@@ -949,6 +949,12 @@ export interface AnalysisRun {
   completed_on: string | null;
   error_message: string | null;
   metrics?: {
+    total_component_entries?: number | null;
+    unique_package_releases?: number | null;
+    unresolved_component_entries?: number | null;
+    cvss_scored_findings?: number;
+    cvss_unknown_findings?: number;
+    cvss_coverage?: number | null;
     raw_observation_count: number;
     total_findings: number;
     unique_vulnerabilities: number;
@@ -1010,7 +1016,29 @@ export type MatchStrategy =
   | 'purl_direct'
   | 'ghsa_alias';
 
+export interface ProviderObservation {
+  provider?: string;
+  vuln_id?: string;
+  severity?: string;
+  score?: number | null;
+  vector?: string | null;
+  cvss_version?: string | null;
+  aliases?: string[];
+  references?: string[];
+  fixed_versions?: string[];
+  applicability?: Record<string, unknown>;
+  match_reason?: string;
+  query_trace?: Record<string, unknown>;
+}
+
 export interface AnalysisFinding {
+  source_observations?: ProviderObservation[];
+  cvss_source?: string | null;
+  selected_cvss?: { score: number; vector: string | null; version: string | null; provider: string; assessment_type: string } | null;
+  rating_disagreement?: boolean;
+  resolution_status?: string | null;
+  bom_ref?: string | null;
+  purl?: string | null;
   vex_status?: VexStatus | null;
   vex_decision?: VexStatement | null;
   id: number;
@@ -1067,6 +1095,9 @@ export interface EnrichedFinding extends AnalysisFinding {
   epss_percentile: number | null;
   /** Composite finding score: cvss * (1 + 5*epss) * (kev ? 2 : 1). 0..120. */
   risk_score: number;
+  risk_cvss_input?: number;
+  risk_input_estimated?: boolean;
+  risk_methodology?: string;
   /** All CVE aliases discovered on the finding (vuln_id + parsed aliases). */
   cve_aliases: string[];
 }

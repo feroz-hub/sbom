@@ -1,0 +1,19 @@
+File,Line,Entry Point,Arguments,Mentions tenant_id,Review Status
+app/workers/cve_refresh.py,34,refresh_kev_cache,self,False,Background caller/tenant review required
+app/workers/cve_refresh.py,43,purge_expired_cve_cache,self,False,Background caller/tenant review required
+app/workers/security_mail.py,9,dispatch_pending,,False,Background caller/tenant review required
+app/workers/report_notifications.py,69,generate,"delivery_id, tenant_id",True,Background caller/tenant review required
+app/workers/report_notifications.py,274,tick,,False,Background caller/tenant review required
+app/workers/report_notifications.py,293,dispatch_pending,,True,Background caller/tenant review required
+app/workers/report_notifications.py,325,purge,,True,Background caller/tenant review required
+app/workers/source_cache.py,38,sweep_expired,"self, batch_size",False,Background caller/tenant review required
+app/workers/scheduled_analysis.py,76,tick_scheduled_analyses,self,True,Background caller/tenant review required
+app/workers/scheduled_analysis.py,178,analyze_sbom_async,"self, sbom_id, schedule_id, force_refresh, report_cycle, lifecycle_revision",True,Background caller/tenant review required
+app/workers/celery_app.py,54,propagate_logging_context,headers,False,Background caller/tenant review required
+app/workers/celery_app.py,60,bind_task_logging_context,task,False,Background caller/tenant review required
+app/workers/celery_app.py,72,reset_task_logging_context,task,False,Background caller/tenant review required
+app/workers/component_advisor_tasks.py,39,evaluate_recommendation_task,"self, recommendation_id, tenant_id, correlation_id",True,Background caller/tenant review required
+app/workers/ai_model_discovery.py,71,refresh_all_provider_models,,False,Background caller/tenant review required
+app/workers/ai_fix_tasks.py,49,generate_run_fixes,"self, run_id, tenant_id, actor_user_id, provider_name, force_refresh, budget_usd, finding_ids, batch_id, scope_label",True,Background caller/tenant review required
+app/workers/kev_sync.py,20,sync_kev_catalog,"self, since, prune_stale",False,Background caller/tenant review required
+app/nvd_mirror/tasks.py,142,mirror_nvd,self,False,Background caller/tenant review required

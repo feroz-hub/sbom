@@ -39,6 +39,8 @@ def count_authoritative_cpes(components: list[dict[str, Any]]) -> int:
 
 
 def component_skip_reason(component: dict[str, Any]) -> str | None:
+    if any("conflict" in note for note in component.get("identity_notes") or []):
+        return "conflicting_component_identity"
     ctype = str(component.get("type") or component.get("component_type") or "").strip().lower()
     if ctype in NON_QUERYABLE_COMPONENT_TYPES:
         return "not_queryable_component"

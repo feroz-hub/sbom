@@ -184,7 +184,9 @@ def score_findings(db: Session, findings: Iterable[AnalysisFinding]) -> dict:
             epss_avg                float        mean EPSS across findings
             methodology             dict         METHODOLOGY constant
     """
-    finding_list = list(findings)
+    from .finding_metrics import canonicalize_finding_rows
+
+    finding_list = canonicalize_finding_rows(findings)
     if not finding_list:
         return {
             "total_risk_score": 0.0,
@@ -210,7 +212,7 @@ def score_findings(db: Session, findings: Iterable[AnalysisFinding]) -> dict:
     epss_map: dict[str, float] = get_epss_scores_memoized(db, cve_list)
 
     # Group findings by component for the per-component breakdown.
-    by_comp: dict[tuple[str, str], list[dict]] = defaultdict(list)
+    by_comp: dict[tuple[int | None, str, str], list[dict]] = defaultdict(list)
     worst_overall: dict | None = None
     has_kev_critical = False
     kev_count = 0
@@ -240,7 +242,7 @@ def score_findings(db: Session, findings: Iterable[AnalysisFinding]) -> dict:
         if in_kev and cvss >= KEV_CRITICAL_CVSS_THRESHOLD:
             has_kev_critical = True
 
-        comp_key = (f.component_name or "unknown", f.component_version or "")
+        comp_key = (f.component_id, f.component_name or "unknown", f.component_version or "")
         finding_record = {
             "vuln_id": f.vuln_id,
             "severity": (f.severity or "UNKNOWN").upper(),
@@ -248,20 +250,23 @@ def score_findings(db: Session, findings: Iterable[AnalysisFinding]) -> dict:
             "epss": round(epss, 4),
             "in_kev": in_kev,
             "score": round(finding_score, 2),
+            "risk_input_estimated": f.score is None,
+            "cvss_input": cvss,
         }
         by_comp[comp_key].append(finding_record)
 
         if worst_overall is None or finding_score > worst_overall["score"]:
             worst_overall = {
                 **finding_record,
-                "component_name": comp_key[0],
-                "component_version": comp_key[1],
+                "component_id": comp_key[0],
+                "component_name": comp_key[1],
+                "component_version": comp_key[2],
             }
 
     # Per-component aggregation.
     components_out: list[dict] = []
     total_risk = 0.0
-    for (cname, cver), recs in by_comp.items():
+    for (component_id, cname, cver), recs in by_comp.items():
         sev_counts = {"CRITICAL": 0, "HIGH": 0, "MEDIUM": 0, "LOW": 0}
         comp_score = 0.0
         comp_kev = 0
@@ -278,6 +283,7 @@ def score_findings(db: Session, findings: Iterable[AnalysisFinding]) -> dict:
         total_risk += comp_score
         components_out.append(
             {
+                "component_id": component_id,
                 "name": cname,
                 "version": cver,
                 "critical": sev_counts["CRITICAL"],

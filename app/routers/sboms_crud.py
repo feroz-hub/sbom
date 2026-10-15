@@ -701,7 +701,7 @@ def download_sbom_original(
     )
 
 
-@router.post("/sboms", response_model=SBOMSourceOut, status_code=status.HTTP_201_CREATED, deprecated=True)
+@router.post("/sboms", response_model=SBOMSourceOut, status_code=status.HTTP_201_CREATED, deprecated=True, include_in_schema=False)
 @workflow_event("sbom_upload", result_kind="sbom")
 def create_sbom(
     payload: SBOMSourceCreate,

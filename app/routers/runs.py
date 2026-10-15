@@ -22,7 +22,13 @@ from ..metrics._helpers import cves_for_finding
 from ..metrics.findings import canonical_finding_metrics_for_run, canonical_findings_for_run
 from ..models import AnalysisFinding, AnalysisRun, EpssScore, Product, SBOMSource
 from ..schemas import AnalysisFindingOut, AnalysisRunOut, RunsAggregateOut
-from ..services.finding_metrics import canonicalize_finding_rows, metrics_to_dict, normalize_severity
+from ..services.finding_metrics import (
+    canonicalize_finding_rows,
+    metrics_to_dict,
+    normalize_severity,
+    remediation_for_finding,
+    vex_for_finding,
+)
 from ..services.kev_enrichment import EMPTY_KEV_ENRICHMENT, enrich_findings_with_kev
 from ..services.lifecycle.vex_provider import _statement_dict, effective_vex_for_sbom
 from ..services.risk_score import (
@@ -368,11 +374,10 @@ def list_run_findings(
 
     vex = effective_vex_for_sbom(db, tenant_id=context.tenant_id, sbom_id=run.sbom_id)
     for item in items:
-        decision = vex.get((item.component_id, item.vuln_id.strip().upper()))
+        decision = vex_for_finding(vex, item)
         item.vex_status = decision.status if decision else None
         item.vex_decision = _statement_dict(decision)
-        key = (item.vuln_id, item.component_name, item.component_version)
-        r = rem_map.get(key)
+        r = remediation_for_finding(rem_map, item)
         if r:
             item.remediation = r
         else:
@@ -474,7 +479,7 @@ def list_run_findings_enriched(
     vex = effective_vex_for_sbom(db, tenant_id=context.tenant_id, sbom_id=run.sbom_id)
     items: list[dict] = []
     for f in findings:
-        decision = vex.get((f.component_id, f.vuln_id.strip().upper()))
+        decision = vex_for_finding(vex, f)
         cves = finding_cves.get(f.id, [])
         # Per-finding EPSS = max EPSS across any CVE alias on the finding.
         epss = 0.0
@@ -496,8 +501,7 @@ def list_run_findings_enriched(
         kev_multiplier = KEV_MULTIPLIER if in_kev else 1.0
         risk_score = round(cvss * exploit_factor * kev_multiplier, 2)
 
-        key = (f.vuln_id, f.component_name, f.component_version)
-        r = rem_map.get(key)
+        r = remediation_for_finding(rem_map, f)
         if r:
             rem_data = {
                 "id": r.id,
@@ -534,6 +538,16 @@ def list_run_findings_enriched(
                 "description": f.description,
                 "severity": f.severity,
                 "score": f.score,
+                "cvss_source": getattr(f, "cvss_source", None),
+                "selected_cvss": getattr(f, "selected_cvss", None),
+                "source_observations": getattr(f, "source_observations", []),
+                "rating_disagreement": getattr(f, "rating_disagreement", False),
+                "resolution_status": getattr(f, "resolution_status", "unresolved"),
+                "bom_ref": getattr(f, "bom_ref", None),
+                "purl": getattr(f, "purl", None),
+                "risk_cvss_input": cvss,
+                "risk_input_estimated": f.score is None,
+                "risk_methodology": "cvss_input × (1 + 5 × epss_probability) × (2 if in_kev else 1)",
                 "vector": f.vector,
                 "published_on": f.published_on,
                 "reference_url": f.reference_url,

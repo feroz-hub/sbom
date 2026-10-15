@@ -1,0 +1,1523 @@
+                     
+                     
+┌───────────────────┐
+│ 257 Code Findings │
+└───────────────────┘
+                                                
+    alembic/versions/033_hcl_iam_multitenancy.py
+   ❯❯❱ [1mpython.sqlalchemy.security.audit.avoid-sqlalchemy-text.avoid-[0m
+  [1m     sqlalchemy-text[0m                                              
+          ❰❰ Blocking ❱❱
+          sqlalchemy.text passes the constructed SQL statement to the
+          database mostly unchanged. This means that the usual SQL   
+          injection protections are not applied and this function is 
+          vulnerable to SQL injection if user input can reach here.  
+          Use normal SQLAlchemy operators (such as `or_()`, `and_()`,
+          etc.) to construct SQL.                                    
+          Details: https://sg.run/yP1O                               
+                                                                     
+          145┆ bind.execute(sa.text(f'UPDATE "{table}" SET
+               tenant_id=1 WHERE tenant_id IS NULL'))     
+                                                     
+    alembic/versions/041_project_product_hierarchy.py
+   ❯❯❱ [1mpython.sqlalchemy.security.audit.avoid-sqlalchemy-text.avoid-[0m
+  [1m     sqlalchemy-text[0m                                              
+          ❰❰ Blocking ❱❱
+          sqlalchemy.text passes the constructed SQL statement to the
+          database mostly unchanged. This means that the usual SQL   
+          injection protections are not applied and this function is 
+          vulnerable to SQL injection if user input can reach here.  
+          Use normal SQLAlchemy operators (such as `or_()`, `and_()`,
+          etc.) to construct SQL.                                    
+          Details: https://sg.run/yP1O                               
+                                                                     
+          324┆ op.execute(sa.text(f'ALTER TABLE analysis_schedule
+               DROP CONSTRAINT IF EXISTS "{name}"'))             
+            ⋮┆----------------------------------------
+          327┆ op.execute(sa.text(f'ALTER TABLE analysis_schedule
+               DROP CONSTRAINT IF EXISTS "{name}"'))             
+            ⋮┆----------------------------------------
+          362┆ op.execute(sa.text(f'ALTER TABLE analysis_schedule
+               DROP CONSTRAINT IF EXISTS "{name}"'))             
+            ⋮┆----------------------------------------
+          365┆ op.execute(sa.text(f'ALTER TABLE analysis_schedule
+               DROP CONSTRAINT IF EXISTS "{name}"'))             
+                                                                     
+    alembic/versions/046_external_identity_and_verification_fields.py
+   ❯❯❱ [1mpython.sqlalchemy.security.audit.avoid-sqlalchemy-text.avoid-[0m
+  [1m     sqlalchemy-text[0m                                              
+          ❰❰ Blocking ❱❱
+          sqlalchemy.text passes the constructed SQL statement to the
+          database mostly unchanged. This means that the usual SQL   
+          injection protections are not applied and this function is 
+          vulnerable to SQL injection if user input can reach here.  
+          Use normal SQLAlchemy operators (such as `or_()`, `and_()`,
+          etc.) to construct SQL.                                    
+          Details: https://sg.run/yP1O                               
+                                                                     
+           73┆ return                                            
+               int(bind.execute(sa.text(statement)).scalar_one())
+                                               
+    alembic/versions/051_report_subscription.py
+   ❯❯❱ [1mpython.sqlalchemy.security.audit.avoid-sqlalchemy-text.avoid-[0m
+  [1m     sqlalchemy-text[0m                                              
+          ❰❰ Blocking ❱❱
+          sqlalchemy.text passes the constructed SQL statement to the
+          database mostly unchanged. This means that the usual SQL   
+          injection protections are not applied and this function is 
+          vulnerable to SQL injection if user input can reach here.  
+          Use normal SQLAlchemy operators (such as `or_()`, `and_()`,
+          etc.) to construct SQL.                                    
+          Details: https://sg.run/yP1O                               
+                                                                     
+           55┆ postgresql_where=sa.text(f"is_active AND scope =
+               '{scope}'"),                                    
+            ⋮┆----------------------------------------
+           56┆ sqlite_where=sa.text(f"is_active = 1 AND scope =
+               '{scope}'"),                                    
+                                               
+    alembic/versions/057_vex_audit_hardening.py
+   ❯❯❱ [1mpython.sqlalchemy.security.audit.avoid-sqlalchemy-text.avoid-[0m
+  [1m     sqlalchemy-text[0m                                              
+          ❰❰ Blocking ❱❱
+          sqlalchemy.text passes the constructed SQL statement to the
+          database mostly unchanged. This means that the usual SQL   
+          injection protections are not applied and this function is 
+          vulnerable to SQL injection if user input can reach here.  
+          Use normal SQLAlchemy operators (such as `or_()`, `and_()`,
+          etc.) to construct SQL.                                    
+          Details: https://sg.run/yP1O                               
+                                                                     
+          115┆ sa.text(
+          116┆     f"UPDATE vex_override_audit SET {column} =
+               upper({source} ->> 'status') "                
+          117┆     f"WHERE {column} IS NULL AND {source} IS NOT
+               NULL"                                           
+          118┆ )
+                                                
+    alembic/versions/065_scoped_configuration.py
+   ❯❯❱ [1mpython.sqlalchemy.security.audit.avoid-sqlalchemy-text.avoid-[0m
+  [1m     sqlalchemy-text[0m                                              
+          ❰❰ Blocking ❱❱
+          sqlalchemy.text passes the constructed SQL statement to the
+          database mostly unchanged. This means that the usual SQL   
+          injection protections are not applied and this function is 
+          vulnerable to SQL injection if user input can reach here.  
+          Use normal SQLAlchemy operators (such as `or_()`, `and_()`,
+          etc.) to construct SQL.                                    
+          Details: https://sg.run/yP1O                               
+                                                                     
+           90┆ postgresql_where=sa.text(f"{flag} = TRUE AND
+               tenant_id IS NULL"),                        
+            ⋮┆----------------------------------------
+           91┆ sqlite_where=sa.text(f"{flag} = 1 AND tenant_id IS
+               NULL"),                                           
+            ⋮┆----------------------------------------
+           98┆ postgresql_where=sa.text(f"{flag} = TRUE AND
+               tenant_id IS NOT NULL"),                    
+            ⋮┆----------------------------------------
+           99┆ sqlite_where=sa.text(f"{flag} = 1 AND tenant_id IS
+               NOT NULL"),                                       
+                        
+    app/core/security.py
+    ❯❱ [1mpython.lang.security.audit.dynamic-urllib-use-detected.dynamic-urllib-[0m
+  [1m     use-detected[0m                                                          
+          ❰❰ Blocking ❱❱
+          Detected a dynamic value being used with urllib. urllib     
+          supports 'file://' schemes, so a dynamic value controlled by
+          a malicious actor may allow them to read arbitrary files.   
+          Audit uses of urllib calls to ensure user data cannot       
+          control the URLs, or consider using the 'requests' library  
+          instead.                                                    
+          Details: https://sg.run/dKZZ                                
+                                                                      
+           84┆ with urllib.request.urlopen(request,             
+               timeout=timeout, context=_ssl_context(ca_bundle))
+               as response:                                     
+   
+   ❯❯❱ [1mpython.jwt.security.unverified-jwt-decode.unverified-jwt-decode[0m
+          ❰❰ Blocking ❱❱
+          Detected JWT token decoded with 'verify=False'. This       
+          bypasses any integrity checks for the token which means the
+          token could be tampered with by malicious actors. Ensure   
+          that the JWT token is verified.                            
+          Details: https://sg.run/6nyB                               
+                                                                     
+           ▶▶┆ Autofix ▶ True
+          193┆ issuer = jwt.decode(token,                     
+               options={"verify_signature": False}).get("iss")
+                         
+    app/models_reports.py
+   ❯❯❱ [1mpython.sqlalchemy.security.audit.avoid-sqlalchemy-text.avoid-[0m
+  [1m     sqlalchemy-text[0m                                              
+          ❰❰ Blocking ❱❱
+          sqlalchemy.text passes the constructed SQL statement to the
+          database mostly unchanged. This means that the usual SQL   
+          injection protections are not applied and this function is 
+          vulnerable to SQL injection if user input can reach here.  
+          Use normal SQLAlchemy operators (such as `or_()`, `and_()`,
+          etc.) to construct SQL.                                    
+          Details: https://sg.run/yP1O                               
+                                                                     
+           60┆ postgresql_where=text(f"is_active AND scope =
+               '{scope}'"),                                 
+            ⋮┆----------------------------------------
+           61┆ sqlite_where=text(f"is_active = 1 AND scope =
+               '{scope}'"),                                 
+                                 
+    app/routers/ai_credentials.py
+    ❯❱ [1mpython.lang.security.audit.logging.logger-credential-leak.python-[0m
+  [1m     logger-credential-disclosure[0m                                     
+          ❰❰ Blocking ❱❱
+          Detected a python logger call with a potential hardcoded    
+          secret "ai.model_refresh.failed provider=%s credential_id=%s
+          error_type=%s" being logged. This may lead to secret        
+          credentials being exposed. Make sure that the logger is not 
+          logging  sensitive information.                             
+          Details: https://sg.run/ydNx                                
+                                                                      
+          1062┆ log.warning(
+          1063┆     "ai.model_refresh.failed provider=%s
+               credential_id=%s error_type=%s",         
+          1064┆     credential.provider_name,
+          1065┆     credential.id,
+          1066┆     type(exc).__name__,
+          1067┆ )
+                                      
+    app/services/entra_auth_service.py
+    ❯❱ [1mpython.lang.security.audit.dynamic-urllib-use-detected.dynamic-urllib-[0m
+  [1m     use-detected[0m                                                          
+          ❰❰ Blocking ❱❱
+          Detected a dynamic value being used with urllib. urllib     
+          supports 'file://' schemes, so a dynamic value controlled by
+          a malicious actor may allow them to read arbitrary files.   
+          Audit uses of urllib calls to ensure user data cannot       
+          control the URLs, or consider using the 'requests' library  
+          instead.                                                    
+          Details: https://sg.run/dKZZ                                
+                                                                      
+           59┆ with urlopen(f"{authority}/v2.0/.well-known/openid-
+               configuration", timeout=5) as response:            
+                                     
+    app/workers/ai_model_discovery.py
+    ❯❱ [1mpython.lang.security.audit.logging.logger-credential-leak.python-[0m
+  [1m     logger-credential-disclosure[0m                                     
+          ❰❰ Blocking ❱❱
+          Detected a python logger call with a potential hardcoded    
+          secret "ai.model_refresh.failed provider=%s credential_id=%s
+          kind=%s" being logged. This may lead to secret credentials  
+          being exposed. Make sure that the logger is not logging     
+          sensitive information.                                      
+          Details: https://sg.run/ydNx                                
+                                                                      
+           49┆ log.warning(
+           50┆     "ai.model_refresh.failed provider=%s
+               credential_id=%s kind=%s",              
+           51┆     credential.provider_name,
+           52┆     credential.id,
+           53┆     exc.kind,
+           54┆ )
+            ⋮┆----------------------------------------
+    ❯❱ [1mpython.lang.security.audit.logging.logger-credential-leak.python-[0m
+  [1m     logger-credential-disclosure[0m                                     
+          ❰❰ Blocking ❱❱
+          Detected a python logger call with a potential hardcoded    
+          secret "ai.model_refresh.failed provider=%s credential_id=%s
+          error_type=%s" being logged. This may lead to secret        
+          credentials being exposed. Make sure that the logger is not 
+          logging  sensitive information.                             
+          Details: https://sg.run/ydNx                                
+                                                                      
+           58┆ log.warning(
+           59┆     "ai.model_refresh.failed provider=%s
+               credential_id=%s error_type=%s",        
+           60┆     credential.provider_name,
+           61┆     credential.id,
+           62┆     type(exc).__name__,
+           63┆ )
+                                  
+    deploy/iam-proxy.nginx.example
+    ❯❱ [1mgeneric.nginx.security.request-host-used.request-host-used[0m
+          ❰❰ Blocking ❱❱
+          '$http_host' and '$host' variables may contain a malicious  
+          value from attacker controlled 'Host' request header. Use an
+          explicitly configured host value or a allow list for        
+          validation.                                                 
+          Details: https://sg.run/4x3Z                                
+                                                                      
+           11┆ proxy_set_header Host $host;
+                                          
+    frontend/src/lib/auth/session-store.ts
+   ❯❯❱ [1mjavascript.node-crypto.security.gcm-no-tag-length.gcm-no-tag-length[0m
+          ❰❰ Blocking ❱❱
+          The call to 'createDecipheriv' with the Galois Counter Mode
+          (GCM) mode of operation is missing an expected             
+          authentication tag length. If the expected authentication  
+          tag length is not specified or otherwise checked, the      
+          application might be tricked into verifying a shorter-than-
+          expected authentication tag. This can be abused by an      
+          attacker to spoof ciphertexts or recover the implicit      
+          authentication key of GCM, allowing arbitrary forgeries.   
+          Details: https://sg.run/NbGG1                              
+                                                                     
+           73┆ const decipher = createDecipheriv('aes-256-gcm',
+               transactionKey(), iv);                          
+                                                 
+    frontend/src/lib/auth/shared-session-store.ts
+   ❯❯❱ [1mjavascript.node-crypto.security.gcm-no-tag-length.gcm-no-tag-length[0m
+          ❰❰ Blocking ❱❱
+          The call to 'createDecipheriv' with the Galois Counter Mode
+          (GCM) mode of operation is missing an expected             
+          authentication tag length. If the expected authentication  
+          tag length is not specified or otherwise checked, the      
+          application might be tricked into verifying a shorter-than-
+          expected authentication tag. This can be abused by an      
+          attacker to spoof ciphertexts or recover the implicit      
+          authentication key of GCM, allowing arbitrary forgeries.   
+          Details: https://sg.run/NbGG1                              
+                                                                     
+           40┆ const decipher = createDecipheriv('aes-256-gcm',
+               this.key, iv);                                  
+                                                            
+    reports/dast/sbom-frontend-baseline-20260707_163313.html
+    ❯❱ [1mhtml.security.plaintext-http-link.plaintext-http-link[0m
+          ❰❰ Blocking ❱❱
+          This link points to a plaintext HTTP URL. Prefer an
+          encrypted HTTPS URL if possible.                   
+          Details: https://sg.run/RA5q                       
+                                                             
+          680┆ <td width="80%"><a href="http://host.docker.interna
+               l:3000">http://host.docker.internal:3000</a></td>  
+            ⋮┆----------------------------------------
+          716┆ <td width="80%"><a href="http://host.docker.interna
+               l:3000/">http://host.docker.internal:3000/</a></td>
+            ⋮┆----------------------------------------
+          752┆ <td width="80%"><a href="http://host.docker.interna
+               l:3000/robots.txt">http://host.docker.internal:3000
+               /robots.txt</a></td>                               
+            ⋮┆----------------------------------------
+          788┆ <td width="80%"><a href="http://host.docker.interna
+               l:3000/sitemap.xml">http://host.docker.internal:300
+               0/sitemap.xml</a></td>                             
+            ⋮┆----------------------------------------
+          898┆ <td width="80%"><a href="http://host.docker.interna
+               l:3000">http://host.docker.internal:3000</a></td>  
+            ⋮┆----------------------------------------
+          934┆ <td width="80%"><a href="http://host.docker.interna
+               l:3000/">http://host.docker.internal:3000/</a></td>
+            ⋮┆----------------------------------------
+          1029┆ <td width="80%"><a href="http://host.docker.intern
+               al:3000">http://host.docker.internal:3000</a></td> 
+            ⋮┆----------------------------------------
+          1124┆ <td width="80%"><a href="http://host.docker.intern
+               al:3000">http://host.docker.internal:3000</a></td> 
+            ⋮┆----------------------------------------
+          1222┆ <td width="80%"><a href="http://host.docker.intern
+               al:3000/_next/static/chunks/src_lib_api_ts_1avs92- 
+               ._.js">http://host.docker.internal:3000/_next/stati
+               c/chunks/src_lib_api_ts_1avs92-._.js</a></td>      
+            ⋮┆----------------------------------------
+          1258┆ <td width="80%"><a href="http://host.docker.intern
+               al:3000/_next/static/media/03fc1b4a8d284b5e-       
+               s.p.0wiir8udbzjvx.woff2">http://host.docker.interna
+               l:3000/_next/static/media/03fc1b4a8d284b5e-        
+               s.p.0wiir8udbzjvx.woff2</a></td>                   
+            ⋮┆----------------------------------------
+          1294┆ <td width="80%"><a href="http://host.docker.intern
+               al:3000/_next/static/media/23b7a97ae3b5c134-       
+               s.p.226pwps5o-                                     
+               gq_.woff2">http://host.docker.internal:3000/_next/s
+               tatic/media/23b7a97ae3b5c134-s.p.226pwps5o-        
+               gq_.woff2</a></td>                                 
+            ⋮┆----------------------------------------
+          1330┆ <td width="80%"><a href="http://host.docker.intern
+               al:3000/_next/static/media/99e609270109b47d-       
+               s.p.40sczeszzbjw1.woff2">http://host.docker.interna
+               l:3000/_next/static/media/99e609270109b47d-        
+               s.p.40sczeszzbjw1.woff2</a></td>                   
+            ⋮┆----------------------------------------
+          1366┆ <td width="80%"><a href="http://host.docker.intern
+               al:3000/_next/static/media/effe91970fc4db64-       
+               s.p.0oace-s_gkfks.woff2">http://host.docker.interna
+               l:3000/_next/static/media/effe91970fc4db64-        
+               s.p.0oace-s_gkfks.woff2</a></td>                   
+            ⋮┆----------------------------------------
+          1467┆ <td width="80%"><a href="http://host.docker.intern
+               al:3000/_next/static/chunks/node_modules_next_dist_
+               compiled_react-server-dom-turbopack_164kp-         
+               6._.js">http://host.docker.internal:3000/_next/stat
+               ic/chunks/node_modules_next_dist_compiled_react-   
+               server-dom-turbopack_164kp-6._.js</a></td>         
+            ⋮┆----------------------------------------
+          1503┆ <td width="80%"><a href="http://host.docker.intern
+               al:3000/_next/static/chunks/turbopack-             
+               _01_ro95._.js">http://host.docker.internal:3000/_ne
+               xt/static/chunks/turbopack-_01_ro95._.js</a></td>  
+            ⋮┆----------------------------------------
+          1595┆ <td width="80%"><a href="http://host.docker.intern
+               al:3000">http://host.docker.internal:3000</a></td> 
+            ⋮┆----------------------------------------
+          1631┆ <td width="80%"><a href="http://host.docker.intern
+               al:3000/_next/static/chunks/%5Bturbopack%5D_browser
+               _dev_hmr-client_hmr-client_ts_1xx01vv._.js">http://
+               host.docker.internal:3000/_next/static/chunks/%5Btu
+               rbopack%5D_browser_dev_hmr-client_hmr-             
+               client_ts_1xx01vv._.js</a></td>                    
+            ⋮┆----------------------------------------
+          1667┆ <td width="80%"><a href="http://host.docker.intern
+               al:3000/_next/static/chunks/_1anvha4._.js">http://h
+               ost.docker.internal:3000/_next/static/chunks/_1anvh
+               a4._.js</a></td>                                   
+            ⋮┆----------------------------------------
+          1703┆ <td width="80%"><a href="http://host.docker.intern
+               al:3000/_next/static/chunks/src_lib_api_ts_1avs92- 
+               ._.js">http://host.docker.internal:3000/_next/stati
+               c/chunks/src_lib_api_ts_1avs92-._.js</a></td>      
+            ⋮┆----------------------------------------
+          1739┆ <td width="80%"><a href="http://host.docker.intern
+               al:3000/_next/static/chunks/turbopack-             
+               _01_ro95._.js">http://host.docker.internal:3000/_ne
+               xt/static/chunks/turbopack-_01_ro95._.js</a></td>  
+            ⋮┆----------------------------------------
+          1843┆ <td width="80%"><a href="http://host.docker.intern
+               al:3000">http://host.docker.internal:3000</a></td> 
+            ⋮┆----------------------------------------
+          1879┆ <td width="80%"><a href="http://host.docker.intern
+               al:3000/">http://host.docker.internal:3000/</a></td
+               >                                                  
+            ⋮┆----------------------------------------
+          1915┆ <td width="80%"><a href="http://host.docker.intern
+               al:3000/robots.txt">http://host.docker.internal:300
+               0/robots.txt</a></td>                              
+            ⋮┆----------------------------------------
+          1951┆ <td width="80%"><a href="http://host.docker.intern
+               al:3000/sitemap.xml">http://host.docker.internal:30
+               00/sitemap.xml</a></td>                            
+            ⋮┆----------------------------------------
+          2046┆ <td width="80%"><a href="http://host.docker.intern
+               al:3000/_next/static/chunks/node_modules_next_dist_
+               compiled_react-dom_096_9a-                         
+               ._.js">http://host.docker.internal:3000/_next/stati
+               c/chunks/node_modules_next_dist_compiled_react-    
+               dom_096_9a-._.js</a></td>                          
+            ⋮┆----------------------------------------
+          2141┆ <td width="80%"><a href="http://host.docker.intern
+               al:3000/_next/static/chunks/%5Bturbopack%5D_browser
+               _dev_hmr-client_hmr-client_ts_1xx01vv._.js">http://
+               host.docker.internal:3000/_next/static/chunks/%5Btu
+               rbopack%5D_browser_dev_hmr-client_hmr-             
+               client_ts_1xx01vv._.js</a></td>                    
+            ⋮┆----------------------------------------
+          2183┆ <td width="80%"><a href="http://host.docker.intern
+               al:3000/_next/static/media/03fc1b4a8d284b5e-       
+               s.p.0wiir8udbzjvx.woff2">http://host.docker.interna
+               l:3000/_next/static/media/03fc1b4a8d284b5e-        
+               s.p.0wiir8udbzjvx.woff2</a></td>                   
+            ⋮┆----------------------------------------
+          2225┆ <td width="80%"><a href="http://host.docker.intern
+               al:3000/_next/static/media/23b7a97ae3b5c134-       
+               s.p.226pwps5o-                                     
+               gq_.woff2">http://host.docker.internal:3000/_next/s
+               tatic/media/23b7a97ae3b5c134-s.p.226pwps5o-        
+               gq_.woff2</a></td>                                 
+            ⋮┆----------------------------------------
+          2267┆ <td width="80%"><a href="http://host.docker.intern
+               al:3000/_next/static/media/99e609270109b47d-       
+               s.p.40sczeszzbjw1.woff2">http://host.docker.interna
+               l:3000/_next/static/media/99e609270109b47d-        
+               s.p.40sczeszzbjw1.woff2</a></td>                   
+            ⋮┆----------------------------------------
+          2309┆ <td width="80%"><a href="http://host.docker.intern
+               al:3000/_next/static/media/effe91970fc4db64-       
+               s.p.0oace-s_gkfks.woff2">http://host.docker.interna
+               l:3000/_next/static/media/effe91970fc4db64-        
+               s.p.0oace-s_gkfks.woff2</a></td>                   
+            ⋮┆----------------------------------------
+          2413┆ <td width="80%"><a href="http://host.docker.intern
+               al:3000/_next/static/chunks/node_modules_es-toolkit
+               _dist_12huve3._.js">http://host.docker.internal:300
+               0/_next/static/chunks/node_modules_es-             
+               toolkit_dist_12huve3._.js</a></td>                 
+            ⋮┆----------------------------------------
+          2461┆ <td width="80%"><a href="http://host.docker.intern
+               al:3000/_next/static/chunks/node_modules_es-toolkit
+               _dist_12huve3._.js">http://host.docker.internal:300
+               0/_next/static/chunks/node_modules_es-             
+               toolkit_dist_12huve3._.js</a></td>                 
+            ⋮┆----------------------------------------
+          2504┆ <td width="80%"><a href="http://host.docker.intern
+               al:3000/_next/static/chunks/node_modules_es-toolkit
+               _dist_12huve3._.js">http://host.docker.internal:300
+               0/_next/static/chunks/node_modules_es-             
+               toolkit_dist_12huve3._.js</a></td>                 
+            ⋮┆----------------------------------------
+          2552┆ <td width="80%"><a href="http://host.docker.intern
+               al:3000/_next/static/chunks/node_modules_next_dist_
+               1ybzpk2._.js">http://host.docker.internal:3000/_nex
+               t/static/chunks/node_modules_next_dist_1ybzpk2._.js
+               </a></td>                                          
+            ⋮┆----------------------------------------
+          2597┆ <td width="80%"><a href="http://host.docker.intern
+               al:3000/_next/static/chunks/node_modules_next_dist_
+               1ybzpk2._.js">http://host.docker.internal:3000/_nex
+               t/static/chunks/node_modules_next_dist_1ybzpk2._.js
+               </a></td>                                          
+            ⋮┆----------------------------------------
+          2636┆ <td width="80%"><a href="http://host.docker.intern
+               al:3000/_next/static/chunks/node_modules_next_dist_
+               1ybzpk2._.js">http://host.docker.internal:3000/_nex
+               t/static/chunks/node_modules_next_dist_1ybzpk2._.js
+               </a></td>                                          
+            ⋮┆----------------------------------------
+          2675┆ <td width="80%"><a href="http://host.docker.intern
+               al:3000/_next/static/chunks/node_modules_next_dist_
+               1ybzpk2._.js">http://host.docker.internal:3000/_nex
+               t/static/chunks/node_modules_next_dist_1ybzpk2._.js
+               </a></td>                                          
+            ⋮┆----------------------------------------
+          2714┆ <td width="80%"><a href="http://host.docker.intern
+               al:3000/_next/static/chunks/node_modules_next_dist_
+               1ybzpk2._.js">http://host.docker.internal:3000/_nex
+               t/static/chunks/node_modules_next_dist_1ybzpk2._.js
+               </a></td>                                          
+            ⋮┆----------------------------------------
+          2753┆ <td width="80%"><a href="http://host.docker.intern
+               al:3000/_next/static/chunks/node_modules_next_dist_
+               1ybzpk2._.js">http://host.docker.internal:3000/_nex
+               t/static/chunks/node_modules_next_dist_1ybzpk2._.js
+               </a></td>                                          
+            ⋮┆----------------------------------------
+          2807┆ <td width="80%"><a href="http://host.docker.intern
+               al:3000/_next/static/chunks/node_modules_next_dist_
+               1ybzpk2._.js">http://host.docker.internal:3000/_nex
+               t/static/chunks/node_modules_next_dist_1ybzpk2._.js
+               </a></td>                                          
+            ⋮┆----------------------------------------
+          2846┆ <td width="80%"><a href="http://host.docker.intern
+               al:3000/_next/static/chunks/node_modules_next_dist_
+               compiled_1amofcm._.js">http://host.docker.internal:
+               3000/_next/static/chunks/node_modules_next_dist_com
+               piled_1amofcm._.js</a></td>                        
+            ⋮┆----------------------------------------
+          2885┆ <td width="80%"><a href="http://host.docker.intern
+               al:3000/_next/static/chunks/node_modules_next_dist_
+               compiled_1amofcm._.js">http://host.docker.internal:
+               3000/_next/static/chunks/node_modules_next_dist_com
+               piled_1amofcm._.js</a></td>                        
+            ⋮┆----------------------------------------
+          2924┆ <td width="80%"><a href="http://host.docker.intern
+               al:3000/_next/static/chunks/node_modules_recharts_e
+               s6_chart_1f_ue5b._.js">http://host.docker.internal:
+               3000/_next/static/chunks/node_modules_recharts_es6_
+               chart_1f_ue5b._.js</a></td>                        
+            ⋮┆----------------------------------------
+          2963┆ <td width="80%"><a href="http://host.docker.intern
+               al:3000/_next/static/chunks/node_modules_recharts_e
+               s6_chart_1f_ue5b._.js">http://host.docker.internal:
+               3000/_next/static/chunks/node_modules_recharts_es6_
+               chart_1f_ue5b._.js</a></td>                        
+            ⋮┆----------------------------------------
+          3002┆ <td width="80%"><a href="http://host.docker.intern
+               al:3000/_next/static/chunks/node_modules_recharts_e
+               s6_chart_1f_ue5b._.js">http://host.docker.internal:
+               3000/_next/static/chunks/node_modules_recharts_es6_
+               chart_1f_ue5b._.js</a></td>                        
+            ⋮┆----------------------------------------
+          3048┆ <td width="80%"><a href="http://host.docker.intern
+               al:3000/_next/static/chunks/node_modules_recharts_e
+               s6_component_0t5m2pp._.js">http://host.docker.inter
+               nal:3000/_next/static/chunks/node_modules_recharts_
+               es6_component_0t5m2pp._.js</a></td>                
+            ⋮┆----------------------------------------
+          3087┆ <td width="80%"><a href="http://host.docker.intern
+               al:3000/_next/static/chunks/node_modules_recharts_e
+               s6_component_0t5m2pp._.js">http://host.docker.inter
+               nal:3000/_next/static/chunks/node_modules_recharts_
+               es6_component_0t5m2pp._.js</a></td>                
+            ⋮┆----------------------------------------
+          3126┆ <td width="80%"><a href="http://host.docker.intern
+               al:3000/_next/static/chunks/node_modules_recharts_e
+               s6_component_0t5m2pp._.js">http://host.docker.inter
+               nal:3000/_next/static/chunks/node_modules_recharts_
+               es6_component_0t5m2pp._.js</a></td>                
+            ⋮┆----------------------------------------
+          3165┆ <td width="80%"><a href="http://host.docker.intern
+               al:3000/_next/static/chunks/node_modules_recharts_e
+               s6_component_0t5m2pp._.js">http://host.docker.inter
+               nal:3000/_next/static/chunks/node_modules_recharts_
+               es6_component_0t5m2pp._.js</a></td>                
+            ⋮┆----------------------------------------
+          3211┆ <td width="80%"><a href="http://host.docker.intern
+               al:3000/_next/static/chunks/node_modules_recharts_e
+               s6_util_196ddir._.js">http://host.docker.internal:3
+               000/_next/static/chunks/node_modules_recharts_es6_u
+               til_196ddir._.js</a></td>                          
+            ⋮┆----------------------------------------
+          3250┆ <td width="80%"><a href="http://host.docker.intern
+               al:3000/_next/static/chunks/node_modules_recharts_e
+               s6_util_196ddir._.js">http://host.docker.internal:3
+               000/_next/static/chunks/node_modules_recharts_es6_u
+               til_196ddir._.js</a></td>                          
+            ⋮┆----------------------------------------
+          3289┆ <td width="80%"><a href="http://host.docker.intern
+               al:3000/_next/static/chunks/node_modules_recharts_e
+               s6_util_196ddir._.js">http://host.docker.internal:3
+               000/_next/static/chunks/node_modules_recharts_es6_u
+               til_196ddir._.js</a></td>                          
+            ⋮┆----------------------------------------
+          3334┆ <td width="80%"><a href="http://host.docker.intern
+               al:3000/_next/static/chunks/node_modules_recharts_e
+               s6_util_196ddir._.js">http://host.docker.internal:3
+               000/_next/static/chunks/node_modules_recharts_es6_u
+               til_196ddir._.js</a></td>                          
+            ⋮┆----------------------------------------
+          3380┆ <td width="80%"><a href="http://host.docker.intern
+               al:3000/_next/static/chunks/src_0siywz6._.js">http:
+               //host.docker.internal:3000/_next/static/chunks/src
+               _0siywz6._.js</a></td>                             
+            ⋮┆----------------------------------------
+          3419┆ <td width="80%"><a href="http://host.docker.intern
+               al:3000/_next/static/chunks/src_0siywz6._.js">http:
+               //host.docker.internal:3000/_next/static/chunks/src
+               _0siywz6._.js</a></td>                             
+            ⋮┆----------------------------------------
+          3458┆ <td width="80%"><a href="http://host.docker.intern
+               al:3000/_next/static/chunks/src_0siywz6._.js">http:
+               //host.docker.internal:3000/_next/static/chunks/src
+               _0siywz6._.js</a></td>                             
+            ⋮┆----------------------------------------
+          3497┆ <td width="80%"><a href="http://host.docker.intern
+               al:3000/_next/static/chunks/src_0siywz6._.js">http:
+               //host.docker.internal:3000/_next/static/chunks/src
+               _0siywz6._.js</a></td>                             
+            ⋮┆----------------------------------------
+          3536┆ <td width="80%"><a href="http://host.docker.intern
+               al:3000/_next/static/chunks/src_0siywz6._.js">http:
+               //host.docker.internal:3000/_next/static/chunks/src
+               _0siywz6._.js</a></td>                             
+            ⋮┆----------------------------------------
+          3585┆ <td width="80%"><a href="http://host.docker.intern
+               al:3000/_next/static/chunks/turbopack-             
+               _01_ro95._.js">http://host.docker.internal:3000/_ne
+               xt/static/chunks/turbopack-_01_ro95._.js</a></td>  
+            ⋮┆----------------------------------------
+          3624┆ <td width="80%"><a href="http://host.docker.intern
+               al:3000/_next/static/chunks/turbopack-             
+               _01_ro95._.js">http://host.docker.internal:3000/_ne
+               xt/static/chunks/turbopack-_01_ro95._.js</a></td>  
+            ⋮┆----------------------------------------
+          3663┆ <td width="80%"><a href="http://host.docker.intern
+               al:3000/_next/static/chunks/turbopack-             
+               _01_ro95._.js">http://host.docker.internal:3000/_ne
+               xt/static/chunks/turbopack-_01_ro95._.js</a></td>  
+            ⋮┆----------------------------------------
+          3702┆ <td width="80%"><a href="http://host.docker.intern
+               al:3000/_next/static/chunks/turbopack-             
+               _01_ro95._.js">http://host.docker.internal:3000/_ne
+               xt/static/chunks/turbopack-_01_ro95._.js</a></td>  
+            ⋮┆----------------------------------------
+          3747┆ <td width="80%"><a href="http://host.docker.intern
+               al:3000/_next/static/chunks/turbopack-             
+               _01_ro95._.js">http://host.docker.internal:3000/_ne
+               xt/static/chunks/turbopack-_01_ro95._.js</a></td>  
+            ⋮┆----------------------------------------
+          3786┆ <td width="80%"><a href="http://host.docker.intern
+               al:3000/_next/static/chunks/turbopack-             
+               _01_ro95._.js">http://host.docker.internal:3000/_ne
+               xt/static/chunks/turbopack-_01_ro95._.js</a></td>  
+            ⋮┆----------------------------------------
+          3834┆ <td width="80%"><a href="http://host.docker.intern
+               al:3000/_next/static/chunks/turbopack-             
+               _01_ro95._.js">http://host.docker.internal:3000/_ne
+               xt/static/chunks/turbopack-_01_ro95._.js</a></td>  
+            ⋮┆----------------------------------------
+          3932┆ <td width="80%"><a href="http://host.docker.intern
+               al:3000">http://host.docker.internal:3000</a></td> 
+            ⋮┆----------------------------------------
+          3971┆ <td width="80%"><a href="http://host.docker.intern
+               al:3000/">http://host.docker.internal:3000/</a></td
+               >                                                  
+            ⋮┆----------------------------------------
+          4010┆ <td width="80%"><a href="http://host.docker.intern
+               al:3000/robots.txt">http://host.docker.internal:300
+               0/robots.txt</a></td>                              
+            ⋮┆----------------------------------------
+          4049┆ <td width="80%"><a href="http://host.docker.intern
+               al:3000/sitemap.xml">http://host.docker.internal:30
+               00/sitemap.xml</a></td>                            
+            ⋮┆----------------------------------------
+          4140┆ <td width="80%"><a href="http://host.docker.intern
+               al:3000/_next/static/media/03fc1b4a8d284b5e-       
+               s.p.0wiir8udbzjvx.woff2">http://host.docker.interna
+               l:3000/_next/static/media/03fc1b4a8d284b5e-        
+               s.p.0wiir8udbzjvx.woff2</a></td>                   
+            ⋮┆----------------------------------------
+          4176┆ <td width="80%"><a href="http://host.docker.intern
+               al:3000/_next/static/media/23b7a97ae3b5c134-       
+               s.p.226pwps5o-                                     
+               gq_.woff2">http://host.docker.internal:3000/_next/s
+               tatic/media/23b7a97ae3b5c134-s.p.226pwps5o-        
+               gq_.woff2</a></td>                                 
+            ⋮┆----------------------------------------
+          4212┆ <td width="80%"><a href="http://host.docker.intern
+               al:3000/_next/static/media/99e609270109b47d-       
+               s.p.40sczeszzbjw1.woff2">http://host.docker.interna
+               l:3000/_next/static/media/99e609270109b47d-        
+               s.p.40sczeszzbjw1.woff2</a></td>                   
+            ⋮┆----------------------------------------
+          4322┆ <td width="80%"><a href="http://host.docker.intern
+               al:3000">http://host.docker.internal:3000</a></td> 
+            ⋮┆----------------------------------------
+          4358┆ <td width="80%"><a href="http://host.docker.intern
+               al:3000/_next/static/chunks/%5Broot-of-the-server%5
+               D__09hpsjx._.css">http://host.docker.internal:3000/
+               _next/static/chunks/%5Broot-of-the-                
+               server%5D__09hpsjx._.css</a></td>                  
+            ⋮┆----------------------------------------
+          4394┆ <td width="80%"><a href="http://host.docker.intern
+               al:3000/_next/static/chunks/%5Bturbopack%5D_browser
+               _dev_hmr-client_hmr-client_ts_1xx01vv._.js">http://
+               host.docker.internal:3000/_next/static/chunks/%5Btu
+               rbopack%5D_browser_dev_hmr-client_hmr-             
+               client_ts_1xx01vv._.js</a></td>                    
+            ⋮┆----------------------------------------
+          4430┆ <td width="80%"><a href="http://host.docker.intern
+               al:3000/_next/static/chunks/_1anvha4._.js">http://h
+               ost.docker.internal:3000/_next/static/chunks/_1anvh
+               a4._.js</a></td>                                   
+            ⋮┆----------------------------------------
+          4466┆ <td width="80%"><a href="http://host.docker.intern
+               al:3000/_next/static/chunks/src_lib_api_ts_1avs92- 
+               ._.js">http://host.docker.internal:3000/_next/stati
+               c/chunks/src_lib_api_ts_1avs92-._.js</a></td>      
+                                            
+    reports/dast/sbom-frontend-baseline.html
+    ❯❱ [1mhtml.security.plaintext-http-link.plaintext-http-link[0m
+          ❰❰ Blocking ❱❱
+          This link points to a plaintext HTTP URL. Prefer an
+          encrypted HTTPS URL if possible.                   
+          Details: https://sg.run/RA5q                       
+                                                             
+          662┆ <td width="80%"><a href="http://host.docker.interna
+               l:3000">http://host.docker.internal:3000</a></td>  
+            ⋮┆----------------------------------------
+          698┆ <td width="80%"><a href="http://host.docker.interna
+               l:3000/">http://host.docker.internal:3000/</a></td>
+            ⋮┆----------------------------------------
+          734┆ <td width="80%"><a href="http://host.docker.interna
+               l:3000/robots.txt">http://host.docker.internal:3000
+               /robots.txt</a></td>                               
+            ⋮┆----------------------------------------
+          770┆ <td width="80%"><a href="http://host.docker.interna
+               l:3000/sitemap.xml">http://host.docker.internal:300
+               0/sitemap.xml</a></td>                             
+            ⋮┆----------------------------------------
+          880┆ <td width="80%"><a href="http://host.docker.interna
+               l:3000">http://host.docker.internal:3000</a></td>  
+            ⋮┆----------------------------------------
+          916┆ <td width="80%"><a href="http://host.docker.interna
+               l:3000/">http://host.docker.internal:3000/</a></td>
+            ⋮┆----------------------------------------
+          1011┆ <td width="80%"><a href="http://host.docker.intern
+               al:3000">http://host.docker.internal:3000</a></td> 
+            ⋮┆----------------------------------------
+          1106┆ <td width="80%"><a href="http://host.docker.intern
+               al:3000">http://host.docker.internal:3000</a></td> 
+            ⋮┆----------------------------------------
+          1204┆ <td width="80%"><a href="http://host.docker.intern
+               al:3000/_next/static/chunks/%5Broot-of-the-server%5
+               D__09hpsjx._.css">http://host.docker.internal:3000/
+               _next/static/chunks/%5Broot-of-the-                
+               server%5D__09hpsjx._.css</a></td>                  
+            ⋮┆----------------------------------------
+          1240┆ <td width="80%"><a href="http://host.docker.intern
+               al:3000/_next/static/chunks/%5Bturbopack%5D_browser
+               _dev_hmr-client_hmr-client_ts_1xx01vv._.js">http://
+               host.docker.internal:3000/_next/static/chunks/%5Btu
+               rbopack%5D_browser_dev_hmr-client_hmr-             
+               client_ts_1xx01vv._.js</a></td>                    
+            ⋮┆----------------------------------------
+          1276┆ <td width="80%"><a href="http://host.docker.intern
+               al:3000/_next/static/media/03fc1b4a8d284b5e-       
+               s.p.0wiir8udbzjvx.woff2">http://host.docker.interna
+               l:3000/_next/static/media/03fc1b4a8d284b5e-        
+               s.p.0wiir8udbzjvx.woff2</a></td>                   
+            ⋮┆----------------------------------------
+          1312┆ <td width="80%"><a href="http://host.docker.intern
+               al:3000/_next/static/media/23b7a97ae3b5c134-       
+               s.p.226pwps5o-                                     
+               gq_.woff2">http://host.docker.internal:3000/_next/s
+               tatic/media/23b7a97ae3b5c134-s.p.226pwps5o-        
+               gq_.woff2</a></td>                                 
+            ⋮┆----------------------------------------
+          1348┆ <td width="80%"><a href="http://host.docker.intern
+               al:3000/_next/static/media/99e609270109b47d-       
+               s.p.40sczeszzbjw1.woff2">http://host.docker.interna
+               l:3000/_next/static/media/99e609270109b47d-        
+               s.p.40sczeszzbjw1.woff2</a></td>                   
+            ⋮┆----------------------------------------
+          1449┆ <td width="80%"><a href="http://host.docker.intern
+               al:3000/_next/static/chunks/node_modules_next_dist_
+               compiled_react-server-dom-turbopack_164kp-         
+               6._.js">http://host.docker.internal:3000/_next/stat
+               ic/chunks/node_modules_next_dist_compiled_react-   
+               server-dom-turbopack_164kp-6._.js</a></td>         
+            ⋮┆----------------------------------------
+          1485┆ <td width="80%"><a href="http://host.docker.intern
+               al:3000/_next/static/chunks/turbopack-             
+               _01_ro95._.js">http://host.docker.internal:3000/_ne
+               xt/static/chunks/turbopack-_01_ro95._.js</a></td>  
+            ⋮┆----------------------------------------
+          1577┆ <td width="80%"><a href="http://host.docker.intern
+               al:3000">http://host.docker.internal:3000</a></td> 
+            ⋮┆----------------------------------------
+          1613┆ <td width="80%"><a href="http://host.docker.intern
+               al:3000/_next/static/chunks/%5Bturbopack%5D_browser
+               _dev_hmr-client_hmr-client_ts_1xx01vv._.js">http://
+               host.docker.internal:3000/_next/static/chunks/%5Btu
+               rbopack%5D_browser_dev_hmr-client_hmr-             
+               client_ts_1xx01vv._.js</a></td>                    
+            ⋮┆----------------------------------------
+          1649┆ <td width="80%"><a href="http://host.docker.intern
+               al:3000/_next/static/chunks/_1anvha4._.js">http://h
+               ost.docker.internal:3000/_next/static/chunks/_1anvh
+               a4._.js</a></td>                                   
+            ⋮┆----------------------------------------
+          1685┆ <td width="80%"><a href="http://host.docker.intern
+               al:3000/_next/static/chunks/node_modules_next_dist_
+               compiled_1amofcm._.js">http://host.docker.internal:
+               3000/_next/static/chunks/node_modules_next_dist_com
+               piled_1amofcm._.js</a></td>                        
+            ⋮┆----------------------------------------
+          1721┆ <td width="80%"><a href="http://host.docker.intern
+               al:3000/_next/static/chunks/src_lib_api_ts_1avs92- 
+               ._.js">http://host.docker.internal:3000/_next/stati
+               c/chunks/src_lib_api_ts_1avs92-._.js</a></td>      
+            ⋮┆----------------------------------------
+          1825┆ <td width="80%"><a href="http://host.docker.intern
+               al:3000">http://host.docker.internal:3000</a></td> 
+            ⋮┆----------------------------------------
+          1861┆ <td width="80%"><a href="http://host.docker.intern
+               al:3000/">http://host.docker.internal:3000/</a></td
+               >                                                  
+            ⋮┆----------------------------------------
+          1897┆ <td width="80%"><a href="http://host.docker.intern
+               al:3000/robots.txt">http://host.docker.internal:300
+               0/robots.txt</a></td>                              
+            ⋮┆----------------------------------------
+          1933┆ <td width="80%"><a href="http://host.docker.intern
+               al:3000/sitemap.xml">http://host.docker.internal:30
+               00/sitemap.xml</a></td>                            
+            ⋮┆----------------------------------------
+          2028┆ <td width="80%"><a href="http://host.docker.intern
+               al:3000/_next/static/chunks/node_modules_next_dist_
+               compiled_react-dom_096_9a-                         
+               ._.js">http://host.docker.internal:3000/_next/stati
+               c/chunks/node_modules_next_dist_compiled_react-    
+               dom_096_9a-._.js</a></td>                          
+            ⋮┆----------------------------------------
+          2123┆ <td width="80%"><a href="http://host.docker.intern
+               al:3000/_next/static/chunks/%5Bturbopack%5D_browser
+               _dev_hmr-client_hmr-client_ts_1xx01vv._.js">http://
+               host.docker.internal:3000/_next/static/chunks/%5Btu
+               rbopack%5D_browser_dev_hmr-client_hmr-             
+               client_ts_1xx01vv._.js</a></td>                    
+            ⋮┆----------------------------------------
+          2165┆ <td width="80%"><a href="http://host.docker.intern
+               al:3000/_next/static/media/03fc1b4a8d284b5e-       
+               s.p.0wiir8udbzjvx.woff2">http://host.docker.interna
+               l:3000/_next/static/media/03fc1b4a8d284b5e-        
+               s.p.0wiir8udbzjvx.woff2</a></td>                   
+            ⋮┆----------------------------------------
+          2207┆ <td width="80%"><a href="http://host.docker.intern
+               al:3000/_next/static/media/23b7a97ae3b5c134-       
+               s.p.226pwps5o-                                     
+               gq_.woff2">http://host.docker.internal:3000/_next/s
+               tatic/media/23b7a97ae3b5c134-s.p.226pwps5o-        
+               gq_.woff2</a></td>                                 
+            ⋮┆----------------------------------------
+          2249┆ <td width="80%"><a href="http://host.docker.intern
+               al:3000/_next/static/media/99e609270109b47d-       
+               s.p.40sczeszzbjw1.woff2">http://host.docker.interna
+               l:3000/_next/static/media/99e609270109b47d-        
+               s.p.40sczeszzbjw1.woff2</a></td>                   
+            ⋮┆----------------------------------------
+          2291┆ <td width="80%"><a href="http://host.docker.intern
+               al:3000/_next/static/media/effe91970fc4db64-       
+               s.p.0oace-s_gkfks.woff2">http://host.docker.interna
+               l:3000/_next/static/media/effe91970fc4db64-        
+               s.p.0oace-s_gkfks.woff2</a></td>                   
+            ⋮┆----------------------------------------
+          2395┆ <td width="80%"><a href="http://host.docker.intern
+               al:3000/_next/static/chunks/node_modules_1c-nb-    
+               8._.js">http://host.docker.internal:3000/_next/stat
+               ic/chunks/node_modules_1c-nb-8._.js</a></td>       
+            ⋮┆----------------------------------------
+          2440┆ <td width="80%"><a href="http://host.docker.intern
+               al:3000/_next/static/chunks/node_modules_1c-nb-    
+               8._.js">http://host.docker.internal:3000/_next/stat
+               ic/chunks/node_modules_1c-nb-8._.js</a></td>       
+            ⋮┆----------------------------------------
+          2479┆ <td width="80%"><a href="http://host.docker.intern
+               al:3000/_next/static/chunks/node_modules_1c-nb-    
+               8._.js">http://host.docker.internal:3000/_next/stat
+               ic/chunks/node_modules_1c-nb-8._.js</a></td>       
+            ⋮┆----------------------------------------
+          2518┆ <td width="80%"><a href="http://host.docker.intern
+               al:3000/_next/static/chunks/node_modules_1c-nb-    
+               8._.js">http://host.docker.internal:3000/_next/stat
+               ic/chunks/node_modules_1c-nb-8._.js</a></td>       
+            ⋮┆----------------------------------------
+          2557┆ <td width="80%"><a href="http://host.docker.intern
+               al:3000/_next/static/chunks/node_modules_1c-nb-    
+               8._.js">http://host.docker.internal:3000/_next/stat
+               ic/chunks/node_modules_1c-nb-8._.js</a></td>       
+            ⋮┆----------------------------------------
+          2596┆ <td width="80%"><a href="http://host.docker.intern
+               al:3000/_next/static/chunks/node_modules_1c-nb-    
+               8._.js">http://host.docker.internal:3000/_next/stat
+               ic/chunks/node_modules_1c-nb-8._.js</a></td>       
+            ⋮┆----------------------------------------
+          2641┆ <td width="80%"><a href="http://host.docker.intern
+               al:3000/_next/static/chunks/node_modules_1c-nb-    
+               8._.js">http://host.docker.internal:3000/_next/stat
+               ic/chunks/node_modules_1c-nb-8._.js</a></td>       
+            ⋮┆----------------------------------------
+          2680┆ <td width="80%"><a href="http://host.docker.intern
+               al:3000/_next/static/chunks/node_modules_es-toolkit
+               _dist_12huve3._.js">http://host.docker.internal:300
+               0/_next/static/chunks/node_modules_es-             
+               toolkit_dist_12huve3._.js</a></td>                 
+            ⋮┆----------------------------------------
+          2728┆ <td width="80%"><a href="http://host.docker.intern
+               al:3000/_next/static/chunks/node_modules_es-toolkit
+               _dist_12huve3._.js">http://host.docker.internal:300
+               0/_next/static/chunks/node_modules_es-             
+               toolkit_dist_12huve3._.js</a></td>                 
+            ⋮┆----------------------------------------
+          2771┆ <td width="80%"><a href="http://host.docker.intern
+               al:3000/_next/static/chunks/node_modules_es-toolkit
+               _dist_12huve3._.js">http://host.docker.internal:300
+               0/_next/static/chunks/node_modules_es-             
+               toolkit_dist_12huve3._.js</a></td>                 
+            ⋮┆----------------------------------------
+          2819┆ <td width="80%"><a href="http://host.docker.intern
+               al:3000/_next/static/chunks/node_modules_next_dist_
+               1ybzpk2._.js">http://host.docker.internal:3000/_nex
+               t/static/chunks/node_modules_next_dist_1ybzpk2._.js
+               </a></td>                                          
+            ⋮┆----------------------------------------
+          2864┆ <td width="80%"><a href="http://host.docker.intern
+               al:3000/_next/static/chunks/node_modules_next_dist_
+               1ybzpk2._.js">http://host.docker.internal:3000/_nex
+               t/static/chunks/node_modules_next_dist_1ybzpk2._.js
+               </a></td>                                          
+            ⋮┆----------------------------------------
+          2903┆ <td width="80%"><a href="http://host.docker.intern
+               al:3000/_next/static/chunks/node_modules_next_dist_
+               1ybzpk2._.js">http://host.docker.internal:3000/_nex
+               t/static/chunks/node_modules_next_dist_1ybzpk2._.js
+               </a></td>                                          
+            ⋮┆----------------------------------------
+          2942┆ <td width="80%"><a href="http://host.docker.intern
+               al:3000/_next/static/chunks/node_modules_next_dist_
+               1ybzpk2._.js">http://host.docker.internal:3000/_nex
+               t/static/chunks/node_modules_next_dist_1ybzpk2._.js
+               </a></td>                                          
+            ⋮┆----------------------------------------
+          2981┆ <td width="80%"><a href="http://host.docker.intern
+               al:3000/_next/static/chunks/node_modules_next_dist_
+               1ybzpk2._.js">http://host.docker.internal:3000/_nex
+               t/static/chunks/node_modules_next_dist_1ybzpk2._.js
+               </a></td>                                          
+            ⋮┆----------------------------------------
+          3020┆ <td width="80%"><a href="http://host.docker.intern
+               al:3000/_next/static/chunks/node_modules_next_dist_
+               1ybzpk2._.js">http://host.docker.internal:3000/_nex
+               t/static/chunks/node_modules_next_dist_1ybzpk2._.js
+               </a></td>                                          
+            ⋮┆----------------------------------------
+          3074┆ <td width="80%"><a href="http://host.docker.intern
+               al:3000/_next/static/chunks/node_modules_next_dist_
+               1ybzpk2._.js">http://host.docker.internal:3000/_nex
+               t/static/chunks/node_modules_next_dist_1ybzpk2._.js
+               </a></td>                                          
+            ⋮┆----------------------------------------
+          3113┆ <td width="80%"><a href="http://host.docker.intern
+               al:3000/_next/static/chunks/node_modules_next_dist_
+               compiled_1amofcm._.js">http://host.docker.internal:
+               3000/_next/static/chunks/node_modules_next_dist_com
+               piled_1amofcm._.js</a></td>                        
+            ⋮┆----------------------------------------
+          3152┆ <td width="80%"><a href="http://host.docker.intern
+               al:3000/_next/static/chunks/node_modules_next_dist_
+               compiled_1amofcm._.js">http://host.docker.internal:
+               3000/_next/static/chunks/node_modules_next_dist_com
+               piled_1amofcm._.js</a></td>                        
+            ⋮┆----------------------------------------
+          3191┆ <td width="80%"><a href="http://host.docker.intern
+               al:3000/_next/static/chunks/node_modules_recharts_e
+               s6_component_0t5m2pp._.js">http://host.docker.inter
+               nal:3000/_next/static/chunks/node_modules_recharts_
+               es6_component_0t5m2pp._.js</a></td>                
+            ⋮┆----------------------------------------
+          3230┆ <td width="80%"><a href="http://host.docker.intern
+               al:3000/_next/static/chunks/node_modules_recharts_e
+               s6_component_0t5m2pp._.js">http://host.docker.inter
+               nal:3000/_next/static/chunks/node_modules_recharts_
+               es6_component_0t5m2pp._.js</a></td>                
+            ⋮┆----------------------------------------
+          3269┆ <td width="80%"><a href="http://host.docker.intern
+               al:3000/_next/static/chunks/node_modules_recharts_e
+               s6_component_0t5m2pp._.js">http://host.docker.inter
+               nal:3000/_next/static/chunks/node_modules_recharts_
+               es6_component_0t5m2pp._.js</a></td>                
+            ⋮┆----------------------------------------
+          3308┆ <td width="80%"><a href="http://host.docker.intern
+               al:3000/_next/static/chunks/node_modules_recharts_e
+               s6_component_0t5m2pp._.js">http://host.docker.inter
+               nal:3000/_next/static/chunks/node_modules_recharts_
+               es6_component_0t5m2pp._.js</a></td>                
+            ⋮┆----------------------------------------
+          3354┆ <td width="80%"><a href="http://host.docker.intern
+               al:3000/_next/static/chunks/node_modules_recharts_e
+               s6_util_196ddir._.js">http://host.docker.internal:3
+               000/_next/static/chunks/node_modules_recharts_es6_u
+               til_196ddir._.js</a></td>                          
+            ⋮┆----------------------------------------
+          3393┆ <td width="80%"><a href="http://host.docker.intern
+               al:3000/_next/static/chunks/node_modules_recharts_e
+               s6_util_196ddir._.js">http://host.docker.internal:3
+               000/_next/static/chunks/node_modules_recharts_es6_u
+               til_196ddir._.js</a></td>                          
+            ⋮┆----------------------------------------
+          3432┆ <td width="80%"><a href="http://host.docker.intern
+               al:3000/_next/static/chunks/node_modules_recharts_e
+               s6_util_196ddir._.js">http://host.docker.internal:3
+               000/_next/static/chunks/node_modules_recharts_es6_u
+               til_196ddir._.js</a></td>                          
+            ⋮┆----------------------------------------
+          3477┆ <td width="80%"><a href="http://host.docker.intern
+               al:3000/_next/static/chunks/node_modules_recharts_e
+               s6_util_196ddir._.js">http://host.docker.internal:3
+               000/_next/static/chunks/node_modules_recharts_es6_u
+               til_196ddir._.js</a></td>                          
+            ⋮┆----------------------------------------
+          3523┆ <td width="80%"><a href="http://host.docker.intern
+               al:3000/_next/static/chunks/src_0siywz6._.js">http:
+               //host.docker.internal:3000/_next/static/chunks/src
+               _0siywz6._.js</a></td>                             
+            ⋮┆----------------------------------------
+          3562┆ <td width="80%"><a href="http://host.docker.intern
+               al:3000/_next/static/chunks/src_0siywz6._.js">http:
+               //host.docker.internal:3000/_next/static/chunks/src
+               _0siywz6._.js</a></td>                             
+            ⋮┆----------------------------------------
+          3601┆ <td width="80%"><a href="http://host.docker.intern
+               al:3000/_next/static/chunks/src_0siywz6._.js">http:
+               //host.docker.internal:3000/_next/static/chunks/src
+               _0siywz6._.js</a></td>                             
+            ⋮┆----------------------------------------
+          3640┆ <td width="80%"><a href="http://host.docker.intern
+               al:3000/_next/static/chunks/src_0siywz6._.js">http:
+               //host.docker.internal:3000/_next/static/chunks/src
+               _0siywz6._.js</a></td>                             
+            ⋮┆----------------------------------------
+          3679┆ <td width="80%"><a href="http://host.docker.intern
+               al:3000/_next/static/chunks/src_0siywz6._.js">http:
+               //host.docker.internal:3000/_next/static/chunks/src
+               _0siywz6._.js</a></td>                             
+            ⋮┆----------------------------------------
+          3728┆ <td width="80%"><a href="http://host.docker.intern
+               al:3000/_next/static/chunks/turbopack-             
+               _01_ro95._.js">http://host.docker.internal:3000/_ne
+               xt/static/chunks/turbopack-_01_ro95._.js</a></td>  
+            ⋮┆----------------------------------------
+          3767┆ <td width="80%"><a href="http://host.docker.intern
+               al:3000/_next/static/chunks/turbopack-             
+               _01_ro95._.js">http://host.docker.internal:3000/_ne
+               xt/static/chunks/turbopack-_01_ro95._.js</a></td>  
+            ⋮┆----------------------------------------
+          3806┆ <td width="80%"><a href="http://host.docker.intern
+               al:3000/_next/static/chunks/turbopack-             
+               _01_ro95._.js">http://host.docker.internal:3000/_ne
+               xt/static/chunks/turbopack-_01_ro95._.js</a></td>  
+            ⋮┆----------------------------------------
+          3845┆ <td width="80%"><a href="http://host.docker.intern
+               al:3000/_next/static/chunks/turbopack-             
+               _01_ro95._.js">http://host.docker.internal:3000/_ne
+               xt/static/chunks/turbopack-_01_ro95._.js</a></td>  
+            ⋮┆----------------------------------------
+          3890┆ <td width="80%"><a href="http://host.docker.intern
+               al:3000/_next/static/chunks/turbopack-             
+               _01_ro95._.js">http://host.docker.internal:3000/_ne
+               xt/static/chunks/turbopack-_01_ro95._.js</a></td>  
+            ⋮┆----------------------------------------
+          3929┆ <td width="80%"><a href="http://host.docker.intern
+               al:3000/_next/static/chunks/turbopack-             
+               _01_ro95._.js">http://host.docker.internal:3000/_ne
+               xt/static/chunks/turbopack-_01_ro95._.js</a></td>  
+            ⋮┆----------------------------------------
+          3977┆ <td width="80%"><a href="http://host.docker.intern
+               al:3000/_next/static/chunks/turbopack-             
+               _01_ro95._.js">http://host.docker.internal:3000/_ne
+               xt/static/chunks/turbopack-_01_ro95._.js</a></td>  
+            ⋮┆----------------------------------------
+          4075┆ <td width="80%"><a href="http://host.docker.intern
+               al:3000">http://host.docker.internal:3000</a></td> 
+            ⋮┆----------------------------------------
+          4114┆ <td width="80%"><a href="http://host.docker.intern
+               al:3000/">http://host.docker.internal:3000/</a></td
+               >                                                  
+            ⋮┆----------------------------------------
+          4153┆ <td width="80%"><a href="http://host.docker.intern
+               al:3000/robots.txt">http://host.docker.internal:300
+               0/robots.txt</a></td>                              
+            ⋮┆----------------------------------------
+          4192┆ <td width="80%"><a href="http://host.docker.intern
+               al:3000/sitemap.xml">http://host.docker.internal:30
+               00/sitemap.xml</a></td>                            
+            ⋮┆----------------------------------------
+          4283┆ <td width="80%"><a href="http://host.docker.intern
+               al:3000/_next/static/media/99e609270109b47d-       
+               s.p.40sczeszzbjw1.woff2">http://host.docker.interna
+               l:3000/_next/static/media/99e609270109b47d-        
+               s.p.40sczeszzbjw1.woff2</a></td>                   
+            ⋮┆----------------------------------------
+          4393┆ <td width="80%"><a href="http://host.docker.intern
+               al:3000">http://host.docker.internal:3000</a></td> 
+            ⋮┆----------------------------------------
+          4429┆ <td width="80%"><a href="http://host.docker.intern
+               al:3000/_next/static/chunks/_1anvha4._.js">http://h
+               ost.docker.internal:3000/_next/static/chunks/_1anvh
+               a4._.js</a></td>                                   
+            ⋮┆----------------------------------------
+          4465┆ <td width="80%"><a href="http://host.docker.intern
+               al:3000/_next/static/chunks/src_lib_api_ts_1avs92- 
+               ._.js">http://host.docker.internal:3000/_next/stati
+               c/chunks/src_lib_api_ts_1avs92-._.js</a></td>      
+                                                        
+    reports/dast/sbom-frontend-full-20260707_163313.html
+    ❯❱ [1mhtml.security.plaintext-http-link.plaintext-http-link[0m
+          ❰❰ Blocking ❱❱
+          This link points to a plaintext HTTP URL. Prefer an
+          encrypted HTTPS URL if possible.                   
+          Details: https://sg.run/RA5q                       
+                                                             
+          882┆ <td width="80%"><a href="http://host.docker.interna
+               l:3000">http://host.docker.internal:3000</a></td>  
+            ⋮┆----------------------------------------
+          918┆ <td width="80%"><a href="http://host.docker.interna
+               l:3000/">http://host.docker.internal:3000/</a></td>
+            ⋮┆----------------------------------------
+          954┆ <td width="80%"><a href="http://host.docker.interna
+               l:3000/robots.txt">http://host.docker.internal:3000
+               /robots.txt</a></td>                               
+            ⋮┆----------------------------------------
+          990┆ <td width="80%"><a href="http://host.docker.interna
+               l:3000/sitemap.xml">http://host.docker.internal:300
+               0/sitemap.xml</a></td>                             
+            ⋮┆----------------------------------------
+          1100┆ <td width="80%"><a href="http://host.docker.intern
+               al:3000/">http://host.docker.internal:3000/</a></td
+               >                                                  
+            ⋮┆----------------------------------------
+          1201┆ <td width="80%"><a href="http://host.docker.intern
+               al:3000">http://host.docker.internal:3000</a></td> 
+            ⋮┆----------------------------------------
+          1237┆ <td width="80%"><a href="http://host.docker.intern
+               al:3000/">http://host.docker.internal:3000/</a></td
+               >                                                  
+            ⋮┆----------------------------------------
+          1332┆ <td width="80%"><a href="http://host.docker.intern
+               al:3000">http://host.docker.internal:3000</a></td> 
+            ⋮┆----------------------------------------
+          1368┆ <td width="80%"><a href="http://host.docker.intern
+               al:3000/">http://host.docker.internal:3000/</a></td
+               >                                                  
+            ⋮┆----------------------------------------
+          1463┆ <td width="80%"><a href="http://host.docker.intern
+               al:3000">http://host.docker.internal:3000</a></td> 
+            ⋮┆----------------------------------------
+          1499┆ <td width="80%"><a href="http://host.docker.intern
+               al:3000/">http://host.docker.internal:3000/</a></td
+               >                                                  
+            ⋮┆----------------------------------------
+          1597┆ <td width="80%"><a href="http://host.docker.intern
+               al:3000/">http://host.docker.internal:3000/</a></td
+               >                                                  
+            ⋮┆----------------------------------------
+          1633┆ <td width="80%"><a href="http://host.docker.intern
+               al:3000/_next/static/chunks/%5Bturbopack%5D_browser
+               _dev_hmr-client_hmr-client_ts_1xx01vv._.js">http://
+               host.docker.internal:3000/_next/static/chunks/%5Btu
+               rbopack%5D_browser_dev_hmr-client_hmr-             
+               client_ts_1xx01vv._.js</a></td>                    
+            ⋮┆----------------------------------------
+          1669┆ <td width="80%"><a href="http://host.docker.intern
+               al:3000/_next/static/media/03fc1b4a8d284b5e-       
+               s.p.0wiir8udbzjvx.woff2">http://host.docker.interna
+               l:3000/_next/static/media/03fc1b4a8d284b5e-        
+               s.p.0wiir8udbzjvx.woff2</a></td>                   
+            ⋮┆----------------------------------------
+          1705┆ <td width="80%"><a href="http://host.docker.intern
+               al:3000/_next/static/media/23b7a97ae3b5c134-       
+               s.p.226pwps5o-                                     
+               gq_.woff2">http://host.docker.internal:3000/_next/s
+               tatic/media/23b7a97ae3b5c134-s.p.226pwps5o-        
+               gq_.woff2</a></td>                                 
+            ⋮┆----------------------------------------
+          1741┆ <td width="80%"><a href="http://host.docker.intern
+               al:3000/_next/static/media/99e609270109b47d-       
+               s.p.40sczeszzbjw1.woff2">http://host.docker.interna
+               l:3000/_next/static/media/99e609270109b47d-        
+               s.p.40sczeszzbjw1.woff2</a></td>                   
+            ⋮┆----------------------------------------
+          1842┆ <td width="80%"><a href="http://host.docker.intern
+               al:3000/_next/static/chunks/node_modules_next_dist_
+               compiled_react-server-dom-turbopack_164kp-         
+               6._.js">http://host.docker.internal:3000/_next/stat
+               ic/chunks/node_modules_next_dist_compiled_react-   
+               server-dom-turbopack_164kp-6._.js</a></td>         
+            ⋮┆----------------------------------------
+          1878┆ <td width="80%"><a href="http://host.docker.intern
+               al:3000/_next/static/chunks/turbopack-             
+               _01_ro95._.js">http://host.docker.internal:3000/_ne
+               xt/static/chunks/turbopack-_01_ro95._.js</a></td>  
+            ⋮┆----------------------------------------
+          1970┆ <td width="80%"><a href="http://host.docker.intern
+               al:3000/">http://host.docker.internal:3000/</a></td
+               >                                                  
+            ⋮┆----------------------------------------
+          2006┆ <td width="80%"><a href="http://host.docker.intern
+               al:3000/_next/static/chunks/%5Bturbopack%5D_browser
+               _dev_hmr-client_hmr-client_ts_1xx01vv._.js">http://
+               host.docker.internal:3000/_next/static/chunks/%5Btu
+               rbopack%5D_browser_dev_hmr-client_hmr-             
+               client_ts_1xx01vv._.js</a></td>                    
+            ⋮┆----------------------------------------
+          2042┆ <td width="80%"><a href="http://host.docker.intern
+               al:3000/_next/static/chunks/_1anvha4._.js">http://h
+               ost.docker.internal:3000/_next/static/chunks/_1anvh
+               a4._.js</a></td>                                   
+            ⋮┆----------------------------------------
+          2078┆ <td width="80%"><a href="http://host.docker.intern
+               al:3000/robots.txt">http://host.docker.internal:300
+               0/robots.txt</a></td>                              
+            ⋮┆----------------------------------------
+          2114┆ <td width="80%"><a href="http://host.docker.intern
+               al:3000/sitemap.xml">http://host.docker.internal:30
+               00/sitemap.xml</a></td>                            
+            ⋮┆----------------------------------------
+          2218┆ <td width="80%"><a href="http://host.docker.intern
+               al:3000">http://host.docker.internal:3000</a></td> 
+            ⋮┆----------------------------------------
+          2254┆ <td width="80%"><a href="http://host.docker.intern
+               al:3000/">http://host.docker.internal:3000/</a></td
+               >                                                  
+            ⋮┆----------------------------------------
+          2290┆ <td width="80%"><a href="http://host.docker.intern
+               al:3000/robots.txt">http://host.docker.internal:300
+               0/robots.txt</a></td>                              
+            ⋮┆----------------------------------------
+          2326┆ <td width="80%"><a href="http://host.docker.intern
+               al:3000/sitemap.xml">http://host.docker.internal:30
+               00/sitemap.xml</a></td>                            
+            ⋮┆----------------------------------------
+          2597┆ <td width="80%"><a href="http://host.docker.intern
+               al:3000/_next/static/chunks/node_modules_next_dist_
+               compiled_react-dom_096_9a-                         
+               ._.js">http://host.docker.internal:3000/_next/stati
+               c/chunks/node_modules_next_dist_compiled_react-    
+               dom_096_9a-._.js</a></td>                          
+            ⋮┆----------------------------------------
+          2692┆ <td width="80%"><a href="http://host.docker.intern
+               al:3000/">http://host.docker.internal:3000/</a></td
+               >                                                  
+            ⋮┆----------------------------------------
+          2734┆ <td width="80%"><a href="http://host.docker.intern
+               al:3000/_next/static/chunks/%5Bturbopack%5D_browser
+               _dev_hmr-client_hmr-client_ts_1xx01vv._.js">http://
+               host.docker.internal:3000/_next/static/chunks/%5Btu
+               rbopack%5D_browser_dev_hmr-client_hmr-             
+               client_ts_1xx01vv._.js</a></td>                    
+            ⋮┆----------------------------------------
+          2776┆ <td width="80%"><a href="http://host.docker.intern
+               al:3000/_next/static/media/03fc1b4a8d284b5e-       
+               s.p.0wiir8udbzjvx.woff2">http://host.docker.interna
+               l:3000/_next/static/media/03fc1b4a8d284b5e-        
+               s.p.0wiir8udbzjvx.woff2</a></td>                   
+            ⋮┆----------------------------------------
+          2818┆ <td width="80%"><a href="http://host.docker.intern
+               al:3000/_next/static/media/23b7a97ae3b5c134-       
+               s.p.226pwps5o-                                     
+               gq_.woff2">http://host.docker.internal:3000/_next/s
+               tatic/media/23b7a97ae3b5c134-s.p.226pwps5o-        
+               gq_.woff2</a></td>                                 
+            ⋮┆----------------------------------------
+          2860┆ <td width="80%"><a href="http://host.docker.intern
+               al:3000/_next/static/media/99e609270109b47d-       
+               s.p.40sczeszzbjw1.woff2">http://host.docker.interna
+               l:3000/_next/static/media/99e609270109b47d-        
+               s.p.40sczeszzbjw1.woff2</a></td>                   
+            ⋮┆----------------------------------------
+          2964┆ <td width="80%"><a href="http://host.docker.intern
+               al:3000/_next/static/chunks/node_modules_next_dist_
+               1ybzpk2._.js">http://host.docker.internal:3000/_nex
+               t/static/chunks/node_modules_next_dist_1ybzpk2._.js
+               </a></td>                                          
+            ⋮┆----------------------------------------
+          3009┆ <td width="80%"><a href="http://host.docker.intern
+               al:3000/_next/static/chunks/node_modules_next_dist_
+               1ybzpk2._.js">http://host.docker.internal:3000/_nex
+               t/static/chunks/node_modules_next_dist_1ybzpk2._.js
+               </a></td>                                          
+            ⋮┆----------------------------------------
+          3048┆ <td width="80%"><a href="http://host.docker.intern
+               al:3000/_next/static/chunks/node_modules_next_dist_
+               1ybzpk2._.js">http://host.docker.internal:3000/_nex
+               t/static/chunks/node_modules_next_dist_1ybzpk2._.js
+               </a></td>                                          
+            ⋮┆----------------------------------------
+          3087┆ <td width="80%"><a href="http://host.docker.intern
+               al:3000/_next/static/chunks/node_modules_next_dist_
+               1ybzpk2._.js">http://host.docker.internal:3000/_nex
+               t/static/chunks/node_modules_next_dist_1ybzpk2._.js
+               </a></td>                                          
+            ⋮┆----------------------------------------
+          3126┆ <td width="80%"><a href="http://host.docker.intern
+               al:3000/_next/static/chunks/node_modules_next_dist_
+               1ybzpk2._.js">http://host.docker.internal:3000/_nex
+               t/static/chunks/node_modules_next_dist_1ybzpk2._.js
+               </a></td>                                          
+            ⋮┆----------------------------------------
+          3165┆ <td width="80%"><a href="http://host.docker.intern
+               al:3000/_next/static/chunks/node_modules_next_dist_
+               1ybzpk2._.js">http://host.docker.internal:3000/_nex
+               t/static/chunks/node_modules_next_dist_1ybzpk2._.js
+               </a></td>                                          
+            ⋮┆----------------------------------------
+          3219┆ <td width="80%"><a href="http://host.docker.intern
+               al:3000/_next/static/chunks/node_modules_next_dist_
+               1ybzpk2._.js">http://host.docker.internal:3000/_nex
+               t/static/chunks/node_modules_next_dist_1ybzpk2._.js
+               </a></td>                                          
+            ⋮┆----------------------------------------
+          3258┆ <td width="80%"><a href="http://host.docker.intern
+               al:3000/_next/static/chunks/node_modules_next_dist_
+               compiled_1amofcm._.js">http://host.docker.internal:
+               3000/_next/static/chunks/node_modules_next_dist_com
+               piled_1amofcm._.js</a></td>                        
+            ⋮┆----------------------------------------
+          3297┆ <td width="80%"><a href="http://host.docker.intern
+               al:3000/_next/static/chunks/node_modules_next_dist_
+               compiled_1amofcm._.js">http://host.docker.internal:
+               3000/_next/static/chunks/node_modules_next_dist_com
+               piled_1amofcm._.js</a></td>                        
+            ⋮┆----------------------------------------
+          3336┆ <td width="80%"><a href="http://host.docker.intern
+               al:3000/_next/static/chunks/node_modules_recharts_e
+               s6_component_0t5m2pp._.js">http://host.docker.inter
+               nal:3000/_next/static/chunks/node_modules_recharts_
+               es6_component_0t5m2pp._.js</a></td>                
+            ⋮┆----------------------------------------
+          3375┆ <td width="80%"><a href="http://host.docker.intern
+               al:3000/_next/static/chunks/node_modules_recharts_e
+               s6_component_0t5m2pp._.js">http://host.docker.inter
+               nal:3000/_next/static/chunks/node_modules_recharts_
+               es6_component_0t5m2pp._.js</a></td>                
+            ⋮┆----------------------------------------
+          3414┆ <td width="80%"><a href="http://host.docker.intern
+               al:3000/_next/static/chunks/node_modules_recharts_e
+               s6_component_0t5m2pp._.js">http://host.docker.inter
+               nal:3000/_next/static/chunks/node_modules_recharts_
+               es6_component_0t5m2pp._.js</a></td>                
+            ⋮┆----------------------------------------
+          3453┆ <td width="80%"><a href="http://host.docker.intern
+               al:3000/_next/static/chunks/node_modules_recharts_e
+               s6_component_0t5m2pp._.js">http://host.docker.inter
+               nal:3000/_next/static/chunks/node_modules_recharts_
+               es6_component_0t5m2pp._.js</a></td>                
+            ⋮┆----------------------------------------
+          3499┆ <td width="80%"><a href="http://host.docker.intern
+               al:3000/_next/static/chunks/src_0siywz6._.js">http:
+               //host.docker.internal:3000/_next/static/chunks/src
+               _0siywz6._.js</a></td>                             
+            ⋮┆----------------------------------------
+          3538┆ <td width="80%"><a href="http://host.docker.intern
+               al:3000/_next/static/chunks/src_0siywz6._.js">http:
+               //host.docker.internal:3000/_next/static/chunks/src
+               _0siywz6._.js</a></td>                             
+            ⋮┆----------------------------------------
+          3577┆ <td width="80%"><a href="http://host.docker.intern
+               al:3000/_next/static/chunks/src_0siywz6._.js">http:
+               //host.docker.internal:3000/_next/static/chunks/src
+               _0siywz6._.js</a></td>                             
+            ⋮┆----------------------------------------
+          3616┆ <td width="80%"><a href="http://host.docker.intern
+               al:3000/_next/static/chunks/src_0siywz6._.js">http:
+               //host.docker.internal:3000/_next/static/chunks/src
+               _0siywz6._.js</a></td>                             
+            ⋮┆----------------------------------------
+          3655┆ <td width="80%"><a href="http://host.docker.intern
+               al:3000/_next/static/chunks/src_0siywz6._.js">http:
+               //host.docker.internal:3000/_next/static/chunks/src
+               _0siywz6._.js</a></td>                             
+            ⋮┆----------------------------------------
+          3704┆ <td width="80%"><a href="http://host.docker.intern
+               al:3000/_next/static/chunks/turbopack-             
+               _01_ro95._.js">http://host.docker.internal:3000/_ne
+               xt/static/chunks/turbopack-_01_ro95._.js</a></td>  
+            ⋮┆----------------------------------------
+          3743┆ <td width="80%"><a href="http://host.docker.intern
+               al:3000/_next/static/chunks/turbopack-             
+               _01_ro95._.js">http://host.docker.internal:3000/_ne
+               xt/static/chunks/turbopack-_01_ro95._.js</a></td>  
+            ⋮┆----------------------------------------
+          3782┆ <td width="80%"><a href="http://host.docker.intern
+               al:3000/_next/static/chunks/turbopack-             
+               _01_ro95._.js">http://host.docker.internal:3000/_ne
+               xt/static/chunks/turbopack-_01_ro95._.js</a></td>  
+            ⋮┆----------------------------------------
+          3821┆ <td width="80%"><a href="http://host.docker.intern
+               al:3000/_next/static/chunks/turbopack-             
+               _01_ro95._.js">http://host.docker.internal:3000/_ne
+               xt/static/chunks/turbopack-_01_ro95._.js</a></td>  
+            ⋮┆----------------------------------------
+          3866┆ <td width="80%"><a href="http://host.docker.intern
+               al:3000/_next/static/chunks/turbopack-             
+               _01_ro95._.js">http://host.docker.internal:3000/_ne
+               xt/static/chunks/turbopack-_01_ro95._.js</a></td>  
+            ⋮┆----------------------------------------
+          3905┆ <td width="80%"><a href="http://host.docker.intern
+               al:3000/_next/static/chunks/turbopack-             
+               _01_ro95._.js">http://host.docker.internal:3000/_ne
+               xt/static/chunks/turbopack-_01_ro95._.js</a></td>  
+            ⋮┆----------------------------------------
+          3953┆ <td width="80%"><a href="http://host.docker.intern
+               al:3000/_next/static/chunks/turbopack-             
+               _01_ro95._.js">http://host.docker.internal:3000/_ne
+               xt/static/chunks/turbopack-_01_ro95._.js</a></td>  
+            ⋮┆----------------------------------------
+          4051┆ <td width="80%"><a href="http://host.docker.intern
+               al:3000">http://host.docker.internal:3000</a></td> 
+            ⋮┆----------------------------------------
+          4090┆ <td width="80%"><a href="http://host.docker.intern
+               al:3000/">http://host.docker.internal:3000/</a></td
+               >                                                  
+            ⋮┆----------------------------------------
+          4129┆ <td width="80%"><a href="http://host.docker.intern
+               al:3000/robots.txt">http://host.docker.internal:300
+               0/robots.txt</a></td>                              
+            ⋮┆----------------------------------------
+          4168┆ <td width="80%"><a href="http://host.docker.intern
+               al:3000/sitemap.xml">http://host.docker.internal:30
+               00/sitemap.xml</a></td>                            
+            ⋮┆----------------------------------------
+          4611┆ <td width="80%"><a href="http://host.docker.intern
+               al:3000/_next/static/media/03fc1b4a8d284b5e-       
+               s.p.0wiir8udbzjvx.woff2">http://host.docker.interna
+               l:3000/_next/static/media/03fc1b4a8d284b5e-        
+               s.p.0wiir8udbzjvx.woff2</a></td>                   
+            ⋮┆----------------------------------------
+          4647┆ <td width="80%"><a href="http://host.docker.intern
+               al:3000/_next/static/media/23b7a97ae3b5c134-       
+               s.p.226pwps5o-                                     
+               gq_.woff2">http://host.docker.internal:3000/_next/s
+               tatic/media/23b7a97ae3b5c134-s.p.226pwps5o-        
+               gq_.woff2</a></td>                                 
+            ⋮┆----------------------------------------
+          4683┆ <td width="80%"><a href="http://host.docker.intern
+               al:3000/_next/static/media/99e609270109b47d-       
+               s.p.40sczeszzbjw1.woff2">http://host.docker.interna
+               l:3000/_next/static/media/99e609270109b47d-        
+               s.p.40sczeszzbjw1.woff2</a></td>                   
+            ⋮┆----------------------------------------
+          4719┆ <td width="80%"><a href="http://host.docker.intern
+               al:3000/_next/static/media/effe91970fc4db64-       
+               s.p.0oace-s_gkfks.woff2">http://host.docker.interna
+               l:3000/_next/static/media/effe91970fc4db64-        
+               s.p.0oace-s_gkfks.woff2</a></td>                   
+            ⋮┆----------------------------------------
+          4829┆ <td width="80%"><a href="http://host.docker.intern
+               al:3000/">http://host.docker.internal:3000/</a></td
+               >                                                  
+            ⋮┆----------------------------------------
+          4865┆ <td width="80%"><a href="http://host.docker.intern
+               al:3000/_next/static/chunks/%5Bturbopack%5D_browser
+               _dev_hmr-client_hmr-client_ts_1xx01vv._.js">http://
+               host.docker.internal:3000/_next/static/chunks/%5Btu
+               rbopack%5D_browser_dev_hmr-client_hmr-             
+               client_ts_1xx01vv._.js</a></td>                    
+            ⋮┆----------------------------------------
+          4901┆ <td width="80%"><a href="http://host.docker.intern
+               al:3000/_next/static/chunks/_1anvha4._.js">http://h
+               ost.docker.internal:3000/_next/static/chunks/_1anvh
+               a4._.js</a></td>                                   
+            ⋮┆----------------------------------------
+          4937┆ <td width="80%"><a href="http://host.docker.intern
+               al:3000/robots.txt">http://host.docker.internal:300
+               0/robots.txt</a></td>                              
+            ⋮┆----------------------------------------
+          4973┆ <td width="80%"><a href="http://host.docker.intern
+               al:3000/sitemap.xml">http://host.docker.internal:30
+               00/sitemap.xml</a></td>                            
+            ⋮┆----------------------------------------
+          5068┆ <td width="80%"><a href="http://host.docker.intern
+               al:3000">http://host.docker.internal:3000</a></td> 
+            ⋮┆----------------------------------------
+          5104┆ <td width="80%"><a href="http://host.docker.intern
+               al:3000/">http://host.docker.internal:3000/</a></td
+               >                                                  
+            ⋮┆----------------------------------------
+          5140┆ <td width="80%"><a href="http://host.docker.intern
+               al:3000/_next">http://host.docker.internal:3000/_ne
+               xt</a></td>                                        
+            ⋮┆----------------------------------------
+          5176┆ <td width="80%"><a href="http://host.docker.intern
+               al:3000/_next/static">http://host.docker.internal:3
+               000/_next/static</a></td>                          
+            ⋮┆----------------------------------------
+          5212┆ <td width="80%"><a href="http://host.docker.intern
+               al:3000/_next/static">http://host.docker.internal:3
+               000/_next/static</a></td>                          
+                  
+    scripts/dev.py
+    ❯❱ [1mpython.lang.security.audit.dynamic-urllib-use-detected.dynamic-urllib-[0m
+  [1m     use-detected[0m                                                          
+          ❰❰ Blocking ❱❱
+          Detected a dynamic value being used with urllib. urllib     
+          supports 'file://' schemes, so a dynamic value controlled by
+          a malicious actor may allow them to read arbitrary files.   
+          Audit uses of urllib calls to ensure user data cannot       
+          control the URLs, or consider using the 'requests' library  
+          instead.                                                    
+          Details: https://sg.run/dKZZ                                
+                                                                      
+          119┆ with urlopen(f"http://127.0.0.1:{MAILPIT_UI_PORT}/a
+               pi/v1/info", timeout=2) as response:               
+   
+   ❯❯❱ [1mpython.lang.security.unverified-ssl-context.unverified-ssl-context[0m
+          ❰❰ Blocking ❱❱
+          Unverified SSL context detected. This will permit insecure
+          connections without verifying SSL certificates. Use       
+          'ssl.create_default_context' instead.                     
+          Details: https://sg.run/N4lp                              
+                                                                    
+           ▶▶┆ Autofix ▶ ssl.create_default_context()
+          924┆ context = ssl._create_unverified_context() if 
+               url.startswith("https://localhost:") else None
+   
+    ❯❱ [1mpython.lang.security.audit.dynamic-urllib-use-detected.dynamic-urllib-[0m
+  [1m     use-detected[0m                                                          
+          ❰❰ Blocking ❱❱
+          Detected a dynamic value being used with urllib. urllib     
+          supports 'file://' schemes, so a dynamic value controlled by
+          a malicious actor may allow them to read arbitrary files.   
+          Audit uses of urllib calls to ensure user data cannot       
+          control the URLs, or consider using the 'requests' library  
+          instead.                                                    
+          Details: https://sg.run/dKZZ                                
+                                                                      
+          925┆ with urlopen(url, timeout=1, context=context) as
+               response:                                       

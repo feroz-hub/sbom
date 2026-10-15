@@ -294,6 +294,9 @@ def _upsert_components(
     by_cpe: dict = {}
     by_purl: dict = {}
 
+    existing_by_id = {r.id: r for r in existing_rows}
+    claimed_ids: set[int] = set()
+
     # Build lookup maps from existing components
     for row in existing_rows:
         if row.bom_ref:
@@ -320,7 +323,7 @@ def _upsert_components(
         version = (comp.get("version") or "").strip() or None
         cpe = (comp.get("cpe") or "").strip() or None
         cpe_source = (comp.get("cpe_source") or "").strip() or None
-        ref = (comp.get("bom_ref") or "").strip() or None
+        ref = (comp.get("bom_ref") or comp.get("SPDXID") or "").strip() or None
         return {
             "bom_ref": ref,
             "component_type": (comp.get("type") or "").strip() or None,
@@ -379,6 +382,24 @@ def _upsert_components(
         ref = values["bom_ref"]
         triplet = (normalized_key(cpe), normalized_key(name), normalized_key(version))
 
+        # Analysis already has authoritative IDs. Never rewrite an occurrence
+        # from an enriched provider-input projection.
+        supplied_id = comp.get("component_id")
+        if supplied_id is not None:
+            row = existing_by_id.get(supplied_id)
+            if row is None or row.tenant_id != sbom_obj.tenant_id:
+                raise ValueError("Component does not belong to the selected SBOM and tenant")
+            claimed_ids.add(row.id)
+            return row
+        if not ref:
+            candidates = [r for r in existing_rows if not r.bom_ref and r.id not in claimed_ids
+                          and r.name == name and r.version == version and r.purl == values["purl"]
+                          and r.hashes == values["hashes"] and r.scope == values["scope"]]
+            if candidates:
+                row = min(candidates, key=lambda r: r.id)
+                claimed_ids.add(row.id)
+                return _apply_component_values(row, values)
+
         # If it already exists by bom-ref, update fields in place
         if ref and ref in by_bom_ref:
             row = by_bom_ref[ref]
@@ -390,12 +411,12 @@ def _upsert_components(
             return row
 
         # Backfill case for canonical components
-        if not is_dup and cpe:
+        if not is_dup and cpe and not ref:
             nv_key = (normalized_key(name), normalized_key(version))
-            backfill_target = next(
-                (r for r in by_name_version.get(nv_key, []) if not (r.cpe or "").strip() and not r.is_duplicate),
-                None,
-            )
+            backfill_candidates = [r for r in by_name_version.get(nv_key, [])
+                                   if not (r.cpe or "").strip() and not r.is_duplicate and not r.bom_ref
+                                   and r.id not in claimed_ids and r.purl == values["purl"]]
+            backfill_target = backfill_candidates[0] if len(backfill_candidates) == 1 else None
             if backfill_target is not None:
                 _apply_component_values(backfill_target, values)
                 db.add(backfill_target)
@@ -414,6 +435,9 @@ def _upsert_components(
         row = SBOMComponent(sbom_id=sbom_obj.id, created_on=now_iso(), **values)
         db.add(row)
         db.flush()
+        existing_rows.append(row)
+        existing_by_id[row.id] = row
+        claimed_ids.add(row.id)
 
         if ref:
             by_bom_ref[ref] = row
@@ -448,15 +472,15 @@ def _upsert_components(
         parent_id = parent_row.id if parent_row else None
         save_comp_row(comp, is_dup=True, dup_of_id=parent_id)
 
-    return {"triplet": by_comp_triplet, "cpe": by_cpe, "bom_ref": by_bom_ref, "purl": by_purl, "name_version": by_name_version}
+    return {"ids": {r.id: r for r in [*existing_rows, *by_bom_ref.values(), *by_comp_triplet.values()]}, "triplet": by_comp_triplet, "cpe": by_cpe, "bom_ref": by_bom_ref, "purl": by_purl, "name_version": by_name_version}
 
 
 def resolve_component_id(finding: dict, component_maps: dict) -> int | None:
     """
     Resolve a finding to a component ID using the component maps.
 
-    Tries to match by exact (cpe, name, version) triplet first,
-    then falls back to CPE match if available.
+    Prefer an owned stored ID or document reference. Legacy PURL or
+    name/version lookup must be unambiguous. CPE alone is insufficient.
 
     Args:
         finding: Finding dictionary with cpe, component_name, component_version
@@ -465,35 +489,40 @@ def resolve_component_id(finding: dict, component_maps: dict) -> int | None:
     Returns:
         Component ID if found, None otherwise
     """
-    cpe = (finding.get("cpe") or "").strip() or None
-    name = (finding.get("component_name") or "").strip() or None
-    version = (finding.get("component_version") or "").strip() or None
-
-    triplet = (
-        normalized_key(cpe),
-        normalized_key(name),
-        normalized_key(version),
-    )
-    row = component_maps["triplet"].get(triplet)
-    if row:
+    rows = component_maps.get("ids", {})
+    supplied_id = finding.get("component_id")
+    if supplied_id is not None:
+        # Membership is checked against the authorized SBOM's rows, never DB.get.
+        row = rows.get(supplied_id)
+        if row is None:
+            return None
+        if finding.get("sbom_id") is not None and finding["sbom_id"] != row.sbom_id:
+            return None
+        if finding.get("tenant_id") is not None and finding["tenant_id"] != row.tenant_id:
+            return None
+        if finding.get("bom_ref") and finding["bom_ref"] != row.bom_ref:
+            return None
+        purl = finding.get("purl")
+        if purl and (row.normalized_purl or row.purl) and purl != (row.normalized_purl or row.purl):
+            return None
+        version = finding.get("component_version")
+        if version and row.version and version not in {row.version, row.original_version}:
+            return None
         return row.id
-
-    if cpe:
-        cpe_rows = component_maps["cpe"].get(normalized_key(cpe), [])
-        if cpe_rows:
-            return cpe_rows[0].id
-
-    purl = (finding.get("purl") or "").strip() or None
+    ref = finding.get("bom_ref")
+    if ref:
+        row = component_maps.get("bom_ref", {}).get(ref)
+        return row.id if row else None
+    purl = str(finding.get("purl") or "").strip()
     if purl:
-        purl_rows = component_maps.get("purl", {}).get(normalized_key(purl), [])
-        if purl_rows:
-            return purl_rows[0].id
-
-    nv_rows = component_maps.get("name_version", {}).get((normalized_key(name), normalized_key(version)), [])
-    if nv_rows:
-        return nv_rows[0].id
-
-    return None
+        candidates = [r for r in rows.values() if (r.normalized_purl or r.purl) == purl]
+    else:
+        name, version = finding.get("component_name"), finding.get("component_version")
+        if not name or not version:
+            return None
+        candidates = component_maps.get("name_version", {}).get((normalized_key(name), normalized_key(version)), [])
+    ids = {r.id for r in candidates}
+    return next(iter(ids)) if len(ids) == 1 else None
 
 
 # ============================================================

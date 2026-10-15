@@ -39,9 +39,6 @@ def normalize_version(value: Any, *, ecosystem: str | None = None) -> VersionNor
 def _can_remove_leading_v(value: str, ecosystem: str | None) -> bool:
     if len(value) < 2 or value[0] != "v" or not value[1].isdigit():
         return False
-    # OS package ecosystems often have epochs/revisions where aggressive
-    # version munging is risky; leading "v" is still safe only for semver-ish
-    # versions.
-    if (ecosystem or "").lower() in {"debian", "rpm", "redhat", "alpine", "apk"}:
-        return "." in value[1:]
-    return True
+    # Only npm's semver parser explicitly treats the v prefix as equivalent.
+    # Go tags, Maven coordinates, and generic artifact versions retain it.
+    return (ecosystem or "").lower() == "npm"
