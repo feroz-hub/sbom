@@ -67,7 +67,7 @@ function expectMetric(title: string, value: number) { expect(screen.getByLabelTe
 async function createTenant() {
   const user = userEvent.setup();
   await user.click(screen.getByRole('button', { name: 'Create Tenant' }));
-  const form = screen.getByRole('heading', { name: 'Create tenant' }).closest('section')!;
+  const form = screen.getByRole('dialog', { name: 'Create tenant' });
   await user.type(within(form).getByLabelText('Name'), 'New Tenant');
   await user.click(within(form).getByRole('button', { name: 'Select candidate' }));
   await user.click(within(form).getByRole('button', { name: 'Create Tenant' }));
@@ -79,7 +79,7 @@ async function statusChange(from: 'PENDING' | 'ACTIVE', entry: 'list' | 'detail'
     await user.click(await screen.findByRole('button', { name: from === 'ACTIVE' ? 'Disable tenant' : 'Enable tenant' }));
     await user.click(screen.getByRole('button', { name: 'Confirm' }));
   } else {
-    await user.click(screen.getByRole('button', { name: from === 'ACTIVE' ? 'Disable' : 'Enable' }));
+    await user.click(screen.getByRole('button', { name: from === 'ACTIVE' ? 'Disable Test Tenant' : 'Enable Test Tenant' }));
     if (from === 'ACTIVE') await user.click(screen.getByRole('button', { name: 'Disable tenant' }));
   }
 }
