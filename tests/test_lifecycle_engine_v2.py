@@ -571,6 +571,7 @@ def test_duplicate_components_deduped_before_lookup(db):
     summary = LifecycleEnrichmentService(providers=[provider]).enrich_sbom(db, sbom.id, force_refresh=True)
     assert summary["total_components"] == 3
     assert summary["unique_identities"] == 1
+    assert summary["eol_count"] == 3
     assert provider.lookup.call_count == 1
 
 
@@ -674,7 +675,7 @@ def test_lifecycle_provider_status_endpoint(client):
     response = client.get("/api/lifecycle/provider-status")
     assert response.status_code == 200
     body = response.json()
-    assert body["overall_status"] in {"healthy", "degraded"}
+    assert body["overall_status"] in {"healthy", "degraded", "unknown"}
     assert "providers" in body
 
 

@@ -1,222 +1,164 @@
 // @vitest-environment jsdom
-
 import { QueryClient, QueryClientProvider, QueryObserver } from '@tanstack/react-query';
-import { render, screen, waitFor } from '@testing-library/react';
+import { fireEvent, render, screen, waitFor, within } from '@testing-library/react';
 import userEvent from '@testing-library/user-event';
-import { describe, expect, it, vi, beforeEach } from 'vitest';
+import { axe } from 'vitest-axe';
+import { afterEach, beforeEach, describe, expect, it, vi } from 'vitest';
 import { setActiveTenantId, clearActiveTenantId } from '@/lib/auth';
 import { ToastProvider } from '@/hooks/useToast';
+import { makeProvider, successfulProbe, visualProviders } from '@/test/lifecycle-provider-fixtures';
+import type { LifecycleProviderConfig } from '@/types';
 import { LifecycleProviderSettings } from './LifecycleProviderSettings';
 import { LifecycleVendorRecordsPage } from './LifecycleVendorRecordsPage';
 
-const api = vi.hoisted(() => ({
-  listLifecycleProviders: vi.fn(),
-  resetLifecycleProviderOverride: vi.fn(),
-  updateLifecycleProvider: vi.fn(),
-  setLifecycleProviderSecret: vi.fn(),
-  deleteLifecycleProviderSecret: vi.fn(),
-  testLifecycleProvider: vi.fn(),
-  syncLifecycleProvider: vi.fn(),
-  listLifecycleVendorRecords: vi.fn(),
-  createLifecycleVendorRecord: vi.fn(),
-  updateLifecycleVendorRecord: vi.fn(),
-  deleteLifecycleVendorRecord: vi.fn(),
-  importLifecycleVendorRecords: vi.fn(),
-  exportLifecycleVendorRecords: vi.fn(),
-}));
-
+const api = vi.hoisted(() => ({ listLifecycleProviders: vi.fn(), resetLifecycleProviderOverride: vi.fn(), updateLifecycleProvider: vi.fn(), setLifecycleProviderSecret: vi.fn(), deleteLifecycleProviderSecret: vi.fn(), testLifecycleProvider: vi.fn(), syncLifecycleProvider: vi.fn(), listLifecycleVendorRecords: vi.fn(), createLifecycleVendorRecord: vi.fn(), updateLifecycleVendorRecord: vi.fn(), deleteLifecycleVendorRecord: vi.fn(), importLifecycleVendorRecords: vi.fn(), exportLifecycleVendorRecords: vi.fn() }));
 vi.mock('@/lib/api', () => api);
-
-const provider = {
-  provider_key: 'openeox',
-  override_enabled: true,
-  source: 'TENANT_OVERRIDE' as const,
-  display_name: 'OpenEoX',
-  provider_type: 'openeox',
-  enabled: false,
-  priority: 20,
-  base_url: null,
-  feed_urls: [],
-  config: {},
-  timeout_seconds: 10,
-  max_retries: 0,
-  circuit_breaker_enabled: true,
-  cache_ttl: {
-    known_days: null,
-    unknown_hours: null,
-    failure_minutes: null,
-    deprecated_days: null,
-  },
-  health_status: 'disabled' as const,
-  last_success_at: null,
-  last_failure_at: null,
-  last_failure_message: null,
-  has_secret: false,
-  secret_preview: null,
-  updated_at: '2026-06-27T00:00:00Z',
-};
-
-function renderWithProviders(ui: React.ReactElement) {
-  const client = new QueryClient({ defaultOptions: { queries: { retry: false }, mutations: { retry: false } } });
-  return render(
-    <QueryClientProvider client={client}>
-      <ToastProvider>{ui}</ToastProvider>
-    </QueryClientProvider>,
-  );
+vi.mock('@/hooks/useAuth', async () => ({ useAuth: (await import('@/test/authorizedAuth')).authorizedAuth }));
+function renderWithProviders(ui: React.ReactElement) { return render(<QueryClientProvider client={new QueryClient({ defaultOptions: { queries: { retry: false }, mutations: { retry: false } } })}><ToastProvider>{ui}</ToastProvider></QueryClientProvider>); }
+let rows: LifecycleProviderConfig[];
+beforeEach(() => {
+  vi.clearAllMocks(); rows = [makeProvider()]; api.listLifecycleProviders.mockImplementation(async () => rows);
+  api.updateLifecycleProvider.mockImplementation(async (key, payload) => { const row = { ...rows.find(p => p.provider_key === key)!, ...payload, last_probe: null, override_enabled: true }; rows = rows.map(p => p.provider_key === key ? row : p); return row; });
+  api.testLifecycleProvider.mockResolvedValue(successfulProbe);
+  api.setLifecycleProviderSecret.mockResolvedValue({}); api.deleteLifecycleProviderSecret.mockResolvedValue(undefined);
+  api.resetLifecycleProviderOverride.mockImplementation(async key => { rows = rows.map(p => p.provider_key === key ? { ...p, override_enabled: false } : p); });
+  api.syncLifecycleProvider.mockResolvedValue({ status: 'completed', job_id: null, message: 'Local source cache reloaded.' });
+});
+afterEach(() => clearActiveTenantId());
+function setup(props: React.ComponentProps<typeof LifecycleProviderSettings> = {}, observe = false) {
+  const qc = new QueryClient({ defaultOptions: { queries: { retry: false, staleTime: 300_000 }, mutations: { retry: false } } });
+  const statusFetch = vi.fn().mockResolvedValue({ overall_status: 'healthy' });
+  qc.setQueryData(['lifecycle-provider-status'], { overall_status: 'unknown' }); qc.setQueryData(['lifecycle-providers', 'tenant:99'], [makeProvider()]); qc.setQueryData(['sbom-components-canonical', 5], 'existing evidence');
+  const observer = observe ? new QueryObserver(qc, { queryKey: ['lifecycle-provider-status'], queryFn: statusFetch }).subscribe(() => {}) : () => {};
+  const view = render(<QueryClientProvider client={qc}><ToastProvider><LifecycleProviderSettings scopeKey="tenant:1" {...props} /></ToastProvider></QueryClientProvider>);
+  return { ...view, qc, statusFetch, stop: () => { observer(); view.unmount(); qc.clear(); } };
 }
+async function manage(name = 'endoflife.date') { await userEvent.click(await screen.findByRole('button', { name: `Manage ${name}` })); }
+async function section(name: string) { await userEvent.click(screen.getByRole('button', { name })); }
+function priority(value = '27') { fireEvent.change(screen.getByLabelText('Priority'), { target: { value } }); }
 
-describe('LifecycleProviderSettings', () => {
-  it('inherited provider offers an explicit tenant override and configured credential marker', async () => {
-    api.listLifecycleProviders.mockResolvedValue([{ ...provider, override_enabled: false, source: 'PLATFORM_DEFAULT', has_secret: true }]);
-    renderWithProviders(<LifecycleProviderSettings tenantName="Olympus" />);
-    expect(await screen.findByRole('button', { name: 'Override for Olympus' })).toBeInTheDocument();
-    expect(screen.getByText('Credential managed by platform')).toBeInTheDocument();
-    expect(screen.getByLabelText('Toggle OpenEoX')).toBeDisabled();
-    expect(screen.queryByRole('button', { name: 'Reset to Platform Default' })).not.toBeInTheDocument();
+describe('LifecycleProviderSettings enterprise directory', () => {
+  it('has no automated accessibility violations in the directory and configuration drawer', async () => {
+    const h = setup(); await screen.findByRole('button', { name: 'Manage endoflife.date' });
+    expect((await axe(h.container)).violations).toEqual([]);
+    await manage(); await section('Configuration');
+    expect((await axe(screen.getByRole('dialog'))).violations).toEqual([]);
   });
-
-  it('reset uses the existing provider-specific override endpoint', async () => {
-    api.resetLifecycleProviderOverride.mockResolvedValue(undefined);
-    renderWithProviders(<LifecycleProviderSettings tenantName="Olympus" />);
-    await userEvent.click(await screen.findByRole('button', { name: 'Reset to Platform Default' }));
-    await waitFor(() => expect(api.resetLifecycleProviderOverride).toHaveBeenCalledWith('openeox', expect.anything()));
+  it('shows compact columns and computes metrics using stored proof only', async () => {
+    rows = [makeProvider({ last_probe: successfulProbe, health_status: 'healthy' }), makeProvider({ provider_key: 'legacy', display_name: 'Legacy', health_status: 'healthy', last_success_at: '2026-10-01' }), makeProvider({ provider_key: 'off', display_name: 'Off', enabled: false }), makeProvider({ provider_key: 'unsupported', display_name: 'Unsupported source' }, { implemented: false })];
+    setup(); const summary = await screen.findByRole('region', { name: 'Provider summary' });
+    await screen.findByRole('button', { name: 'Manage Legacy' });
+    expect(within(summary).getByText('Total providers').parentElement).toHaveTextContent('4');
+    expect(within(summary).getByText('Verified operational').parentElement).toHaveTextContent('1');
+    expect(within(summary).getByText('Needs attention').parentElement).toHaveTextContent('1');
+    expect(within(summary).getByText('Disabled providers').parentElement).toHaveTextContent('1');
+    expect(screen.getAllByRole('columnheader')).toHaveLength(6);
+    expect(screen.queryByText('https://endoflife.date/api')).not.toBeInTheDocument();
+    expect(screen.queryByText('legacy')).not.toBeInTheDocument();
   });
-
-  it('platform provider operations explicitly use platform scope', async () => {
-    renderWithProviders(<LifecycleProviderSettings scope="platform" scopeKey="platform" />);
-    await userEvent.click(await screen.findByRole('button', { name: 'Test' }));
-    await waitFor(() => expect(api.testLifecycleProvider).toHaveBeenCalledWith('openeox', undefined, 'platform'));
-    expect(screen.queryByRole('button', { name: 'Reset to Platform Default' })).not.toBeInTheDocument();
+  it('searches, filters, clears empty results and sorts by actual priority/name', async () => {
+    rows = [makeProvider({ display_name: 'Zulu', priority: 80 }), makeProvider({ provider_key: 'a', display_name: 'Alpha', priority: 10, enabled: false })]; setup();
+    await screen.findByRole('button', { name: 'Manage Zulu' });
+    expect(screen.getAllByRole('row')[1]).toHaveTextContent('Alpha');
+    await userEvent.selectOptions(screen.getByLabelText('Sort providers'), 'name'); expect(screen.getAllByRole('row')[1]).toHaveTextContent('Alpha');
+    await userEvent.click(screen.getByRole('button', { name: 'Enabled' })); expect(screen.queryByRole('button', { name: 'Manage Alpha' })).not.toBeInTheDocument();
+    fireEvent.change(screen.getByLabelText('Search providers'), { target: { value: 'missing' } }); expect(screen.getByText('No providers match your search')).toBeInTheDocument();
+    await userEvent.click(screen.getByRole('button', { name: 'Clear filters' })); expect(screen.getByRole('button', { name: 'Manage Alpha' })).toBeInTheDocument();
   });
-  beforeEach(() => {
-    vi.clearAllMocks();
-    api.listLifecycleProviders.mockResolvedValue([provider]);
-    api.updateLifecycleProvider.mockResolvedValue(provider);
-    api.testLifecycleProvider.mockResolvedValue({
-      success: true,
-      status: 'healthy',
-      latency_ms: 12,
-      message: 'Provider responded',
-      checked_at: '2026-06-27T00:00:01Z',
-    });
-    api.syncLifecycleProvider.mockResolvedValue({
-      job_id: null,
-      status: 'completed',
-      message: 'Synced',
-      triggered_at: '2026-06-27T00:00:02Z',
-    });
+  it('opens details for read-only users and returns focus when closed', async () => {
+    setup({ canUpdate: false }); await manage(); expect(screen.getByRole('dialog', { name: 'endoflife.date' })).toBeInTheDocument();
+    await section('Configuration'); expect(screen.getByLabelText('Priority')).toBeDisabled(); expect(screen.queryByRole('button', { name: 'Save changes' })).not.toBeInTheDocument();
+    await userEvent.click(screen.getByRole('button', { name: 'Close dialog' })); expect(screen.queryByRole('dialog')).not.toBeInTheDocument(); expect(screen.getByRole('button', { name: 'Manage endoflife.date' })).toHaveFocus();
   });
-
-  it('renders configured providers', async () => {
-    renderWithProviders(<LifecycleProviderSettings />);
-    expect(await screen.findByText('OpenEoX')).toBeInTheDocument();
-    expect(screen.getAllByText('openeox').length).toBeGreaterThan(0);
+  it('supports keyboard opening and Escape dismissal', async () => {
+    setup(); const manageButton = await screen.findByRole('button', { name: 'Manage endoflife.date' }); manageButton.focus(); await userEvent.keyboard('{Enter}');
+    expect(screen.getByRole('dialog')).toBeInTheDocument(); await userEvent.keyboard('{Escape}'); expect(screen.queryByRole('dialog')).not.toBeInTheDocument(); expect(manageButton).toHaveFocus();
   });
-
-  it('toggle enable calls the backend', async () => {
-    renderWithProviders(<LifecycleProviderSettings />);
-    const checkbox = await screen.findByLabelText('Toggle OpenEoX');
-    await userEvent.click(checkbox);
-    await waitFor(() => {
-      expect(api.updateLifecycleProvider).toHaveBeenCalledWith('openeox', { enabled: true }, undefined, 'tenant');
-    });
+  it('confirms discard and retains drafts when continuing to edit', async () => {
+    setup(); await manage(); await section('Configuration'); priority(); await userEvent.click(screen.getByRole('button', { name: 'Close dialog' }));
+    expect(screen.getByRole('alert', { name: 'Unsaved changes' })).toBeInTheDocument(); await userEvent.click(screen.getByRole('button', { name: 'Keep editing' })); expect(screen.getByLabelText('Priority')).toHaveValue(27);
+    await userEvent.click(screen.getByRole('button', { name: 'Close dialog' })); await userEvent.click(screen.getByRole('button', { name: 'Discard changes' })); expect(screen.queryByRole('dialog')).not.toBeInTheDocument();
   });
-
-  it('renders checked enabled provider with unknown health, not disabled', async () => {
-    api.listLifecycleProviders.mockResolvedValue([
-      {
-        ...provider,
-        provider_key: 'xeol_db',
-        display_name: 'Local Xeol DB',
-        provider_type: 'xeol_db',
-        enabled: true,
-        health_status: 'unknown',
-      },
-    ]);
-
-    renderWithProviders(<LifecycleProviderSettings />);
-
-    expect(await screen.findByLabelText('Toggle Local Xeol DB')).toBeChecked();
-    expect(screen.getByText('Unknown')).toBeInTheDocument();
-    expect(screen.queryByText('Disabled')).not.toBeInTheDocument();
+  it('preserves an edited draft when switching sections', async () => {
+    setup(); await manage(); await section('Configuration'); priority(); await section('Verification'); expect(screen.getByRole('button', { name: 'Verify connection' })).toBeDisabled();
+    await section('Configuration'); expect(screen.getByLabelText('Priority')).toHaveValue(27);
   });
-
-  it('treats null health as unknown', async () => {
-    api.listLifecycleProviders.mockResolvedValue([
-      {
-        ...provider,
-        enabled: true,
-        health_status: null,
-      },
-    ]);
-
-    renderWithProviders(<LifecycleProviderSettings />);
-
-    expect(await screen.findByText('Unknown')).toBeInTheDocument();
+  it('saves without closing details, refreshes authoritative health and preserves unrelated caches', async () => {
+    const h = setup({}, true); await manage(); await section('Configuration'); priority(); await userEvent.click(screen.getByRole('button', { name: 'Save changes' }));
+    await waitFor(() => expect(h.statusFetch).toHaveBeenCalledTimes(1)); expect(api.updateLifecycleProvider).toHaveBeenCalledWith('endoflife_date', expect.objectContaining({ priority: 27 }), undefined, 'tenant');
+    expect(screen.getByRole('dialog')).toBeInTheDocument(); expect(h.qc.getQueryData(['sbom-components-canonical', 5])).toBe('existing evidence'); expect(h.qc.getQueryState(['lifecycle-providers', 'tenant:99'])?.isInvalidated).toBe(false); h.stop();
   });
-
-  it('failed provider update leaves checkbox on backend state', async () => {
-    api.updateLifecycleProvider.mockRejectedValue(new Error('Save failed'));
-
-    renderWithProviders(<LifecycleProviderSettings />);
-    const checkbox = await screen.findByLabelText('Toggle OpenEoX');
-    await userEvent.click(checkbox);
-
-    await waitFor(() => expect(api.updateLifecycleProvider).toHaveBeenCalled());
-    expect(checkbox).not.toBeChecked();
-    expect(await screen.findByText('Provider configuration update failed.')).toBeInTheDocument();
+  it('keeps failed save drafts and does not falsely update readiness', async () => {
+    api.updateLifecycleProvider.mockRejectedValue(new Error('Denied')); const h = setup({}, true); await manage(); await section('Configuration'); priority(); await userEvent.click(screen.getByRole('button', { name: 'Save changes' }));
+    await screen.findByText('Provider configuration update failed.'); expect(screen.getByLabelText('Priority')).toHaveValue(27); expect(h.statusFetch).not.toHaveBeenCalled(); h.stop();
   });
-
-  it('successful update applies returned provider row and refetches', async () => {
-    const updated = { ...provider, enabled: true, health_status: 'unknown' as const };
-    api.listLifecycleProviders.mockResolvedValueOnce([provider]).mockResolvedValue([updated]);
-    api.updateLifecycleProvider.mockResolvedValue(updated);
-
-    renderWithProviders(<LifecycleProviderSettings />);
-    await userEvent.click(await screen.findByLabelText('Toggle OpenEoX'));
-
-    expect(await screen.findByText('Unknown')).toBeInTheDocument();
-    await waitFor(() => expect(api.listLifecycleProviders).toHaveBeenCalledTimes(2));
+  it('offers explicit tenant customization before any inherited write', async () => {
+    rows = [makeProvider({ source: 'PLATFORM_DEFAULT', override_enabled: false, has_secret: true }, { secret_name: 'api_key' })]; setup({ tenantName: 'Olympus' }); await manage(); await section('Configuration');
+    expect(screen.getByLabelText('Priority')).toBeDisabled(); expect(screen.getByText('Credential managed by platform')).toBeInTheDocument(); expect(screen.queryByLabelText('Provider credential')).not.toBeInTheDocument();
+    await userEvent.click(screen.getByRole('button', { name: 'Customize for Olympus' })); expect(screen.getByLabelText('Priority')).toBeEnabled(); expect(api.updateLifecycleProvider).not.toHaveBeenCalled();
+    await userEvent.click(screen.getByRole('button', { name: 'Save tenant override' })); await waitFor(() => expect(api.updateLifecycleProvider).toHaveBeenCalled());
   });
-
-  it('test action shows provider health result', async () => {
-    renderWithProviders(<LifecycleProviderSettings />);
-    await userEvent.click(await screen.findByRole('button', { name: /test/i }));
-    expect((await screen.findAllByText('Provider responded')).length).toBeGreaterThan(0);
+  it('confirms resetting an override before using the existing endpoint', async () => {
+    setup(); await manage(); await section('Configuration'); await userEvent.click(screen.getByRole('button', { name: 'Reset to platform defaults' })); expect(api.resetLifecycleProviderOverride).not.toHaveBeenCalled();
+    await userEvent.click(screen.getByRole('button', { name: 'Reset to platform defaults' })); await waitFor(() => expect(api.resetLifecycleProviderOverride).toHaveBeenCalledWith('endoflife_date', expect.anything()));
   });
-
-  it('test action refreshes row health and timestamps', async () => {
-    const healthy = {
-      ...provider,
-      enabled: true,
-      health_status: 'healthy' as const,
-      last_success_at: '2026-06-27T00:00:01Z',
-    };
-    api.listLifecycleProviders.mockResolvedValueOnce([{ ...provider, enabled: true, health_status: 'unknown' }]).mockResolvedValue([
-      healthy,
-    ]);
-
-    renderWithProviders(<LifecycleProviderSettings />);
-    await userEvent.click(await screen.findByRole('button', { name: /test/i }));
-
-    expect((await screen.findAllByText('Healthy')).length).toBeGreaterThan(0);
-    await waitFor(() => expect(api.listLifecycleProviders).toHaveBeenCalledTimes(2));
+  it('renders real operation, auth, sample, coverage and error separately', async () => {
+    api.testLifecycleProvider.mockResolvedValue({ ...successfulProbe, success: false, status: 'degraded', authentication_verified: false, response_valid: false, lifecycle_evidence_found: false, http_status: 401, error_code: 'http_401', message: 'Authentication failed' });
+    const h = setup({}, true); await manage(); await section('Verification'); await userEvent.click(screen.getByRole('button', { name: 'Verify connection' }));
+    expect(await screen.findByText('http_401')).toBeInTheDocument(); expect(screen.getByText('401')).toBeInTheDocument(); expect(screen.getByText('debian · 12')).toBeInTheDocument(); expect(screen.getByText('Not found for this sample')).toBeInTheDocument(); await waitFor(() => expect(h.statusFetch).toHaveBeenCalledTimes(1)); h.stop();
   });
-
-  it('sync action refreshes row health', async () => {
-    const healthy = { ...provider, enabled: true, health_status: 'healthy' as const };
-    api.listLifecycleProviders.mockResolvedValueOnce([{ ...provider, enabled: true, health_status: 'unknown' }]).mockResolvedValue([
-      healthy,
-    ]);
-
-    renderWithProviders(<LifecycleProviderSettings />);
-    await userEvent.click(await screen.findByRole('button', { name: /sync/i }));
-
-    expect(await screen.findByText('Healthy')).toBeInTheDocument();
-    await waitFor(() => expect(api.listLifecycleProviders).toHaveBeenCalledTimes(2));
+  it('locks editing and closing while a verification is running', async () => {
+    let finish!: (result: typeof successfulProbe) => void;
+    api.testLifecycleProvider.mockImplementation(() => new Promise(resolve => { finish = resolve; }));
+    setup(); await manage(); await section('Verification'); await userEvent.click(screen.getByRole('button', { name: 'Verify connection' }));
+    await section('Configuration'); expect(screen.getByLabelText('Priority')).toBeDisabled();
+    await userEvent.click(screen.getByRole('button', { name: 'Close dialog' })); expect(screen.getByRole('dialog')).toBeInTheDocument();
+    finish(successfulProbe); await waitFor(() => expect(screen.getByLabelText('Priority')).toBeEnabled());
+  });
+  it('shows a failed verification request without inventing a provider result', async () => {
+    api.testLifecycleProvider.mockRejectedValue(new Error('Service unavailable')); setup(); await manage(); await section('Verification');
+    await userEvent.click(screen.getByRole('button', { name: 'Verify connection' }));
+    expect(await within(screen.getByRole('dialog')).findByRole('alert')).toHaveTextContent('No new verification result was recorded');
+    expect(screen.getByText(/Not verified yet. Run verification/)).toBeInTheDocument();
+  });
+  it('uses explicit platform scope when verifying', async () => {
+    setup({ scope: 'platform', scopeKey: 'platform' }); await manage(); await section('Verification'); await userEvent.click(screen.getByRole('button', { name: 'Verify connection' }));
+    await waitFor(() => expect(api.testLifecycleProvider).toHaveBeenCalledWith('endoflife_date', undefined, 'platform'));
+  });
+  it('does not turn a transient inherited test into stored verification', async () => {
+    rows = [makeProvider({ override_enabled: false })]; const h = setup({}, true); await manage(); await section('Verification'); await userEvent.click(screen.getByRole('button', { name: 'Verify connection' }));
+    await screen.findAllByText(successfulProbe.message); expect(h.statusFetch).not.toHaveBeenCalled(); expect(within(screen.getByRole('region', { name: 'Provider summary' })).getByText('Verified operational').parentElement).toHaveTextContent('0'); h.stop();
+  });
+  it('explains disabled verification and never silently enables runtime', async () => {
+    rows = [makeProvider({ enabled: false, health_status: 'disabled' })]; setup(); await manage(); await section('Verification'); expect(screen.getByRole('button', { name: 'Verify connection' })).toBeDisabled(); expect(screen.getByText(/current API skips disabled/)).toBeInTheDocument(); expect(api.updateLifecycleProvider).not.toHaveBeenCalled();
+  });
+  it('does not advertise activation, verification or sync for unsupported providers', async () => {
+    rows = [visualProviders.find(p => p.provider_key === 'official_vendor_lifecycle')!]; setup(); await manage('Official Vendor Lifecycle');
+    expect(screen.getByRole('button', { name: 'Configuration' })).toBeDisabled(); await section('Verification'); expect(screen.queryByRole('button', { name: 'Verify connection' })).not.toBeInTheDocument(); expect(screen.queryByRole('button', { name: 'Reload cache' })).not.toBeInTheDocument();
+  });
+  it('restores stored verification on reload and exposes no invented history', async () => {
+    rows = [makeProvider({ last_probe: successfulProbe, health_status: 'healthy' })]; setup(); await manage(); await section('Verification'); expect(screen.getByText(successfulProbe.message)).toBeInTheDocument();
+    await section('Activity'); expect(screen.getByText(/not a complete activity history/)).toBeInTheDocument(); expect(screen.getAllByText('Not yet recorded').length).toBeGreaterThan(0);
+  });
+  it('shows reload only for supported sources and does not claim a queued job', async () => {
+    rows = [makeProvider({ provider_key: 'xeol_db', display_name: 'Local Xeol DB' }, { network: false, sync_action: 'reload_cache' })]; const h = setup({}, true); await manage('Local Xeol DB'); await section('Verification');
+    await userEvent.click(screen.getByRole('button', { name: 'Reload cache' })); await screen.findByText('Local source cache reloaded.'); await waitFor(() => expect(h.statusFetch).toHaveBeenCalledTimes(1)); expect(api.syncLifecycleProvider).toHaveBeenCalledWith('xeol_db', undefined, 'tenant'); h.stop();
+  });
+  it('blocks unauthorized test and configuration actions', async () => {
+    setup({ canUpdate: false, canTest: false, canSync: false }); await manage(); await section('Verification'); expect(screen.getByRole('button', { name: 'Verify connection' })).toBeDisabled();
+    await section('Configuration'); expect(screen.getByLabelText('Priority')).toBeDisabled(); expect(api.updateLifecycleProvider).not.toHaveBeenCalled();
+  });
+  it('handles empty and failed service responses without fabricated metrics', async () => {
+    api.listLifecycleProviders.mockRejectedValue(new Error('Unavailable')); setup(); expect(await screen.findByRole('alert')).toHaveTextContent('Unable to load provider configuration'); expect(screen.getAllByText('Unavailable')).toHaveLength(4);
+  });
+  it('renders an actual loading state', () => { api.listLifecycleProviders.mockImplementation(() => new Promise(() => {})); setup(); expect(screen.getByText('Loading provider configuration…')).toBeInTheDocument(); });
+  it('renders empty source state', async () => { rows = []; setup(); expect(await screen.findByText('No lifecycle providers configured')).toBeInTheDocument(); });
+  it('does not restore stale provider data after tenant switches during a write', async () => {
+    setActiveTenantId('1'); let finish!: (value: LifecycleProviderConfig) => void; api.updateLifecycleProvider.mockImplementation(() => new Promise(resolve => { finish = resolve; }));
+    const h = setup(); await manage(); await section('Configuration'); priority(); await userEvent.click(screen.getByRole('button', { name: 'Save changes' })); await waitFor(() => expect(finish).toBeDefined());
+    setActiveTenantId('2'); h.qc.clear(); finish(makeProvider()); await waitFor(() => expect(h.qc.getQueryCache().getAll()).toHaveLength(0)); h.stop();
   });
 });
-
 describe('LifecycleVendorRecordsPage', () => {
   beforeEach(() => {
     vi.clearAllMocks();
@@ -266,118 +208,5 @@ describe('LifecycleVendorRecordsPage', () => {
     renderWithProviders(<LifecycleVendorRecordsPage />);
     await userEvent.click(await screen.findByRole('button', { name: /add/i }));
     expect(await screen.findByText('Add Vendor Record')).toBeInTheDocument();
-  });
-});
-
-vi.mock('@/hooks/useAuth', async () => ({ useAuth: (await import('@/test/authorizedAuth')).authorizedAuth }));
-
-
-describe('Batch 6 persisted readiness synchronization', () => {
-  function setup(overrides: Partial<typeof provider> = {}, props: React.ComponentProps<typeof LifecycleProviderSettings> = {}) {
-    vi.clearAllMocks();
-    const row = { ...provider, ...overrides };
-    api.listLifecycleProviders.mockResolvedValue([row]);
-    api.updateLifecycleProvider.mockResolvedValue(row);
-    api.resetLifecycleProviderOverride.mockResolvedValue(undefined);
-    api.testLifecycleProvider.mockResolvedValue({ success: true, status: 'healthy', message: 'Connected', checked_at: '2026-10-09', latency_ms: 1 });
-    api.syncLifecycleProvider.mockResolvedValue({ status: 'completed', message: 'Finished', job_id: null });
-    const qc = new QueryClient({ defaultOptions: { queries: { staleTime: 300_000, refetchOnWindowFocus: false, retry: false }, mutations: { retry: false } } });
-    qc.setQueryData(['lifecycle-provider-status'], { overall_status: 'unknown' });
-    qc.setQueryData(['lifecycle-providers', 'tenant:99'], [provider]);
-    qc.setQueryData(['sbom-components-canonical', 5], 'existing evidence');
-    const statusFetch = vi.fn().mockResolvedValue({ overall_status: 'healthy' });
-    const off = new QueryObserver(qc, { queryKey: ['lifecycle-provider-status'], queryFn: statusFetch }).subscribe(() => {});
-    const view = render(<QueryClientProvider client={qc}><ToastProvider><LifecycleProviderSettings scopeKey="tenant:1" {...props} /></ToastProvider></QueryClientProvider>);
-    return { qc, statusFetch, cleanup: () => { view.unmount(); off(); qc.clear(); } };
-  }
-  it.each(['enable', 'disable', 'reset', 'test', 'sync'])('%s refetches authoritative status and preserves unrelated evidence/configuration', async action => {
-    const h = setup({ enabled: action === 'disable' });
-    const name = action === 'enable' || action === 'disable' ? 'Toggle OpenEoX' : action === 'reset' ? 'Reset to Platform Default' : action === 'test' ? 'Test' : 'Sync';
-    await userEvent.click(await (name.startsWith('Toggle') ? screen.findByLabelText(name) : screen.findByRole('button', { name })));
-    await waitFor(() => expect(h.statusFetch).toHaveBeenCalledTimes(1));
-    expect(h.qc.getQueryData(['lifecycle-provider-status'])).toEqual({ overall_status: 'healthy' });
-    expect(h.qc.getQueryState(['lifecycle-providers', 'tenant:99'])?.isInvalidated).toBe(false);
-    expect(h.qc.getQueryState(['sbom-components-canonical', 5])?.isInvalidated).toBe(false);
-    h.cleanup();
-  });
-  it.each(['save configuration', 'save secret', 'delete secret'])('%s refreshes readiness from the server without resetting unrelated form drafts', async action => {
-    const h = setup({ provider_key: 'xeol_api', display_name: 'Xeol', has_secret: action === 'delete secret' });
-    const secretResponse = (has_secret: boolean) => api.listLifecycleProviders.mockResolvedValue([{ ...provider, provider_key: 'xeol_api', display_name: 'Xeol', has_secret }]);
-    api.setLifecycleProviderSecret.mockImplementation(async () => { secretResponse(true); return {}; });
-    api.deleteLifecycleProviderSecret.mockImplementation(async () => { secretResponse(false); });
-    await userEvent.click(await screen.findByRole('button', { name: 'Edit' }));
-    const draft = screen.getByDisplayValue('20');
-    await userEvent.clear(draft); await userEvent.type(draft, '27');
-    if (action === 'delete secret') await userEvent.click(screen.getByRole('button', { name: 'Delete' }));
-    else if (action === 'save secret') {
-      await userEvent.type(document.querySelector('input[type="password"]')!, 'synthetic-test-secret');
-      await userEvent.click(screen.getAllByRole('button', { name: 'Save' })[0]);
-    } else await userEvent.click(screen.getAllByRole('button', { name: 'Save' })[1]);
-    await waitFor(() => expect(h.statusFetch).toHaveBeenCalledTimes(1));
-    expect(h.qc.getQueryData(['lifecycle-provider-status'])).toEqual({ overall_status: 'healthy' });
-    if (action !== 'save configuration') {
-      expect(draft).toHaveValue(27);
-      if (action === 'save secret') expect(screen.getAllByText('Credential configured ✓')).toHaveLength(2);
-      else expect(screen.getByText('No credential saved')).toBeInTheDocument();
-    }
-    h.cleanup();
-  });
-  it('failed form save retains the draft and does not invalidate readiness', async () => {
-    const h = setup(); api.updateLifecycleProvider.mockRejectedValue(new Error('Denied'));
-    await userEvent.click(await screen.findByRole('button', { name: 'Edit' }));
-    await userEvent.click(screen.getByRole('button', { name: 'Save' }));
-    expect(await screen.findByText('Provider configuration update failed.')).toBeInTheDocument();
-    expect(screen.getByRole('button', { name: 'Save' })).toBeInTheDocument(); expect(h.statusFetch).not.toHaveBeenCalled(); h.cleanup();
-  });
-  it('failed HTTP mutations preserve cached readiness without false success', async () => {
-    const h = setup(); api.updateLifecycleProvider.mockRejectedValue(new Error('Denied'));
-    await userEvent.click(await screen.findByLabelText('Toggle OpenEoX'));
-    expect(await screen.findByText('Provider configuration update failed.')).toBeInTheDocument();
-    expect(h.statusFetch).not.toHaveBeenCalled(); expect(h.qc.getQueryData(['lifecycle-provider-status'])).toEqual({ overall_status: 'unknown' }); h.cleanup();
-  });
-  it('failed persisted probes refresh health but do not remove configuration', async () => {
-    const h = setup({ enabled: true });
-    api.testLifecycleProvider.mockResolvedValue({ success: false, status: 'degraded', message: 'Probe failed', checked_at: '2026-10-09', latency_ms: 1 });
-    h.statusFetch.mockResolvedValue({ overall_status: 'degraded' });
-    await userEvent.click(await screen.findByRole('button', { name: 'Test' }));
-    await waitFor(() => expect(h.qc.getQueryData(['lifecycle-provider-status'])).toEqual({ overall_status: 'degraded' }));
-    expect(api.updateLifecycleProvider).not.toHaveBeenCalled(); h.cleanup();
-  });
-  it('inherited connection tests are transient and do not refresh persisted readiness', async () => {
-    const h = setup({ override_enabled: false });
-    await userEvent.click(await screen.findByRole('button', { name: 'Test' }));
-    expect((await screen.findAllByText('Connected')).length).toBeGreaterThan(0);
-    expect(h.statusFetch).not.toHaveBeenCalled(); h.cleanup();
-  });
-  it('queued sync acknowledges submission without refreshing terminal readiness', async () => {
-    const h = setup(); api.syncLifecycleProvider.mockResolvedValue({ status: 'queued', message: 'Queued', job_id: 'future-job' });
-    await userEvent.click(await screen.findByRole('button', { name: 'Sync' }));
-    expect(await screen.findByText('Queued')).toBeInTheDocument(); expect(h.statusFetch).not.toHaveBeenCalled(); h.cleanup();
-  });
-  it('permission-gated actions do not submit unauthorized mutations', async () => {
-    const h = setup({}, { canUpdate: false, canTest: false, canSync: false });
-    expect(await screen.findByLabelText('Toggle OpenEoX')).toBeDisabled();
-    expect(screen.getByRole('button', { name: 'Test' })).toBeDisabled();
-    expect(screen.getByRole('button', { name: 'Sync' })).toBeDisabled();
-    expect(screen.queryByRole('button', { name: 'Edit' })).not.toBeInTheDocument();
-    expect(api.updateLifecycleProvider).not.toHaveBeenCalled(); expect(h.statusFetch).not.toHaveBeenCalled(); h.cleanup();
-  });
-  it('in-flight mutations cannot restore provider data after tenant switching clears caches', async () => {
-    setActiveTenantId('1'); const h = setup(); let finish!: (value: typeof provider) => void;
-    api.updateLifecycleProvider.mockImplementation(() => new Promise(resolve => { finish = resolve; }));
-    await userEvent.click(await screen.findByLabelText('Toggle OpenEoX'));
-    await waitFor(() => expect(finish).toBeDefined()); setActiveTenantId('2'); h.qc.clear(); finish({ ...provider, enabled: true });
-    await new Promise(resolve => setTimeout(resolve, 10));
-    expect(h.statusFetch).not.toHaveBeenCalled();
-    expect(h.qc.getQueryData(['lifecycle-provider-status'])).toBeUndefined();
-    expect(h.qc.getQueryData<Array<typeof provider>>(['lifecycle-providers', 'tenant:1'])?.some(row => row.enabled)).not.toBe(true);
-    h.cleanup(); clearActiveTenantId();
-  });
-  it('old callbacks cannot repopulate cleared caches after unmount', async () => {
-    const h = setup(); let finish!: (value: typeof provider) => void;
-    api.updateLifecycleProvider.mockImplementation(() => new Promise(resolve => { finish = resolve; }));
-    await userEvent.click(await screen.findByLabelText('Toggle OpenEoX'));
-    await waitFor(() => expect(finish).toBeDefined()); h.cleanup(); finish(provider);
-    await new Promise(resolve => setTimeout(resolve, 10)); expect(h.qc.getQueryCache().getAll()).toHaveLength(0);
   });
 });

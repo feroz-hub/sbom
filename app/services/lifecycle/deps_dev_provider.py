@@ -11,6 +11,7 @@ from packaging.version import InvalidVersion, Version
 
 from .provider_base import LifecycleProvider
 from .provider_chain import PRIORITY_DEPS_DEV
+from .provider_http import invalid_response, request_json
 from .types import DEPRECATED, LOW, MEDIUM, UNKNOWN, LifecycleResult, NormalizedComponent, unknown_result
 
 DEPS_DEV_SYSTEMS = {
@@ -74,7 +75,7 @@ class DepsDevProvider(LifecycleProvider):
                 deprecated=True,
                 maintenance_status="Deprecated by deps.dev metadata",
                 latest_version=latest,
-                latest_supported_version=latest,
+                latest_supported_version=None,
                 recommended_version=recommended,
                 recommendation=(
                     f"{deprecation} Upgrade to {latest} after compatibility testing." if recommended else deprecation
@@ -105,7 +106,7 @@ class DepsDevProvider(LifecycleProvider):
             cpe=component.cpe,
             lifecycle_status=UNKNOWN,
             latest_version=latest,
-            latest_supported_version=latest,
+            latest_supported_version=None,
             recommended_version=recommended,
             recommendation=recommendation,
             source_name=self.name,
@@ -124,12 +125,12 @@ class DepsDevProvider(LifecycleProvider):
         try:
             if self._http_get is not None:
                 return self._http_get(url)
-            with httpx.Client(timeout=self._timeout_seconds, follow_redirects=True) as client:
-                response = client.get(url)
-                if response.status_code == 404:
-                    return None
-                response.raise_for_status()
-                return response.json()
+            data = request_json("GET", url, timeout=self._timeout_seconds)
+            if data is not None and (
+                not isinstance(data, dict) or not any(k in data for k in ("versions", "versionKey", "packageKey"))
+            ):
+                return invalid_response()
+            return data
         except (httpx.HTTPError, ValueError, TypeError):
             return None
 

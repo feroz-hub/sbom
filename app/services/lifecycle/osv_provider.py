@@ -9,6 +9,7 @@ import httpx
 
 from .provider_base import LifecycleProvider
 from .provider_chain import PRIORITY_OSV
+from .provider_http import invalid_response, request_json
 from .types import LOW, UNKNOWN, LifecycleResult, NormalizedComponent, unknown_result
 
 OSV_URL = "https://api.osv.dev/v1/query"
@@ -107,10 +108,10 @@ class OSVProvider(LifecycleProvider):
         try:
             if self._http_post is not None:
                 return self._http_post(url, payload)
-            with httpx.Client(timeout=self._timeout_seconds, follow_redirects=True) as client:
-                response = client.post(url, json=payload)
-                response.raise_for_status()
-                return response.json()
+            data = request_json("POST", url, payload=payload, timeout=self._timeout_seconds)
+            if data is not None and (not isinstance(data, dict) or not isinstance(data.get("vulns", []), list)):
+                return invalid_response()
+            return data
         except (httpx.HTTPError, ValueError, TypeError):
             return None
 

@@ -18,6 +18,7 @@ from .types import (
     UNKNOWN,
     LifecycleResult,
     NormalizedComponent,
+    canonical_confidence,
     canonical_status,
     unknown_result,
 )
@@ -67,7 +68,7 @@ class VendorLifecycleProvider(LifecycleProvider):
                 today=self.today,
             )
         )
-        latest = _text(record.get("latest_supported_version") or record.get("latest_version"))
+        latest = _text(record.get("latest_supported_version"))
         recommendation = _text(record.get("recommendation"))
         if not recommendation and status in {EOL, EOS, EOF, EOL_SOON}:
             recommendation = (
@@ -95,8 +96,8 @@ class VendorLifecycleProvider(LifecycleProvider):
             recommendation=recommendation,
             source_name=_text(record.get("source_name")) or self.name,
             source_url=str(record["source_url"]),
-            confidence=HIGH,
-            evidence={"authority": "vendor", "record": record},
+            confidence=canonical_confidence(record.get("confidence") or HIGH),
+            evidence={"authority": "vendor", "data_source_type": "custom-reference", "record": record},
         ).canonicalized()
 
 

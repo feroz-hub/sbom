@@ -311,7 +311,8 @@ def test_force_refresh_updates_existing_cache_row(db):
     assert cached.source_name == "Fresh Provider"
     assert cached.lifecycle_status == EOL
     assert cached.checked_at != "2020-01-01T00:00:00+00:00"
-    assert cached.evidence_json == {"provider": "Fresh Provider"}
+    assert cached.evidence_json["provider"] == "Fresh Provider"
+    assert cached.evidence_json["provider_outcomes"][0]["provider"] == "Fresh Provider"
     assert _identity_count(
         db,
         name="force-refresh-package",

@@ -54,10 +54,13 @@ describe('ProviderModels', () => {
     renderWithProviders(<ProviderModels credentialId={3} providerName="Gemini" enabled />);
     expect(await screen.findByText('gemini-new')).toBeInTheDocument();
     expect(screen.getByText(/Provider ID: models\/gemini-new/)).toBeInTheDocument();
+    await userEvent.click(screen.getByText('Capabilities and details'));
     expect(screen.getByText('chat: yes')).toBeInTheDocument();
-    expect(screen.queryByText(/JSON:/)).not.toBeInTheDocument();
+    expect(screen.getByText('JSON: unknown')).toBeInTheDocument();
 
     await userEvent.click(screen.getByRole('button', { name: 'Set active' }));
+    expect(selectAiProviderModel).not.toHaveBeenCalled();
+    await userEvent.click(screen.getByRole('button', { name: 'Confirm activation' }));
     await waitFor(() => expect(selectAiProviderModel).toHaveBeenCalledWith(3, 7, undefined, 'tenant'));
   });
 

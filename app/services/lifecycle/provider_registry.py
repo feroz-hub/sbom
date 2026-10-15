@@ -41,7 +41,7 @@ def _env_vendor_records(settings: Any) -> list[dict[str, Any]]:
 
 
 class LifecycleProviderRegistry:
-    """Build enabled providers from DB config, with static fallback on DB failure."""
+    """Build enabled providers from DB configuration; fail closed on config errors."""
 
     def __init__(
         self,
@@ -57,22 +57,14 @@ class LifecycleProviderRegistry:
     ) -> list[LifecycleProvider]:
         settings = get_settings()
         if db is None:
-            from ...services.configuration_scope import current_configuration_tenant
-
-            if current_configuration_tenant() is not None:
-                raise RuntimeError("Tenant lifecycle configuration requires a database session")
-            return self.default_static_providers(settings, timeout_seconds=fallback_timeout_seconds)
+            raise RuntimeError("Lifecycle configuration requires a database session")
         try:
             snapshots = self.config_service.list_snapshots(db)
             providers = self._providers_from_snapshots(db, settings, snapshots)
             return sorted(providers, key=lambda provider: (provider.priority, provider.name))
         except Exception as exc:  # noqa: BLE001
-            from ...services.configuration_scope import current_configuration_tenant
-
-            if current_configuration_tenant() is not None:
-                raise RuntimeError("Tenant lifecycle configuration is unavailable") from None
-            log.warning("lifecycle.provider_config_fallback: %s", type(exc).__name__)
-            return self.default_static_providers(settings, timeout_seconds=fallback_timeout_seconds)
+            log.warning("lifecycle.provider_configuration_unavailable", extra={"error_type": type(exc).__name__})
+            raise RuntimeError("Lifecycle configuration is unavailable; provider execution stopped") from None
 
     def default_static_providers(
         self, settings: Any | None = None, *, timeout_seconds: float = 5.0
@@ -123,6 +115,7 @@ class LifecycleProviderRegistry:
                 continue
             provider = self._provider_from_snapshot(db, settings, config)
             if provider is not None:
+                provider.runtime_config = config
                 providers.append(_set_priority(provider, config.priority))
         return providers
 
@@ -141,7 +134,7 @@ class LifecycleProviderRegistry:
         if config.provider_key == "redhat_lifecycle":
             return RedHatLifecycleProvider(timeout_seconds=timeout)
         if config.provider_key == "official_vendor_lifecycle":
-            return OfficialVendorLifecycleProvider()
+            return None
         if config.provider_key == "endoflife_date":
             return EndOfLifeDateProvider(base_url=config.base_url, timeout_seconds=timeout)
         if config.provider_key == "openeox":
@@ -176,7 +169,12 @@ class LifecycleProviderRegistry:
         if config.provider_key == "osv":
             return OSVProvider(timeout_seconds=timeout)
         if config.provider_key == "repository_health":
-            return RepositoryHealthProvider(timeout_seconds=timeout)
+            return RepositoryHealthProvider(
+                timeout_seconds=timeout,
+                github_token=LifecycleProviderSecretService(tenant_id=config.tenant_id).get_secret(
+                    db, config.provider_key, "github_token"
+                ),
+            )
         return None
 
     def _custom_vendor_records(self, db: Session, settings: Any) -> list[dict[str, Any]]:

@@ -326,7 +326,6 @@ def test_lifecycle_provider_independent_override_and_dynamic_inheritance(configu
 
 
 def test_lifecycle_connection_test_uses_effective_owner_credentials(configured_actors, monkeypatch):
-    from app.services.lifecycle import provider_config_service
 
     call = configured_actors
     for actor, base, value in (
@@ -347,11 +346,13 @@ def test_lifecycle_connection_test_uses_effective_owner_credentials(configured_a
         def __exit__(self, *args):
             pass
 
-        def post(self, url, *, json, headers):
+        def request(self, method, url, *, json, headers):
             headers_seen.append(headers["Authorization"])
-            return SimpleNamespace(status_code=200)
+            return SimpleNamespace(status_code=200, json=lambda: {"match": {"found": False}})
 
-    monkeypatch.setattr(provider_config_service.httpx, "Client", ProbeClient)
+    from app.services.lifecycle import provider_http
+    monkeypatch.setattr(provider_http.httpx, "Client", ProbeClient)
+    monkeypatch.setattr(provider_http.socket, "getaddrinfo", lambda *a, **k: [(2, 1, 6, "", ("93.184.216.34", 443))])
     for actor, base in (
         ("olympus", "/api/admin/lifecycle-providers"),
         ("astra", "/api/admin/lifecycle-providers"),

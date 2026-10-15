@@ -570,7 +570,25 @@ export interface DashboardLifecycle {
   unsupported: number;
 }
 
+export interface LifecycleProviderCapabilities {
+  data_source_type: string;
+  effective_endpoint: string | null;
+  coverage: string;
+  implemented: boolean;
+  editable_endpoint: boolean;
+  feed_urls: boolean;
+  config_fields: string[];
+  secret_name: string | null;
+  sync_action: string | null;
+  network: boolean;
+  circuit_state_scope: string;
+  cache_defaults: { known_days: number; unknown_hours: number; failure_minutes: number; deprecated_days: number };
+}
+
 export interface LifecycleProviderConfig {
+  runtime_status?: { state_scope: string; circuit_open?: boolean; consecutive_failures?: number; last_error?: string | null };
+  configuration_status?: string;
+  capabilities?: LifecycleProviderCapabilities;
   source?: 'PLATFORM_DEFAULT' | 'TENANT_OVERRIDE';
   override_enabled?: boolean;
   provider_key: string;
@@ -591,6 +609,9 @@ export interface LifecycleProviderConfig {
     deprecated_days: number | null;
   };
   health_status: 'healthy' | 'degraded' | 'disabled' | 'unknown';
+  last_verification_at?: string | null;
+  last_lookup_at?: string | null;
+  last_probe?: LifecycleProviderTestResult | null;
   last_success_at: string | null;
   last_failure_at: string | null;
   last_failure_message: string | null;
@@ -615,6 +636,18 @@ export interface LifecycleProviderUpdatePayload {
 }
 
 export interface LifecycleProviderTestResult {
+  provider_key?: string;
+  probe_type?: string;
+  real_provider_call?: boolean;
+  configuration_valid?: boolean;
+  connection_verified?: boolean;
+  authentication_verified?: boolean | null;
+  response_valid?: boolean;
+  sample_matched?: boolean;
+  lifecycle_evidence_found?: boolean;
+  http_status?: number | null;
+  error_code?: string | null;
+  sample_component?: Record<string, unknown> | null;
   success: boolean;
   status: string;
   latency_ms: number;

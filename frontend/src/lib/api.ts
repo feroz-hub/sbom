@@ -2588,7 +2588,9 @@ export const aiConfigurationBase = (scope: ConfigurationScope) => scope === 'pla
 export const lifecycleConfigurationBase = (scope: ConfigurationScope) => scope === 'platform' ? '/api/platform/configuration/lifecycle' : '/api/admin/lifecycle-providers';
 export interface EffectiveAiConfiguration {
   source: 'PLATFORM_DEFAULT' | 'TENANT_OVERRIDE'; override_enabled: boolean;
-  feature_enabled: boolean; configured_providers: { provider_name: string; model: string; enabled: boolean; credential_present: boolean }[];
+  feature_enabled: boolean;
+  default_selection_key?: string | null;
+  configured_providers: { provider_name: string; model: string; enabled: boolean; credential_present: boolean; selection_key?: string; is_default?: boolean; is_fallback?: boolean }[];
 }
 export function getEffectiveAiConfiguration(scope: ConfigurationScope, signal?: AbortSignal) {
   return request<EffectiveAiConfiguration>(`${aiConfigurationBase(scope)}/effective-config`, { signal });

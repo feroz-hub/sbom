@@ -7,6 +7,7 @@ import { cn } from '@/lib/utils';
 import { Button } from './Button';
 
 interface DialogProps {
+  placement?: 'center' | 'right';
   open: boolean;
   onClose: () => void;
   title: string;
@@ -38,6 +39,7 @@ const FOCUSABLE = [
   'textarea:not([disabled])',
   'input:not([disabled]):not([type="hidden"])',
   'select:not([disabled])',
+  'summary',
   '[tabindex]:not([tabindex="-1"])',
 ].join(',');
 
@@ -54,6 +56,7 @@ export function Dialog({
   children,
   footer,
   maxWidth = 'md',
+  placement = 'center',
   dismissOnBackdrop = true,
   describedBy,
 }: DialogProps) {
@@ -164,7 +167,7 @@ export function Dialog({
   const dialogTree = (
     // Outer wrapper: bottom-anchored on mobile (items-end), centered on sm+.
     <div
-      className="fixed inset-0 z-50 flex items-end justify-center sm:items-center sm:p-4"
+      className={cn("fixed inset-0 z-50 flex", placement === "right" ? "items-stretch justify-end" : "items-end justify-center sm:items-center sm:p-4")}
       role="presentation"
     >
       <div
@@ -185,14 +188,14 @@ export function Dialog({
           'dialog-panel-in motion-reduce:animate-none',
           'focus-visible:outline-none',
           // Mobile: bottom sheet — full-width, 90dvh tall, only top corners rounded.
-          'max-h-[90dvh] rounded-t-xl rounded-b-none',
+          placement === 'right' ? 'h-dvh max-h-dvh rounded-none sm:max-w-2xl' : 'max-h-[90dvh] rounded-t-xl rounded-b-none',
           // Desktop: centered card — 92vw bounded by the maxWidth class below,
           // dvh-aware max-height capped at 800px, fully rounded. Width must not be
           // hard-capped here: a literal 720px silently overrode maxWidth="2xl"
           // (max-w-4xl = 896px), so wide forms rendered in a narrow panel.
-          'sm:w-[92vw] sm:max-h-[min(calc(100dvh-4rem),800px)] sm:rounded-xl',
+          placement === 'center' && 'sm:w-[92vw] sm:max-h-[min(calc(100dvh-4rem),800px)] sm:rounded-xl',
           // The maxWidth prop only applies on sm+ (mobile is full-width).
-          maxWidthClasses[maxWidth],
+          placement === 'center' && maxWidthClasses[maxWidth],
         )}
       >
         {/* Sticky title bar — never scrolls. Casts a subtle shadow when
@@ -205,7 +208,7 @@ export function Dialog({
           )}
         >
           <div className="flex min-w-0 items-center gap-2.5">
-            <div className="h-5 w-1 shrink-0 rounded-full bg-gradient-to-b from-hcl-blue to-hcl-cyan" />
+            {placement === "center" && <div className="h-5 w-1 shrink-0 rounded-full bg-gradient-to-b from-hcl-blue to-hcl-cyan" />}
             <h2 id={titleId} className="truncate text-lg font-semibold text-hcl-navy">
               {title}
             </h2>

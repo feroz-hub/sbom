@@ -13,6 +13,7 @@ from packaging.version import InvalidVersion, Version
 from .aliases import resolve_lifecycle_alias
 from .provider_base import LifecycleProvider
 from .provider_chain import PRIORITY_ENDOFLIFE_DATE
+from .provider_http import request_json
 from .types import (
     EOF,
     EOL,
@@ -155,8 +156,10 @@ class EndOfLifeDateProvider(LifecycleProvider):
             unsupported=status in {EOL, EOS, EOF, UNSUPPORTED},
             maintenance_status=_maintenance_status(status),
             latest_version=None if release_hint else latest,
-            latest_supported_version=None if release_hint else latest,
-            recommended_version=None if release_hint else latest if _is_newer(latest, component.normalized_version) else None,
+            latest_supported_version=latest if not release_hint and status in {SUPPORTED, EOL_SOON} else None,
+            recommended_version=latest
+            if not release_hint and status in {SUPPORTED, EOL_SOON} and _is_newer(latest, component.normalized_version)
+            else None,
             recommendation=recommendation,
             source_name=self.name,
             source_url=f"https://endoflife.date/{slug}",
@@ -179,24 +182,16 @@ class EndOfLifeDateProvider(LifecycleProvider):
             if payload:
                 self._product_cache[slug] = payload
                 return payload
-        self._product_cache[slug] = None
+        # Do not memoize outages as a successful no-match for subsequent components.
         return None
 
     def _fetch_json_with_retries(self, url: str) -> Any | None:
-        attempts = max(1, self._retries + 1)
-        for _ in range(attempts):
-            try:
-                if self._http_get is not None:
-                    return self._http_get(url)
-                with httpx.Client(timeout=self._timeout_seconds, follow_redirects=True) as client:
-                    response = client.get(url)
-                    if response.status_code == 404:
-                        return None
-                    response.raise_for_status()
-                    return response.json()
-            except (httpx.HTTPError, ValueError, TypeError):
-                continue
-        return None
+        try:
+            if self._http_get is not None:
+                return self._http_get(url)
+            return request_json("GET", url, timeout=self._timeout_seconds)
+        except (httpx.HTTPError, ValueError, TypeError):
+            return None
 
     def _status_from_dates(
         self,
@@ -303,11 +298,7 @@ def _purl_parts(value: str | None) -> dict[str, Any]:
     body = value[4:]
     path, _, query = body.partition("?")
     package_type = path.split("/", 1)[0].strip().lower() or None
-    qualifiers = {
-        key.lower(): unquote(val)
-        for key, val in parse_qsl(query, keep_blank_values=False)
-        if key
-    }
+    qualifiers = {key.lower(): unquote(val) for key, val in parse_qsl(query, keep_blank_values=False) if key}
     return {"type": package_type, "qualifiers": qualifiers}
 
 
@@ -466,8 +457,8 @@ def _recommendation(
             label = f"{slug} {release_hint['cycle']}"
             date_suffix = f" before {eol_date}" if eol_date else ""
             return f"Review {label} lifecycle support and plan an OS release upgrade{date_suffix}."
-        if _is_newer(latest, current):
-            return f"Upgrade {slug} to supported version {latest}."
+        if status == EOL_SOON and _is_newer(latest, current):
+            return f"Review {slug} version {latest} and plan migration before the cycle ends."
         return f"Review {slug} lifecycle support and upgrade to a supported cycle."
     return None
 

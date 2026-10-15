@@ -8,7 +8,6 @@ from app.models import (
     AuthorizationAuditLog,
     LifecycleProviderConfig,
     LifecycleProviderSecret,
-    LifecycleVendorRecord,
 )
 from app.security.secrets import generate_master_key
 from app.services.lifecycle.provider_config_service import (
@@ -151,7 +150,8 @@ def test_openeox_requires_feed_url_when_enabled(client):
     assert response.status_code == 422
 
 
-def test_openeox_can_be_enabled_with_feed_url(client):
+def test_openeox_can_be_enabled_with_feed_url(client, monkeypatch):
+    monkeypatch.setattr("app.services.lifecycle.provider_http.get_settings", lambda: type("Settings", (), {"lifecycle_egress_allowed_hosts": "example.com"})())
     response = client.put(
         "/api/admin/lifecycle-providers/openeox",
         json={"enabled": True, "feed_urls": ["https://example.com/openeox.json"]},
@@ -280,7 +280,8 @@ def test_provider_chain_uses_db_stored_xeol_config(db_session, tmp_path):
     assert xeol.db_path == str(db_path)
 
 
-def test_provider_test_endpoint_returns_health_result(client):
+def test_provider_test_endpoint_returns_health_result(client, monkeypatch):
+    monkeypatch.setattr("app.services.lifecycle.provider_probe.request_json", lambda *a, **k: {"info": {"version": "2.31.0"}})
     response = client.post("/api/admin/lifecycle-providers/package_registry/test")
     assert response.status_code == 200, response.text
     assert response.json()["status"] == "healthy"
@@ -337,11 +338,12 @@ def test_endoflife_date_probe_uses_product_endpoint(client, monkeypatch):
         def __exit__(self, *args):
             return False
 
-        def get(self, url):
+        def request(self, method, url, **kwargs):
             requested_urls.append(url)
             return FakeResponse()
 
-    monkeypatch.setattr("app.services.lifecycle.provider_config_service.httpx.Client", FakeClient)
+    monkeypatch.setattr("app.services.lifecycle.provider_http.httpx.Client", FakeClient)
+    monkeypatch.setattr("app.services.lifecycle.provider_http.socket.getaddrinfo", lambda *a, **k: [(2, 1, 6, "", ("93.184.216.34", 443))])
 
     response = client.post("/api/admin/lifecycle-providers/endoflife_date/test")
 
@@ -365,23 +367,27 @@ def test_custom_vendor_record_crud_and_lookup_participation(client, db_session):
             "confidence": "High",
         },
     )
-    assert create.status_code == 201, create.text
-    record_id = create.json()["id"]
-
-    list_response = client.get("/api/admin/lifecycle-vendor-records?search=legacy")
-    assert list_response.status_code == 200
-    assert list_response.json()["total"] >= 1
-
+    assert create.status_code == 403  # Platform-only data must reject tenant mutation.
+    from app.core.context import CurrentContext, minimal_background_context, tenant_scope
+    from app.models import IAMUser
+    from app.services.lifecycle.provider_config_service import LifecycleVendorRecordService
+    actor_id = db_session.query(IAMUser.id).first()[0]
+    context = CurrentContext(user_id=actor_id, external_user_id="test-platform", email=None, display_name="Test", external_tenant_id=None, roles=frozenset(), tenant_id=None, is_platform_admin=True,
+                             permissions=frozenset({"platform:admin"}))
+    with tenant_scope(context):
+        record = LifecycleVendorRecordService().create_record(db_session, {
+            "vendor_name": "Acme", "product_name": "legacy-runtime", "version_pattern": "1",
+            "lifecycle_status": "EOL", "eol_date": "2024-01-01", "evidence_url": "https://example.com/lifecycle",
+        }, context=context)
+        db_session.commit()
     client.put("/api/admin/lifecycle-providers/custom_vendor_records", json={"enabled": True})
-    from app.core.context import minimal_background_context, tenant_scope
     with tenant_scope(minimal_background_context(1)):
         providers = LifecycleProviderRegistry().build_provider_chain(db_session)
     assert "Vendor Lifecycle" in [provider.name for provider in providers]
-
-    delete = client.delete(f"/api/admin/lifecycle-vendor-records/{record_id}")
-    assert delete.status_code == 204
-    disabled = db_session.get(LifecycleVendorRecord, record_id)
-    assert disabled.enabled is False
+    probe = client.post("/api/admin/lifecycle-providers/custom_vendor_records/test").json()
+    assert probe["success"] and probe["sample_matched"] and probe["lifecycle_evidence_found"]
+    assert probe["probe_type"] == "local_verification" and not probe["connection_verified"]
+    assert client.delete(f"/api/admin/lifecycle-vendor-records/{record.id}").status_code == 403
 
 
 def test_audit_logs_written_for_provider_changes(client, db_session):
@@ -395,3 +401,17 @@ def test_audit_logs_written_for_provider_changes(client, db_session):
     )
     assert audit is not None
     assert "sk_" not in str(audit.new_value).lower()
+
+
+def test_unsupported_fields_nulls_and_unverified_health(client, db_session):
+    for field in ("enabled", "priority", "timeout_seconds", "max_retries", "circuit_breaker_enabled"):
+        assert client.put("/api/admin/lifecycle-providers/osv", json={field: None}).status_code == 422
+    assert client.put("/api/admin/lifecycle-providers/osv", json={"base_url": "https://endoflife.date/api"}).status_code == 422
+    assert client.put("/api/admin/lifecycle-providers/repository_health", json={"config": {"stale_days": 1}}).status_code == 422
+    assert client.post("/api/admin/lifecycle-providers/osv/sync").json()["status"] == "unsupported"
+    service = LifecycleProviderConfigService()
+    row = service.get_config(db_session, "osv")
+    row.health_status = "healthy"
+    row.last_probe_json = None
+    db_session.commit()
+    assert service.safe_config_dict(db_session, row)["health_status"] == "unknown"
