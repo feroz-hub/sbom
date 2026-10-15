@@ -1,95 +1,232 @@
 'use client';
 
-import { useEffect, useState } from 'react';
-import { useQuery, useQueryClient } from '@tanstack/react-query';
+import { useId, useRef, useState } from 'react';
+import { useQuery } from '@tanstack/react-query';
+import {
+  Building2,
+  ShieldCheck,
+  ShieldHalf,
+  SlidersHorizontal,
+} from 'lucide-react';
 import { usePermissions } from '@/hooks/usePermission';
-import { useMutationScope } from '@/hooks/useMutationScope';
-import { invalidateAdvisorPolicySurfaces } from '@/lib/queryInvalidation';
 import { useAuth } from '@/hooks/useAuth';
 import { TopBar } from '@/components/layout/TopBar';
-import { ApiError } from '@/lib/api';
-import { getAdvisorPolicy, getAdvisorPolicyHistory, publishAdvisorPolicy, type AdvisorPolicyKind, type AdvisorPolicyState, type AdvisorPolicyStatus } from '@/lib/advisorPolicyApi';
+import { Button } from '@/components/ui/Button';
+import { getAdvisorPolicy } from '@/lib/advisorPolicyApi';
+import { PolicyEditor } from './advisor-policies/PolicyEditor';
+import {
+  definitions,
+  type PolicyDefinition,
+} from './advisor-policies/policyRules';
+import styles from './advisor-policies/policies.module.css';
 
-const definitions: { kind: AdvisorPolicyKind; title: string; description: string; example: Record<string, unknown> }[] = [
-  { kind: 'accepted-risk', title: 'Accepted risk', description: 'Accept only Low or Medium actionable risk. Critical and High vulnerabilities can never be accepted. Optional rules restrict CVSS, vulnerability count, VEX status, lifecycle and analysis age.', example: { max_actionable_severity: 'MEDIUM', max_cvss_score: 6.9, max_actionable_vulnerabilities: 3, max_analysis_age_days: 30 } },
-  { kind: 'trust', title: 'Trust', description: 'Require allowed classifications and lifecycle states. Optional license allow/deny lists, evidence age and minimum product adoption further restrict trust.', example: { allowed_classifications: ['NO_KNOWN_ACTIONABLE_VULNERABILITIES', 'LOW'], allowed_lifecycle: ['SUPPORTED'], allowed_licenses: ['MIT', 'Apache-2.0'], max_evidence_age_days: 90, require_no_review_reasons: true } },
-  { kind: 'scoring', title: 'Recommendation scoring', description: 'Weights order recommendation candidates; they do not override security gates. Weights must sum to 1. Missing data can be PENALIZE or EXCLUDE; history window is 6–120 months and stale threshold is 1–3650 days.', example: { weights: { current_risk: 0.30, lifecycle: 0.20, vulnerability_trend: 0.15, compatibility: 0.15, maintenance: 0.08, license: 0.05, tenant_adoption: 0.05, evidence_freshness: 0.02 }, missing_data: 'PENALIZE', history_window_months: 24, stale_after_days: 90 } },
-];
-const inputClass = 'w-full rounded border border-border-subtle bg-surface p-2';
+const icons = [ShieldHalf, ShieldCheck, SlidersHorizontal];
 
-function PolicyEditor({ tenantId, definition, state, canUpdate }: { tenantId: number | null; definition: typeof definitions[number]; state: AdvisorPolicyState; canUpdate: boolean }) {
-  const client = useQueryClient();
-  const mutationScope = useMutationScope();
-  const owned = tenantId === null ? state.platform_default : state.tenant_override;
-  const initialStatus = owned?.status ?? (tenantId === null ? 'DISABLED' : 'INHERIT');
-  const [status, setStatus] = useState<AdvisorPolicyStatus>(initialStatus);
-  const [rules, setRules] = useState(JSON.stringify(owned?.status === 'ACTIVE' ? owned.rules : state.effective?.rules ?? definition.example, null, 2));
-  const [reason, setReason] = useState('');
-  const [error, setError] = useState('');
-  const [saved, setSaved] = useState(false);
-  const [saving, setSaving] = useState(false);
-  const [conflict, setConflict] = useState(false);
-  useEffect(() => {
-    setStatus(initialStatus);
-    setRules(JSON.stringify(owned?.status === 'ACTIVE' ? owned.rules : state.effective?.rules ?? definition.example, null, 2));
-    setConflict(false); setError('');
-  }, [state, definition, initialStatus, owned]);
-  const history = useQuery({ queryKey: ['advisor-policy-history', tenantId, definition.kind], queryFn: () => getAdvisorPolicyHistory(tenantId, definition.kind), retry: false });
-  async function publish(event: React.FormEvent) {
-    const isCurrent = mutationScope.capture();
-    event.preventDefault(); setError(''); setSaved(false);
-    let parsed: Record<string, unknown> | null = null;
-    try {
-      if (status === 'ACTIVE') {
-        parsed = JSON.parse(rules);
-        if (!parsed || Array.isArray(parsed) || typeof parsed !== 'object') throw new Error('Rules must be a JSON object.');
-      }
-      if (!reason.trim()) throw new Error('Enter a reason for this change.');
-    } catch (err) { setError(err instanceof Error ? err.message : 'Invalid rules.'); return; }
-    setSaving(true);
-    try {
-      const result = await publishAdvisorPolicy(tenantId, definition.kind, { status, rules: parsed, reason: reason.trim(), row_version: state.row_version });
-      if (!isCurrent()) return;
-      setReason(''); setSaved(true);
-      client.setQueryData(['advisor-policy', tenantId, definition.kind], result);
-      await Promise.all([
-        client.invalidateQueries({ queryKey: ['advisor-policy-history', tenantId, definition.kind] }),
-        invalidateAdvisorPolicySurfaces(client, tenantId),
-      ]);
-    } catch (err) {
-      if (err instanceof ApiError && err.status === 409) { setConflict(true); setError('Another administrator changed this policy. Reload the latest policy before publishing again.'); }
-      else setError(err instanceof Error ? err.message : 'Unable to publish policy.');
-    } finally { setSaving(false); }
-  }
-  return <div className="space-y-4">
-    <p>{state.effective ? `Effective: ${state.effective.scope.toLowerCase()} policy v${state.effective.version}` : definition.kind === 'scoring' ? 'Effective: built-in scoring defaults' : 'Policy not configured'}</p>
-    {state.effective && <details><summary>Effective rules</summary><pre className="overflow-auto text-sm">{JSON.stringify(state.effective.rules, null, 2)}</pre></details>}
-    <form onSubmit={publish} className="space-y-3">
-      <fieldset disabled={!canUpdate || saving || conflict} className="space-y-3">
-        <label className="block">Policy mode<select aria-label={`${definition.title} policy mode`} className={inputClass} value={status} onChange={event => setStatus(event.target.value as AdvisorPolicyStatus)}>{tenantId !== null && <option value="INHERIT">Inherit platform default</option>}<option value="ACTIVE">{tenantId === null ? "Use platform default" : "Use tenant policy"}</option><option value="DISABLED">{tenantId === null ? "Disable platform default" : "Disable policy for this tenant"}</option></select></label>
-        <p className="text-sm text-hcl-muted">{tenantId === null ? "Platform defaults apply to tenants that inherit. Scoring falls back to built-in defaults when no policy applies." : "Inherit uses an available platform default. Disable blocks inheritance. Scoring falls back to built-in defaults when no policy applies."}</p>
-        {status === 'ACTIVE' && <label className="block">Rules (JSON)<textarea aria-label={`${definition.title} rules`} className={`${inputClass} font-mono text-sm`} rows={12} value={rules} onChange={event => setRules(event.target.value)} spellCheck={false} /></label>}
-        {canUpdate && <><label className="block">Reason for change<input aria-label={`${definition.title} reason`} className={inputClass} required maxLength={2000} value={reason} onChange={event => setReason(event.target.value)} /></label><button className="rounded bg-primary px-4 py-2 text-white" type="submit">{saving ? 'Publishing…' : 'Publish policy version'}</button></>}
-      </fieldset>
-    </form>
-    {!canUpdate && <p>Read-only access. A {tenantId === null ? "Platform" : "Tenant"} Admin can publish policy changes.</p>}
-    {error && <p role="alert">{error}</p>}
-    {conflict && <button onClick={() => client.invalidateQueries({ queryKey: ['advisor-policy', tenantId, definition.kind] })}>Reload latest policy (discard draft)</button>}
-    {saved && <p role="status">Policy version published.</p>}
-    <details><summary>Version history</summary>{history.isPending ? <p>Loading history…</p> : history.isError ? <p role="alert">Unable to load history.</p> : history.data.items.length === 0 ? <p>No versions published.</p> : <ul className="space-y-3">{history.data.items.map(version => <li key={version.id}><p>v{version.version} · {version.status} · {version.created_at} · {version.created_by}</p><p>{version.reason}</p><pre className="overflow-auto text-xs">{JSON.stringify(version.rules, null, 2)}</pre></li>)}</ul>}</details>
-  </div>;
+function PolicyPanel({
+  tenantId,
+  definition,
+  canUpdate,
+}: {
+  tenantId: number | null;
+  definition: PolicyDefinition;
+  canUpdate: boolean;
+}) {
+  const query = useQuery({
+    queryKey: ['advisor-policy', tenantId, definition.kind],
+    queryFn: () => getAdvisorPolicy(tenantId, definition.kind),
+    retry: false,
+  });
+  return (
+    <div className="space-y-5">
+      <div>
+        <h2 className="text-xl font-semibold text-hcl-navy">
+          {definition.title}
+        </h2>
+        <p className="mt-2 max-w-4xl text-sm leading-6 text-hcl-muted">
+          {definition.description}
+        </p>
+      </div>
+      {query.isPending && (
+        <div
+          role="status"
+          className="animate-pulse rounded-xl border border-border bg-surface p-6 text-sm text-hcl-muted"
+        >
+          Loading policy…
+        </div>
+      )}
+      {query.isError && (
+        <div
+          role="alert"
+          className="rounded-xl border border-border bg-surface p-5 text-sm"
+        >
+          Unable to load policy: {query.error.message}{' '}
+          <Button variant="secondary" onClick={() => query.refetch()}>
+            Retry
+          </Button>
+        </div>
+      )}
+      {query.data && (
+        <PolicyEditor
+          tenantId={tenantId}
+          definition={definition}
+          state={query.data}
+          canUpdate={canUpdate}
+          reload={async () => {
+            const result = await query.refetch();
+            if (result.error) throw result.error;
+            return result.data!;
+          }}
+        />
+      )}
+    </div>
+  );
 }
-function PolicyCard({ tenantId, definition, canUpdate }: { tenantId: number | null; definition: typeof definitions[number]; canUpdate: boolean }) {
-  const query = useQuery({ queryKey: ['advisor-policy', tenantId, definition.kind], queryFn: () => getAdvisorPolicy(tenantId, definition.kind), retry: false });
-  return <section className="space-y-3 rounded-lg border border-border-subtle bg-surface p-5"><h2 className="text-lg font-semibold">{definition.title}</h2><p>{definition.description}</p>{query.isPending ? <p>Loading policy…</p> : query.isError ? <><p role="alert">Unable to load policy: {query.error.message}</p><button onClick={() => query.refetch()}>Retry</button></> : <PolicyEditor tenantId={tenantId} definition={definition} state={query.data} canUpdate={canUpdate} />}</section>;
+
+function PolicyConsole({
+  tenantId,
+  canUpdate,
+}: {
+  tenantId: number | null;
+  canUpdate: boolean;
+}) {
+  const [selected, setSelected] = useState(0);
+  const tabs = useRef<(HTMLButtonElement | null)[]>([]);
+  const id = useId();
+  return (
+    <div className="space-y-6">
+      <div
+        className="flex flex-wrap items-center justify-between gap-3 border-b border-border"
+        role="tablist"
+        aria-label="Advisor policy types"
+      >
+        {definitions.map((definition, index) => {
+          const Icon = icons[index];
+          return (
+            <button
+              key={definition.kind}
+              ref={(element) => {
+                tabs.current[index] = element;
+              }}
+              role="tab"
+              type="button"
+              id={`${id}-tab-${index}`}
+              aria-controls={`${id}-panel-${index}`}
+              aria-selected={selected === index}
+              tabIndex={selected === index ? 0 : -1}
+              onClick={() => setSelected(index)}
+              onKeyDown={(event) => {
+                const next =
+                  event.key === 'ArrowRight'
+                    ? (index + 1) % definitions.length
+                    : event.key === 'ArrowLeft'
+                      ? (index + definitions.length - 1) % definitions.length
+                      : event.key === 'Home'
+                        ? 0
+                        : event.key === 'End'
+                          ? definitions.length - 1
+                          : null;
+                if (next !== null) {
+                  event.preventDefault();
+                  setSelected(next);
+                  tabs.current[next]?.focus();
+                }
+              }}
+              className={`flex min-h-12 items-center gap-2 rounded-t-lg border-b-2 px-3 py-3 text-sm font-medium sm:px-5 ${selected === index ? 'border-primary bg-surface text-hcl-navy' : 'border-transparent text-hcl-muted hover:bg-surface-muted'}`}
+            >
+              <Icon className="h-4 w-4" aria-hidden />
+              {definition.title}
+            </button>
+          );
+        })}
+      </div>
+      {definitions.map((definition, index) => (
+        <div
+          key={definition.kind}
+          role="tabpanel"
+          id={`${id}-panel-${index}`}
+          aria-labelledby={`${id}-tab-${index}`}
+          hidden={selected !== index}
+          tabIndex={0}
+          className="min-w-0 rounded focus-visible:outline-primary"
+        >
+          <PolicyPanel
+            tenantId={tenantId}
+            definition={definition}
+            canUpdate={canUpdate}
+          />
+        </div>
+      ))}
+    </div>
+  );
 }
-export function ScopedAdvisorPolicies({ scope }: { scope: 'platform' | 'tenant' }) {
-  const { activeTenantId, activeTenant,  isLoading, isTenantContextLoading } = useAuth();
+
+export function ScopedAdvisorPolicies({
+  scope,
+}: {
+  scope: 'platform' | 'tenant';
+}) {
+  const { activeTenantId, activeTenant, isLoading, isTenantContextLoading } =
+    useAuth();
   const { can: hasPermission } = usePermissions();
-  if (isLoading || isTenantContextLoading) return <p>Verifying configuration access…</p>;
-  if ((scope === 'tenant' && !activeTenantId) || !hasPermission(`${scope}:advisor-policy:read`)) return <p role="alert">Policy configuration access is not permitted in this context.</p>;
+  if (isLoading || isTenantContextLoading)
+    return <p role="status">Verifying configuration access…</p>;
+  if (
+    (scope === 'tenant' && !activeTenantId) ||
+    !hasPermission(`${scope}:advisor-policy:read`)
+  )
+    return (
+      <p role="alert">
+        Policy configuration access is not permitted in this context.
+      </p>
+    );
   const tenantId = scope === 'platform' ? null : Number(activeTenantId);
-  const scopeName = scope === 'platform' ? 'platform defaults' : activeTenant?.name ?? 'the active tenant';
-  return <div className="flex flex-1 flex-col"><TopBar title="Component Advisor Policies" subtitle={`Configuration for ${scopeName}`} /><main className="mx-auto w-full max-w-4xl space-y-5 p-6"><p>Manage policies for {scopeName}. Every published change creates a new version and preserves history.</p>{definitions.map(definition => <PolicyCard key={`${tenantId}:${definition.kind}`} tenantId={tenantId} definition={definition} canUpdate={hasPermission(`${scope}:advisor-policy:update`)} />)}</main></div>;
+  const scopeName =
+    scope === 'platform'
+      ? 'platform defaults'
+      : (activeTenant?.name ?? 'the active tenant');
+  return (
+    <div
+      className={`${styles.page} flex min-w-0 flex-1 flex-col text-hcl-navy`}
+    >
+      <TopBar
+        title="Component Advisor Policies"
+        subtitle="Configure accepted risk, trust criteria and recommendation scoring."
+        breadcrumbs={[
+          {
+            label: scope === 'platform' ? 'Platform' : 'Settings',
+            href: scope === 'platform' ? '/platform' : '/settings',
+          },
+          { label: 'Configuration' },
+          { label: 'Component Advisor Policies' },
+        ]}
+      />
+      <div className="mx-auto w-full max-w-7xl space-y-6 p-4 md:p-6 xl:p-8">
+        <div className="flex flex-wrap items-start justify-between gap-3 rounded-xl border border-border bg-surface p-4 sm:p-5">
+          <div className="flex min-w-0 items-start gap-3">
+            <Building2
+              className="mt-0.5 h-5 w-5 shrink-0 text-hcl-blue"
+              aria-hidden
+            />
+            <div>
+              <p className="break-words text-sm font-semibold">
+                Configuration for {scopeName}
+              </p>
+              <p className="mt-1 text-sm leading-6 text-hcl-muted">
+                {scope === 'platform'
+                  ? 'Platform defaults apply to tenants that inherit. Tenant overrides remain independent.'
+                  : 'Tenant policies can inherit the platform default, use their own rules, or disable inheritance.'}{' '}
+                Every published change creates a new version and preserves
+                history.
+              </p>
+            </div>
+          </div>
+        </div>
+        <PolicyConsole
+          key={`${scope}:${tenantId}`}
+          tenantId={tenantId}
+          canUpdate={hasPermission(`${scope}:advisor-policy:update`)}
+        />
+      </div>
+    </div>
+  );
 }
-
