@@ -493,6 +493,7 @@ class BatchDurationEstimateResponse(BaseModel):
     "/runs/{run_id}/ai-fixes/estimate",
     response_model=BatchDurationEstimateResponse,
     deprecated=True,
+    include_in_schema=False,
 )
 def estimate_run_duration_legacy(
     run_id: int,
@@ -754,6 +755,7 @@ def cancel_run_batch(
     response_model=BatchProgress,
     responses={204: {"description": "Run exists but has no AI fix batch (idle)."}},
     deprecated=True,
+    include_in_schema=False,
 )
 def get_progress(run_id: int, db: Session = Depends(get_db)) -> BatchProgress | Response:
     """Return the most-recent batch's progress (legacy compat).
@@ -797,6 +799,7 @@ def get_progress(run_id: int, db: Session = Depends(get_db)) -> BatchProgress | 
     "/runs/{run_id}/ai-fixes/cancel",
     status_code=202,
     deprecated=True,
+    include_in_schema=False,
 )
 def cancel_run_fixes_legacy(run_id: int, db: Session = Depends(get_db)) -> dict:
     """Cancel every active batch on the run (legacy compat).
@@ -823,6 +826,7 @@ def cancel_run_fixes_legacy(run_id: int, db: Session = Depends(get_db)) -> dict:
 @router.get(
     "/runs/{run_id}/ai-fixes/stream",
     deprecated=True,
+    include_in_schema=False,
 )
 def stream_progress_legacy(run_id: int) -> StreamingResponse:
     """Stream the most-recent batch's progress (legacy compat).
