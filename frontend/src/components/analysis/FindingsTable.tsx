@@ -230,7 +230,7 @@ function loadDensity(): Density {
 
 function SourceChips({ source }: { source: string | null }) {
   if (!source) return <span className="text-xs text-hcl-muted">—</span>;
-  const parts = source.split(',').map((s) => s.trim()).filter(Boolean);
+  const parts = [...new Set(source.split(',').map((s) => s.trim()).filter(Boolean))];
   const colorMap: Record<string, string> = {
     NVD: 'border-indigo-200 bg-indigo-50 text-indigo-700 dark:border-indigo-800 dark:bg-indigo-950/50 dark:text-indigo-200',
     OSV: 'border-emerald-200 bg-emerald-50 text-emerald-700 dark:border-emerald-800 dark:bg-emerald-950/50 dark:text-emerald-200',
@@ -248,7 +248,7 @@ function SourceChips({ source }: { source: string | null }) {
               'border-slate-200 bg-slate-50 text-slate-600 dark:border-slate-600 dark:bg-slate-800 dark:text-slate-300',
           )}
         >
-          {s}
+          {s.toUpperCase() === 'GITHUB' ? 'GHSA' : s}
         </span>
       ))}
     </div>
@@ -1243,6 +1243,32 @@ function ExpandedDetail({ finding: f, aliases, cwes, fixedVersions, onAliasOpen,
   return (
     <div className="grid grid-cols-1 gap-4 lg:grid-cols-3">
       <div className="lg:col-span-2 space-y-3">
+        <div className="rounded border border-border p-3 text-xs space-y-1">
+          <p className="font-semibold">Original SBOM component</p>
+          <p>{f.component_name} {f.component_version} · ID {f.component_id ?? 'Unresolved'}</p>
+          {f.bom_ref && <p className="break-all font-mono">Reference: {f.bom_ref}</p>}
+          {f.purl && <p className="break-all font-mono">{f.purl}</p>}
+          <p>Selected CVSS: {f.score ?? 'Unscored'} · {f.cvss_version ?? 'Version unknown'} · {f.cvss_source ?? 'Source unavailable'}</p>
+          {f.rating_disagreement && <p className="text-amber-700 dark:text-amber-300">Provider rating disagreement — see source observations.</p>}
+          <p>EPSS probability: {(f.epss * 100).toFixed(2)}% · Percentile: {f.epss_percentile == null ? 'Unknown' : `${(f.epss_percentile * 100).toFixed(2)}%`}</p>
+          <p>Risk: CVSS input × (1 + 5 × EPSS probability) × (2 if KEV, otherwise 1).</p>
+          {f.risk_input_estimated && <p>Estimated risk input: {f.risk_cvss_input ?? 'Unknown'} from severity; measured CVSS is unavailable.</p>}
+        </div>
+        <div className="space-y-2">
+          <p className="text-xs font-semibold">Verified source observations ({f.source_observations?.length ?? 0})</p>
+          {(f.source_observations ?? []).map((observation, index) => (
+            <details key={`${observation.provider}-${observation.vuln_id}-${index}`} className="rounded border border-border p-2 text-xs">
+              <summary className="cursor-pointer">{observation.provider} · {observation.vuln_id} · {observation.severity ?? 'Unknown'} · CVSS {observation.score ?? 'Unscored'}</summary>
+              {observation.vector && <p className="mt-2 break-all font-mono">{observation.vector}</p>}
+              <p>Aliases: {(observation.aliases ?? []).join(', ') || 'None'}</p>
+              <p>Available fixes: {(observation.fixed_versions ?? []).join(', ') || 'Unknown'}</p>
+              <pre className="mt-2 whitespace-pre-wrap break-all">{JSON.stringify(observation.applicability ?? { reason: observation.match_reason }, null, 2)}</pre>
+              {observation.query_trace && <pre className="mt-2 whitespace-pre-wrap break-all">{JSON.stringify(observation.query_trace, null, 2)}</pre>}
+              {(observation.references ?? []).filter((url) => /^https?:\/\//i.test(url)).map((url) => <a key={url} href={url} target="_blank" rel="noopener noreferrer" className="block truncate text-hcl-blue hover:underline">{url}</a>)}
+            </details>
+          ))}
+          {!f.source_observations?.length && <p className="text-xs text-hcl-muted">Detailed source evidence was not recorded for this historical finding.</p>}
+        </div>
         {description && (
           <div>
             <p className="text-[11px] font-semibold uppercase tracking-wider text-hcl-muted">

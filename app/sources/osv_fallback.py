@@ -146,18 +146,29 @@ async def osv_fetch_via_query_endpoint_raw(
             continue
         seen.add(purl)
 
-        payload: dict[str, Any] = {"package": {"purl": purl}}
-        version = comp.get("version")
-        if version and "@" + str(version) not in purl and payload.get("package"):
-            payload["version"] = version
+        from .osv_eligibility import osv_query_for_component
+        decision = osv_query_for_component(comp)
+        if not decision.query:
+            continue
+        payload = dict(decision.query)
 
         try:
-            data = await post_json_fn(url, json_body=payload, timeout=timeout)
+            raw_vulns = []
+            tokens = set()
+            while True:
+                data = await post_json_fn(url, json_body=payload, timeout=timeout)
+                raw_vulns.extend((data or {}).get("vulns") or [])
+                token = (data or {}).get("next_page_token")
+                if not token:
+                    break
+                if token in tokens:
+                    raise ValueError("Repeated OSV query pagination token")
+                tokens.add(token)
+                payload["page_token"] = token
         except Exception as exc:
             errors.append({"source": "OSV", "purl": purl, "error": str(exc)})
             continue
 
-        raw_vulns = (data or {}).get("vulns") or []
         # Even an empty list is cached deliberately; storing the empty
         # list here lets the caller mark this PURL as "checked, nothing".
         vulns_by_purl[purl] = [v for v in raw_vulns if isinstance(v, dict)]
@@ -181,66 +192,29 @@ async def osv_query_via_query_endpoint(
 
     Returns (findings, errors, warnings).
     """
-    if not components:
-        return [], [], []
+    from .component_observation import applicable_osv_record, bind_component
+    from .cvss_assessment import osv_assessment
 
-    base = getattr(settings, "osv_api_base_url", "https://api.osv.dev").rstrip("/")
-    url = f"{base}/v1/query"
-    timeout = int(getattr(settings, "nvd_request_timeout_seconds", 60))
-
-    findings: list[dict] = []
-    errors: list[dict] = []
-    warnings: list[dict] = []
-
-    # Per-PURL, but de-dupe exact repeats to avoid redundant calls for SBOMs
-    # that contain multiple entries with the same purl.
-    seen: set[str] = set()
-
+    raw_by_purl, errors, warnings = await osv_fetch_via_query_endpoint_raw(components, settings, post_json_fn=post_json_fn)
+    findings = []
     for comp in components:
-        purl = (comp.get("purl") or "").strip()
-        if not purl or purl in seen:
-            continue
-        seen.add(purl)
-
-        payload = {"package": {"purl": purl}}
-        # If PURL lacks version but component has it, send as separate field.
-        version = comp.get("version")
-        if version and "@" + str(version) not in purl and payload.get("package"):
-            payload["version"] = version
-
-        try:
-            data = await post_json_fn(url, json_body=payload, timeout=timeout)
-        except Exception as exc:
-            errors.append({"source": "OSV", "purl": purl, "error": str(exc)})
-            continue
-
-        vulns = (data or {}).get("vulns") or []
-        if not vulns:
-            continue
-
-        vendor = _vendor_from_purl(comp.get("purl"))
-        for v in vulns:
-            if not isinstance(v, dict):
+        for raw in raw_by_purl.get(comp.get("purl"), []):
+            vuln = applicable_osv_record(raw, comp)
+            if vuln is None:
                 continue
             finding = _normalize_osv_vuln_to_finding(
-                v,
-                component_name=comp.get("name") or "",
-                component_version=comp.get("version"),
-                score_and_vector_fn=best_score_and_vector_fn,
-                severity_bucket_fn=severity_bucket_fn,
-                attack_vector_fn=attack_vector_fn,
-                extract_cwe_fn=extract_cwe_fn,
-                extract_fixed_versions_fn=extract_fixed_versions_fn,
-                settings=settings,
-            )
-            # Roadmap #3 — same wiring as the /v1/querybatch path.
-            result = score_match(
-                component_name=finding.get("component_name") or "",
-                component_version=finding.get("component_version"),
-                component_vendor=vendor,
-                cve_text=_osv_cve_text(v),
-            )
+                vuln, component_name=comp.get("name") or "", component_version=comp.get("version"),
+                score_and_vector_fn=best_score_and_vector_fn, severity_bucket_fn=severity_bucket_fn,
+                attack_vector_fn=attack_vector_fn, extract_cwe_fn=extract_cwe_fn,
+                extract_fixed_versions_fn=extract_fixed_versions_fn, settings=settings)
+            bind_component(finding, comp)
+            selected = osv_assessment(vuln)
+            finding["cvss_version"] = selected["version"] if selected else None
+            finding["provider_raw"] = raw
+            finding["applicability_status"] = "affected"
+            finding["applicability"] = {"status": "affected", "reason": "osv_version_qualified_query", "affected": vuln.get("affected")}
+            result = score_match(component_name=finding["component_name"], component_version=finding["component_version"],
+                                 component_vendor=_vendor_from_purl(comp.get("purl")), cve_text=_osv_cve_text(vuln))
             finding["match_confidence"] = apply_strategy_floor(result.confidence, finding.get("match_strategy"))
             findings.append(finding)
-
     return findings, errors, warnings

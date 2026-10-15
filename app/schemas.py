@@ -482,6 +482,13 @@ class VulnerabilityRemediationOut(ORMModel):
 
 
 class AnalysisFindingOut(ORMModel):
+    source_observations: list[dict[str, Any]] = Field(default_factory=list)
+    selected_cvss: dict[str, Any] | None = None
+    cvss_source: str | None = None
+    rating_disagreement: bool = False
+    resolution_status: str | None = None
+    bom_ref: str | None = None
+    purl: str | None = None
     vex_status: str | None = None
     vex_decision: dict | None = None
     id: int

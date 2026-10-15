@@ -1,0 +1,259 @@
+{
+  "baseline-selected": {
+    "summary": "8 failed, 53 passed, 3 warnings, 16 errors in 40.21s",
+    "failing_tests": [
+      "ERROR tests/test_auth.py::test_mode_none_lets_unauthenticated_requests_through",
+      "ERROR tests/test_auth.py::test_mode_bearer_rejects_missing_authorization_header",
+      "ERROR tests/test_auth.py::test_mode_bearer_rejects_malformed_authorization_header",
+      "ERROR tests/test_auth.py::test_mode_bearer_rejects_unknown_token - TypeError:...",
+      "ERROR tests/test_auth.py::test_mode_bearer_accepts_valid_token - TypeError: s...",
+      "ERROR tests/test_auth.py::test_mode_bearer_accepts_token_with_case_insensitive_scheme",
+      "ERROR tests/test_auth.py::test_unprotected_routes_stay_open_in_bearer_mode - ...",
+      "ERROR tests/test_auth.py::test_analysis_config_endpoint_is_protected - TypeEr...",
+      "ERROR tests/test_tenant_isolation.py::test_tenant_a_cannot_access_tenant_b_sbom",
+      "ERROR tests/test_tenant_isolation.py::test_tenant_a_cannot_access_tenant_b_project",
+      "ERROR tests/test_tenant_isolation.py::test_tenant_a_cannot_update_or_delete_tenant_b_project",
+      "ERROR tests/test_tenant_isolation.py::test_tenant_a_cannot_update_or_delete_tenant_b_sbom",
+      "ERROR tests/test_tenant_isolation.py::test_tenant_header_cannot_select_an_unrelated_tenant",
+      "ERROR tests/test_tenant_isolation.py::test_tenant_a_cannot_read_update_or_delete_tenant_b_product",
+      "ERROR tests/test_tenant_isolation.py::test_tenant_a_cannot_read_tenant_b_run_or_findings",
+      "ERROR tests/test_tenant_isolation.py::test_tenant_a_cannot_read_tenant_b_vex_or_remediation",
+      "FAILED tests/test_hcl_iam_auth.py::TestPrincipalTenantResolution::test_unknown_tenant_and_missing_membership_return_403",
+      "FAILED tests/test_hcl_iam_auth.py::TestPrincipalTenantResolution::test_active_membership_role_is_authoritative",
+      "FAILED tests/test_hcl_iam_auth.py::TestPrincipalTenantResolution::test_token_platform_admin_cannot_override_viewer_membership",
+      "FAILED tests/test_hcl_iam_auth.py::TestPrincipalTenantResolution::test_token_platform_admin_cannot_bypass_missing_membership",
+      "FAILED tests/test_hcl_iam_auth.py::TestPrincipalTenantResolution::test_unknown_platform_token_creates_unverified_user_without_privilege",
+      "FAILED tests/test_hcl_iam_auth.py::TestPrincipalTenantResolution::test_active_database_platform_grant_allows_explicit_tenant_selection",
+      "FAILED tests/test_auth.py::test_mode_jwt_accepts_valid_token - TypeError: sup...",
+      "FAILED tests/test_auth.py::test_mode_jwt_rejects_bad_signature - TypeError: s..."
+    ]
+  },
+  "baseline-entra-original-commit": {
+    "summary": "8 failed, 33 passed, 2 warnings, 2 errors in 14.31s",
+    "failing_tests": [
+      "ERROR tests/test_entra_auth.py::test_session_and_context_endpoint_pending_and_business_denial",
+      "ERROR tests/test_entra_auth.py::test_approval_suspension_and_resume_use_existing_admin_api",
+      "FAILED tests/test_entra_auth.py::test_first_login_pending_no_authority_and_same_email_not_linked",
+      "FAILED tests/test_entra_auth.py::test_local_status_overrides_token_without_recreating_user[PENDING-USER_ACCESS_PENDING-USER_ACCESS_PENDING]",
+      "FAILED tests/test_entra_auth.py::test_local_status_overrides_token_without_recreating_user[DISABLED-ACCOUNT_DISABLED-IAM_ACCOUNT_DISABLED]",
+      "FAILED tests/test_entra_auth.py::test_local_status_overrides_token_without_recreating_user[SUSPENDED-USER_SUSPENDED-USER_SUSPENDED]",
+      "FAILED tests/test_entra_auth.py::test_local_status_overrides_token_without_recreating_user[ACTIVE-NO_TENANT-IAM_NO_TENANT]",
+      "FAILED tests/test_entra_auth.py::test_approval_does_not_assign_authority_and_tenant_permission_isolation",
+      "FAILED tests/test_entra_auth.py::test_concurrent_first_login_has_one_user_and_identity",
+      "FAILED tests/test_entra_auth.py::test_audit_failure_rolls_back_user_and_identity"
+    ]
+  },
+  "patch1-red": {
+    "summary": "4 failed, 3 passed, 1 warning in 2.45s",
+    "failing_tests": [
+      "FAILED tests/test_security_remediation_patches.py::test_close_requires_separate_permission[Developer-permissions1]",
+      "FAILED tests/test_security_remediation_patches.py::test_remediation_actor_cannot_be_spoofed",
+      "FAILED tests/test_security_remediation_patches.py::test_restore_foreign_project_without_ambient_guard",
+      "FAILED tests/test_security_remediation_patches.py::test_restore_own_project_and_audit_actor"
+    ]
+  },
+  "patch1": {
+    "summary": "29 passed, 1 warning in 5.74s",
+    "failing_tests": []
+  },
+  "patch2-red": {
+    "summary": "14 failed, 7 passed, 1 warning in 3.85s",
+    "failing_tests": [
+      "FAILED tests/test_security_remediation_patches.py::test_global_vendor_service_denies_before_db[None-create_record]",
+      "FAILED tests/test_security_remediation_patches.py::test_global_vendor_service_denies_before_db[None-update_record]",
+      "FAILED tests/test_security_remediation_patches.py::test_global_vendor_service_denies_before_db[None-disable_record]",
+      "FAILED tests/test_security_remediation_patches.py::test_global_vendor_service_denies_before_db[None-import_records]",
+      "FAILED tests/test_security_remediation_patches.py::test_global_vendor_service_denies_before_db[context1-create_record]",
+      "FAILED tests/test_security_remediation_patches.py::test_global_vendor_service_denies_before_db[context1-update_record]",
+      "FAILED tests/test_security_remediation_patches.py::test_global_vendor_service_denies_before_db[context1-disable_record]",
+      "FAILED tests/test_security_remediation_patches.py::test_global_vendor_service_denies_before_db[context1-import_records]",
+      "FAILED tests/test_security_remediation_patches.py::test_global_vendor_service_denies_before_db[context2-create_record]",
+      "FAILED tests/test_security_remediation_patches.py::test_global_vendor_service_denies_before_db[context2-update_record]",
+      "FAILED tests/test_security_remediation_patches.py::test_global_vendor_service_denies_before_db[context2-disable_record]",
+      "FAILED tests/test_security_remediation_patches.py::test_global_vendor_service_denies_before_db[context2-import_records]",
+      "FAILED tests/test_security_remediation_patches.py::test_kev_sync_platform_authority[False]",
+      "FAILED tests/test_security_remediation_patches.py::test_kev_sync_platform_authority[True]"
+    ]
+  },
+  "patch2": {
+    "summary": "46 passed, 1 warning in 6.40s",
+    "failing_tests": []
+  },
+  "patch3-red": {
+    "summary": "16 failed, 24 passed, 1 warning in 2.94s",
+    "failing_tests": [
+      "FAILED tests/test_security_remediation_patches.py::test_exports_require_explicit_export_permission[GET-/api/sboms/1/download]",
+      "FAILED tests/test_security_remediation_patches.py::test_exports_require_explicit_export_permission[GET-/api/analysis-runs/1/export/csv]",
+      "FAILED tests/test_security_remediation_patches.py::test_exports_require_explicit_export_permission[GET-/api/analysis-runs/1/export/sarif]",
+      "FAILED tests/test_security_remediation_patches.py::test_exports_require_explicit_export_permission[GET-/api/sboms/1/vex/report]",
+      "FAILED tests/test_security_remediation_patches.py::test_exports_require_explicit_export_permission[GET-/api/sboms/1/reports/vex-pack]",
+      "FAILED tests/test_security_remediation_patches.py::test_exports_require_explicit_export_permission[GET-/api/sboms/1/lifecycle/report]",
+      "FAILED tests/test_security_remediation_patches.py::test_exports_require_explicit_export_permission[GET-/api/sboms/1/reports/lifecycle-pack]",
+      "FAILED tests/test_security_remediation_patches.py::test_exports_require_explicit_export_permission[POST-/api/projects/1/reports/fda-510k-sbom/export]",
+      "FAILED tests/test_security_remediation_patches.py::test_exports_require_explicit_export_permission[POST-/api/v1/compare/cache/export]",
+      "FAILED tests/test_security_remediation_patches.py::test_exports_require_explicit_export_permission[POST-/api/pdf-report]",
+      "FAILED tests/test_security_remediation_patches.py::test_exports_require_explicit_export_permission[GET-/api/report-deliveries/1/artifacts/1]",
+      "FAILED tests/test_security_remediation_patches.py::test_unmapped_operations_fail_closed[GET]",
+      "FAILED tests/test_security_remediation_patches.py::test_unmapped_operations_fail_closed[POST]",
+      "FAILED tests/test_security_remediation_patches.py::test_unmapped_operations_fail_closed[PUT]",
+      "FAILED tests/test_security_remediation_patches.py::test_unmapped_operations_fail_closed[PATCH]",
+      "FAILED tests/test_security_remediation_patches.py::test_unmapped_operations_fail_closed[DELETE]"
+    ]
+  },
+  "patch3": {
+    "summary": "70 passed, 1 warning in 8.75s",
+    "failing_tests": []
+  },
+  "patch4-red": {
+    "summary": "4 failed, 45 passed, 1 warning in 5.87s",
+    "failing_tests": [
+      "FAILED tests/test_security_remediation_patches.py::test_production_cannot_disable_auth[production]",
+      "FAILED tests/test_security_remediation_patches.py::test_production_cannot_disable_auth[staging]",
+      "FAILED tests/test_security_remediation_patches.py::test_enabled_provider_cannot_use_development_identity",
+      "FAILED tests/test_security_remediation_patches.py::test_forwarding_headers_do_not_change_rate_limit_identity"
+    ]
+  },
+  "patch4-broad-existing": {
+    "summary": "11 failed, 135 passed, 2 warnings, 2 errors in 17.74s",
+    "failing_tests": [
+      "ERROR tests/test_entra_auth.py::test_session_and_context_endpoint_pending_and_business_denial",
+      "ERROR tests/test_entra_auth.py::test_approval_suspension_and_resume_use_existing_admin_api",
+      "FAILED tests/test_entra_auth.py::test_first_login_pending_no_authority_and_same_email_not_linked",
+      "FAILED tests/test_entra_auth.py::test_local_status_overrides_token_without_recreating_user[PENDING-USER_ACCESS_PENDING-USER_ACCESS_PENDING]",
+      "FAILED tests/test_entra_auth.py::test_local_status_overrides_token_without_recreating_user[DISABLED-ACCOUNT_DISABLED-IAM_ACCOUNT_DISABLED]",
+      "FAILED tests/test_entra_auth.py::test_local_status_overrides_token_without_recreating_user[SUSPENDED-USER_SUSPENDED-USER_SUSPENDED]",
+      "FAILED tests/test_entra_auth.py::test_local_status_overrides_token_without_recreating_user[ACTIVE-NO_TENANT-IAM_NO_TENANT]",
+      "FAILED tests/test_entra_auth.py::test_approval_does_not_assign_authority_and_tenant_permission_isolation",
+      "FAILED tests/test_entra_auth.py::test_concurrent_first_login_has_one_user_and_identity",
+      "FAILED tests/test_entra_auth.py::test_audit_failure_rolls_back_user_and_identity",
+      "FAILED tests/test_hcl_iam_auth.py::TestPrincipalTenantResolution::test_active_membership_role_is_authoritative",
+      "FAILED tests/test_hcl_iam_auth.py::TestPrincipalTenantResolution::test_token_platform_admin_cannot_override_viewer_membership",
+      "FAILED tests/test_hcl_iam_auth.py::TestPrincipalTenantResolution::test_active_database_platform_grant_allows_explicit_tenant_selection"
+    ]
+  },
+  "patch4-native-catalog-existing": {
+    "summary": "50 failed, 111 passed, 1 warning in 15.24s",
+    "failing_tests": [
+      "FAILED tests/test_native_iam_phase2.py::test_creation_delegation[True-assigned0-True]",
+      "FAILED tests/test_native_iam_phase2.py::test_creation_delegation[False-assigned1-True]",
+      "FAILED tests/test_native_iam_phase2.py::test_creation_delegation[False-assigned2-False]",
+      "FAILED tests/test_native_iam_phase2.py::test_creation_delegation[False-assigned3-False]",
+      "FAILED tests/test_native_iam_phase2.py::test_cross_tenant_and_duplicate - Typ...",
+      "FAILED tests/test_native_iam_phase2.py::test_activation_single_use_and_audit",
+      "FAILED tests/test_native_iam_phase2.py::test_same_token_tenant_isolation_and_live_roles",
+      "FAILED tests/test_native_iam_phase2.py::test_lockout_last_platform_admin_revocation_and_unlock",
+      "FAILED tests/test_native_iam_phase2.py::test_concurrent_failed_attempts - fas...",
+      "FAILED tests/test_native_iam_phase2.py::test_bad_jwt_claims[iss-https://wrong.test]",
+      "FAILED tests/test_native_iam_phase2.py::test_bad_jwt_claims[aud-wrong] - fast...",
+      "FAILED tests/test_native_iam_phase2.py::test_bad_jwt_claims[exp-1] - fastapi....",
+      "FAILED tests/test_native_iam_phase2.py::test_bad_jwt_claims[sub-abc] - fastap...",
+      "FAILED tests/test_native_iam_phase2.py::test_bad_jwt_claims[sub-01] - fastapi...",
+      "FAILED tests/test_native_iam_phase2.py::test_bad_jwt_claims[auth_provider-HCL_CS]",
+      "FAILED tests/test_native_iam_phase2.py::test_bad_jwt_claims[security_version-True]",
+      "FAILED tests/test_native_iam_phase2.py::test_bad_jwt_claims[jti-] - fastapi.e...",
+      "FAILED tests/test_native_iam_phase2.py::test_bad_jwt_claims[iat-9999999999]",
+      "FAILED tests/test_native_iam_phase2.py::test_required_claims[iss] - fastapi.e...",
+      "FAILED tests/test_native_iam_phase2.py::test_required_claims[sub] - fastapi.e...",
+      "FAILED tests/test_native_iam_phase2.py::test_required_claims[aud] - fastapi.e...",
+      "FAILED tests/test_native_iam_phase2.py::test_required_claims[iat] - fastapi.e...",
+      "FAILED tests/test_native_iam_phase2.py::test_required_claims[exp] - fastapi.e...",
+      "FAILED tests/test_native_iam_phase2.py::test_required_claims[jti] - fastapi.e...",
+      "FAILED tests/test_native_iam_phase2.py::test_required_claims[auth_provider]",
+      "FAILED tests/test_native_iam_phase2.py::test_required_claims[security_version]",
+      "FAILED tests/test_native_iam_phase2.py::test_signature_algorithm_and_disabled",
+      "FAILED tests/test_native_iam_phase2.py::test_audit_failure_rolls_back_activation",
+      "FAILED tests/test_native_iam_phase2.py::test_concurrent_enrollment_one_identity",
+      "FAILED tests/test_native_iam_phase2.py::test_concurrent_activation_one_winner",
+      "FAILED tests/test_native_iam_phase2.py::test_activation_rejection[expired] - ...",
+      "FAILED tests/test_native_iam_phase2.py::test_activation_rejection[invalidated]",
+      "FAILED tests/test_native_iam_phase2.py::test_activation_rejection[email] - fa...",
+      "FAILED tests/test_native_iam_phase2.py::test_activation_rejection[disabled]",
+      "FAILED tests/test_native_iam_phase2.py::test_email_failure_resend_rotation_and_scope",
+      "FAILED tests/test_native_iam_phase2.py::test_success_resets_and_rehashes - fa...",
+      "FAILED tests/test_native_iam_phase2.py::test_nonactive_login[PENDING_EMAIL_VERIFICATION]",
+      "FAILED tests/test_native_iam_phase2.py::test_nonactive_login[DISABLED] - fast...",
+      "FAILED tests/test_native_iam_phase2.py::test_nonactive_login[FORCE_PASSWORD_CHANGE]",
+      "FAILED tests/test_native_iam_phase2.py::test_creation_and_login_audit_rollback",
+      "FAILED tests/test_native_iam_phase2.py::test_disable_enable_does_not_revive_token",
+      "FAILED tests/test_native_iam_phase2.py::test_public_and_admin_http_boundaries",
+      "FAILED tests/test_native_iam_phase2.py::test_http_activation_login_and_shared_context",
+      "FAILED tests/test_native_iam_phase2.py::test_login_uses_native_identifier_not_profile_email",
+      "FAILED tests/test_native_iam_phase2.py::test_future_not_before_and_token_roles_are_not_authority",
+      "FAILED tests/test_native_iam_phase2.py::test_configured_lockout_threshold_and_duration",
+      "FAILED tests/test_phase8_permission_resolution.py::test_database_mode_uses_database_and_reflects_next_request",
+      "FAILED tests/test_phase8_permission_resolution.py::test_database_mode_new_mapping_applies_on_next_resolution",
+      "FAILED tests/test_phase8_permission_mutation.py::test_metadata_update_uses_optimistic_version",
+      "FAILED tests/test_phase8_permission_mutation.py::test_protected_tenant_admin_mapping_cannot_be_removed"
+    ]
+  },
+  "additional-audit-red": {
+    "summary": "3 failed, 78 passed, 1 warning in 6.67s",
+    "failing_tests": [
+      "FAILED tests/test_security_remediation_patches.py::test_version_actor_is_authenticated[edit]",
+      "FAILED tests/test_security_remediation_patches.py::test_version_actor_is_authenticated[restore]",
+      "FAILED tests/test_security_remediation_patches.py::test_schedule_actor_is_authenticated"
+    ]
+  },
+  "background-original-red": {
+    "summary": "1 failed, 89 deselected, 1 warning in 1.53s",
+    "failing_tests": [
+      "FAILED tests/test_security_remediation_patches.py::test_old_ai_jobs_without_actor_do_not_execute"
+    ]
+  },
+  "patch5": {
+    "summary": "122 passed, 1 warning in 11.57s",
+    "failing_tests": []
+  },
+  "service-red": {
+    "summary": "2 failed, 93 deselected, 1 warning in 1.58s",
+    "failing_tests": [
+      "FAILED tests/test_security_remediation_patches.py::test_report_generation_requires_export_authority_before_scope_queries",
+      "FAILED tests/test_security_remediation_patches.py::test_remediation_service_requires_write_before_database_access"
+    ]
+  },
+  "patch6": {
+    "summary": "134 passed, 1 warning in 12.67s",
+    "failing_tests": []
+  },
+  "route-identity-red": {
+    "summary": "1 failed, 113 deselected, 1 warning in 1.38s",
+    "failing_tests": [
+      "FAILED tests/test_security_remediation_patches.py::test_unmapped_route_cannot_borrow_known_url_policy"
+    ]
+  },
+  "final-verified": {
+    "summary": "230 passed, 6 deselected, 2 warnings in 15.43s",
+    "failing_tests": [],
+    "selection": {
+      "files": [
+        "tests/test_security_remediation_patches.py",
+        "tests/test_kev_router.py",
+        "tests/test_kev_sync_worker.py",
+        "tests/test_native_session_lifetime.py",
+        "tests/test_hcl_iam_auth.py"
+      ],
+      "entra_nodes": [
+        "test_valid_access_token_routes_to_fixed_validator",
+        "test_invalid_token_claims_rejected",
+        "test_signature_algorithm_unknown_kid_and_missing_claim_rejected",
+        "test_configuration_fails_closed",
+        "test_disabled_provider_needs_no_configuration",
+        "test_signing_key_issuer_is_bound_to_configured_directory",
+        "test_required_claims_cannot_be_omitted",
+        "test_entra_only_startup_and_missing_token_are_fail_closed"
+      ],
+      "filter": "not PrincipalTenantResolution",
+      "environment": {
+        "TEST_DATABASE_URL": "sqlite:////tmp/sbom_security_final_test.db",
+        "TEST_POSTGRES_DATABASE_URL": ""
+      }
+    }
+  },
+  "foreign-job-progress-red": {
+    "summary": "1 failed, 1 passed, 141 deselected, 1 warning in 1.58s",
+    "failing_tests": [
+      "ERROR    sbom.ai.tasks:ai_fix_tasks.py:142 ai.task.generate_run_fixes.failed: run=1 batch=None err=404: Analysis run not found",
+      "FAILED tests/test_security_remediation_patches.py::test_ai_worker_ownership_precedes_execution_and_progress_writes[False]"
+    ]
+  }
+}

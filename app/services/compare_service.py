@@ -468,12 +468,27 @@ class CompareService:
         # is set (most rows). Findings without a component_id still produce a
         # row, just with purl=None.
         stmt = (
-            select(AnalysisFinding, SBOMComponent.purl)
+            select(AnalysisFinding, SBOMComponent)
             .where(AnalysisFinding.analysis_run_id == run_id)
             .outerjoin(SBOMComponent, SBOMComponent.id == AnalysisFinding.component_id)
         )
         out: dict[_FindingKey, _LoadedFinding] = {}
-        for finding, purl in self._db.execute(stmt).all():
+        from .finding_metrics import canonicalize_finding_rows
+        loaded_rows = self._db.execute(stmt).all()
+        inventory = {f.component_id: component for f, component in loaded_rows if component}
+        def occurrence_context(component):
+            return (component.purl or "", component.bom_ref or "", component.hashes or "", component.scope or "")
+        context_counts = {}
+        for component in inventory.values():
+            context = occurrence_context(component)
+            context_counts[context] = context_counts.get(context, 0) + 1
+        for finding in canonicalize_finding_rows(f for f, _ in loaded_rows):
+            component = inventory.get(finding.component_id)
+            purl = component.purl if component else None
+            context = occurrence_context(component) if component else ()
+            identity = repr(context) if purl or (component and component.bom_ref) else ""
+            if context_counts.get(context, 0) > 1:
+                identity += f":occurrence:{finding.component_id}"
             vuln_id_raw = (finding.vuln_id or "").strip()
             if not vuln_id_raw:
                 continue
@@ -484,12 +499,10 @@ class CompareService:
                 vuln_id_canonical=canonical,
                 component_name=comp_name.lower(),
                 component_version=comp_ver,
+                component_identity=identity,
             )
-            # Multi-source fan-out can produce multiple rows for the same
-            # finding identity (e.g. NVD + OSV both find CVE-X on pkg@1.2.3).
-            # The schema's uq_analysis_finding_run_vuln_cpe key uses CPE,
-            # which can differ between sources. Collapse on identity here
-            # and prefer the most-severe.
+            # Provider duplicates were reconciled above. Preserve distinct
+            # declared package, artifact, and occurrence contexts in the diff.
             existing = out.get(key)
             sev = _severity_from_str(finding.severity)
             if existing is not None and _severity_ord(existing.severity) >= _severity_ord(sev):
@@ -778,7 +791,7 @@ def compute_cache_key(run_a_id: int, run_b_id: int) -> str:
     ``compare(A, B)`` and ``compare(B, A)`` MUST hit the same cache row.
     """
     lo, hi = sorted((int(run_a_id), int(run_b_id)))
-    return hashlib.sha256(f"{lo}:{hi}".encode("ascii")).hexdigest()
+    return hashlib.sha256(f"reconciliation-v1:{lo}:{hi}".encode("ascii")).hexdigest()
 
 
 def _canonicalize_vuln_id(raw: str) -> str:

@@ -2,11 +2,10 @@
 
 from __future__ import annotations
 
+import re
 from dataclasses import dataclass, field
 from typing import Any
 from urllib.parse import unquote
-
-from .version_normalizer import normalize_version
 
 try:  # pragma: no cover - exercised in integration tests when installed.
     from packageurl import PackageURL
@@ -14,8 +13,8 @@ except ModuleNotFoundError:  # pragma: no cover
     PackageURL = None  # type: ignore[assignment]
 
 
-LOWERCASE_NAMESPACE_TYPES = {"bitbucket", "deb", "github", "golang", "maven", "npm", "pypi"}
-LOWERCASE_NAME_TYPES = {"apk", "bitbucket", "deb", "github", "golang", "gem", "maven", "npm", "nuget", "pypi", "rpm"}
+LOWERCASE_NAMESPACE_TYPES = {"bitbucket", "github", "npm", "pypi"}
+LOWERCASE_NAME_TYPES = {"bitbucket", "github", "npm", "nuget", "pypi"}
 
 
 @dataclass(slots=True)
@@ -46,7 +45,9 @@ def normalize_purl(value: Any, *, fallback_version: str | None = None) -> PurlNo
     ptype = (parsed.type or "").strip().lower()
     namespace = _clean_part(parsed.namespace)
     name = _clean_part(parsed.name)
-    version = normalize_version(parsed.version or fallback_version, ecosystem=ptype).normalized_version
+    version = (parsed.version or fallback_version or "").strip() or None
+    if ptype == "npm" and version and re.fullmatch(r"v\d+\.\d+\.\d+(?:[-+].*)?", version):
+        version = version[1:]
     if namespace and ptype in LOWERCASE_NAMESPACE_TYPES:
         namespace = namespace.lower()
     if name and ptype in LOWERCASE_NAME_TYPES:
@@ -85,7 +86,7 @@ def normalize_purl(value: Any, *, fallback_version: str | None = None) -> PurlNo
 def _clean_part(value: Any) -> str | None:
     if value is None:
         return None
-    cleaned = unquote(str(value).strip())
+    cleaned = str(value).strip()
     return cleaned or None
 
 
@@ -99,7 +100,7 @@ def _fallback_parse(raw: str, *, fallback_version: str | None) -> PurlNormalizat
     if not at:
         path = rest
         version = fallback_version or ""
-    parts = [_clean_part(part) for part in path.split("/") if part]
+    parts = [_clean_part(unquote(part)) for part in path.split("/") if part]
     if not ptype or not parts:
         return PurlNormalizationResult(raw, None, False, notes=["invalid_purl"])
     name = parts[-1]
@@ -110,7 +111,7 @@ def _fallback_parse(raw: str, *, fallback_version: str | None) -> PurlNormalizat
         if key.strip() and qvalue.strip():
             qualifiers[key.strip().lower()] = qvalue.strip()
     ptype = ptype.lower()
-    version = normalize_version(version, ecosystem=ptype).normalized_version
+    version = str(version or "").strip() or None
     normalized = f"pkg:{ptype}/"
     if namespace:
         normalized += f"{namespace.lower() if ptype in LOWERCASE_NAMESPACE_TYPES else namespace}/"

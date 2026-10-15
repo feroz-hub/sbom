@@ -736,7 +736,10 @@ def export_sbom(
             # Sync flat canonical attributes back to raw
             for flat in export_flat:
                 if "raw" in flat:
-                    _sync_flat_to_raw(flat, flat["raw"], "cyclonedx")
+                    # Aggregates belong to the explicit normalized export;
+                    # stored representative occurrences retain their own fields.
+                    aggregate = (flat.get("dedupe_evidence_json") or {}).get("aggregate_metadata") or {}
+                    _sync_flat_to_raw({**flat, **aggregate}, flat["raw"], "cyclonedx")
 
             # Update doc components
             doc["components"] = [flat["raw"] for flat in export_flat if "raw" in flat]
@@ -785,7 +788,8 @@ def export_sbom(
             # Sync flat canonical attributes back to raw
             for flat in export_flat:
                 if "raw" in flat:
-                    _sync_flat_to_raw(flat, flat["raw"], "spdx")
+                    aggregate = (flat.get("dedupe_evidence_json") or {}).get("aggregate_metadata") or {}
+                    _sync_flat_to_raw({**flat, **aggregate}, flat["raw"], "spdx")
 
             # Rebuild packages and elements lists, keeping only canonical ones
             canonical_raw_set = {id(flat["raw"]) for flat in export_flat if "raw" in flat}

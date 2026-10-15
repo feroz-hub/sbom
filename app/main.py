@@ -31,6 +31,7 @@ from slowapi.errors import RateLimitExceeded
 from slowapi.middleware import SlowAPIMiddleware
 from sqlalchemy import MetaData, Table, func, select, update
 from starlette.middleware.gzip import GZipMiddleware
+from starlette.routing import compile_path
 
 from .logger import get_logger, setup_logging
 
@@ -42,6 +43,7 @@ from datetime import UTC, datetime
 
 from . import error_handlers
 from .auth import validate_auth_setup
+from .core.route_policies import ROUTE_POLICIES
 from .core.security import enforce_request_access
 from .db import Base, SessionLocal, engine
 from .http_client import close_async_http_client, init_async_http_client
@@ -600,6 +602,41 @@ async def lifespan(app: FastAPI):
 
 
 app = FastAPI(title="SBOM & Projects API", version=APP_VERSION, lifespan=lifespan)
+
+_generate_openapi = app.openapi
+
+
+def custom_openapi():
+    """Document the existing route policy without changing runtime dependencies."""
+    if app.openapi_schema is not None:
+        return app.openapi_schema
+    schema = _generate_openapi()
+    schema.setdefault("components", {}).setdefault("securitySchemes", {})["BearerAuth"] = {
+        "type": "http",
+        "scheme": "bearer",
+        "bearerFormat": "JWT",
+    }
+    # OpenAPI omits Starlette path converters (e.g. {family_key:path}).
+    policies = {
+        (method, compile_path(path)[1]): policy
+        for key, policy in ROUTE_POLICIES.items()
+        for method, path in [key.split(" ", 1)]
+    }
+    for path, path_item in schema["paths"].items():
+        for method, operation in path_item.items():
+            policy = policies.get((method.upper(), path))
+            if policy is None or policy == "public":
+                continue
+            operation["security"] = [{"BearerAuth": []}]
+            if "parameters" in operation:
+                operation["parameters"] = [
+                    parameter for parameter in operation["parameters"]
+                    if not (parameter.get("in") == "header" and parameter.get("name", "").lower() == "authorization")
+                ]
+    return schema
+
+
+app.openapi = custom_openapi
 
 app.state.limiter = limiter
 app.add_exception_handler(RateLimitExceeded, rate_limit_exceeded_handler)

@@ -4,6 +4,7 @@ Analysis Service Layer - Business logic for vulnerability analysis and reporting
 
 from __future__ import annotations
 
+import hashlib
 import json
 import logging
 from datetime import UTC, datetime, timedelta
@@ -590,6 +591,8 @@ def persist_analysis_run(
         raise ValueError("SBOM no longer available")
     original_fingerprint = None
     if existing_run is not None:
+        if existing_run.sbom_id != sbom_obj.id or existing_run.tenant_id != sbom_obj.tenant_id:
+            raise ValueError("Analysis run does not belong to the selected SBOM and tenant")
         db.refresh(existing_run)
         original_fingerprint = existing_run.analysis_input_fingerprint
     current_fingerprint = analysis_fingerprint(db, sbom_obj)
@@ -602,6 +605,15 @@ def persist_analysis_run(
         result_is_current = False
     component_maps = _upsert_components(db, sbom_obj, components)
     details = filter_unconfirmed_provider_findings(details, components)
+    # Resolve and validate ownership BEFORE canonical reconciliation.
+    for finding in details.get("findings") or []:
+        finding["component_id"] = resolve_component_id(finding, component_maps)
+        if finding["component_id"] is not None:
+            component = component_maps["ids"][finding["component_id"]]
+            finding["component_name"] = component.original_name or component.name
+            finding["component_version"] = component.original_version or component.version
+            finding["sbom_id"] = sbom_obj.id
+            finding["tenant_id"] = sbom_obj.tenant_id
     details["findings"] = deduplicate_finding_dicts(details.get("findings") or [])
     raw_observation_count = safe_int(
         (details.get("analysis_metadata") or {}).get("raw_observation_count")
@@ -612,6 +624,12 @@ def persist_analysis_run(
     details.setdefault("analysis_metadata", {})
     if isinstance(details["analysis_metadata"], dict):
         details["analysis_metadata"]["raw_observation_count"] = raw_observation_count
+        inventory = list(component_maps["ids"].values())
+        identified = [r for r in inventory if r.canonical_identity_confidence == "High"
+                      and str(r.normalized_component_key or "").startswith("purl:")]
+        details["analysis_metadata"].update(total_component_entries=len(inventory),
+                                            unique_package_releases=len({r.normalized_component_key for r in identified}),
+                                            unresolved_component_entries=len(inventory) - len(identified))
 
     run = existing_run or AnalysisRun(sbom_id=sbom_obj.id, project_id=sbom_obj.projectid, product_id=sbom_obj.product_id)
     run.is_current = result_is_current
@@ -714,10 +732,14 @@ def persist_analysis_run(
                 reference_url = refs[0]
         reference_url = reference_url or None
 
-        component_id = resolve_component_id(finding, component_maps)
+        component_id = finding.get("component_id")
         cpe_value = (finding.get("cpe") or "").strip() or None
         row = AnalysisFinding(
             analysis_run_id=run.id,
+            evidence_json={key: finding.get(key) for key in
+                           ("source_observations", "selected_cvss", "cvss_source", "rating_disagreement", "resolution_status", "bom_ref", "purl", "normalized_name")},
+            reconciliation_key=hashlib.sha256(
+                f"{component_id}:{vuln_id}".encode()).hexdigest() if component_id is not None else None,
             component_id=component_id,
             vuln_id=vuln_id,
             source=sources_str,

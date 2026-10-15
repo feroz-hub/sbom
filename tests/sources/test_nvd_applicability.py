@@ -76,9 +76,9 @@ def test_invalid_installed_version_is_unknown():
 
 def test_same_cve_from_multiple_providers_dedupes_to_one_finding():
     findings = [
-        {"vuln_id": "CVE-1", "sources": ["NVD"], "component_name": "pillow", "component_version": "12.2.0", "ecosystem": "pypi"},
-        {"vuln_id": "OSV-1", "aliases": ["CVE-1"], "sources": ["OSV"], "component_name": "pillow", "component_version": "12.2.0", "ecosystem": "pypi"},
-        {"vuln_id": "GHSA-1", "aliases": ["CVE-1"], "sources": ["GITHUB"], "component_name": "pillow", "component_version": "12.2.0", "ecosystem": "pypi"},
+        {"component_id": 5, "vuln_id": "CVE-2021-44228", "sources": ["NVD"], "component_name": "pillow", "component_version": "12.2.0", "ecosystem": "pypi"},
+        {"component_id": 5, "vuln_id": "OSV-1", "aliases": ["CVE-2021-44228"], "sources": ["OSV"], "component_name": "pillow", "component_version": "12.2.0", "ecosystem": "pypi"},
+        {"component_id": 5, "vuln_id": "GHSA-1", "aliases": ["CVE-2021-44228"], "sources": ["GITHUB"], "component_name": "pillow", "component_version": "12.2.0", "ecosystem": "pypi"},
     ]
     merged = deduplicate_findings(findings)
     assert len(merged) == 1

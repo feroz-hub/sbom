@@ -2,6 +2,8 @@
 
 from __future__ import annotations
 
+import json
+import re
 from collections import defaultdict
 from typing import Any
 
@@ -21,6 +23,23 @@ class ComponentDeduplicator:
         unique_components: list[dict[str, Any]] = []
         low_confidence = 0
 
+        contexts: dict[str, list[str]] = defaultdict(list)
+        for dep in dependencies or []:
+            if "ref" in dep:
+                for target in dep.get("dependsOn") or []:
+                    contexts[str(target)].append(str(dep["ref"]))
+            elif "source" in dep:
+                contexts[str(dep.get("target"))].append(str(dep["source"]))
+            elif dep.get("relatedSpdxElement"):
+                contexts[str(dep["relatedSpdxElement"])].append(str(dep.get("spdxElementId")))
+        hash_variants: dict[str, dict[str, set[str]]] = defaultdict(lambda: defaultdict(set))
+        cpe_variants: dict[str, set[str]] = defaultdict(set)
+        for comp in normalized:
+            if comp.get("primary_cpe"):
+                cpe_variants[str(comp.get("normalized_component_key"))].add(comp["primary_cpe"])
+            if comp.get("hashes"):
+                for alg, digest in _well_formed_hashes(comp["hashes"]):
+                    hash_variants[str(comp.get("normalized_component_key"))][alg].add(digest)
         for component in normalized:
             key = component.get("normalized_component_key")
             confidence = component.get("canonical_identity_confidence")
@@ -30,7 +49,16 @@ class ComponentDeduplicator:
                 component["dedupe_group_id"] = None
                 unique_components.append(component)
                 continue
-            groups[str(key)].append(component)
+            # Package grouping must not erase artifact or occurrence applicability.
+            distinction = {field: component.get(field) for field in
+                           ("scope", "properties", "pedigree", "vex") if component.get(field)}
+            if len(cpe_variants[str(key)]) > 1:
+                distinction["cpe"] = component.get("primary_cpe")
+            if any(len(values) > 1 for values in hash_variants[str(key)].values()):
+                distinction["hashes"] = component.get("hashes")
+            if contexts.get(_ref(component)):
+                distinction["parents"] = sorted(set(contexts[_ref(component)]))
+            groups[str(key) + ":context:" + json.dumps(distinction, sort_keys=True, default=str)].append(component)
 
         canonical_components: list[dict[str, Any]] = []
         duplicate_components: list[dict[str, Any]] = []
@@ -38,6 +66,9 @@ class ComponentDeduplicator:
         duplicate_groups: list[dict[str, Any]] = []
         conflicts: list[dict[str, Any]] = []
         warnings: list[str] = []
+        refs = [_ref(c) for c in normalized if _ref(c)]
+        if len(refs) != len(set(refs)):
+            raise ValueError("Duplicate document-scoped component reference")
 
         for key, candidates in groups.items():
             canonical = choose_canonical_component(candidates)
@@ -59,10 +90,11 @@ class ComponentDeduplicator:
                 continue
 
             merged = dict(canonical)
+            aggregate = dict(canonical)
             for item in candidates:
                 if item is canonical:
                     continue
-                merged = merge_components(merged, item, key, conflicts)
+                aggregate = merge_components(aggregate, item, key, conflicts)
                 item_ref = _ref(item)
                 if item_ref and canonical_ref:
                     ref_mapping[item_ref] = canonical_ref
@@ -91,6 +123,7 @@ class ComponentDeduplicator:
                 "canonical_ref": canonical_ref,
                 "component_refs": group_refs,
                 "merged_duplicate_count": len(candidates) - 1,
+                "aggregate_metadata": {field: aggregate.get(field) for field in ("license", "hashes", "supplier")},
             }
             canonical_components.append(merged)
             duplicate_groups.append(
@@ -131,6 +164,7 @@ class ComponentDeduplicator:
             "ref_mapping": ref_mapping,
             "remapped_dependencies": remapped_refs,
             "normalized_dependencies": remapped_dependencies,
+            "original_dependencies": dependencies or [],
             "warnings": warnings,
         }
         return canonical_components, duplicate_components, ref_mapping, report, warnings
@@ -146,7 +180,8 @@ def choose_canonical_component(candidates: list[dict[str, Any]]) -> dict[str, An
             0 if item.get("license") else 1,
             0 if item.get("hashes") else 1,
             0 if item.get("supplier") else 1,
-            index,
+            _ref(item),
+            json.dumps(item, sort_keys=True, default=str),
         )
 
     return sorted(((item, index) for index, item in enumerate(candidates)), key=rank)[0][0]
@@ -252,3 +287,21 @@ def _merge_csv(a: Any, b: Any) -> str | None:
 
 def _ref(component: dict[str, Any]) -> str:
     return str(component.get("bom_ref") or component.get("SPDXID") or "")
+
+
+def _well_formed_hashes(value: Any) -> list[tuple[str, str]]:
+    sizes = {"sha256": 64, "sha384": 96, "sha512": 128, "sha1": 40}
+    if isinstance(value, str):
+        entries = [part.strip().partition(":")[::2] for part in value.split(",")]
+    elif isinstance(value, list):
+        entries = [(item.get("alg") or item.get("algorithm"), item.get("content") or item.get("checksumValue"))
+                   for item in value if isinstance(item, dict)]
+    else:
+        return []
+    result = []
+    for algorithm, digest in entries:
+        algorithm = re.sub(r"[^a-z0-9]", "", str(algorithm).lower())
+        digest = str(digest or "").strip().lower()
+        if algorithm in sizes and re.fullmatch(rf"[0-9a-f]{{{sizes[algorithm]}}}", digest):
+            result.append((algorithm, digest))
+    return result

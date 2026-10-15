@@ -95,6 +95,11 @@ class AnalysisOrchestrator:
     @staticmethod
     def _component_input(row: SBOMComponent) -> dict[str, Any]:
         return {
+            "component_id": row.id,
+            "sbom_id": row.sbom_id,
+            "tenant_id": row.tenant_id,
+            "original_name": row.original_name or row.name,
+            "original_version": row.original_version or row.version,
             "bom_ref": row.bom_ref,
             "type": row.component_type,
             "group": row.component_group,
@@ -115,6 +120,7 @@ class AnalysisOrchestrator:
             "normalized_component_key": row.normalized_component_key,
             "primary_cpe": row.primary_cpe,
             "normalized_cpes": row.normalized_cpes,
+            "identity_notes": row.normalization_notes_json,
         }
 
     def load_components(
@@ -138,7 +144,6 @@ class AnalysisOrchestrator:
                     select(SBOMComponent)
                     .where(
                         SBOMComponent.sbom_id == sbom.id,
-                        (SBOMComponent.is_duplicate.is_(False)) | (SBOMComponent.is_duplicate.is_(None)),
                     )
                     .order_by(SBOMComponent.id.asc())
                 ).scalars()
@@ -365,6 +370,12 @@ class AnalysisOrchestrator:
             "analysis_metadata": {
                 "sources": source_names,
                 "raw_observation_count": len(raw_findings),
+                "total_component_entries": len(components),
+                "unique_package_releases": len({c["normalized_component_key"] for c in components
+                                                if str(c.get("normalized_component_key") or "").startswith("purl:")
+                                                and not any("conflict" in n for n in c.get("identity_notes") or [])}),
+                "unresolved_component_entries": sum(not str(c.get("normalized_component_key") or "").startswith("purl:")
+                                                     or any("conflict" in n for n in c.get("identity_notes") or []) for c in components),
                 "source_summary": source_summary,
                 "provider_status": provider_status,
             },

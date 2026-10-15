@@ -130,6 +130,8 @@ def test_bulk_insert_persists_long_external_finding_values(client, db):
             component_version=long_component_version,
             matched_range=long_range,
             vector=long_vector,
+            score=None,
+            cvss_version="4.0",
             match_strategy="ghsa_alias",
         )
     )

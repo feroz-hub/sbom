@@ -16,12 +16,8 @@ from typing import Any
 
 def safe_score(value: Any) -> float | None:
     """Coerce a CVSS score-like value to ``float``, returning ``None`` on failure."""
-    if value is None:
-        return None
-    try:
-        return float(value)
-    except (TypeError, ValueError):
-        return None
+    from .cvss_assessment import numeric_score
+    return numeric_score(value)
 
 
 def parse_cvss_attack_vector(vector: str | None) -> str | None:
@@ -40,42 +36,31 @@ def parse_cvss_attack_vector(vector: str | None) -> str | None:
 
 
 def cvss_version_from_metrics(metrics: dict[str, Any]) -> str | None:
-    """Return ``'V40'``, ``'V31'``, or ``'V2'`` based on which metric key has data."""
-    for key, label in (
-        ("cvssMetricV40", "V40"),
-        ("cvssMetricV31", "V31"),
-        ("cvssMetricV30", "V31"),
-        ("cvssMetricV2", "V2"),
-    ):
-        if metrics.get(key):
-            return label
-    return None
+    selected = nvd_assessment(metrics)
+    return selected["version"] if selected else None
 
 
-def extract_best_cvss(
-    metrics: dict[str, Any],
-) -> tuple[float | None, str | None, str | None]:
-    """
-    Pick the best available CVSS triple ``(score, vector, baseSeverity)``
-    from an NVD-style metrics dict, preferring v4.0 → v3.1 → v3.0 → v2.
-    """
-    if not isinstance(metrics, dict):
-        return None, None, None
-    metric_keys = ("cvssMetricV40", "cvssMetricV31", "cvssMetricV30", "cvssMetricV2")
-    for key in metric_keys:
-        entries = metrics.get(key) or []
-        if not entries:
-            continue
-        primary = next(
-            (m for m in entries if str((m or {}).get("type", "")).lower() == "primary"),
-            entries[0],
-        )
-        cvss_data = (primary or {}).get("cvssData") or {}
-        score = safe_score(cvss_data.get("baseScore"))
-        vector = cvss_data.get("vectorString")
-        severity = (primary or {}).get("baseSeverity") or cvss_data.get("baseSeverity")
-        return score, vector, severity
-    return None, None, None
+def nvd_assessment(metrics: dict[str, Any]) -> dict | None:
+    from .cvss_assessment import VERSION_ORDER, assessment
+    candidates = []
+    for key, version in (("cvssMetricV31", "3.1"), ("cvssMetricV30", "3.0"),
+                         ("cvssMetricV40", "4.0"), ("cvssMetricV2", "2.0")):
+        for entry in metrics.get(key) or []:
+            data = entry.get("cvssData") or {}
+            selected = assessment(data.get("baseScore"), data.get("vectorString"), version, provider="NVD")
+            if selected:
+                candidates.append((entry, selected))
+    return min(candidates, key=lambda item: (
+        0 if item[0].get("source") == "nvd@nist.gov" else 1,
+        0 if str(item[0].get("type", "")).lower() == "primary" else 1,
+        VERSION_ORDER[item[1]["version"]], str(item[1]["vector"] or ""), item[1]["score"]))[1] if candidates else None
+
+
+def extract_best_cvss(metrics: dict[str, Any]) -> tuple[float | None, str | None, str | None]:
+    from .cvss_assessment import severity_for_score
+    selected = nvd_assessment(metrics)
+    return ((selected["score"], selected["vector"], severity_for_score(selected["score"]))
+            if selected else (None, None, None))
 
 
 # GitHub Advisory severity normalisation: GraphQL returns "MODERATE" for medium.

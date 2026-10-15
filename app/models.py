@@ -1672,11 +1672,14 @@ class AnalysisFinding(Base, SoftDeleteMixin, TenantOwnedMixin):
     # ("show everything produced by keyword_search") don't table-scan.
     match_strategy = Column(String(64), nullable=True, index=True)
 
+    evidence_json = Column(JSON, nullable=True)
+    reconciliation_key = Column(String(64), nullable=True)
+
     analysis_run = relationship("AnalysisRun", back_populates="findings")
     component = relationship("SBOMComponent", back_populates="findings")
 
     __table_args__ = (
-        UniqueConstraint("analysis_run_id", "vuln_id", "cpe", name="uq_analysis_finding_run_vuln_cpe"),
+        UniqueConstraint("analysis_run_id", "reconciliation_key", name="uq_analysis_finding_run_reconciliation"),
         Index("ix_analysis_finding_run_severity", "analysis_run_id", "severity"),
     )
 

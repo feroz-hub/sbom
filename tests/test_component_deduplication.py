@@ -120,27 +120,15 @@ def test_deduplication_service_logic():
         components, dependencies
     )
 
-    # 1. Verification of identity & groupings
-    assert len(canonical) == 1
-    assert len(duplicates) == 1
-    assert duplicates[0]["is_duplicate"] is True
-    assert duplicates[0]["duplicate_of_ref"] == "ref-lodash-1"
-
-    # 2. Attribute merging checks
-    canonical_comp = canonical[0]
-    assert canonical_comp["license"] == "Apache-2.0, MIT" or canonical_comp["license"] == "MIT, Apache-2.0"
-    assert "SHA-256:12345" in canonical_comp["hashes"]
-    assert "SHA-1:67890" in canonical_comp["hashes"]
-    assert canonical_comp["supplier"] == "JS Supplier"  # Kept the first one
-
-    # 3. Conflict report
-    assert len(report["conflicts"]) > 0
-    conflict_fields = [c["field"] for c in report["conflicts"]]
-    assert "license" in conflict_fields
-    assert "supplier" in conflict_fields
-
-    # 4. Ref mapping remapping check
+    # Package grouping keeps the original metadata of both occurrences.
+    assert len(canonical) == len(duplicates) == 1
     assert ref_mapping == {"ref-lodash-2": "ref-lodash-1"}
+    assert canonical[0]["hashes"] == "SHA-256:12345"
+    assert canonical[0]["license"] == "MIT"
+    assert duplicates[0]["hashes"] == "SHA-1:67890"
+    assert duplicates[0]["license"] == "Apache-2.0"
+    assert report["original_dependencies"] == dependencies
+    assert {c["field"] for c in report["conflicts"]} == {"license", "supplier"}
 
 
 def test_api_dedupe_on_upload(client, unique_name):

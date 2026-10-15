@@ -1,0 +1,2938 @@
+{
+  "/api/report-notifications/config GET": [
+    "configuration",
+    "dependency",
+    "get_current_tenant_context",
+    "get_current_claims",
+    "get_db"
+  ],
+  "/api/report-subscriptions GET": [
+    "list_subscriptions",
+    "dependency",
+    "get_current_tenant_context",
+    "get_current_claims",
+    "get_db",
+    "get_db"
+  ],
+  "/api/report-notifications/targets GET": [
+    "targets",
+    "dependency",
+    "get_current_tenant_context",
+    "get_current_claims",
+    "get_db",
+    "get_db"
+  ],
+  "/api/tenants/{tenant_id}/report-subscriptions GET": [
+    "tenant_subscriptions",
+    "dependency",
+    "get_current_tenant_context",
+    "get_current_claims",
+    "get_db",
+    "get_db"
+  ],
+  "/api/report-subscriptions POST": [
+    "create_subscription",
+    "dependency",
+    "get_current_tenant_context",
+    "get_current_claims",
+    "get_db",
+    "get_db"
+  ],
+  "/api/report-subscriptions/{identifier} PATCH": [
+    "update_subscription",
+    "dependency",
+    "get_current_tenant_context",
+    "get_current_claims",
+    "get_db",
+    "get_db"
+  ],
+  "/api/report-subscriptions/{identifier} DELETE": [
+    "delete_subscription",
+    "dependency",
+    "get_current_tenant_context",
+    "get_current_claims",
+    "get_db",
+    "get_db"
+  ],
+  "/api/report-subscriptions/preview POST": [
+    "preview_unsaved",
+    "dependency",
+    "get_current_tenant_context",
+    "get_current_claims",
+    "get_db",
+    "get_db"
+  ],
+  "/api/report-subscriptions/{identifier}/preview POST": [
+    "preview_saved",
+    "dependency",
+    "get_current_tenant_context",
+    "get_current_claims",
+    "get_db",
+    "get_db"
+  ],
+  "/api/report-subscriptions/{identifier}/send-now POST": [
+    "send_now",
+    "dependency",
+    "get_current_tenant_context",
+    "get_current_claims",
+    "get_db",
+    "get_db"
+  ],
+  "/api/report-deliveries GET": [
+    "deliveries",
+    "dependency",
+    "get_current_tenant_context",
+    "get_current_claims",
+    "get_db",
+    "get_db"
+  ],
+  "/api/report-deliveries/{delivery_id}/artifacts/{artifact_id} GET": [
+    "download",
+    "dependency",
+    "get_current_tenant_context",
+    "get_current_claims",
+    "get_db",
+    "get_db"
+  ],
+  "/ GET": [
+    "service_info"
+  ],
+  "/health GET": [
+    "health",
+    "get_db"
+  ],
+  "/api/analysis/config GET": [
+    "get_analysis_config",
+    "require_auth",
+    "get_current_tenant_context",
+    "get_current_claims",
+    "get_db"
+  ],
+  "/api/types GET": [
+    "list_sbom_types",
+    "require_auth",
+    "get_db"
+  ],
+  "/ready/iam GET": [
+    "iam_readiness",
+    "get_db"
+  ],
+  "/api/sboms/{id}/edit POST": [
+    "edit_sbom_endpoint",
+    "get_db"
+  ],
+  "/api/sboms/{id}/versions GET": [
+    "get_sbom_versions",
+    "get_db"
+  ],
+  "/api/sboms/compare-versions GET": [
+    "compare_sbom_versions",
+    "get_db"
+  ],
+  "/api/sboms/{id}/restore/{version_id} POST": [
+    "restore_sbom_version",
+    "get_db"
+  ],
+  "/api/sboms/{id}/lifecycle/refresh POST": [
+    "refresh_sbom_lifecycle",
+    "get_db"
+  ],
+  "/api/sboms/{id}/lifecycle GET": [
+    "list_sbom_lifecycle",
+    "get_db"
+  ],
+  "/api/sboms/{id}/lifecycle/report GET": [
+    "get_sbom_lifecycle_report",
+    "get_db"
+  ],
+  "/api/sboms/{id}/reports/lifecycle-pack GET": [
+    "get_lifecycle_report_pack",
+    "get_db"
+  ],
+  "/api/sboms/{id}/convert/cyclonedx POST": [
+    "convert_spdx_to_cyclonedx_endpoint",
+    "get_db"
+  ],
+  "/api/sboms/{id}/conversion-report GET": [
+    "get_conversion_report",
+    "get_db"
+  ],
+  "/api/sboms/{sbom_id}/reports/vulnerabilities.xlsx GET": [
+    "export_sbom_vulnerabilities_excel",
+    "get_db"
+  ],
+  "/api/sboms/{id}/export GET": [
+    "export_sbom",
+    "get_db"
+  ],
+  "/api/sboms/{id}/lifecycle/diagnostics GET": [
+    "get_sbom_lifecycle_diagnostics",
+    "get_db"
+  ],
+  "/api/sboms/{sbom_id} GET": [
+    "get_sbom",
+    "get_current_tenant_context",
+    "get_current_claims",
+    "get_db",
+    "get_db"
+  ],
+  "/api/sboms/{sbom_id}/workspace POST": [
+    "create_sbom_workspace",
+    "dependency",
+    "get_current_tenant_context",
+    "get_current_claims",
+    "get_db",
+    "get_db"
+  ],
+  "/api/sboms/{sbom_id}/stats GET": [
+    "get_sbom_document_stats",
+    "get_current_tenant_context",
+    "get_current_claims",
+    "get_db",
+    "get_db"
+  ],
+  "/api/sboms/{sbom_id}/raw GET": [
+    "get_sbom_raw_chunk",
+    "get_current_tenant_context",
+    "get_current_claims",
+    "get_db",
+    "get_db"
+  ],
+  "/api/sboms/{sbom_id}/download GET": [
+    "download_sbom_original",
+    "get_current_tenant_context",
+    "get_current_claims",
+    "get_db",
+    "get_db"
+  ],
+  "/api/sboms POST": [
+    "create_sbom",
+    "dependency",
+    "get_current_tenant_context",
+    "get_current_claims",
+    "get_db",
+    "get_db"
+  ],
+  "/api/sboms GET": [
+    "get_sbom_details",
+    "get_current_tenant_context",
+    "get_current_claims",
+    "get_db",
+    "get_db"
+  ],
+  "/api/sboms/{sbom_id}/components GET": [
+    "get_sbom_components",
+    "get_current_tenant_context",
+    "get_current_claims",
+    "get_db",
+    "get_db"
+  ],
+  "/api/sboms/{sbom_id}/components/reprocess POST": [
+    "reprocess_sbom_components",
+    "get_current_tenant_context",
+    "get_current_claims",
+    "get_db",
+    "get_db"
+  ],
+  "/api/sboms/{sbom_id}/normalize-deduplicate POST": [
+    "normalize_deduplicate_sbom",
+    "dependency",
+    "get_current_tenant_context",
+    "get_current_claims",
+    "get_db",
+    "get_db"
+  ],
+  "/api/sboms/{sbom_id}/dedupe-report GET": [
+    "get_sbom_dedupe_report",
+    "get_current_tenant_context",
+    "get_current_claims",
+    "get_db",
+    "get_db"
+  ],
+  "/api/sboms/{sbom_id}/normalization-report GET": [
+    "get_sbom_normalization_report",
+    "get_current_tenant_context",
+    "get_current_claims",
+    "get_db",
+    "get_db"
+  ],
+  "/api/sboms/{sbom_id} PATCH": [
+    "update_sbom",
+    "dependency",
+    "get_current_tenant_context",
+    "get_current_claims",
+    "get_db",
+    "get_db"
+  ],
+  "/api/sboms/{sbom_id}/delete-impact GET": [
+    "sbom_delete_impact",
+    "get_current_tenant_context",
+    "get_current_claims",
+    "get_db",
+    "get_db"
+  ],
+  "/api/sboms/{sbom_id} DELETE": [
+    "delete_sbom",
+    "get_current_tenant_context",
+    "get_current_claims",
+    "get_db",
+    "get_db"
+  ],
+  "/api/sboms/{sbom_id}/lifecycle POST": [
+    "change_sbom_lifecycle",
+    "dependency",
+    "get_current_tenant_context",
+    "get_current_claims",
+    "get_db",
+    "get_db"
+  ],
+  "/api/sboms/{sbom_id}/lifecycle-history GET": [
+    "get_sbom_lifecycle_history",
+    "dependency",
+    "get_current_tenant_context",
+    "get_current_claims",
+    "get_db",
+    "get_db"
+  ],
+  "/api/sboms/{sbom_id}/restore POST": [
+    "restore_sbom",
+    "get_current_tenant_context",
+    "get_current_claims",
+    "get_db",
+    "get_db"
+  ],
+  "/api/sboms/{sbom_id}/revalidate POST": [
+    "revalidate_sbom",
+    "get_db"
+  ],
+  "/api/sboms/{sbom_id}/analyze POST": [
+    "run_analysis_for_sbom",
+    "get_db"
+  ],
+  "/api/sboms/{sbom_id}/analyze/stream POST": [
+    "analyze_sbom_stream",
+    "get_current_tenant_context",
+    "get_current_claims",
+    "get_db",
+    "get_db"
+  ],
+  "/api/sboms/{sbom_id}/analysis-runs GET": [
+    "list_sbom_analysis_runs",
+    "get_current_tenant_context",
+    "get_current_claims",
+    "get_db",
+    "get_db"
+  ],
+  "/api/sboms/{sbom_id}/quality GET": [
+    "sbom_quality",
+    "dependency",
+    "get_current_tenant_context",
+    "get_current_claims",
+    "get_db",
+    "get_db"
+  ],
+  "/api/sboms/upload POST": [
+    "upload_sbom",
+    "dependency",
+    "get_current_tenant_context",
+    "get_current_claims",
+    "get_db",
+    "get_db"
+  ],
+  "/api/sbom-validation-sessions/{session_id}/repair/analyze POST": [
+    "analyze",
+    "dependency",
+    "get_current_tenant_context",
+    "get_current_claims",
+    "get_db",
+    "get_db"
+  ],
+  "/api/sbom-validation-sessions/{session_id}/repair POST": [
+    "repair",
+    "dependency",
+    "get_current_tenant_context",
+    "get_current_claims",
+    "get_db",
+    "get_db"
+  ],
+  "/api/sbom-validation-sessions/{session_id}/repair GET": [
+    "latest",
+    "dependency",
+    "get_current_tenant_context",
+    "get_current_claims",
+    "get_db",
+    "get_db"
+  ],
+  "/api/sbom-validation-sessions/{session_id}/repair/{job_id} GET": [
+    "get_job",
+    "dependency",
+    "get_current_tenant_context",
+    "get_current_claims",
+    "get_db",
+    "get_db"
+  ],
+  "/api/sbom-validation-sessions/{session_id}/repair/{job_id}/changes GET": [
+    "changes",
+    "dependency",
+    "get_current_tenant_context",
+    "get_current_claims",
+    "get_db",
+    "get_db"
+  ],
+  "/api/sbom-validation-sessions/{session_id}/repair/{job_id}/download GET": [
+    "download",
+    "dependency",
+    "get_current_tenant_context",
+    "get_current_claims",
+    "get_db",
+    "get_db"
+  ],
+  "/api/sbom-validation-sessions/{session_id}/repair/{job_id}/report GET": [
+    "report",
+    "dependency",
+    "get_current_tenant_context",
+    "get_current_claims",
+    "get_db",
+    "get_db"
+  ],
+  "/api/sbom-validation-sessions/{session_id}/repair/{job_id}/approve POST": [
+    "approve",
+    "dependency",
+    "get_current_tenant_context",
+    "get_current_claims",
+    "get_db",
+    "dependency",
+    "get_current_tenant_context",
+    "get_current_claims",
+    "get_db",
+    "dependency",
+    "get_current_tenant_context",
+    "get_current_claims",
+    "get_db",
+    "get_db"
+  ],
+  "/api/sbom-validation-sessions/{session_id}/repair/{job_id}/reject POST": [
+    "reject",
+    "dependency",
+    "get_current_tenant_context",
+    "get_current_claims",
+    "get_db",
+    "get_db"
+  ],
+  "/api/sbom-validation-sessions/{session_id}/quality GET": [
+    "session_quality",
+    "dependency",
+    "get_current_tenant_context",
+    "get_current_claims",
+    "get_db",
+    "get_db"
+  ],
+  "/api/sbom-validation-sessions/{session_id} GET": [
+    "get_validation_session",
+    "get_current_tenant_context",
+    "get_current_claims",
+    "get_db",
+    "get_db"
+  ],
+  "/api/sbom-validation-sessions/{session_id}/content GET": [
+    "get_validation_session_content",
+    "get_current_tenant_context",
+    "get_current_claims",
+    "get_db",
+    "get_db"
+  ],
+  "/api/sbom-validation-sessions/{session_id}/content/chunk GET": [
+    "get_validation_session_content_chunk",
+    "get_current_tenant_context",
+    "get_current_claims",
+    "get_db",
+    "get_db"
+  ],
+  "/api/sbom-validation-sessions/{session_id}/content-lines GET": [
+    "get_validation_session_content_lines",
+    "get_current_tenant_context",
+    "get_current_claims",
+    "get_db",
+    "get_db"
+  ],
+  "/api/sbom-validation-sessions/{session_id}/content/lines GET": [
+    "get_validation_session_content_lines_alias",
+    "get_current_tenant_context",
+    "get_current_claims",
+    "get_db",
+    "get_db"
+  ],
+  "/api/sbom-validation-sessions/{session_id}/download-original GET": [
+    "download_original_validation_session",
+    "get_current_tenant_context",
+    "get_current_claims",
+    "get_db",
+    "get_db"
+  ],
+  "/api/sbom-validation-sessions/{session_id}/download-repair-draft GET": [
+    "download_repair_draft_validation_session",
+    "get_current_tenant_context",
+    "get_current_claims",
+    "get_db",
+    "get_db"
+  ],
+  "/api/sbom-validation-sessions/{session_id}/search GET": [
+    "search_validation_session",
+    "get_current_tenant_context",
+    "get_current_claims",
+    "get_db",
+    "get_db"
+  ],
+  "/api/sbom-validation-sessions/{session_id} PATCH": [
+    "update_validation_session",
+    "get_current_tenant_context",
+    "get_current_claims",
+    "get_db",
+    "get_db"
+  ],
+  "/api/sbom-validation-sessions/{session_id}/repair-draft PUT": [
+    "save_repair_draft",
+    "get_current_tenant_context",
+    "get_current_claims",
+    "get_db",
+    "get_db"
+  ],
+  "/api/sbom-validation-sessions/{session_id}/validate POST": [
+    "validate_session",
+    "get_current_tenant_context",
+    "get_current_claims",
+    "get_db",
+    "get_db"
+  ],
+  "/api/sbom-validation-sessions/{session_id}/revalidate POST": [
+    "revalidate_session",
+    "get_current_tenant_context",
+    "get_current_claims",
+    "get_db",
+    "get_db"
+  ],
+  "/api/sbom-validation-sessions/{session_id}/import POST": [
+    "import_session",
+    "get_current_tenant_context",
+    "get_current_claims",
+    "get_db",
+    "get_db"
+  ],
+  "/api/sbom-validation-sessions/{session_id}/ai/suggest-fixes POST": [
+    "suggest_fixes",
+    "get_current_tenant_context",
+    "get_current_claims",
+    "get_db",
+    "get_db"
+  ],
+  "/api/sbom-validation-sessions/{session_id}/apply-patch POST": [
+    "apply_patch",
+    "get_current_tenant_context",
+    "get_current_claims",
+    "get_db",
+    "get_db"
+  ],
+  "/api/sbom-validation-sessions/{session_id}/repair/patches POST": [
+    "apply_line_patches",
+    "get_current_tenant_context",
+    "get_current_claims",
+    "get_db",
+    "get_db"
+  ],
+  "/api/sbom-validation-sessions/{session_id}/history GET": [
+    "session_history",
+    "get_current_tenant_context",
+    "get_current_claims",
+    "get_db",
+    "get_db"
+  ],
+  "/api/validation-sessions/{session_id} GET": [
+    "get_validation_session",
+    "get_current_tenant_context",
+    "get_current_claims",
+    "get_db",
+    "get_db"
+  ],
+  "/api/validation-sessions/{session_id}/content GET": [
+    "get_validation_session_content",
+    "get_current_tenant_context",
+    "get_current_claims",
+    "get_db",
+    "get_db"
+  ],
+  "/api/validation-sessions/{session_id}/content/chunk GET": [
+    "get_validation_session_content_chunk",
+    "get_current_tenant_context",
+    "get_current_claims",
+    "get_db",
+    "get_db"
+  ],
+  "/api/validation-sessions/{session_id}/content-lines GET": [
+    "get_validation_session_content_lines",
+    "get_current_tenant_context",
+    "get_current_claims",
+    "get_db",
+    "get_db"
+  ],
+  "/api/validation-sessions/{session_id}/content/lines GET": [
+    "get_validation_session_content_lines_alias",
+    "get_current_tenant_context",
+    "get_current_claims",
+    "get_db",
+    "get_db"
+  ],
+  "/api/validation-sessions/{session_id}/download-original GET": [
+    "download_original_validation_session",
+    "get_current_tenant_context",
+    "get_current_claims",
+    "get_db",
+    "get_db"
+  ],
+  "/api/validation-sessions/{session_id}/download-repair-draft GET": [
+    "download_repair_draft_validation_session",
+    "get_current_tenant_context",
+    "get_current_claims",
+    "get_db",
+    "get_db"
+  ],
+  "/api/validation-sessions/{session_id}/search GET": [
+    "search_validation_session",
+    "get_current_tenant_context",
+    "get_current_claims",
+    "get_db",
+    "get_db"
+  ],
+  "/api/validation-sessions/{session_id} PATCH": [
+    "update_validation_session",
+    "get_current_tenant_context",
+    "get_current_claims",
+    "get_db",
+    "get_db"
+  ],
+  "/api/validation-sessions/{session_id}/repair-draft PUT": [
+    "save_repair_draft",
+    "get_current_tenant_context",
+    "get_current_claims",
+    "get_db",
+    "get_db"
+  ],
+  "/api/validation-sessions/{session_id}/validate POST": [
+    "validate_session",
+    "get_current_tenant_context",
+    "get_current_claims",
+    "get_db",
+    "get_db"
+  ],
+  "/api/validation-sessions/{session_id}/revalidate POST": [
+    "revalidate_session",
+    "get_current_tenant_context",
+    "get_current_claims",
+    "get_db",
+    "get_db"
+  ],
+  "/api/validation-sessions/{session_id}/import POST": [
+    "import_session",
+    "get_current_tenant_context",
+    "get_current_claims",
+    "get_db",
+    "get_db"
+  ],
+  "/api/validation-sessions/{session_id}/ai/suggest-fixes POST": [
+    "suggest_fixes",
+    "get_current_tenant_context",
+    "get_current_claims",
+    "get_db",
+    "get_db"
+  ],
+  "/api/validation-sessions/{session_id}/apply-patch POST": [
+    "apply_patch",
+    "get_current_tenant_context",
+    "get_current_claims",
+    "get_db",
+    "get_db"
+  ],
+  "/api/validation-sessions/{session_id}/repair/patches POST": [
+    "apply_line_patches",
+    "get_current_tenant_context",
+    "get_current_claims",
+    "get_db",
+    "get_db"
+  ],
+  "/api/validation-sessions/{session_id}/history GET": [
+    "session_history",
+    "get_current_tenant_context",
+    "get_current_claims",
+    "get_db",
+    "get_db"
+  ],
+  "/api/sbom-workspaces/{session_id} GET": [
+    "get_validation_session",
+    "get_current_tenant_context",
+    "get_current_claims",
+    "get_db",
+    "get_db"
+  ],
+  "/api/sbom-workspaces/{session_id}/content GET": [
+    "get_validation_session_content",
+    "get_current_tenant_context",
+    "get_current_claims",
+    "get_db",
+    "get_db"
+  ],
+  "/api/sbom-workspaces/{session_id}/content/chunk GET": [
+    "get_validation_session_content_chunk",
+    "get_current_tenant_context",
+    "get_current_claims",
+    "get_db",
+    "get_db"
+  ],
+  "/api/sbom-workspaces/{session_id}/content-lines GET": [
+    "get_validation_session_content_lines",
+    "get_current_tenant_context",
+    "get_current_claims",
+    "get_db",
+    "get_db"
+  ],
+  "/api/sbom-workspaces/{session_id}/content/lines GET": [
+    "get_validation_session_content_lines_alias",
+    "get_current_tenant_context",
+    "get_current_claims",
+    "get_db",
+    "get_db"
+  ],
+  "/api/sbom-workspaces/{session_id}/download-original GET": [
+    "download_original_validation_session",
+    "get_current_tenant_context",
+    "get_current_claims",
+    "get_db",
+    "get_db"
+  ],
+  "/api/sbom-workspaces/{session_id}/download-repair-draft GET": [
+    "download_repair_draft_validation_session",
+    "get_current_tenant_context",
+    "get_current_claims",
+    "get_db",
+    "get_db"
+  ],
+  "/api/sbom-workspaces/{session_id}/search GET": [
+    "search_validation_session",
+    "get_current_tenant_context",
+    "get_current_claims",
+    "get_db",
+    "get_db"
+  ],
+  "/api/sbom-workspaces/{session_id} PATCH": [
+    "update_validation_session",
+    "get_current_tenant_context",
+    "get_current_claims",
+    "get_db",
+    "get_db"
+  ],
+  "/api/sbom-workspaces/{session_id}/repair-draft PUT": [
+    "save_repair_draft",
+    "get_current_tenant_context",
+    "get_current_claims",
+    "get_db",
+    "get_db"
+  ],
+  "/api/sbom-workspaces/{session_id}/validate POST": [
+    "validate_session",
+    "get_current_tenant_context",
+    "get_current_claims",
+    "get_db",
+    "get_db"
+  ],
+  "/api/sbom-workspaces/{session_id}/revalidate POST": [
+    "revalidate_session",
+    "get_current_tenant_context",
+    "get_current_claims",
+    "get_db",
+    "get_db"
+  ],
+  "/api/sbom-workspaces/{session_id}/import POST": [
+    "import_session",
+    "get_current_tenant_context",
+    "get_current_claims",
+    "get_db",
+    "get_db"
+  ],
+  "/api/sbom-workspaces/{session_id}/ai/suggest-fixes POST": [
+    "suggest_fixes",
+    "get_current_tenant_context",
+    "get_current_claims",
+    "get_db",
+    "get_db"
+  ],
+  "/api/sbom-workspaces/{session_id}/apply-patch POST": [
+    "apply_patch",
+    "get_current_tenant_context",
+    "get_current_claims",
+    "get_db",
+    "get_db"
+  ],
+  "/api/sbom-workspaces/{session_id}/repair/patches POST": [
+    "apply_line_patches",
+    "get_current_tenant_context",
+    "get_current_claims",
+    "get_db",
+    "get_db"
+  ],
+  "/api/sbom-workspaces/{session_id}/history GET": [
+    "session_history",
+    "get_current_tenant_context",
+    "get_current_claims",
+    "get_db",
+    "get_db"
+  ],
+  "/api/runs GET": [
+    "list_analysis_runs",
+    "get_db"
+  ],
+  "/api/runs/aggregate GET": [
+    "runs_aggregate_endpoint",
+    "get_db"
+  ],
+  "/api/runs/recent GET": [
+    "list_recent_runs",
+    "get_db"
+  ],
+  "/api/runs/search GET": [
+    "search_runs",
+    "get_db"
+  ],
+  "/api/runs/{run_id} GET": [
+    "get_analysis_run",
+    "get_current_tenant_context",
+    "get_current_claims",
+    "get_db",
+    "get_db"
+  ],
+  "/api/runs/{run_id}/findings GET": [
+    "list_run_findings",
+    "get_current_tenant_context",
+    "get_current_claims",
+    "get_db",
+    "get_db"
+  ],
+  "/api/runs/{run_id}/findings-enriched GET": [
+    "list_run_findings_enriched",
+    "get_current_tenant_context",
+    "get_current_claims",
+    "get_db",
+    "get_db"
+  ],
+  "/api/vulnerabilities GET": [
+    "list_vulnerabilities",
+    "dashboard_scope_dependency",
+    "get_current_tenant_context",
+    "get_current_claims",
+    "get_db",
+    "get_db",
+    "get_db"
+  ],
+  "/api/projects POST": [
+    "create_project",
+    "get_current_tenant_context",
+    "get_current_claims",
+    "get_db",
+    "get_db"
+  ],
+  "/api/projects/{project_id} GET": [
+    "get_project_details",
+    "get_current_tenant_context",
+    "get_current_claims",
+    "get_db",
+    "get_db"
+  ],
+  "/api/projects GET": [
+    "list_projects",
+    "get_db"
+  ],
+  "/api/projects/{project_id} PATCH": [
+    "update_project",
+    "get_current_tenant_context",
+    "get_current_claims",
+    "get_db",
+    "get_db"
+  ],
+  "/api/projects/{project_id}/delete-impact GET": [
+    "project_delete_impact",
+    "get_current_tenant_context",
+    "get_current_claims",
+    "get_db",
+    "get_db"
+  ],
+  "/api/projects/{project_id} DELETE": [
+    "delete_project",
+    "get_current_tenant_context",
+    "get_current_claims",
+    "get_db",
+    "get_db"
+  ],
+  "/api/projects/{project_id}/restore POST": [
+    "restore_project",
+    "get_db"
+  ],
+  "/api/projects/{project_id}/products POST": [
+    "create_product",
+    "dependency",
+    "get_current_tenant_context",
+    "get_current_claims",
+    "get_db",
+    "get_db"
+  ],
+  "/api/projects/{project_id}/products GET": [
+    "list_project_products",
+    "dependency",
+    "get_current_tenant_context",
+    "get_current_claims",
+    "get_db",
+    "get_db"
+  ],
+  "/api/products/{product_id} GET": [
+    "get_product",
+    "dependency",
+    "get_current_tenant_context",
+    "get_current_claims",
+    "get_db",
+    "get_db"
+  ],
+  "/api/products/{product_id} PATCH": [
+    "update_product",
+    "dependency",
+    "get_current_tenant_context",
+    "get_current_claims",
+    "get_db",
+    "get_db"
+  ],
+  "/api/products/{product_id} DELETE": [
+    "delete_product",
+    "dependency",
+    "get_current_tenant_context",
+    "get_current_claims",
+    "get_db",
+    "get_db"
+  ],
+  "/api/products/{product_id}/sboms GET": [
+    "list_product_sboms",
+    "dependency",
+    "get_current_tenant_context",
+    "get_current_claims",
+    "get_db",
+    "get_db"
+  ],
+  "/api/projects/{project_id}/reports/fda-510k-sbom/export POST": [
+    "export_fda_510k_sbom_report",
+    "get_current_tenant_context",
+    "get_current_claims",
+    "get_db",
+    "get_db"
+  ],
+  "/analyze-sbom-nvd POST": [
+    "analyze_sbom_nvd",
+    "get_db"
+  ],
+  "/analyze-sbom-github POST": [
+    "analyze_sbom_github",
+    "get_db"
+  ],
+  "/analyze-sbom-osv POST": [
+    "analyze_sbom_osv",
+    "get_db"
+  ],
+  "/analyze-sbom-vulndb POST": [
+    "analyze_sbom_vulndb",
+    "get_db"
+  ],
+  "/analyze-sbom-consolidated POST": [
+    "analyze_sbom_consolidated",
+    "get_db"
+  ],
+  "/api/pdf-report POST": [
+    "create_pdf_report_by_run_id",
+    "get_db"
+  ],
+  "/dashboard/posture-versions GET": [
+    "dashboard_posture_versions",
+    "dashboard_scope_dependency",
+    "get_current_tenant_context",
+    "get_current_claims",
+    "get_db",
+    "get_db",
+    "get_db"
+  ],
+  "/dashboard/filter-options/projects GET": [
+    "dashboard_project_options",
+    "dashboard_scope_dependency",
+    "get_current_tenant_context",
+    "get_current_claims",
+    "get_db",
+    "get_db",
+    "get_db"
+  ],
+  "/dashboard/scanned-project-ids GET": [
+    "dashboard_scanned_project_ids",
+    "dashboard_scope_dependency",
+    "get_current_tenant_context",
+    "get_current_claims",
+    "get_db",
+    "get_db",
+    "get_db"
+  ],
+  "/dashboard/filter-options/applications GET": [
+    "dashboard_application_options",
+    "dashboard_scope_dependency",
+    "get_current_tenant_context",
+    "get_current_claims",
+    "get_db",
+    "get_db",
+    "get_db"
+  ],
+  "/dashboard/filter-options/sboms GET": [
+    "dashboard_sbom_options",
+    "dashboard_scope_dependency",
+    "get_current_tenant_context",
+    "get_current_claims",
+    "get_db",
+    "get_db",
+    "get_db"
+  ],
+  "/dashboard/runs GET": [
+    "dashboard_scoped_runs",
+    "dashboard_scope_dependency",
+    "get_current_tenant_context",
+    "get_current_claims",
+    "get_db",
+    "get_db",
+    "get_db"
+  ],
+  "/dashboard/priority-findings GET": [
+    "dashboard_priority_findings",
+    "dashboard_scope_dependency",
+    "get_current_tenant_context",
+    "get_current_claims",
+    "get_db",
+    "get_db",
+    "dependency",
+    "get_current_tenant_context",
+    "get_current_claims",
+    "get_db",
+    "get_db"
+  ],
+  "/dashboard/stats GET": [
+    "dashboard_stats",
+    "dashboard_scope_dependency",
+    "get_current_tenant_context",
+    "get_current_claims",
+    "get_db",
+    "get_db",
+    "get_db"
+  ],
+  "/dashboard/recent-sboms GET": [
+    "dashboard_recent_sboms",
+    "dashboard_scope_dependency",
+    "get_current_tenant_context",
+    "get_current_claims",
+    "get_db",
+    "get_db",
+    "get_db"
+  ],
+  "/dashboard/activity GET": [
+    "dashboard_activity",
+    "dashboard_scope_dependency",
+    "get_current_tenant_context",
+    "get_current_claims",
+    "get_db",
+    "get_db",
+    "get_db"
+  ],
+  "/dashboard/severity GET": [
+    "dashboard_severity",
+    "dashboard_scope_dependency",
+    "get_current_tenant_context",
+    "get_current_claims",
+    "get_db",
+    "get_db",
+    "get_db"
+  ],
+  "/dashboard/posture GET": [
+    "dashboard_posture",
+    "dashboard_scope_dependency",
+    "get_current_tenant_context",
+    "get_current_claims",
+    "get_db",
+    "get_db",
+    "get_db"
+  ],
+  "/dashboard/vulnerability-age GET": [
+    "dashboard_vulnerability_age",
+    "dashboard_scope_dependency",
+    "get_current_tenant_context",
+    "get_current_claims",
+    "get_db",
+    "get_db",
+    "get_db"
+  ],
+  "/dashboard/lifetime GET": [
+    "dashboard_lifetime",
+    "dashboard_scope_dependency",
+    "get_current_tenant_context",
+    "get_current_claims",
+    "get_db",
+    "get_db",
+    "get_db"
+  ],
+  "/dashboard/lifecycle GET": [
+    "get_dashboard_lifecycle",
+    "dashboard_scope_dependency",
+    "get_current_tenant_context",
+    "get_current_claims",
+    "get_db",
+    "get_db",
+    "get_db"
+  ],
+  "/dashboard/vex GET": [
+    "get_dashboard_vex",
+    "dashboard_scope_dependency",
+    "get_current_tenant_context",
+    "get_current_claims",
+    "get_db",
+    "get_db",
+    "get_db"
+  ],
+  "/dashboard/health GET": [
+    "get_dashboard_health",
+    "dashboard_scope_dependency",
+    "get_current_tenant_context",
+    "get_current_claims",
+    "get_db",
+    "get_db",
+    "get_db"
+  ],
+  "/dashboard/remediation-stats GET": [
+    "get_dashboard_remediation_stats",
+    "dashboard_scope_dependency",
+    "get_current_tenant_context",
+    "get_current_claims",
+    "get_db",
+    "get_db",
+    "get_db"
+  ],
+  "/dashboard/summary GET": [
+    "get_dashboard_summary",
+    "dashboard_scope_dependency",
+    "get_current_tenant_context",
+    "get_current_claims",
+    "get_db",
+    "get_db",
+    "get_db"
+  ],
+  "/dashboard/forecast GET": [
+    "dashboard_forecast",
+    "dashboard_scope_dependency",
+    "get_current_tenant_context",
+    "get_current_claims",
+    "get_db",
+    "get_db",
+    "get_db"
+  ],
+  "/dashboard/exploitation GET": [
+    "dashboard_exploitation",
+    "dashboard_scope_dependency",
+    "get_current_tenant_context",
+    "get_current_claims",
+    "get_db",
+    "get_db",
+    "get_db"
+  ],
+  "/dashboard/remediation GET": [
+    "dashboard_remediation",
+    "dashboard_scope_dependency",
+    "get_current_tenant_context",
+    "get_current_claims",
+    "get_db",
+    "get_db",
+    "get_db"
+  ],
+  "/dashboard/risk-map GET": [
+    "dashboard_risk_map",
+    "dashboard_scope_dependency",
+    "get_current_tenant_context",
+    "get_current_claims",
+    "get_db",
+    "get_db",
+    "get_db"
+  ],
+  "/dashboard/risk-matrix GET": [
+    "dashboard_risk_matrix",
+    "dashboard_scope_dependency",
+    "get_current_tenant_context",
+    "get_current_claims",
+    "get_db",
+    "get_db",
+    "get_db"
+  ],
+  "/api/ai/copilot/briefing GET": [
+    "copilot_briefing",
+    "get_db"
+  ],
+  "/api/ai/copilot/ask POST": [
+    "copilot_ask",
+    "get_db"
+  ],
+  "/api/tenants/{tenant_id}/schedule GET": [
+    "get_tenant_schedule",
+    "dependency",
+    "get_current_tenant_context",
+    "get_current_claims",
+    "get_db",
+    "get_db"
+  ],
+  "/api/tenants/{tenant_id}/schedule PATCH": [
+    "upsert_tenant_schedule",
+    "dependency",
+    "get_current_tenant_context",
+    "get_current_claims",
+    "get_db",
+    "get_db"
+  ],
+  "/api/tenants/{tenant_id}/schedule POST": [
+    "upsert_tenant_schedule",
+    "dependency",
+    "get_current_tenant_context",
+    "get_current_claims",
+    "get_db",
+    "get_db"
+  ],
+  "/api/tenants/{tenant_id}/schedule DELETE": [
+    "delete_tenant_schedule",
+    "dependency",
+    "get_current_tenant_context",
+    "get_current_claims",
+    "get_db",
+    "get_db"
+  ],
+  "/api/projects/{project_id}/schedule POST": [
+    "upsert_project_schedule",
+    "dependency",
+    "get_current_tenant_context",
+    "get_current_claims",
+    "get_db",
+    "get_db"
+  ],
+  "/api/projects/{project_id}/schedule GET": [
+    "get_project_schedule",
+    "dependency",
+    "get_current_tenant_context",
+    "get_current_claims",
+    "get_db",
+    "get_db"
+  ],
+  "/api/projects/{project_id}/schedule PATCH": [
+    "patch_project_schedule",
+    "dependency",
+    "get_current_tenant_context",
+    "get_current_claims",
+    "get_db",
+    "get_db"
+  ],
+  "/api/projects/{project_id}/schedule DELETE": [
+    "delete_project_schedule",
+    "dependency",
+    "get_current_tenant_context",
+    "get_current_claims",
+    "get_db",
+    "get_db"
+  ],
+  "/api/products/{product_id}/schedule POST": [
+    "upsert_product_schedule",
+    "dependency",
+    "get_current_tenant_context",
+    "get_current_claims",
+    "get_db",
+    "get_db"
+  ],
+  "/api/products/{product_id}/schedule GET": [
+    "get_product_schedule",
+    "dependency",
+    "get_current_tenant_context",
+    "get_current_claims",
+    "get_db",
+    "get_db"
+  ],
+  "/api/products/{product_id}/schedule/effective GET": [
+    "get_effective_product_schedule",
+    "dependency",
+    "get_current_tenant_context",
+    "get_current_claims",
+    "get_db",
+    "get_db"
+  ],
+  "/api/products/{product_id}/schedule/exclude POST": [
+    "exclude_product_from_parent_schedule",
+    "dependency",
+    "get_current_tenant_context",
+    "get_current_claims",
+    "get_db",
+    "get_db"
+  ],
+  "/api/products/{product_id}/schedule/inherit POST": [
+    "restore_product_schedule_inheritance",
+    "dependency",
+    "get_current_tenant_context",
+    "get_current_claims",
+    "get_db",
+    "get_db"
+  ],
+  "/api/products/{product_id}/schedule PATCH": [
+    "patch_product_schedule",
+    "dependency",
+    "get_current_tenant_context",
+    "get_current_claims",
+    "get_db",
+    "get_db"
+  ],
+  "/api/products/{product_id}/schedule DELETE": [
+    "delete_product_schedule",
+    "dependency",
+    "get_current_tenant_context",
+    "get_current_claims",
+    "get_db",
+    "get_db"
+  ],
+  "/api/sboms/{sbom_id}/schedule POST": [
+    "upsert_sbom_schedule",
+    "dependency",
+    "get_current_tenant_context",
+    "get_current_claims",
+    "get_db",
+    "get_db"
+  ],
+  "/api/sboms/{sbom_id}/schedule GET": [
+    "get_sbom_schedule",
+    "dependency",
+    "get_current_tenant_context",
+    "get_current_claims",
+    "get_db",
+    "get_db"
+  ],
+  "/api/sboms/{sbom_id}/schedule/exclude POST": [
+    "exclude_sbom_from_parent_schedule",
+    "dependency",
+    "get_current_tenant_context",
+    "get_current_claims",
+    "get_db",
+    "get_db"
+  ],
+  "/api/sboms/{sbom_id}/schedule/inherit POST": [
+    "restore_sbom_schedule_inheritance",
+    "dependency",
+    "get_current_tenant_context",
+    "get_current_claims",
+    "get_db",
+    "get_db"
+  ],
+  "/api/sboms/{sbom_id}/schedule PATCH": [
+    "patch_sbom_schedule",
+    "dependency",
+    "get_current_tenant_context",
+    "get_current_claims",
+    "get_db",
+    "get_db"
+  ],
+  "/api/sboms/{sbom_id}/schedule DELETE": [
+    "delete_sbom_schedule",
+    "dependency",
+    "get_current_tenant_context",
+    "get_current_claims",
+    "get_db",
+    "get_db"
+  ],
+  "/api/schedules GET": [
+    "list_schedules",
+    "dependency",
+    "get_current_tenant_context",
+    "get_current_claims",
+    "get_db",
+    "get_db"
+  ],
+  "/api/schedules/{schedule_id}/targets GET": [
+    "preview_schedule_targets",
+    "dependency",
+    "get_current_tenant_context",
+    "get_current_claims",
+    "get_db",
+    "get_db"
+  ],
+  "/api/schedules/{schedule_id}/pause POST": [
+    "pause_schedule",
+    "dependency",
+    "get_current_tenant_context",
+    "get_current_claims",
+    "get_db",
+    "get_db"
+  ],
+  "/api/schedules/{schedule_id}/resume POST": [
+    "resume_schedule",
+    "dependency",
+    "get_current_tenant_context",
+    "get_current_claims",
+    "get_db",
+    "get_db"
+  ],
+  "/api/schedules/{schedule_id}/run-now POST": [
+    "run_schedule_now",
+    "dependency",
+    "get_current_tenant_context",
+    "get_current_claims",
+    "get_db",
+    "get_db"
+  ],
+  "/api/v1/cves/{cve_id} GET": [
+    "get_cve_detail",
+    "get_db"
+  ],
+  "/api/v1/cves/batch POST": [
+    "batch_cve_detail",
+    "get_db"
+  ],
+  "/api/v1/scans/{scan_id}/cves/{cve_id} GET": [
+    "get_cve_detail_with_scan_context",
+    "get_db"
+  ],
+  "/api/v1/kev/sync POST": [
+    "sync_kev_catalog",
+    "get_db"
+  ],
+  "/api/v1/kev/filter-options GET": [
+    "get_kev_filter_options",
+    "get_db"
+  ],
+  "/api/v1/kev GET": [
+    "list_kev_vulnerabilities",
+    "get_db"
+  ],
+  "/api/v1/kev/{cve_id} GET": [
+    "get_kev_vulnerability",
+    "get_db"
+  ],
+  "/api/v1/compare POST": [
+    "compare_runs",
+    "get_db"
+  ],
+  "/api/v1/compare/{cache_key}/export POST": [
+    "export_compare",
+    "get_db"
+  ],
+  "/api/v1/ai/usage GET": [
+    "get_ai_usage",
+    "get_db"
+  ],
+  "/api/v1/ai/providers GET": [
+    "list_providers",
+    "get_db"
+  ],
+  "/api/v1/ai/pricing GET": [
+    "list_pricing"
+  ],
+  "/api/v1/ai/registry/reset POST": [
+    "reset_provider_registry"
+  ],
+  "/api/v1/ai/usage/trend GET": [
+    "get_usage_trend",
+    "get_db"
+  ],
+  "/api/v1/ai/usage/top-cached GET": [
+    "get_top_cached_fixes",
+    "get_db"
+  ],
+  "/api/v1/ai/metrics GET": [
+    "get_metrics_json"
+  ],
+  "/api/v1/ai/metrics/prometheus GET": [
+    "get_metrics_prometheus"
+  ],
+  "/api/v1/ai/providers/available GET": [
+    "configuration_provider_catalog"
+  ],
+  "/api/v1/ai/providers/available/{name} GET": [
+    "configuration_provider_catalog_entry"
+  ],
+  "/api/v1/runs/{run_id}/ai-fixes POST": [
+    "trigger_run_fixes",
+    "get_db"
+  ],
+  "/api/v1/runs/{run_id}/ai-fixes/estimate GET": [
+    "estimate_run_duration_legacy",
+    "get_db"
+  ],
+  "/api/v1/runs/{run_id}/ai-fixes/estimate POST": [
+    "estimate_run_duration",
+    "get_db"
+  ],
+  "/api/v1/runs/{run_id}/ai-fixes/batches GET": [
+    "list_run_batches",
+    "get_db"
+  ],
+  "/api/v1/runs/{run_id}/ai-fixes/batches/{batch_id} GET": [
+    "get_run_batch",
+    "get_db"
+  ],
+  "/api/v1/runs/{run_id}/ai-fixes/batches/{batch_id}/stream GET": [
+    "stream_batch_progress"
+  ],
+  "/api/v1/runs/{run_id}/ai-fixes/batches/{batch_id}/cancel POST": [
+    "cancel_run_batch",
+    "get_db"
+  ],
+  "/api/v1/runs/{run_id}/ai-fixes/progress GET": [
+    "get_progress",
+    "get_db"
+  ],
+  "/api/v1/runs/{run_id}/ai-fixes/cancel POST": [
+    "cancel_run_fixes_legacy",
+    "get_db"
+  ],
+  "/api/v1/runs/{run_id}/ai-fixes/stream GET": [
+    "stream_progress_legacy"
+  ],
+  "/api/v1/runs/{run_id}/ai-fixes GET": [
+    "list_run_fixes",
+    "get_db"
+  ],
+  "/api/v1/findings/{finding_id}/ai-fix GET": [
+    "get_finding_fix",
+    "get_db"
+  ],
+  "/api/v1/findings/{finding_id}/ai-fix POST": [
+    "generate_finding_fix",
+    "get_db"
+  ],
+  "/api/v1/findings/{finding_id}/ai-fix:regenerate POST": [
+    "regenerate_finding_fix",
+    "get_db"
+  ],
+  "/api/v1/ai/credentials GET": [
+    "list_credentials",
+    "get_ai_configuration_db",
+    "get_db"
+  ],
+  "/api/v1/ai/credentials/{cred_id} GET": [
+    "get_credential",
+    "get_ai_configuration_db",
+    "get_db"
+  ],
+  "/api/v1/ai/effective-config GET": [
+    "get_effective_config_diagnostic",
+    "get_ai_configuration_db",
+    "get_db"
+  ],
+  "/api/v1/ai/credentials POST": [
+    "create_credential",
+    "get_ai_configuration_db",
+    "get_db"
+  ],
+  "/api/v1/ai/credentials/{cred_id} PUT": [
+    "update_credential",
+    "get_ai_configuration_db",
+    "get_db"
+  ],
+  "/api/v1/ai/credentials/{cred_id} DELETE": [
+    "delete_credential",
+    "get_ai_configuration_db",
+    "get_db"
+  ],
+  "/api/v1/ai/credentials/{cred_id}/set-default PUT": [
+    "set_default_credential",
+    "get_ai_configuration_db",
+    "get_db"
+  ],
+  "/api/v1/ai/credentials/{cred_id}/set-fallback PUT": [
+    "set_fallback_credential",
+    "get_ai_configuration_db",
+    "get_db"
+  ],
+  "/api/v1/ai/credentials/test POST": [
+    "test_unsaved_credential",
+    "get_ai_configuration_db",
+    "get_db"
+  ],
+  "/api/v1/ai/credentials/{cred_id}/test POST": [
+    "test_saved_credential",
+    "get_ai_configuration_db",
+    "get_db"
+  ],
+  "/api/v1/ai/credentials/{cred_id}/models GET": [
+    "list_provider_models",
+    "get_ai_configuration_db",
+    "get_db"
+  ],
+  "/api/v1/ai/credentials/{cred_id}/models/refresh POST": [
+    "refresh_provider_models",
+    "get_ai_configuration_db",
+    "get_db"
+  ],
+  "/api/v1/ai/credentials/{cred_id}/models/{model_id}/select POST": [
+    "select_provider_model",
+    "get_ai_configuration_db",
+    "get_db"
+  ],
+  "/api/v1/ai/credentials/{cred_id}/models/{model_id}/test POST": [
+    "test_provider_model",
+    "get_ai_configuration_db",
+    "get_db"
+  ],
+  "/api/v1/ai/settings GET": [
+    "get_singleton_settings",
+    "get_ai_configuration_db",
+    "get_db"
+  ],
+  "/api/v1/ai/settings PUT": [
+    "update_singleton_settings",
+    "get_ai_configuration_db",
+    "get_db"
+  ],
+  "/api/v1/ai/override POST": [
+    "create_tenant_override",
+    "get_ai_configuration_db",
+    "get_db"
+  ],
+  "/api/v1/ai/override DELETE": [
+    "reset_tenant_override",
+    "get_ai_configuration_db",
+    "get_db"
+  ],
+  "/api/platform/configuration/ai/credentials GET": [
+    "list_credentials",
+    "get_ai_configuration_db",
+    "get_db"
+  ],
+  "/api/platform/configuration/ai/credentials/{cred_id} GET": [
+    "get_credential",
+    "get_ai_configuration_db",
+    "get_db"
+  ],
+  "/api/platform/configuration/ai/effective-config GET": [
+    "get_effective_config_diagnostic",
+    "get_ai_configuration_db",
+    "get_db"
+  ],
+  "/api/platform/configuration/ai/credentials POST": [
+    "create_credential",
+    "get_ai_configuration_db",
+    "get_db"
+  ],
+  "/api/platform/configuration/ai/credentials/{cred_id} PUT": [
+    "update_credential",
+    "get_ai_configuration_db",
+    "get_db"
+  ],
+  "/api/platform/configuration/ai/credentials/{cred_id} DELETE": [
+    "delete_credential",
+    "get_ai_configuration_db",
+    "get_db"
+  ],
+  "/api/platform/configuration/ai/credentials/{cred_id}/set-default PUT": [
+    "set_default_credential",
+    "get_ai_configuration_db",
+    "get_db"
+  ],
+  "/api/platform/configuration/ai/credentials/{cred_id}/set-fallback PUT": [
+    "set_fallback_credential",
+    "get_ai_configuration_db",
+    "get_db"
+  ],
+  "/api/platform/configuration/ai/credentials/test POST": [
+    "test_unsaved_credential",
+    "get_ai_configuration_db",
+    "get_db"
+  ],
+  "/api/platform/configuration/ai/credentials/{cred_id}/test POST": [
+    "test_saved_credential",
+    "get_ai_configuration_db",
+    "get_db"
+  ],
+  "/api/platform/configuration/ai/credentials/{cred_id}/models GET": [
+    "list_provider_models",
+    "get_ai_configuration_db",
+    "get_db"
+  ],
+  "/api/platform/configuration/ai/credentials/{cred_id}/models/refresh POST": [
+    "refresh_provider_models",
+    "get_ai_configuration_db",
+    "get_db"
+  ],
+  "/api/platform/configuration/ai/credentials/{cred_id}/models/{model_id}/select POST": [
+    "select_provider_model",
+    "get_ai_configuration_db",
+    "get_db"
+  ],
+  "/api/platform/configuration/ai/credentials/{cred_id}/models/{model_id}/test POST": [
+    "test_provider_model",
+    "get_ai_configuration_db",
+    "get_db"
+  ],
+  "/api/platform/configuration/ai/settings GET": [
+    "get_singleton_settings",
+    "get_ai_configuration_db",
+    "get_db"
+  ],
+  "/api/platform/configuration/ai/settings PUT": [
+    "update_singleton_settings",
+    "get_ai_configuration_db",
+    "get_db"
+  ],
+  "/api/platform/configuration/ai/override POST": [
+    "create_tenant_override",
+    "get_ai_configuration_db",
+    "get_db"
+  ],
+  "/api/platform/configuration/ai/override DELETE": [
+    "reset_tenant_override",
+    "get_ai_configuration_db",
+    "get_db"
+  ],
+  "/api/platform/configuration/ai/providers/available GET": [
+    "configuration_provider_catalog"
+  ],
+  "/api/platform/configuration/ai/providers/available/{name} GET": [
+    "configuration_provider_catalog_entry"
+  ],
+  "/api/lifecycle/sources GET": [
+    "list_lifecycle_sources",
+    "get_db"
+  ],
+  "/api/lifecycle/provider-status GET": [
+    "lifecycle_provider_status",
+    "get_db"
+  ],
+  "/api/lifecycle/component/{component_id} GET": [
+    "get_component_lifecycle",
+    "get_db"
+  ],
+  "/api/lifecycle/component/{component_id} PUT": [
+    "update_component_lifecycle",
+    "get_current_tenant_context",
+    "get_current_claims",
+    "get_db",
+    "get_db"
+  ],
+  "/api/components/{component_id}/lifecycle-override PATCH": [
+    "patch_component_lifecycle_override",
+    "get_current_tenant_context",
+    "get_current_claims",
+    "get_db",
+    "get_db"
+  ],
+  "/api/components/{component_id}/lifecycle/refresh POST": [
+    "refresh_component_lifecycle_endpoint",
+    "get_db"
+  ],
+  "/api/admin/lifecycle-providers/{provider_key}/override DELETE": [
+    "reset_provider_override",
+    "get_db",
+    "dependency",
+    "get_current_tenant_context",
+    "get_current_claims",
+    "get_db"
+  ],
+  "/api/admin/lifecycle-providers GET": [
+    "list_lifecycle_providers",
+    "get_db",
+    "dependency",
+    "get_current_tenant_context",
+    "get_current_claims",
+    "get_db"
+  ],
+  "/api/admin/lifecycle-providers/{provider_key} PUT": [
+    "update_lifecycle_provider",
+    "get_db",
+    "dependency",
+    "get_current_tenant_context",
+    "get_current_claims",
+    "get_db"
+  ],
+  "/api/admin/lifecycle-providers/{provider_key}/secret PUT": [
+    "put_lifecycle_provider_secret",
+    "get_db",
+    "dependency",
+    "get_current_tenant_context",
+    "get_current_claims",
+    "get_db"
+  ],
+  "/api/admin/lifecycle-providers/{provider_key}/secret/{secret_name} DELETE": [
+    "delete_lifecycle_provider_secret",
+    "get_db",
+    "dependency",
+    "get_current_tenant_context",
+    "get_current_claims",
+    "get_db"
+  ],
+  "/api/admin/lifecycle-providers/{provider_key}/test POST": [
+    "test_lifecycle_provider",
+    "get_db",
+    "dependency",
+    "get_current_tenant_context",
+    "get_current_claims",
+    "get_db"
+  ],
+  "/api/admin/lifecycle-providers/{provider_key}/sync POST": [
+    "sync_lifecycle_provider",
+    "get_db",
+    "dependency",
+    "get_current_tenant_context",
+    "get_current_claims",
+    "get_db"
+  ],
+  "/api/admin/lifecycle-vendor-records GET": [
+    "list_lifecycle_vendor_records",
+    "get_db",
+    "dependency",
+    "get_current_tenant_context",
+    "get_current_claims",
+    "get_db"
+  ],
+  "/api/admin/lifecycle-vendor-records POST": [
+    "create_lifecycle_vendor_record",
+    "get_db",
+    "dependency",
+    "get_current_tenant_context",
+    "get_current_claims",
+    "get_db"
+  ],
+  "/api/admin/lifecycle-vendor-records/{record_id} PUT": [
+    "update_lifecycle_vendor_record",
+    "get_db",
+    "dependency",
+    "get_current_tenant_context",
+    "get_current_claims",
+    "get_db"
+  ],
+  "/api/admin/lifecycle-vendor-records/{record_id} DELETE": [
+    "delete_lifecycle_vendor_record",
+    "get_db",
+    "dependency",
+    "get_current_tenant_context",
+    "get_current_claims",
+    "get_db"
+  ],
+  "/api/admin/lifecycle-vendor-records/import POST": [
+    "import_lifecycle_vendor_records",
+    "get_db",
+    "dependency",
+    "get_current_tenant_context",
+    "get_current_claims",
+    "get_db"
+  ],
+  "/api/admin/lifecycle-vendor-records/export GET": [
+    "export_lifecycle_vendor_records",
+    "get_db",
+    "dependency",
+    "get_current_tenant_context",
+    "get_current_claims",
+    "get_db"
+  ],
+  "/api/platform/configuration/lifecycle/{provider_key}/override DELETE": [
+    "reset_provider_override",
+    "get_db",
+    "dependency",
+    "get_current_tenant_context",
+    "get_current_claims",
+    "get_db"
+  ],
+  "/api/platform/configuration/lifecycle GET": [
+    "list_lifecycle_providers",
+    "get_db",
+    "dependency",
+    "get_current_tenant_context",
+    "get_current_claims",
+    "get_db"
+  ],
+  "/api/platform/configuration/lifecycle/{provider_key} PUT": [
+    "update_lifecycle_provider",
+    "get_db",
+    "dependency",
+    "get_current_tenant_context",
+    "get_current_claims",
+    "get_db"
+  ],
+  "/api/platform/configuration/lifecycle/{provider_key}/secret PUT": [
+    "put_lifecycle_provider_secret",
+    "get_db",
+    "dependency",
+    "get_current_tenant_context",
+    "get_current_claims",
+    "get_db"
+  ],
+  "/api/platform/configuration/lifecycle/{provider_key}/secret/{secret_name} DELETE": [
+    "delete_lifecycle_provider_secret",
+    "get_db",
+    "dependency",
+    "get_current_tenant_context",
+    "get_current_claims",
+    "get_db"
+  ],
+  "/api/platform/configuration/lifecycle/{provider_key}/test POST": [
+    "test_lifecycle_provider",
+    "get_db",
+    "dependency",
+    "get_current_tenant_context",
+    "get_current_claims",
+    "get_db"
+  ],
+  "/api/platform/configuration/lifecycle/{provider_key}/sync POST": [
+    "sync_lifecycle_provider",
+    "get_db",
+    "dependency",
+    "get_current_tenant_context",
+    "get_current_claims",
+    "get_db"
+  ],
+  "/api/sboms/{sbom_id}/vex POST": [
+    "upload_vex_document",
+    "get_current_tenant_context",
+    "get_current_claims",
+    "get_db",
+    "get_db"
+  ],
+  "/api/sboms/{sbom_id}/vex GET": [
+    "get_vex_statements",
+    "get_current_tenant_context",
+    "get_current_claims",
+    "get_db",
+    "get_db"
+  ],
+  "/api/sboms/{sbom_id}/vex/report GET": [
+    "get_vex_report",
+    "get_current_tenant_context",
+    "get_current_claims",
+    "get_db",
+    "get_db"
+  ],
+  "/api/sboms/{sbom_id}/reports/vex-pack GET": [
+    "get_vex_report_pack",
+    "get_current_tenant_context",
+    "get_current_claims",
+    "get_db",
+    "get_db"
+  ],
+  "/api/sboms/{sbom_id}/vex/discover POST": [
+    "discover_vex_documents",
+    "get_current_tenant_context",
+    "get_current_claims",
+    "get_db",
+    "get_db"
+  ],
+  "/api/sboms/{sbom_id}/components/{component_id}/vulnerabilities GET": [
+    "get_component_vulnerabilities",
+    "get_current_tenant_context",
+    "get_current_claims",
+    "get_db",
+    "get_db"
+  ],
+  "/api/components/{component_id}/vulnerabilities/{vulnerability_id}/vex-override PATCH": [
+    "patch_vex_override",
+    "get_current_tenant_context",
+    "get_current_claims",
+    "get_db",
+    "get_db"
+  ],
+  "/api/sboms/{sbom_id}/components/{component_id}/vulnerabilities/{vulnerability_id}/vex-override PATCH": [
+    "patch_vex_override",
+    "get_current_tenant_context",
+    "get_current_claims",
+    "get_db",
+    "get_db"
+  ],
+  "/api/components/{component_id}/vulnerabilities/{vulnerability_id}/vex-override/history GET": [
+    "get_vex_override_history",
+    "get_current_tenant_context",
+    "get_current_claims",
+    "get_db",
+    "get_db"
+  ],
+  "/api/sboms/{sbom_id}/components/{component_id}/vulnerabilities/{vulnerability_id}/vex-override/history GET": [
+    "get_vex_override_history",
+    "get_current_tenant_context",
+    "get_current_claims",
+    "get_db",
+    "get_db"
+  ],
+  "/api/vex/investigations GET": [
+    "list_investigations",
+    "queue_filters",
+    "get_db",
+    "get_current_tenant_context",
+    "get_current_claims",
+    "get_db"
+  ],
+  "/api/vex/investigations/summary GET": [
+    "investigation_summary",
+    "queue_filters",
+    "get_db",
+    "get_current_tenant_context",
+    "get_current_claims",
+    "get_db"
+  ],
+  "/api/vex/investigations/versions GET": [
+    "investigation_versions",
+    "get_db",
+    "get_current_tenant_context",
+    "get_current_claims",
+    "get_db"
+  ],
+  "/api/vex/investigations/analysis-runs GET": [
+    "investigation_analysis_runs",
+    "get_db",
+    "get_current_tenant_context",
+    "get_current_claims",
+    "get_db"
+  ],
+  "/api/vex/investigations/run-snapshot GET": [
+    "investigation_run_snapshot",
+    "get_db",
+    "get_current_tenant_context",
+    "get_current_claims",
+    "get_db"
+  ],
+  "/api/vex/investigations/comparison GET": [
+    "investigation_comparison",
+    "get_db",
+    "get_current_tenant_context",
+    "get_current_claims",
+    "get_db"
+  ],
+  "/api/vex/investigations/assignees GET": [
+    "investigation_assignees",
+    "get_db",
+    "get_current_tenant_context",
+    "get_current_claims",
+    "get_db"
+  ],
+  "/api/vex/investigations/resolve GET": [
+    "resolve_investigation",
+    "get_db",
+    "get_current_tenant_context",
+    "get_current_claims",
+    "get_db"
+  ],
+  "/api/vex/investigations/{investigation_id} GET": [
+    "get_investigation",
+    "get_db",
+    "get_current_tenant_context",
+    "get_current_claims",
+    "get_db"
+  ],
+  "/api/vex/investigations/{investigation_id}/decision PUT": [
+    "set_investigation_decision",
+    "get_db",
+    "get_current_tenant_context",
+    "get_current_claims",
+    "get_db"
+  ],
+  "/api/vex/investigations/{investigation_id}/assignment PUT": [
+    "set_investigation_assignment",
+    "get_db",
+    "get_current_tenant_context",
+    "get_current_claims",
+    "get_db"
+  ],
+  "/api/vex/investigations/{investigation_id}/component PUT": [
+    "resolve_investigation_mapping",
+    "get_db",
+    "get_current_tenant_context",
+    "get_current_claims",
+    "get_db"
+  ],
+  "/api/products/{product_id}/logical-sboms POST": [
+    "create_logical_sbom",
+    "dependency",
+    "get_current_tenant_context",
+    "get_current_claims",
+    "get_db",
+    "dependency",
+    "get_current_tenant_context",
+    "get_current_claims",
+    "get_db",
+    "get_db"
+  ],
+  "/api/products/{product_id}/logical-sboms GET": [
+    "list_logical_sboms",
+    "dependency",
+    "get_current_tenant_context",
+    "get_current_claims",
+    "get_db",
+    "get_db"
+  ],
+  "/api/logical-sboms/{logical_id} GET": [
+    "get_master",
+    "dependency",
+    "get_current_tenant_context",
+    "get_current_claims",
+    "get_db",
+    "get_db"
+  ],
+  "/api/logical-sboms/{logical_id}/versions GET": [
+    "list_versions",
+    "dependency",
+    "get_current_tenant_context",
+    "get_current_claims",
+    "get_db",
+    "get_db"
+  ],
+  "/api/component-advisor/summary GET": [
+    "advisor_summary",
+    "dashboard_scope_dependency",
+    "get_current_tenant_context",
+    "get_current_claims",
+    "get_db",
+    "get_db",
+    "_filters",
+    "_as_of",
+    "get_db",
+    "dependency",
+    "get_current_tenant_context",
+    "get_current_claims",
+    "get_db"
+  ],
+  "/api/component-advisor/components GET": [
+    "advisor_components",
+    "dashboard_scope_dependency",
+    "get_current_tenant_context",
+    "get_current_claims",
+    "get_db",
+    "get_db",
+    "_filters",
+    "_as_of",
+    "get_db",
+    "dependency",
+    "get_current_tenant_context",
+    "get_current_claims",
+    "get_db"
+  ],
+  "/api/component-advisor/components/{canonical_key} GET": [
+    "advisor_component_detail",
+    "dashboard_scope_dependency",
+    "get_current_tenant_context",
+    "get_current_claims",
+    "get_db",
+    "get_db",
+    "_as_of",
+    "get_db",
+    "dependency",
+    "get_current_tenant_context",
+    "get_current_claims",
+    "get_db"
+  ],
+  "/api/component-advisor/components/{canonical_key}/classification GET": [
+    "advisor_component_classification",
+    "dashboard_scope_dependency",
+    "get_current_tenant_context",
+    "get_current_claims",
+    "get_db",
+    "get_db",
+    "_as_of",
+    "get_db",
+    "dependency",
+    "get_current_tenant_context",
+    "get_current_claims",
+    "get_db"
+  ],
+  "/api/component-advisor/search GET": [
+    "advisor_search",
+    "dashboard_scope_dependency",
+    "get_current_tenant_context",
+    "get_current_claims",
+    "get_db",
+    "get_db",
+    "_as_of",
+    "get_db",
+    "dependency",
+    "get_current_tenant_context",
+    "get_current_claims",
+    "get_db"
+  ],
+  "/api/component-advisor/policies/{kind} GET": [
+    "get_policy",
+    "get_db",
+    "dependency",
+    "get_current_tenant_context",
+    "get_current_claims",
+    "get_db"
+  ],
+  "/api/component-advisor/policies/{kind}/versions GET": [
+    "get_policy_versions",
+    "get_db",
+    "dependency",
+    "get_current_tenant_context",
+    "get_current_claims",
+    "get_db"
+  ],
+  "/api/component-advisor/policies/{kind}/versions POST": [
+    "post_policy_version",
+    "get_db",
+    "dependency",
+    "get_current_tenant_context",
+    "get_current_claims",
+    "get_db"
+  ],
+  "/api/component-advisor/purpose/{family_key:path} GET": [
+    "get_purpose",
+    "get_db",
+    "dependency",
+    "get_current_tenant_context",
+    "get_current_claims",
+    "get_db"
+  ],
+  "/api/component-advisor/purpose/{family_key:path} PUT": [
+    "put_purpose",
+    "get_db",
+    "dependency",
+    "get_current_tenant_context",
+    "get_current_claims",
+    "get_db"
+  ],
+  "/api/component-advisor/recommendations POST": [
+    "create_recommendation",
+    "dashboard_scope_dependency",
+    "get_current_tenant_context",
+    "get_current_claims",
+    "get_db",
+    "get_db",
+    "get_db",
+    "dependency",
+    "get_current_tenant_context",
+    "get_current_claims",
+    "get_db"
+  ],
+  "/api/component-advisor/recommendations GET": [
+    "list_recommendations",
+    "get_db",
+    "dependency",
+    "get_current_tenant_context",
+    "get_current_claims",
+    "get_db"
+  ],
+  "/api/component-advisor/recommendations/{recommendation_id} GET": [
+    "get_recommendation",
+    "get_db",
+    "dependency",
+    "get_current_tenant_context",
+    "get_current_claims",
+    "get_db"
+  ],
+  "/api/component-advisor/recommendations/{recommendation_id}/candidates GET": [
+    "get_recommendation_candidates",
+    "get_db",
+    "dependency",
+    "get_current_tenant_context",
+    "get_current_claims",
+    "get_db"
+  ],
+  "/api/component-advisor/recommendations/{recommendation_id}/evaluate POST": [
+    "evaluate_recommendation",
+    "get_db",
+    "dependency",
+    "get_current_tenant_context",
+    "get_current_claims",
+    "get_db"
+  ],
+  "/api/component-advisor/recommendations/{recommendation_id}/candidates POST": [
+    "add_manual_candidate",
+    "get_db",
+    "dependency",
+    "get_current_tenant_context",
+    "get_current_claims",
+    "get_db"
+  ],
+  "/api/component-advisor/recommendations/{recommendation_id}/candidates/{candidate_id} GET": [
+    "get_candidate",
+    "get_db",
+    "dependency",
+    "get_current_tenant_context",
+    "get_current_claims",
+    "get_db"
+  ],
+  "/api/component-advisor/recommendations/{recommendation_id}/candidates/{candidate_id}/compatibility GET": [
+    "get_candidate_compatibility",
+    "get_db",
+    "dependency",
+    "get_current_tenant_context",
+    "get_current_claims",
+    "get_db"
+  ],
+  "/api/component-advisor/recommendations/{recommendation_id}/candidates/{candidate_id}/evidence GET": [
+    "get_candidate_evidence",
+    "get_db",
+    "dependency",
+    "get_current_tenant_context",
+    "get_current_claims",
+    "get_db"
+  ],
+  "/api/component-advisor/recommendations/{recommendation_id}/decisions POST": [
+    "post_decision",
+    "get_db",
+    "dependency",
+    "get_current_tenant_context",
+    "get_current_claims",
+    "get_db"
+  ],
+  "/api/component-advisor/recommendations/{recommendation_id}/events GET": [
+    "get_recommendation_events",
+    "get_db",
+    "dependency",
+    "get_current_tenant_context",
+    "get_current_claims",
+    "get_db"
+  ],
+  "/api/component-advisor/audit/events GET": [
+    "get_audit_events",
+    "get_db",
+    "dependency",
+    "get_current_tenant_context",
+    "get_current_claims",
+    "get_db"
+  ],
+  "/api/component-advisor/analytics GET": [
+    "get_analytics",
+    "dashboard_scope_dependency",
+    "get_current_tenant_context",
+    "get_current_claims",
+    "get_db",
+    "get_db",
+    "get_db",
+    "dependency",
+    "get_current_tenant_context",
+    "get_current_claims",
+    "get_db"
+  ],
+  "/api/platform/configuration/advisor-policies/{kind} GET": [
+    "get_policy",
+    "get_db",
+    "dependency",
+    "get_current_tenant_context",
+    "get_current_claims",
+    "get_db"
+  ],
+  "/api/platform/configuration/advisor-policies/{kind}/versions GET": [
+    "get_policy_versions",
+    "get_db",
+    "dependency",
+    "get_current_tenant_context",
+    "get_current_claims",
+    "get_db"
+  ],
+  "/api/platform/configuration/advisor-policies/{kind}/versions POST": [
+    "post_policy_version",
+    "get_db",
+    "dependency",
+    "get_current_tenant_context",
+    "get_current_claims",
+    "get_db"
+  ],
+  "/api/remediation/project/{project_id} GET": [
+    "get_project_remediations",
+    "get_current_tenant_context",
+    "get_current_claims",
+    "get_db",
+    "get_db"
+  ],
+  "/api/remediation/finding/{finding_id} GET": [
+    "get_finding_remediation",
+    "get_current_tenant_context",
+    "get_current_claims",
+    "get_db",
+    "get_db"
+  ],
+  "/api/remediation/{remediation_id}/history GET": [
+    "get_remediation_history",
+    "get_current_tenant_context",
+    "get_current_claims",
+    "get_db",
+    "get_db"
+  ],
+  "/api/remediation POST": [
+    "upsert_remediation",
+    "get_current_tenant_context",
+    "get_current_claims",
+    "get_db",
+    "get_db"
+  ],
+  "/api/v1/auth/me GET": [
+    "auth_me",
+    "get_current_claims",
+    "get_db"
+  ],
+  "/api/auth/me GET": [
+    "auth_me",
+    "get_current_claims",
+    "get_db"
+  ],
+  "/api/auth/context GET": [
+    "auth_context",
+    "get_current_claims",
+    "get_db"
+  ],
+  "/api/tenants GET": [
+    "list_my_tenants",
+    "get_current_tenant_context",
+    "get_current_claims",
+    "get_db",
+    "get_db"
+  ],
+  "/api/tenants POST": [
+    "create_tenant",
+    "dependency",
+    "get_current_tenant_context",
+    "get_current_claims",
+    "get_db",
+    "get_db",
+    "get_db"
+  ],
+  "/api/tenant-roles GET": [
+    "list_assignable_tenant_roles",
+    "dependency",
+    "get_current_tenant_context",
+    "get_current_claims",
+    "get_db",
+    "get_db"
+  ],
+  "/api/tenants/{tenant_id}/users/{user_id}/roles GET": [
+    "list_tenant_user_roles",
+    "dependency",
+    "get_current_tenant_context",
+    "get_current_claims",
+    "get_db",
+    "get_db"
+  ],
+  "/api/tenants/{tenant_id}/users/{user_id}/roles POST": [
+    "grant_tenant_user_role",
+    "dependency",
+    "get_current_tenant_context",
+    "get_current_claims",
+    "get_db",
+    "get_db"
+  ],
+  "/api/tenants/{tenant_id}/users/{user_id}/roles PUT": [
+    "replace_tenant_user_roles",
+    "dependency",
+    "get_current_tenant_context",
+    "get_current_claims",
+    "get_db",
+    "get_db"
+  ],
+  "/api/tenants/{tenant_id}/users/{user_id}/roles/{role_code} DELETE": [
+    "revoke_tenant_user_role",
+    "dependency",
+    "get_current_tenant_context",
+    "get_current_claims",
+    "get_db",
+    "get_db"
+  ],
+  "/api/tenants/{tenant_id}/users/{user_id}/roles/history GET": [
+    "tenant_user_role_history",
+    "dependency",
+    "get_current_tenant_context",
+    "get_current_claims",
+    "get_db",
+    "get_db"
+  ],
+  "/api/tenants/{tenant_id}/user-candidates GET": [
+    "search_tenant_user_candidates",
+    "dependency",
+    "get_current_tenant_context",
+    "get_current_claims",
+    "get_db",
+    "get_db"
+  ],
+  "/api/tenants/{tenant_id}/users GET": [
+    "list_tenant_users",
+    "dependency",
+    "get_current_tenant_context",
+    "get_current_claims",
+    "get_db",
+    "get_db"
+  ],
+  "/api/tenants/{tenant_id}/audit-history GET": [
+    "tenant_audit_history",
+    "dependency",
+    "get_current_tenant_context",
+    "get_current_claims",
+    "get_db",
+    "get_db"
+  ],
+  "/api/tenants/{tenant_id}/users/{membership_id} GET": [
+    "get_tenant_user",
+    "dependency",
+    "get_current_tenant_context",
+    "get_current_claims",
+    "get_db",
+    "get_db"
+  ],
+  "/api/tenants/{tenant_id}/users POST": [
+    "add_tenant_user",
+    "dependency",
+    "get_current_tenant_context",
+    "get_current_claims",
+    "get_db",
+    "get_db"
+  ],
+  "/api/tenants/{tenant_id}/users/{membership_id} PATCH": [
+    "update_tenant_user",
+    "dependency",
+    "get_current_tenant_context",
+    "get_current_claims",
+    "get_db",
+    "get_db"
+  ],
+  "/api/tenants/{tenant_id}/users/{membership_id}/activate POST": [
+    "activate_tenant_user",
+    "dependency",
+    "get_current_tenant_context",
+    "get_current_claims",
+    "get_db",
+    "get_db"
+  ],
+  "/api/tenants/{tenant_id}/users/{membership_id}/deactivate POST": [
+    "deactivate_tenant_user",
+    "dependency",
+    "get_current_tenant_context",
+    "get_current_claims",
+    "get_db",
+    "get_db"
+  ],
+  "/api/tenants/{tenant_id}/users/{membership_id} DELETE": [
+    "delete_tenant_user",
+    "dependency",
+    "get_current_tenant_context",
+    "get_current_claims",
+    "get_db",
+    "get_db"
+  ],
+  "/api/tenants/{tenant_id}/users/{membership_id}/profile PATCH": [
+    "edit_tenant_profile",
+    "dependency",
+    "get_current_tenant_context",
+    "get_current_claims",
+    "get_db",
+    "get_db"
+  ],
+  "/api/tenants/{tenant_id}/users/{membership_id}/audit GET": [
+    "tenant_user_audit",
+    "dependency",
+    "get_current_tenant_context",
+    "get_current_claims",
+    "get_db",
+    "get_db"
+  ],
+  "/api/auth/verification/status GET": [
+    "verification_status",
+    "get_current_claims",
+    "get_db"
+  ],
+  "/api/auth/verification/resend POST": [
+    "resend_verification",
+    "get_current_claims",
+    "get_db"
+  ],
+  "/api/auth/verification/confirm POST": [
+    "confirm_verification",
+    "get_db"
+  ],
+  "/api/auth/native/login POST": [
+    "login",
+    "get_db"
+  ],
+  "/api/auth/native/activate POST": [
+    "activate",
+    "get_db"
+  ],
+  "/api/platform/native-users POST": [
+    "platform_create",
+    "dependency",
+    "get_current_tenant_context",
+    "get_current_claims",
+    "get_db",
+    "get_db",
+    "get_db"
+  ],
+  "/api/tenants/{tenant_id}/native-users POST": [
+    "tenant_create",
+    "dependency",
+    "get_current_tenant_context",
+    "get_current_claims",
+    "get_db",
+    "get_db"
+  ],
+  "/api/tenants/{tenant_id}/memberships POST": [
+    "add_existing",
+    "dependency",
+    "get_current_tenant_context",
+    "get_current_claims",
+    "get_db",
+    "get_db"
+  ],
+  "/api/tenants/{tenant_id}/native-users/{user_id}/resend-activation POST": [
+    "resend",
+    "dependency",
+    "get_current_tenant_context",
+    "get_current_claims",
+    "get_db",
+    "get_db"
+  ],
+  "/api/platform/tenants/{tenant_id}/native-users/{user_id}/resend-activation POST": [
+    "resend_initial_administrator",
+    "dependency",
+    "get_current_tenant_context",
+    "get_current_claims",
+    "get_db",
+    "get_db",
+    "get_db"
+  ],
+  "/api/auth/native/forgot-password POST": [
+    "forgot_password",
+    "get_db"
+  ],
+  "/api/auth/native/reset-password POST": [
+    "reset_password",
+    "get_db"
+  ],
+  "/api/auth/native/change-password POST": [
+    "change_password",
+    "native_claims",
+    "get_current_claims",
+    "get_db"
+  ],
+  "/api/auth/native/force-change-password POST": [
+    "force_change_password",
+    "get_db"
+  ],
+  "/api/auth/native/session GET": [
+    "native_session",
+    "native_claims",
+    "get_current_claims",
+    "get_db"
+  ],
+  "/api/auth/native/logout-all POST": [
+    "logout_all",
+    "native_claims",
+    "get_current_claims",
+    "get_db"
+  ],
+  "/api/auth/native/logout POST": [
+    "record_logout",
+    "native_claims",
+    "get_current_claims",
+    "get_db"
+  ],
+  "/api/auth/entra/session GET": [
+    "session",
+    "get_current_claims",
+    "get_db"
+  ],
+  "/api/platform/summary GET": [
+    "platform_summary",
+    "dependency",
+    "get_current_tenant_context",
+    "get_current_claims",
+    "get_db",
+    "get_db",
+    "get_db"
+  ],
+  "/api/platform/tenant-admin-candidates GET": [
+    "tenant_admin_candidates",
+    "dependency",
+    "get_current_tenant_context",
+    "get_current_claims",
+    "get_db",
+    "get_db",
+    "get_db"
+  ],
+  "/api/platform/tenants/{tenant_id}/recover-admin POST": [
+    "recover_tenant_admin",
+    "dependency",
+    "get_current_tenant_context",
+    "get_current_claims",
+    "get_db",
+    "get_db",
+    "get_db"
+  ],
+  "/api/platform/users/search GET": [
+    "search_platform_users",
+    "dependency",
+    "get_current_tenant_context",
+    "get_current_claims",
+    "get_db",
+    "get_db",
+    "get_db"
+  ],
+  "/api/platform/users GET": [
+    "list_platform_users",
+    "dependency",
+    "get_current_tenant_context",
+    "get_current_claims",
+    "get_db",
+    "get_db",
+    "get_db"
+  ],
+  "/api/platform/users/{user_id} GET": [
+    "get_platform_user",
+    "dependency",
+    "get_current_tenant_context",
+    "get_current_claims",
+    "get_db",
+    "get_db",
+    "get_db"
+  ],
+  "/api/platform/administrators GET": [
+    "list_platform_administrators",
+    "dependency",
+    "get_current_tenant_context",
+    "get_current_claims",
+    "get_db",
+    "get_db",
+    "get_db"
+  ],
+  "/api/platform/administrators POST": [
+    "grant_platform_administrator",
+    "dependency",
+    "get_current_tenant_context",
+    "get_current_claims",
+    "get_db",
+    "get_db",
+    "get_db"
+  ],
+  "/api/platform/administrators/{grant_id} DELETE": [
+    "revoke_platform_administrator",
+    "dependency",
+    "get_current_tenant_context",
+    "get_current_claims",
+    "get_db",
+    "get_db",
+    "get_db"
+  ],
+  "/api/platform/users/{user_id}/status PATCH": [
+    "update_iam_user_status",
+    "dependency",
+    "get_current_tenant_context",
+    "get_current_claims",
+    "get_db",
+    "get_db",
+    "get_db"
+  ],
+  "/api/platform/users/{user_id} PATCH": [
+    "update_iam_user_status_compatibility",
+    "dependency",
+    "get_current_tenant_context",
+    "get_current_claims",
+    "get_db",
+    "get_db",
+    "get_db"
+  ],
+  "/api/platform/tenants GET": [
+    "list_platform_tenants",
+    "dependency",
+    "get_current_tenant_context",
+    "get_current_claims",
+    "get_db",
+    "get_db",
+    "get_db"
+  ],
+  "/api/platform/tenants/{tenant_id} GET": [
+    "get_platform_tenant",
+    "dependency",
+    "get_current_tenant_context",
+    "get_current_claims",
+    "get_db",
+    "get_db",
+    "get_db"
+  ],
+  "/api/platform/tenants/{tenant_id} PATCH": [
+    "update_tenant_status",
+    "dependency",
+    "get_current_tenant_context",
+    "get_current_claims",
+    "get_db",
+    "get_db",
+    "get_db"
+  ],
+  "/api/platform/users/{user_id}/profile PATCH": [
+    "edit_user_profile",
+    "dependency",
+    "get_current_tenant_context",
+    "get_current_claims",
+    "get_db",
+    "get_db",
+    "get_db"
+  ],
+  "/api/platform/users/{user_id}/audit GET": [
+    "user_audit",
+    "dependency",
+    "get_current_tenant_context",
+    "get_current_claims",
+    "get_db",
+    "get_db",
+    "get_db"
+  ],
+  "/api/platform/users/{user_id}/unlock POST": [
+    "unlock_user",
+    "dependency",
+    "get_current_tenant_context",
+    "get_current_claims",
+    "get_db",
+    "get_db",
+    "get_db"
+  ],
+  "/api/platform/users/{user_id}/force-password-change POST": [
+    "force_password_change",
+    "dependency",
+    "get_current_tenant_context",
+    "get_current_claims",
+    "get_db",
+    "get_db",
+    "get_db"
+  ],
+  "/api/platform/iam/operations GET": [
+    "iam_operations",
+    "dependency",
+    "get_current_tenant_context",
+    "get_current_claims",
+    "get_db",
+    "get_db",
+    "get_db"
+  ],
+  "/api/platform/users/{user_id}/logout-all POST": [
+    "revoke_native_sessions",
+    "dependency",
+    "get_current_tenant_context",
+    "get_current_claims",
+    "get_db",
+    "get_db",
+    "get_db"
+  ],
+  "/api/platform/authorization/roles GET": [
+    "list_roles",
+    "dependency",
+    "get_current_tenant_context",
+    "get_current_claims",
+    "get_db",
+    "get_db",
+    "get_db"
+  ],
+  "/api/platform/authorization/roles/{role_id} GET": [
+    "get_role",
+    "dependency",
+    "get_current_tenant_context",
+    "get_current_claims",
+    "get_db",
+    "get_db",
+    "get_db"
+  ],
+  "/api/platform/authorization/permissions GET": [
+    "list_permissions",
+    "dependency",
+    "get_current_tenant_context",
+    "get_current_claims",
+    "get_db",
+    "get_db",
+    "get_db"
+  ],
+  "/api/platform/authorization/matrix GET": [
+    "get_matrix",
+    "dependency",
+    "get_current_tenant_context",
+    "get_current_claims",
+    "get_db",
+    "get_db",
+    "get_db"
+  ],
+  "/api/platform/authorization/roles/{role_id} PATCH": [
+    "patch_role",
+    "dependency",
+    "get_current_tenant_context",
+    "get_current_claims",
+    "get_db",
+    "get_db",
+    "get_db"
+  ],
+  "/api/platform/authorization/roles/{role_id}/permissions PUT": [
+    "put_role_permissions",
+    "dependency",
+    "get_current_tenant_context",
+    "get_current_claims",
+    "get_db",
+    "get_db",
+    "get_db"
+  ],
+  "/compare GET": [
+    "compare_analysis_runs",
+    "get_db"
+  ],
+  "/{run_id}/export/sarif GET": [
+    "export_sarif",
+    "get_current_tenant_context",
+    "get_current_claims",
+    "get_db",
+    "get_db"
+  ],
+  "/{run_id}/export/csv GET": [
+    "export_csv",
+    "get_current_tenant_context",
+    "get_current_claims",
+    "get_db",
+    "get_db"
+  ],
+  "/{sbom_id}/risk-summary GET": [
+    "get_sbom_risk_summary",
+    "get_db"
+  ],
+  "/{sbom_id}/validation-report GET": [
+    "get_sbom_validation_report",
+    "get_db",
+    "get_current_tenant_context",
+    "get_current_claims",
+    "get_db"
+  ],
+  "/{sbom_id}/info GET": [
+    "get_sbom_info",
+    "get_db"
+  ],
+  "/trend GET": [
+    "dashboard_trend",
+    "dashboard_scope_dependency",
+    "get_current_tenant_context",
+    "get_current_claims",
+    "get_db",
+    "get_db",
+    "get_db"
+  ],
+  "/admin/nvd-mirror/settings GET": [
+    "get_settings",
+    "get_settings_repo",
+    "get_db",
+    "get_secrets",
+    "get_db"
+  ],
+  "/admin/nvd-mirror/settings PUT": [
+    "put_settings",
+    "get_settings_repo",
+    "get_db",
+    "get_secrets",
+    "get_db"
+  ],
+  "/admin/nvd-mirror/sync POST": [
+    "trigger_sync"
+  ],
+  "/admin/nvd-mirror/sync/status GET": [
+    "get_sync_status",
+    "get_sync_run_repo",
+    "get_db"
+  ],
+  "/admin/nvd-mirror/watermark/reset POST": [
+    "reset_watermark",
+    "get_settings_repo",
+    "get_db",
+    "get_secrets",
+    "get_db"
+  ]
+}
