@@ -1,0 +1,7 @@
+{
+  "readOnly": true,
+  "manualStatementsWithUniqueDecisionReason": 1,
+  "contextAuditsWithDecisionReason": 1,
+  "componentAuditsWithDecisionReason": 1,
+  "staleRequestAudits": 0
+}

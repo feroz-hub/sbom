@@ -1,0 +1,80 @@
+[
+  {
+    "id": "R2-POLICY-BROWSER-accepted-risk",
+    "role": "disposable tenant admin",
+    "preconditions": "Actual Native BFF fixture; supported tenant choice; validated HTTPS",
+    "steps": "Open policy tab and actual history",
+    "expected": "History 200, numeric policy IDs, saved reason visible",
+    "actual": {
+      "status": 200,
+      "items": [
+        {
+          "id": 8,
+          "policy_id": 5,
+          "kind": "ACCEPTED_RISK",
+          "version": 1,
+          "status": "DISABLED",
+          "scope": "TENANT",
+          "rules": {},
+          "created_at": "2026-10-20T04:47:41.340289+00:00",
+          "reason": "Round 2 isolated regression",
+          "created_by": "uat-r2-1792471657856543000@example.test"
+        }
+      ],
+      "text": "Version history\n\nPublished versions for this tenant. History is read-only; each publication creates a new version.\n\nVersion 1\nDISABLED\nTENANT\nPublished date\n20/10/2026, 10:17:41\nPublished by\nuat-r2-1792471657856543000@example.test\nReason for change\nRound 2 isolated regression\nRules for version 1"
+    },
+    "result": "PASS"
+  },
+  {
+    "id": "R2-POLICY-BROWSER-trust",
+    "role": "disposable tenant admin",
+    "preconditions": "Actual Native BFF fixture; supported tenant choice; validated HTTPS",
+    "steps": "Open policy tab and actual history",
+    "expected": "History 200, numeric policy IDs, saved reason visible",
+    "actual": {
+      "status": 200,
+      "items": [
+        {
+          "id": 7,
+          "policy_id": 4,
+          "kind": "TRUST",
+          "version": 1,
+          "status": "DISABLED",
+          "scope": "TENANT",
+          "rules": {},
+          "created_at": "2026-10-20T04:47:41.255804+00:00",
+          "reason": "Round 2 isolated regression",
+          "created_by": "uat-r2-1792471657856543000@example.test"
+        }
+      ],
+      "text": "Version history\n\nPublished versions for this tenant. History is read-only; each publication creates a new version.\n\nVersion 1\nDISABLED\nTENANT\nPublished date\n20/10/2026, 10:17:41\nPublished by\nuat-r2-1792471657856543000@example.test\nReason for change\nRound 2 isolated regression\nRules for version 1"
+    },
+    "result": "PASS"
+  },
+  {
+    "id": "R2-POLICY-BROWSER-scoring",
+    "role": "disposable tenant admin",
+    "preconditions": "Actual Native BFF fixture; supported tenant choice; validated HTTPS",
+    "steps": "Open policy tab and actual history",
+    "expected": "History 200, numeric policy IDs, saved reason visible",
+    "actual": {
+      "status": 200,
+      "items": [
+        {
+          "id": 9,
+          "policy_id": 6,
+          "kind": "SCORING",
+          "version": 1,
+          "status": "DISABLED",
+          "scope": "TENANT",
+          "rules": {},
+          "created_at": "2026-10-20T04:47:41.410250+00:00",
+          "reason": "Round 2 isolated regression",
+          "created_by": "uat-r2-1792471657856543000@example.test"
+        }
+      ],
+      "text": "Version history\n\nPublished versions for this tenant. History is read-only; each publication creates a new version.\n\nVersion 1\nDISABLED\nTENANT\nPublished date\n20/10/2026, 10:17:41\nPublished by\nuat-r2-1792471657856543000@example.test\nReason for change\nRound 2 isolated regression\nRules for version 1"
+    },
+    "result": "PASS"
+  }
+]

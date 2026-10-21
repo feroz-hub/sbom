@@ -1,0 +1,12 @@
+[
+  {
+    "id": "R3-SESSION-RETRY-EXECUTION",
+    "role": "admin",
+    "expected": "Complete actual browser recovery",
+    "actual": {
+      "error": "locator.waitFor: Timeout 60000ms exceeded.\nCall log:\n\u001b[2m  - waiting for getByRole('button', { name: 'Retry Status', exact: true }) to be visible\u001b[22m\n\u001b[2m    - waiting for \"https://localhost:13000/api/auth/login?returnTo=%2F\" navigation to finish...\u001b[22m\n\u001b[2m    - navigated to \"https://localhost:13000/native-sign-in\"\u001b[22m\n",
+      "path": "/native-sign-in"
+    },
+    "result": "FAIL"
+  }
+]

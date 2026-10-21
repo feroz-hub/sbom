@@ -1,0 +1,33 @@
+[
+  {
+    "id": "R3-UI-PROJECT-CREATE",
+    "role": "admin",
+    "stepsExecuted": "Native Admin; Projects > New Project; complete form; Create Project",
+    "expected": "201 UUID and visible project",
+    "actual": {
+      "status": 201,
+      "id": "0f38a5f0-ab4e-4ead-9f11-0bcdf68ac19a"
+    },
+    "result": "PASS"
+  },
+  {
+    "id": "R3-UI-PROJECT-UPLOAD-EXECUTION",
+    "role": "admin",
+    "stepsExecuted": "Execute actual UI creation/upload workflow",
+    "expected": "Complete workflow",
+    "actual": {
+      "error": "locator.fill: Timeout 20000ms exceeded.\nCall log:\n\u001b[2m  - waiting for getByRole('dialog').getByLabel('Name', { exact: true })\u001b[22m\n",
+      "path": "/projects",
+      "headings": [
+        "Overview",
+        "Inventory",
+        "Security Operations",
+        "Administration",
+        "Projects",
+        "Applications",
+        "Create Application"
+      ]
+    },
+    "result": "FAIL"
+  }
+]

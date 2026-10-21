@@ -1,0 +1,28 @@
+[
+  {
+    "id": "R3-LEGACY-UUID-BEFORE",
+    "role": "admin",
+    "preconditions": "Verified isolated Greenfield UUID; task-owned fixtures; credentials kept in memory",
+    "stepsExecuted": "Own task-owned analyzed SBOM UUID at supported legacy OSV route",
+    "expected": "Valid UUID accepted by shared boundary",
+    "actual": {
+      "status": 422,
+      "data": {
+        "detail": [
+          {
+            "type": "int_parsing",
+            "loc": [
+              "body",
+              "sbom_id"
+            ],
+            "msg": "Input should be a valid integer, unable to parse string as an integer",
+            "input": "f5e7f4c4-8a16-4c70-93d8-092173885437"
+          }
+        ]
+      },
+      "request_id": "657bb345f8a7"
+    },
+    "result": "FAIL",
+    "time": "2026-10-20T10:47:34.597218+00:00"
+  }
+]

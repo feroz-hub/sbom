@@ -1,0 +1,61 @@
+[
+  {
+    "id": "R2-KEV-UI-admin",
+    "role": "admin",
+    "preconditions": "Clean Chrome context; real Native BFF authentication fixture; TLS validation enabled",
+    "steps": "R2-KEV-UI-admin",
+    "expected": "Tenant roles can read KEV but cannot invoke global sync",
+    "actual": {
+      "disabled": true,
+      "explanation": 0
+    },
+    "result": "PASS"
+  },
+  {
+    "id": "R2-KEV-UI-analyst",
+    "role": "analyst",
+    "preconditions": "Clean Chrome context; real Native BFF authentication fixture; TLS validation enabled",
+    "steps": "R2-KEV-UI-analyst",
+    "expected": "Tenant roles can read KEV but cannot invoke global sync",
+    "actual": {
+      "disabled": true,
+      "explanation": 0
+    },
+    "result": "PASS"
+  },
+  {
+    "id": "R2-KEV-UI-developer",
+    "role": "developer",
+    "preconditions": "Clean Chrome context; real Native BFF authentication fixture; TLS validation enabled",
+    "steps": "R2-KEV-UI-developer",
+    "expected": "Tenant roles can read KEV but cannot invoke global sync",
+    "actual": {
+      "disabled": true,
+      "explanation": 0
+    },
+    "result": "PASS"
+  },
+  {
+    "id": "R2-KEV-UI-viewer",
+    "role": "viewer",
+    "preconditions": "Clean Chrome context; real Native BFF authentication fixture; TLS validation enabled",
+    "steps": "R2-KEV-UI-viewer",
+    "expected": "Tenant roles can read KEV but cannot invoke global sync",
+    "actual": {
+      "disabled": true,
+      "explanation": 0
+    },
+    "result": "PASS"
+  },
+  {
+    "id": "R2-BROWSER-EXECUTION",
+    "role": "admin",
+    "preconditions": "Clean Chrome context; real Native BFF authentication fixture; TLS validation enabled",
+    "steps": "R2-BROWSER-EXECUTION",
+    "expected": "Complete actual browser acceptance",
+    "actual": {
+      "message": "locator.waitFor: Timeout 90000ms exceeded.\nCall log:\n\u001b[2m  - waiting for getByRole('heading', { name: /^(Dashboard|Platform Dashboard|Select tenant)$/ }).first() to be visible\u001b[22m\n\u001b[2m    - waiting for navigation to finish...\u001b[22m\n\u001b[2m    - navigated to \"https://localhost:13000/native-sign-in\"\u001b[22m\n"
+    },
+    "result": "FAIL"
+  }
+]

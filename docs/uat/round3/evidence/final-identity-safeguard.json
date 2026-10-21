@@ -1,0 +1,128 @@
+[
+  {
+    "id": "R3-FINAL-IDENTITY-admin",
+    "role": "admin",
+    "preconditions": "Verified isolated Greenfield UUID; task-owned fixtures; credentials kept in memory",
+    "stepsExecuted": "Fresh Native authentication and current context read after final API reload",
+    "expected": "Seeded identity and authorized context retained",
+    "actual": {
+      "status": 200,
+      "identity": {
+        "email": "admin@olympus.example.test",
+        "tenant_id": "3a900179-36bf-4b5f-b2e1-2a4a9d06e6af",
+        "roles": [
+          "TENANT_ADMIN"
+        ],
+        "is_platform_admin": false,
+        "authenticated": true
+      }
+    },
+    "result": "PASS",
+    "time": "2026-10-20T11:01:10.489796+00:00"
+  },
+  {
+    "id": "R3-FINAL-IDENTITY-analyst",
+    "role": "analyst",
+    "preconditions": "Verified isolated Greenfield UUID; task-owned fixtures; credentials kept in memory",
+    "stepsExecuted": "Fresh Native authentication and current context read after final API reload",
+    "expected": "Seeded identity and authorized context retained",
+    "actual": {
+      "status": 200,
+      "identity": {
+        "email": "analyst@olympus.example.test",
+        "tenant_id": "3a900179-36bf-4b5f-b2e1-2a4a9d06e6af",
+        "roles": [
+          "SECURITY_ANALYST"
+        ],
+        "is_platform_admin": false,
+        "authenticated": true
+      }
+    },
+    "result": "PASS",
+    "time": "2026-10-20T11:01:11.022826+00:00"
+  },
+  {
+    "id": "R3-FINAL-IDENTITY-developer",
+    "role": "developer",
+    "preconditions": "Verified isolated Greenfield UUID; task-owned fixtures; credentials kept in memory",
+    "stepsExecuted": "Fresh Native authentication and current context read after final API reload",
+    "expected": "Seeded identity and authorized context retained",
+    "actual": {
+      "status": 200,
+      "identity": {
+        "email": "developer@olympus.example.test",
+        "tenant_id": "3a900179-36bf-4b5f-b2e1-2a4a9d06e6af",
+        "roles": [
+          "DEVELOPER"
+        ],
+        "is_platform_admin": false,
+        "authenticated": true
+      }
+    },
+    "result": "PASS",
+    "time": "2026-10-20T11:01:11.486681+00:00"
+  },
+  {
+    "id": "R3-FINAL-IDENTITY-viewer",
+    "role": "viewer",
+    "preconditions": "Verified isolated Greenfield UUID; task-owned fixtures; credentials kept in memory",
+    "stepsExecuted": "Fresh Native authentication and current context read after final API reload",
+    "expected": "Seeded identity and authorized context retained",
+    "actual": {
+      "status": 200,
+      "identity": {
+        "email": "viewer@olympus.example.test",
+        "tenant_id": "3a900179-36bf-4b5f-b2e1-2a4a9d06e6af",
+        "roles": [
+          "VIEWER"
+        ],
+        "is_platform_admin": false,
+        "authenticated": true
+      }
+    },
+    "result": "PASS",
+    "time": "2026-10-20T11:01:11.954697+00:00"
+  },
+  {
+    "id": "R3-FINAL-IDENTITY-foreign",
+    "role": "foreign",
+    "preconditions": "Verified isolated Greenfield UUID; task-owned fixtures; credentials kept in memory",
+    "stepsExecuted": "Fresh Native authentication and current context read after final API reload",
+    "expected": "Seeded identity and authorized context retained",
+    "actual": {
+      "status": 200,
+      "identity": {
+        "email": "foreign@olympus.example.test",
+        "tenant_id": "a803c17f-7e7d-439c-8664-c5406d391fd1",
+        "roles": [
+          "TENANT_ADMIN"
+        ],
+        "is_platform_admin": false,
+        "authenticated": true
+      }
+    },
+    "result": "PASS",
+    "time": "2026-10-20T11:01:12.488459+00:00"
+  },
+  {
+    "id": "R3-FINAL-IDENTITY-platform",
+    "role": "platform",
+    "preconditions": "Verified isolated Greenfield UUID; task-owned fixtures; credentials kept in memory",
+    "stepsExecuted": "Fresh Native authentication and current context read after final API reload",
+    "expected": "Seeded identity and authorized context retained",
+    "actual": {
+      "status": 200,
+      "identity": {
+        "email": "platform@olympus.example.test",
+        "tenant_id": null,
+        "roles": [
+          "PLATFORM_ADMIN"
+        ],
+        "is_platform_admin": true,
+        "authenticated": true
+      }
+    },
+    "result": "PASS",
+    "time": "2026-10-20T11:01:12.880797+00:00"
+  }
+]

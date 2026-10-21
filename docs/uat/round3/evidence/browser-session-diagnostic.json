@@ -1,0 +1,44 @@
+[
+  {
+    "route": "/api/auth/session",
+    "status": 200,
+    "authenticated": true,
+    "keys": [
+      "provider",
+      "authenticated"
+    ]
+  },
+  {
+    "route": "/api/backend/api/auth/me",
+    "status": 200,
+    "authenticated": true,
+    "keys": [
+      "user_id",
+      "external_user_id",
+      "email",
+      "display_name",
+      "tenant_id",
+      "external_tenant_id",
+      "roles",
+      "identity_roles",
+      "permissions",
+      "is_platform_admin",
+      "authenticated",
+      "role",
+      "auth_context"
+    ]
+  },
+  {
+    "route": "/api/auth/session",
+    "status": 503,
+    "authenticated": false,
+    "keys": [
+      "authenticated"
+    ]
+  },
+  {
+    "path": "/projects",
+    "headings": [],
+    "responses": []
+  }
+]

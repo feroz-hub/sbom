@@ -1,0 +1,32 @@
+[
+  {
+    "id": "R2-BROWSER-TLS",
+    "role": "admin",
+    "preconditions": "Clean Chrome context; real Native BFF authentication fixture; TLS validation enabled",
+    "steps": "R2-BROWSER-TLS",
+    "expected": "Actual trusted HTTPS handshake; no TLS bypass",
+    "actual": {
+      "https": "https:",
+      "certificate": {
+        "issuer": "mkcert ferozebasha@Ferozes-MacBook-Air.local",
+        "protocol": "TLS 1.3",
+        "subjectName": "",
+        "validFrom": 1792421098,
+        "validTo": 1863528298
+      },
+      "ignoreHTTPSErrors": false
+    },
+    "result": "PASS"
+  },
+  {
+    "id": "R2-DASHBOARD-EXECUTION",
+    "role": "admin",
+    "preconditions": "Clean Chrome context; real Native BFF authentication fixture; TLS validation enabled",
+    "steps": "R2-DASHBOARD-EXECUTION",
+    "expected": "Complete browser dashboard acceptance",
+    "actual": {
+      "message": "locator.click: Error: strict mode violation: getByRole('option', { name: 'UAT R1 1792465600082474000', exact: true }) resolved to 2 elements:\n    1) <div role=\"option\" aria-selected=\"false\" id=\"select-_r_2_-listbox-opt-8\" class=\"flex min-h-[38px] w-full items-center justify-between rounded-md px-2.5 py-2 text-sm text-left cursor-pointer transition-colors duration-100 select-none text-[var(--select-text)] hover:bg-[var(--select-item-hover)]\">…</div> aka locator('#select-_r_2_-listbox-opt-8')\n    2) <option value=\"3b481333-d56a-4730-9427-7fc5c332309a\">UAT R1 1792465600082474000</option> aka locator('#select-_r_2_')\n\nCall log:\n\u001b[2m  - waiting for getByRole('option', { name: 'UAT R1 1792465600082474000', exact: true })\u001b[22m\n"
+    },
+    "result": "FAIL"
+  }
+]

@@ -1,0 +1,124 @@
+[
+  {
+    "id": "R3-UI-REPAIR-QUARANTINE-reject",
+    "role": "admin",
+    "stepsExecuted": "Prepare task-owned malformed fixture through authenticated live API",
+    "expected": "422; no accepted source",
+    "actual": {
+      "status": 422,
+      "session_id": "9d90ffe8-6742-4d14-ba74-65f00a1bc6a9"
+    },
+    "result": "PASS"
+  },
+  {
+    "id": "R3-UI-REPAIR-GENERATE-reject",
+    "role": "admin",
+    "stepsExecuted": "Click Auto-Repair Safe Issues",
+    "expected": "200 repaired candidate pending explicit approval",
+    "actual": {
+      "status": 200,
+      "job_id": "d93f094f-fafa-41f0-91d8-9bc7ed5fcd7b",
+      "statusValue": "REPAIRED",
+      "approval": "PENDING"
+    },
+    "result": "PASS"
+  },
+  {
+    "id": "R3-UI-REPAIR-REVIEW-reject",
+    "role": "admin",
+    "stepsExecuted": "Open View Changes in actual workspace",
+    "expected": "Old/new enum and reason displayed",
+    "actual": {
+      "containsOld": true,
+      "containsNew": true,
+      "containsRule": true
+    },
+    "result": "PASS"
+  },
+  {
+    "id": "R3-UI-REPAIR-DECIDE-reject",
+    "role": "admin",
+    "stepsExecuted": "Click explicit reject in reviewed panel",
+    "expected": "200 terminal decision and correct import boundary",
+    "actual": {
+      "status": 200,
+      "statusValue": "REJECTED",
+      "approval": "REJECTED",
+      "imported_sbom_id": null
+    },
+    "result": "PASS"
+  },
+  {
+    "id": "R3-UI-REPAIR-ORIGINAL-reject",
+    "role": "admin",
+    "stepsExecuted": "Download immutable source after actual terminal UI decision",
+    "expected": "Exact source bytes retained",
+    "actual": {
+      "status": 200,
+      "beforeSha256": "d98e88a4ab91a0fb534814b661c7c533773d32956ea9fd812b9b986184c6dca4",
+      "afterSha256": "d98e88a4ab91a0fb534814b661c7c533773d32956ea9fd812b9b986184c6dca4"
+    },
+    "result": "PASS"
+  },
+  {
+    "id": "R3-UI-REPAIR-QUARANTINE-approve",
+    "role": "admin",
+    "stepsExecuted": "Prepare task-owned malformed fixture through authenticated live API",
+    "expected": "422; no accepted source",
+    "actual": {
+      "status": 422,
+      "session_id": "33a85fcf-360f-430b-be3f-651a117ccafe"
+    },
+    "result": "PASS"
+  },
+  {
+    "id": "R3-UI-REPAIR-GENERATE-approve",
+    "role": "admin",
+    "stepsExecuted": "Click Auto-Repair Safe Issues",
+    "expected": "200 repaired candidate pending explicit approval",
+    "actual": {
+      "status": 200,
+      "job_id": "a4934c52-2521-4209-a559-53f6aea78b24",
+      "statusValue": "REPAIRED",
+      "approval": "PENDING"
+    },
+    "result": "PASS"
+  },
+  {
+    "id": "R3-UI-REPAIR-REVIEW-approve",
+    "role": "admin",
+    "stepsExecuted": "Open View Changes in actual workspace",
+    "expected": "Old/new enum and reason displayed",
+    "actual": {
+      "containsOld": true,
+      "containsNew": true,
+      "containsRule": true
+    },
+    "result": "PASS"
+  },
+  {
+    "id": "R3-UI-REPAIR-DECIDE-approve",
+    "role": "admin",
+    "stepsExecuted": "Click explicit approve in reviewed panel",
+    "expected": "200 terminal decision and correct import boundary",
+    "actual": {
+      "status": 200,
+      "statusValue": "REPAIRED",
+      "approval": "APPROVED",
+      "imported_sbom_id": "f6459f4a-89fe-4c5b-b5c1-527b0eb9cba8"
+    },
+    "result": "PASS"
+  },
+  {
+    "id": "R3-UI-REPAIR-ORIGINAL-approve",
+    "role": "admin",
+    "stepsExecuted": "Download immutable source after actual terminal UI decision",
+    "expected": "Exact source bytes retained",
+    "actual": {
+      "status": 200,
+      "beforeSha256": "81ab4474e4d47e43c051fdab4bd1332b1df7259ebd324de2f843d63216f86859",
+      "afterSha256": "81ab4474e4d47e43c051fdab4bd1332b1df7259ebd324de2f843d63216f86859"
+    },
+    "result": "PASS"
+  }
+]

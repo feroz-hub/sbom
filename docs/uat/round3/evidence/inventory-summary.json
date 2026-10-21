@@ -1,0 +1,16 @@
+{
+  "total": 4368,
+  "defaultIncluded": 4349,
+  "existingMarkerExclusions": 19,
+  "categories": {
+    "AI/provider": 658,
+    "Other unit/integration": 1248,
+    "Scheduling/reporting": 182,
+    "Vulnerability/VEX": 465,
+    "Authentication/authorization": 760,
+    "Ingestion/validation": 658,
+    "Lifecycle": 106,
+    "Advisor/policies": 270,
+    "UUID public API": 21
+  }
+}

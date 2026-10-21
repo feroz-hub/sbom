@@ -37,7 +37,7 @@ From the repository root with the project virtual environment and securely expor
 .venv/bin/python -m alembic current
 ```
 
-Expected head: `062_native_platform_bootstrap`. On an empty PostgreSQL database, the Alembic environment installs the existing frozen revision-047 schema, stamps that supported baseline and applies 048 through current head. Historical migration 001 used live ORM metadata and is not replayed for fresh PostgreSQL. Migrations 001–061 remain unchanged. This is the repository's existing expected-bootstrap approach, now reachable through ordinary Alembic upgrade; it does not import old identity data.
+Expected head: `079_lifecycle_provider_verification`. On an empty PostgreSQL database, the Alembic environment installs the existing frozen revision-047 schema, stamps that supported baseline and applies 048 through current head. Historical migration 001 used live ORM metadata and is not replayed for fresh PostgreSQL. Migrations 001–061 remain unchanged. This is the repository's existing expected-bootstrap approach, now reachable through ordinary Alembic upgrade; it does not import old identity data.
 
 Migration 048 seeds and validates the immutable authorization catalogue transactionally. Start the normal authenticated API to initialize master/reference data (`app.main` startup); do not use development/auth-disabled seed mode. Verify the five role codes PLATFORM_ADMIN, TENANT_ADMIN, SECURITY_ANALYST, DEVELOPER, VIEWER and catalogue mappings. Verify zero old identities/memberships. No manual grants or password inserts.
 

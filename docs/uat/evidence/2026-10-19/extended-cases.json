@@ -1,0 +1,2211 @@
+[
+  {
+    "id": "UAT-POLICY-COMPARE-admin",
+    "module": "Authorization catalogue",
+    "role": "admin",
+    "preconditions": "Fresh auth/me and live platform authorization matrix captured in this run",
+    "steps": "Compare effective permission set and assigned role from actual responses with active database catalogue entries",
+    "expected": "Effective permissions equal active mappings for assigned seeded role; no extra role authority",
+    "actual": {
+      "role": [
+        "TENANT_ADMIN"
+      ],
+      "effectiveCount": 55,
+      "catalogueCount": 55,
+      "extra": [],
+      "missing": []
+    },
+    "api": 200,
+    "status": "PASS",
+    "defect": null,
+    "time": "2026-10-19T15:36:11.806027+00:00"
+  },
+  {
+    "id": "UAT-POLICY-COMPARE-analyst",
+    "module": "Authorization catalogue",
+    "role": "analyst",
+    "preconditions": "Fresh auth/me and live platform authorization matrix captured in this run",
+    "steps": "Compare effective permission set and assigned role from actual responses with active database catalogue entries",
+    "expected": "Effective permissions equal active mappings for assigned seeded role; no extra role authority",
+    "actual": {
+      "role": [
+        "SECURITY_ANALYST"
+      ],
+      "effectiveCount": 37,
+      "catalogueCount": 37,
+      "extra": [],
+      "missing": []
+    },
+    "api": 200,
+    "status": "PASS",
+    "defect": null,
+    "time": "2026-10-19T15:36:11.808528+00:00"
+  },
+  {
+    "id": "UAT-POLICY-COMPARE-developer",
+    "module": "Authorization catalogue",
+    "role": "developer",
+    "preconditions": "Fresh auth/me and live platform authorization matrix captured in this run",
+    "steps": "Compare effective permission set and assigned role from actual responses with active database catalogue entries",
+    "expected": "Effective permissions equal active mappings for assigned seeded role; no extra role authority",
+    "actual": {
+      "role": [
+        "DEVELOPER"
+      ],
+      "effectiveCount": 15,
+      "catalogueCount": 15,
+      "extra": [],
+      "missing": []
+    },
+    "api": 200,
+    "status": "PASS",
+    "defect": null,
+    "time": "2026-10-19T15:36:11.808573+00:00"
+  },
+  {
+    "id": "UAT-POLICY-COMPARE-viewer",
+    "module": "Authorization catalogue",
+    "role": "viewer",
+    "preconditions": "Fresh auth/me and live platform authorization matrix captured in this run",
+    "steps": "Compare effective permission set and assigned role from actual responses with active database catalogue entries",
+    "expected": "Effective permissions equal active mappings for assigned seeded role; no extra role authority",
+    "actual": {
+      "role": [
+        "VIEWER"
+      ],
+      "effectiveCount": 13,
+      "catalogueCount": 13,
+      "extra": [],
+      "missing": []
+    },
+    "api": 200,
+    "status": "PASS",
+    "defect": null,
+    "time": "2026-10-19T15:36:11.808592+00:00"
+  },
+  {
+    "id": "UAT-POLICY-COMPARE-foreign",
+    "module": "Authorization catalogue",
+    "role": "foreign",
+    "preconditions": "Fresh auth/me and live platform authorization matrix captured in this run",
+    "steps": "Compare effective permission set and assigned role from actual responses with active database catalogue entries",
+    "expected": "Effective permissions equal active mappings for assigned seeded role; no extra role authority",
+    "actual": {
+      "role": [
+        "TENANT_ADMIN"
+      ],
+      "effectiveCount": 55,
+      "catalogueCount": 55,
+      "extra": [],
+      "missing": []
+    },
+    "api": 200,
+    "status": "PASS",
+    "defect": null,
+    "time": "2026-10-19T15:36:11.808612+00:00"
+  },
+  {
+    "id": "UAT-POLICY-COMPARE-platform",
+    "module": "Authorization catalogue",
+    "role": "platform",
+    "preconditions": "Fresh auth/me and live platform authorization matrix captured in this run",
+    "steps": "Compare effective permission set and assigned role from actual responses with active database catalogue entries",
+    "expected": "Effective permissions equal active mappings for assigned seeded role; no extra role authority",
+    "actual": {
+      "role": [
+        "PLATFORM_ADMIN"
+      ],
+      "effectiveCount": 21,
+      "catalogueCount": 21,
+      "extra": [],
+      "missing": []
+    },
+    "api": 200,
+    "status": "PASS",
+    "defect": null,
+    "time": "2026-10-19T15:36:11.808625+00:00"
+  },
+  {
+    "id": "UAT-VEX-DETAIL",
+    "module": "VEX Investigation",
+    "role": "admin",
+    "preconditions": "Independent Native bearer authentication per role; direct loopback API; greenfield development stack; no browser session reused",
+    "steps": "Direct GET UAT-created investigation detail; correlated ResponseValidationError and read-only payload validation",
+    "expected": "HTTP 200 detail with valid evidence and row_version",
+    "actual": {
+      "status": 500,
+      "data": {
+        "detail": {
+          "code": "internal_error",
+          "message": "Internal server error.",
+          "correlation_id": "e0f92a6a3fe9"
+        }
+      },
+      "requestId": "e0f92a6a3fe9"
+    },
+    "api": 500,
+    "status": "FAIL",
+    "defect": "UAT-DEF-003",
+    "time": "2026-10-19T15:44:44.958Z"
+  },
+  {
+    "id": "UAT-VEX-DENY-viewer",
+    "module": "VEX authorization",
+    "role": "viewer",
+    "preconditions": "Independent Native bearer authentication per role; direct loopback API; greenfield development stack; no browser session reused",
+    "steps": "PUT valid payload against UAT-created context; no seeded investigation mutation",
+    "expected": "Non-owner/foreign decision rejected HTTP 403",
+    "actual": {
+      "status": 403,
+      "data": {
+        "detail": "You can view this investigation, but only the assigned Developer, a Security Analyst, or Tenant Administrator can update it."
+      },
+      "requestId": "d40534e0b8d2"
+    },
+    "api": 403,
+    "status": "PASS",
+    "defect": null,
+    "time": "2026-10-19T15:44:45.435Z"
+  },
+  {
+    "id": "UAT-VEX-DENY-developer",
+    "module": "VEX authorization",
+    "role": "developer",
+    "preconditions": "Independent Native bearer authentication per role; direct loopback API; greenfield development stack; no browser session reused",
+    "steps": "PUT valid payload against UAT-created context; no seeded investigation mutation",
+    "expected": "Non-owner/foreign decision rejected HTTP 403",
+    "actual": {
+      "status": 403,
+      "data": {
+        "detail": "This investigation must be assigned to you before you can update it. This investigation must be assigned by a Tenant Administrator or Security Analyst before you can update it."
+      },
+      "requestId": "6b43e79d49b8"
+    },
+    "api": 403,
+    "status": "PASS",
+    "defect": null,
+    "time": "2026-10-19T15:44:45.672Z"
+  },
+  {
+    "id": "UAT-VEX-DENY-foreign",
+    "module": "VEX authorization",
+    "role": "foreign",
+    "preconditions": "Independent Native bearer authentication per role; direct loopback API; greenfield development stack; no browser session reused",
+    "steps": "PUT valid payload against UAT-created context; no seeded investigation mutation",
+    "expected": "Non-owner/foreign decision rejected HTTP 404",
+    "actual": {
+      "status": 404,
+      "data": {
+        "detail": "Investigation not found"
+      },
+      "requestId": "66f3467fc7cb"
+    },
+    "api": 404,
+    "status": "PASS",
+    "defect": null,
+    "time": "2026-10-19T15:44:45.791Z"
+  },
+  {
+    "id": "UAT-VEX-DECISION",
+    "module": "VEX Investigation",
+    "role": "admin",
+    "preconditions": "Independent Native bearer authentication per role; direct loopback API; greenfield development stack; no browser session reused",
+    "steps": "Submit a complete versioned decision on UAT context and inspect list afterward; distinguish HTTP response failure from persisted mutation",
+    "expected": "Authorized decision returns 200 with durable result",
+    "actual": {
+      "status": 500,
+      "data": {
+        "detail": {
+          "code": "internal_error",
+          "message": "Internal server error.",
+          "correlation_id": "60ccf345a283"
+        }
+      },
+      "requestId": "60ccf345a283",
+      "persistedRowVersion": 3,
+      "originalRowVersion": 1
+    },
+    "api": 500,
+    "status": "FAIL",
+    "defect": "UAT-DEF-003",
+    "time": "2026-10-19T15:44:52.327Z"
+  },
+  {
+    "id": "UAT-VEX-STALE",
+    "module": "VEX Investigation",
+    "role": "admin",
+    "preconditions": "Independent Native bearer authentication per role; direct loopback API; greenfield development stack; no browser session reused",
+    "steps": "Repeat mutation with pre-change version",
+    "expected": "Stale row_version returns 409 without replacement",
+    "actual": {
+      "status": 500,
+      "data": {
+        "detail": {
+          "code": "internal_error",
+          "message": "Internal server error.",
+          "correlation_id": "89157074d71d"
+        }
+      },
+      "requestId": "89157074d71d"
+    },
+    "api": 500,
+    "status": "FAIL",
+    "defect": "UAT-DEF-003",
+    "time": "2026-10-19T15:44:52.700Z"
+  },
+  {
+    "id": "UAT-VEX-VALIDATION",
+    "module": "VEX Investigation",
+    "role": "admin",
+    "preconditions": "Independent Native bearer authentication per role; direct loopback API; greenfield development stack; no browser session reused",
+    "steps": "Submit complete versioned decision with missing justification; ensure error is not missing row_version",
+    "expected": "NOT_AFFECTED without justification/impact receives 400/422 specifically for required evidence",
+    "actual": {
+      "status": 422,
+      "data": {
+        "detail": "VEX not_affected requires justification or impact statement"
+      },
+      "requestId": "d80da0e8478b"
+    },
+    "api": 422,
+    "status": "PASS",
+    "defect": null,
+    "time": "2026-10-19T15:44:52.846Z"
+  },
+  {
+    "id": "UAT-VEX-ASSIGNED-DEVELOPER",
+    "module": "VEX Investigation",
+    "role": "developer",
+    "preconditions": "Independent Native bearer authentication per role; direct loopback API; greenfield development stack; no browser session reused",
+    "steps": "Observe list/detail boundary before attempting supported assignment workflow",
+    "expected": "Assigned Developer can open and update owned investigation",
+    "actual": "Blocked by UAT-DEF-003: detail serialization fails. Positive assignment/edit UI cannot be accepted; non-owner rejection was executed separately.",
+    "api": 500,
+    "status": "BLOCKED",
+    "defect": "UAT-DEF-003",
+    "time": "2026-10-19T15:44:52.846Z"
+  },
+  {
+    "id": "UAT-LIFECYCLE-COMPONENT",
+    "module": "Lifecycle",
+    "role": "admin",
+    "preconditions": "Independent Native bearer authentication per role; direct loopback API; greenfield development stack; no browser session reused",
+    "steps": "GET lifecycle for uploaded component",
+    "expected": "Component lifecycle lookup retains correct UAT SBOM UUID",
+    "actual": {
+      "status": 200,
+      "data": {
+        "id": "ef09b91c-f21d-420a-9a6c-9b8f43427502",
+        "sbom_id": "729992e8-b107-4d3d-96a9-5cac4bcf5f8d",
+        "bom_ref": "uat-lodash",
+        "component_type": "library",
+        "component_group": null,
+        "name": "lodash",
+        "version": "4.17.20",
+        "purl": "pkg:npm/lodash@4.17.20",
+        "cpe": null,
+        "supplier": "UAT",
+        "scope": null,
+        "created_on": "2026-10-19T15:38:28+00:00",
+        "ecosystem": "npm",
+        "original_name": "lodash",
+        "normalized_name": "lodash",
+        "original_version": "4.17.20",
+        "normalized_version": "4.17.20",
+        "normalized_ecosystem": "npm",
+        "original_purl": "pkg:npm/lodash@4.17.20",
+        "normalized_purl": "pkg:npm/lodash@4.17.20",
+        "purl_type": "npm",
+        "purl_namespace": null,
+        "purl_name": "lodash",
+        "purl_version": "4.17.20",
+        "purl_qualifiers_json": {},
+        "purl_subpath": null,
+        "normalized_cpes": [],
+        "primary_cpe": null,
+        "cpe_evidence_json": {
+          "entries": [],
+          "duplicates_removed": 0
+        },
+        "normalized_supplier": "uat",
+        "normalized_package_key": "npm:lodash:uat",
+        "canonical_identity_confidence": "High",
+        "license": null,
+        "hashes": null,
+        "lifecycle_status": "Unknown",
+        "eos_date": null,
+        "eol_date": null,
+        "eof_date": null,
+        "is_deprecated": false,
+        "deprecated": false,
+        "unsupported": false,
+        "maintenance_status": null,
+        "latest_version": "4.18.1",
+        "latest_supported_version": null,
+        "recommended_version": "4.18.1",
+        "lifecycle_recommendation": "Review upgrade to latest registry version 4.18.1.",
+        "lifecycle_source": "npm registry",
+        "lifecycle_provider": "npm registry",
+        "lifecycle_source_url": "https://www.npmjs.com/package/lodash",
+        "lifecycle_confidence": "Low",
+        "lifecycle_checked_at": "2026-10-19T13:00:01+00:00",
+        "lifecycle_evidence_json": {
+          "dist_tags": {
+            "latest": "4.18.1"
+          },
+          "repository_url": "https://github.com/lodash/lodash",
+          "provider_key": "package_registry",
+          "cache_policy": {
+            "known_days": 14,
+            "unknown_hours": 24,
+            "failure_minutes": 30,
+            "deprecated_days": 7
+          },
+          "deps.dev": {
+            "package": {},
+            "version": {
+              "versionKey": {
+                "system": "NPM",
+                "name": "lodash",
+                "version": "4.17.20"
+              },
+              "isDefault": false,
+              "licenses": [
+                "MIT"
+              ],
+              "links": [
+                {
+                  "label": "HOMEPAGE",
+                  "url": "https://lodash.com/"
+                },
+                {
+                  "label": "ISSUE_TRACKER",
+                  "url": "https://github.com/lodash/lodash/issues"
+                },
+                {
+                  "label": "ORIGIN",
+                  "url": "https://registry.npmjs.org/lodash/4.17.20"
+                },
+                {
+                  "label": "SOURCE_REPO",
+                  "url": "git+https://github.com/lodash/lodash.git"
+                }
+              ],
+              "publishedAt": "2020-08-13T16:53:54Z"
+            },
+            "advisory_count": 5,
+            "advisories": [
+              {
+                "id": "GHSA-29mw-wpgm-hmr9"
+              },
+              {
+                "id": "GHSA-35jh-r3h4-6jhm"
+              },
+              {
+                "id": "GHSA-f23m-r3pf-42rh"
+              },
+              {
+                "id": "GHSA-r5fr-rjxr-66jc"
+              },
+              {
+                "id": "GHSA-xxjr-mmjv-4gpg"
+              }
+            ],
+            "provider_key": "deps_dev",
+            "cache_policy": {
+              "known_days": null,
+              "unknown_hours": null,
+              "failure_minutes": null,
+              "deprecated_days": null
+            }
+          },
+          "OSV": {
+            "vulnerability_count": 5,
+            "fixed_versions": [
+              "4.17.21",
+              "4.18.0",
+              "4.17.23"
+            ],
+            "vuln_ids": [
+              "GHSA-29mw-wpgm-hmr9",
+              "GHSA-35jh-r3h4-6jhm",
+              "GHSA-f23m-r3pf-42rh",
+              "GHSA-r5fr-rjxr-66jc",
+              "GHSA-xxjr-mmjv-4gpg"
+            ],
+            "provider_key": "osv",
+            "cache_policy": {
+              "known_days": null,
+              "unknown_hours": null,
+              "failure_minutes": null,
+              "deprecated_days": null
+            }
+          },
+          "provider_outcomes": [
+            {
+              "provider": "npm registry",
+              "provider_key": "package_registry",
+              "status": "Unknown",
+              "error": null,
+              "checked_at": "2026-10-19T13:00:01+00:00"
+            },
+            {
+              "provider": "deps.dev",
+              "provider_key": "deps_dev",
+              "status": "Unknown",
+              "error": null,
+              "checked_at": "2026-10-19T13:00:02+00:00"
+            },
+            {
+              "provider": "OSV",
+              "provider_key": "osv",
+              "status": "Unknown",
+              "error": null,
+              "checked_at": "2026-10-19T13:00:03+00:00"
+            }
+          ],
+          "cache_hit": true,
+          "stale_cache": false,
+          "cache_expires_at": "2026-10-20T13:00:03+00:00",
+          "risk_level": "UNKNOWN"
+        },
+        "lifecycle_is_stale": false,
+        "lifecycle_manual_override": false,
+        "normalized_component_key": "purl:pkg:npm/lodash@4.17.20",
+        "dedupe_canonical_id": "6a93b26b0cb10087f2398a0b111ffb00182be5a47336302f26e22b00bf8899d9",
+        "dedupe_group_id": "6a93b26b0cb10087f2398a0b111ffb00182be5a47336302f26e22b00bf8899d9",
+        "is_duplicate": false,
+        "duplicate_of_component_id": null,
+        "dedupe_reason": "same_normalized_purl",
+        "dedupe_confidence": "High",
+        "normalization_notes_json": [],
+        "dedupe_evidence_json": {
+          "group_key": "purl:pkg:npm/lodash@4.17.20:context:{\"parents\": [\"uat-app\"]}",
+          "canonical_ref": "uat-lodash",
+          "component_refs": [
+            "uat-lodash"
+          ],
+          "identity_confidence": "High"
+        }
+      },
+      "requestId": "6d6901c7722b"
+    },
+    "api": 200,
+    "status": "PASS",
+    "defect": null,
+    "time": "2026-10-19T15:44:52.924Z"
+  },
+  {
+    "id": "UAT-LIFECYCLE-OVERRIDE",
+    "module": "Lifecycle",
+    "role": "admin",
+    "preconditions": "Independent Native bearer authentication per role; direct loopback API; greenfield development stack; no browser session reused",
+    "steps": "PATCH only the component created by this UAT",
+    "expected": "Authorized lifecycle override on disposable component returns 200",
+    "actual": {
+      "status": 200,
+      "count": 0,
+      "keys": [
+        "id",
+        "sbom_id",
+        "bom_ref",
+        "component_type",
+        "component_group",
+        "name",
+        "version",
+        "purl",
+        "cpe",
+        "supplier",
+        "scope",
+        "created_on",
+        "ecosystem",
+        "original_name",
+        "normalized_name",
+        "original_version",
+        "normalized_version",
+        "normalized_ecosystem",
+        "original_purl",
+        "normalized_purl"
+      ],
+      "requestId": "2d8b14290234"
+    },
+    "api": 200,
+    "status": "PASS",
+    "defect": null,
+    "time": "2026-10-19T15:44:53.039Z"
+  },
+  {
+    "id": "UAT-LIFECYCLE-DENY-viewer",
+    "module": "Lifecycle authorization",
+    "role": "viewer",
+    "preconditions": "Independent Native bearer authentication per role; direct loopback API; greenfield development stack; no browser session reused",
+    "steps": "PATCH only UAT component with role control",
+    "expected": "Unauthorized/cross-tenant override rejected HTTP 403",
+    "actual": {
+      "status": 403,
+      "data": {
+        "detail": "Insufficient permission"
+      },
+      "requestId": "cfcb9a4233fa"
+    },
+    "api": 403,
+    "status": "PASS",
+    "defect": null,
+    "time": "2026-10-19T15:44:53.058Z"
+  },
+  {
+    "id": "UAT-LIFECYCLE-DENY-developer",
+    "module": "Lifecycle authorization",
+    "role": "developer",
+    "preconditions": "Independent Native bearer authentication per role; direct loopback API; greenfield development stack; no browser session reused",
+    "steps": "PATCH only UAT component with role control",
+    "expected": "Unauthorized/cross-tenant override rejected HTTP 403",
+    "actual": {
+      "status": 403,
+      "data": {
+        "detail": "Insufficient permission"
+      },
+      "requestId": "b10e4484a548"
+    },
+    "api": 403,
+    "status": "PASS",
+    "defect": null,
+    "time": "2026-10-19T15:44:53.074Z"
+  },
+  {
+    "id": "UAT-LIFECYCLE-DENY-foreign",
+    "module": "Lifecycle authorization",
+    "role": "foreign",
+    "preconditions": "Independent Native bearer authentication per role; direct loopback API; greenfield development stack; no browser session reused",
+    "steps": "PATCH only UAT component with role control",
+    "expected": "Unauthorized/cross-tenant override rejected HTTP 404",
+    "actual": {
+      "status": 404,
+      "data": {
+        "detail": "Resource not found"
+      },
+      "requestId": "d6353f5b83dd"
+    },
+    "api": 404,
+    "status": "PASS",
+    "defect": null,
+    "time": "2026-10-19T15:44:53.097Z"
+  },
+  {
+    "id": "UAT-SCHEDULE-CREATE",
+    "module": "Schedules",
+    "role": "admin",
+    "preconditions": "Independent Native bearer authentication per role; direct loopback API; greenfield development stack; no browser session reused",
+    "steps": "POST disabled MONTHLY schedule for UAT product only",
+    "expected": "Create disabled schedule for disposable product without scheduling a run",
+    "actual": {
+      "status": 201,
+      "count": 0,
+      "keys": [
+        "id",
+        "tenant_id",
+        "scope",
+        "project_id",
+        "product_id",
+        "sbom_id",
+        "cadence",
+        "cron_expression",
+        "day_of_week",
+        "day_of_month",
+        "hour_utc",
+        "timezone",
+        "mode",
+        "target_version_policy",
+        "state",
+        "enabled",
+        "next_run_at",
+        "last_run_at",
+        "last_run_status",
+        "last_run_id"
+      ],
+      "requestId": "c500e5478f52",
+      "enabled": false,
+      "id": 1
+    },
+    "api": 201,
+    "status": "PASS",
+    "defect": null,
+    "time": "2026-10-19T15:44:53.189Z"
+  },
+  {
+    "id": "UAT-SCHEDULE-EFFECTIVE",
+    "module": "Schedules",
+    "role": "admin",
+    "preconditions": "Independent Native bearer authentication per role; direct loopback API; greenfield development stack; no browser session reused",
+    "steps": "GET effective schedule for UAT product",
+    "expected": "Effective schedule can be resolved",
+    "actual": {
+      "status": 200,
+      "count": 0,
+      "keys": [
+        "inherited",
+        "schedule",
+        "state",
+        "source_scope",
+        "resolution_reason",
+        "included"
+      ],
+      "requestId": "cbcb9ed93120"
+    },
+    "api": 200,
+    "status": "PASS",
+    "defect": null,
+    "time": "2026-10-19T15:44:53.224Z"
+  },
+  {
+    "id": "UAT-SCHEDULE-DENY-viewer",
+    "module": "Schedules",
+    "role": "viewer",
+    "preconditions": "Independent Native bearer authentication per role; direct loopback API; greenfield development stack; no browser session reused",
+    "steps": "Attempt disabled schedule creation against UAT product",
+    "expected": "Schedule mutation rejected HTTP 403",
+    "actual": {
+      "status": 403,
+      "data": {
+        "detail": "Insufficient permission"
+      },
+      "requestId": "a58184e039e9"
+    },
+    "api": 403,
+    "status": "PASS",
+    "defect": null,
+    "time": "2026-10-19T15:44:53.243Z"
+  },
+  {
+    "id": "UAT-SCHEDULE-DENY-developer",
+    "module": "Schedules",
+    "role": "developer",
+    "preconditions": "Independent Native bearer authentication per role; direct loopback API; greenfield development stack; no browser session reused",
+    "steps": "Attempt disabled schedule creation against UAT product",
+    "expected": "Schedule mutation rejected HTTP 403",
+    "actual": {
+      "status": 403,
+      "data": {
+        "detail": "Insufficient permission"
+      },
+      "requestId": "3e52debe8615"
+    },
+    "api": 403,
+    "status": "PASS",
+    "defect": null,
+    "time": "2026-10-19T15:44:53.260Z"
+  },
+  {
+    "id": "UAT-SCHEDULE-VALIDATION",
+    "module": "Schedules",
+    "role": "admin",
+    "preconditions": "Independent Native bearer authentication per role; direct loopback API; greenfield development stack; no browser session reused",
+    "steps": "POST invalid disabled cron configuration on UAT product",
+    "expected": "Invalid cron receives 400/422",
+    "actual": {
+      "status": 422,
+      "data": {
+        "detail": "CUSTOM cadence needs the 'croniter' package; pip install croniter"
+      },
+      "requestId": "adacb4de6ca7",
+      "limitation": "The optional croniter parser is missing. Rejection did not establish invalid-cron syntax validation."
+    },
+    "api": 422,
+    "status": "BLOCKED",
+    "defect": "ENV-002",
+    "time": "2026-10-19T15:44:53.279Z"
+  },
+  {
+    "id": "UAT-SCHEDULE-CLEANUP",
+    "module": "Schedules",
+    "role": "admin",
+    "preconditions": "Independent Native bearer authentication per role; direct loopback API; greenfield development stack; no browser session reused",
+    "steps": "DELETE disabled temporary product schedule",
+    "expected": "Remove only UAT-created schedule",
+    "actual": {
+      "status": 200,
+      "count": 0,
+      "keys": [
+        "status",
+        "permanent",
+        "id"
+      ],
+      "requestId": "f9dc056a3abf"
+    },
+    "api": 200,
+    "status": "PASS",
+    "defect": null,
+    "time": "2026-10-19T15:44:53.313Z"
+  },
+  {
+    "id": "UAT-ADVISOR-admin-summary",
+    "module": "Component Advisor",
+    "role": "admin",
+    "preconditions": "Independent Native bearer authentication per role; direct loopback API; greenfield development stack; no browser session reused",
+    "steps": "GET /api/component-advisor/summary",
+    "expected": "Authorized advisory read returns 200 with scoped data",
+    "actual": {
+      "status": 200,
+      "count": 0,
+      "keys": [
+        "kpis",
+        "by_classification",
+        "by_lifecycle",
+        "meta"
+      ],
+      "requestId": "8692ce864f87"
+    },
+    "api": 200,
+    "status": "PASS",
+    "defect": null,
+    "time": "2026-10-19T15:44:54.328Z"
+  },
+  {
+    "id": "UAT-ADVISOR-admin-inventory",
+    "module": "Component Advisor",
+    "role": "admin",
+    "preconditions": "Independent Native bearer authentication per role; direct loopback API; greenfield development stack; no browser session reused",
+    "steps": "GET /api/component-advisor/components",
+    "expected": "Authorized advisory read returns 200 with scoped data",
+    "actual": {
+      "status": 200,
+      "count": 6,
+      "total": 6,
+      "keys": [
+        "total",
+        "limit",
+        "offset",
+        "sort_by",
+        "sort_order",
+        "items",
+        "meta"
+      ],
+      "requestId": "2f3398165e7a"
+    },
+    "api": 200,
+    "status": "PASS",
+    "defect": null,
+    "time": "2026-10-19T15:44:55.590Z"
+  },
+  {
+    "id": "UAT-ADVISOR-analyst-summary",
+    "module": "Component Advisor",
+    "role": "analyst",
+    "preconditions": "Independent Native bearer authentication per role; direct loopback API; greenfield development stack; no browser session reused",
+    "steps": "GET /api/component-advisor/summary",
+    "expected": "Authorized advisory read returns 200 with scoped data",
+    "actual": {
+      "status": 200,
+      "count": 0,
+      "keys": [
+        "kpis",
+        "by_classification",
+        "by_lifecycle",
+        "meta"
+      ],
+      "requestId": "f4f87dfcf08f"
+    },
+    "api": 200,
+    "status": "PASS",
+    "defect": null,
+    "time": "2026-10-19T15:44:56.137Z"
+  },
+  {
+    "id": "UAT-ADVISOR-analyst-inventory",
+    "module": "Component Advisor",
+    "role": "analyst",
+    "preconditions": "Independent Native bearer authentication per role; direct loopback API; greenfield development stack; no browser session reused",
+    "steps": "GET /api/component-advisor/components",
+    "expected": "Authorized advisory read returns 200 with scoped data",
+    "actual": {
+      "status": 200,
+      "count": 6,
+      "total": 6,
+      "keys": [
+        "total",
+        "limit",
+        "offset",
+        "sort_by",
+        "sort_order",
+        "items",
+        "meta"
+      ],
+      "requestId": "dddf0b922a0a"
+    },
+    "api": 200,
+    "status": "PASS",
+    "defect": null,
+    "time": "2026-10-19T15:44:57.475Z"
+  },
+  {
+    "id": "UAT-ADVISOR-developer-summary",
+    "module": "Component Advisor",
+    "role": "developer",
+    "preconditions": "Independent Native bearer authentication per role; direct loopback API; greenfield development stack; no browser session reused",
+    "steps": "GET /api/component-advisor/summary",
+    "expected": "Authorized advisory read returns 200 with scoped data",
+    "actual": {
+      "status": 200,
+      "count": 0,
+      "keys": [
+        "kpis",
+        "by_classification",
+        "by_lifecycle",
+        "meta"
+      ],
+      "requestId": "20e88c137a26"
+    },
+    "api": 200,
+    "status": "PASS",
+    "defect": null,
+    "time": "2026-10-19T15:44:57.977Z"
+  },
+  {
+    "id": "UAT-ADVISOR-developer-inventory",
+    "module": "Component Advisor",
+    "role": "developer",
+    "preconditions": "Independent Native bearer authentication per role; direct loopback API; greenfield development stack; no browser session reused",
+    "steps": "GET /api/component-advisor/components",
+    "expected": "Authorized advisory read returns 200 with scoped data",
+    "actual": {
+      "status": 200,
+      "count": 6,
+      "total": 6,
+      "keys": [
+        "total",
+        "limit",
+        "offset",
+        "sort_by",
+        "sort_order",
+        "items",
+        "meta"
+      ],
+      "requestId": "2b077aa57859"
+    },
+    "api": 200,
+    "status": "PASS",
+    "defect": null,
+    "time": "2026-10-19T15:44:58.728Z"
+  },
+  {
+    "id": "UAT-ADVISOR-viewer-summary",
+    "module": "Component Advisor",
+    "role": "viewer",
+    "preconditions": "Independent Native bearer authentication per role; direct loopback API; greenfield development stack; no browser session reused",
+    "steps": "GET /api/component-advisor/summary",
+    "expected": "Authorized advisory read returns 200 with scoped data",
+    "actual": {
+      "status": 200,
+      "count": 0,
+      "keys": [
+        "kpis",
+        "by_classification",
+        "by_lifecycle",
+        "meta"
+      ],
+      "requestId": "bda2e601d470"
+    },
+    "api": 200,
+    "status": "PASS",
+    "defect": null,
+    "time": "2026-10-19T15:44:59.960Z"
+  },
+  {
+    "id": "UAT-ADVISOR-viewer-inventory",
+    "module": "Component Advisor",
+    "role": "viewer",
+    "preconditions": "Independent Native bearer authentication per role; direct loopback API; greenfield development stack; no browser session reused",
+    "steps": "GET /api/component-advisor/components",
+    "expected": "Authorized advisory read returns 200 with scoped data",
+    "actual": {
+      "status": 200,
+      "count": 6,
+      "total": 6,
+      "keys": [
+        "total",
+        "limit",
+        "offset",
+        "sort_by",
+        "sort_order",
+        "items",
+        "meta"
+      ],
+      "requestId": "fa2fe1a0ec89"
+    },
+    "api": 200,
+    "status": "PASS",
+    "defect": null,
+    "time": "2026-10-19T15:45:00.804Z"
+  },
+  {
+    "id": "UAT-ADVISOR-foreign-summary",
+    "module": "Component Advisor",
+    "role": "foreign",
+    "preconditions": "Independent Native bearer authentication per role; direct loopback API; greenfield development stack; no browser session reused",
+    "steps": "GET /api/component-advisor/summary",
+    "expected": "Authorized advisory read returns 200 with scoped data",
+    "actual": {
+      "status": 200,
+      "count": 0,
+      "keys": [
+        "kpis",
+        "by_classification",
+        "by_lifecycle",
+        "meta"
+      ],
+      "requestId": "d1fb1f75411f"
+    },
+    "api": 200,
+    "status": "PASS",
+    "defect": null,
+    "time": "2026-10-19T15:45:02.215Z"
+  },
+  {
+    "id": "UAT-ADVISOR-foreign-inventory",
+    "module": "Component Advisor",
+    "role": "foreign",
+    "preconditions": "Independent Native bearer authentication per role; direct loopback API; greenfield development stack; no browser session reused",
+    "steps": "GET /api/component-advisor/components",
+    "expected": "Authorized advisory read returns 200 with scoped data",
+    "actual": {
+      "status": 200,
+      "count": 0,
+      "total": 0,
+      "keys": [
+        "total",
+        "limit",
+        "offset",
+        "sort_by",
+        "sort_order",
+        "items",
+        "meta"
+      ],
+      "requestId": "c0d60217087e"
+    },
+    "api": 200,
+    "status": "PASS",
+    "defect": null,
+    "time": "2026-10-19T15:45:02.760Z"
+  },
+  {
+    "id": "UAT-EXPORT-vulnerabilities-xlsx",
+    "module": "Reports",
+    "role": "admin",
+    "preconditions": "Independent Native bearer authentication per role; direct loopback API; greenfield development stack; no browser session reused",
+    "steps": "Download generated artifact without logging document content",
+    "expected": "Real downloadable artifact is returned with nonempty ZIP/XLSX content",
+    "actual": {
+      "status": 200,
+      "data": {
+        "bytes": 6081,
+        "contentType": "application/vnd.openxmlformats-officedocument.spreadsheetml.sheet",
+        "zipSignature": "PK"
+      },
+      "requestId": "bd5db3310a31"
+    },
+    "api": 200,
+    "status": "PASS",
+    "defect": null,
+    "time": "2026-10-19T15:45:02.858Z"
+  },
+  {
+    "id": "UAT-EXPORT-lifecycle-pack",
+    "module": "Reports",
+    "role": "admin",
+    "preconditions": "Independent Native bearer authentication per role; direct loopback API; greenfield development stack; no browser session reused",
+    "steps": "Download generated artifact without logging document content",
+    "expected": "Real downloadable artifact is returned with nonempty ZIP/XLSX content",
+    "actual": {
+      "status": 200,
+      "data": {
+        "bytes": 2548,
+        "contentType": "application/zip",
+        "zipSignature": "PK"
+      },
+      "requestId": "54662310cd71"
+    },
+    "api": 200,
+    "status": "PASS",
+    "defect": null,
+    "time": "2026-10-19T15:45:02.917Z"
+  },
+  {
+    "id": "UAT-EXPORT-vex-pack",
+    "module": "Reports",
+    "role": "admin",
+    "preconditions": "Independent Native bearer authentication per role; direct loopback API; greenfield development stack; no browser session reused",
+    "steps": "Download generated artifact without logging document content",
+    "expected": "Real downloadable artifact is returned with nonempty ZIP/XLSX content",
+    "actual": {
+      "status": 200,
+      "data": {
+        "bytes": 2163,
+        "contentType": "application/zip",
+        "zipSignature": "PK"
+      },
+      "requestId": "8329a3c22a99"
+    },
+    "api": 200,
+    "status": "PASS",
+    "defect": null,
+    "time": "2026-10-19T15:45:03.005Z"
+  },
+  {
+    "id": "UAT-SBOM-INVALID-JSON",
+    "module": "SBOM upload and validation",
+    "role": "admin",
+    "preconditions": "Independent Native bearer authentication per role; direct loopback API; greenfield development stack; no browser session reused",
+    "steps": "Upload malformed JSON to disposable application; inspect real validation response",
+    "expected": "Malformed JSON is rejected with structured validation error",
+    "actual": {
+      "status": 400,
+      "data": {
+        "detail": {
+          "code": "sbom_validation_failed",
+          "status": "validation_failed",
+          "message": "SBOM validation failed. Full content is available in repair workspace.",
+          "session_id": "7fe433f4-20c0-4d87-a658-24a41231340f",
+          "validation_session_id": "7fe433f4-20c0-4d87-a658-24a41231340f",
+          "repair_workspace_url": "/repair/7fe433f4-20c0-4d87-a658-24a41231340f",
+          "sbom_id": null,
+          "file_size_bytes": 1,
+          "sha256": "021fb596db81e6d02bf3d2586ee3981fe519f275c0ac9ca76bbcf2ebb4097d96",
+          "can_edit": true,
+          "can_ai_fix": true,
+          "reason": null,
+          "failed_stage": "detect",
+          "error_count": 1,
+          "warning_count": 0,
+          "entries": [
+            {
+              "code": "SBOM_VAL_E020_JSON_PARSE_FAILED",
+              "severity": "error",
+              "stage": "detect",
+              "path": "",
+              "message": "JSON parser failed at line 1, column 2: Expecting property name enclosed in double quotes",
+              "remediation": "Validate the document with a JSON linter before upload.",
+              "spec_reference": null,
+              "stage_number": 2,
+              "can_ai_fix": true
+            }
+          ],
+          "truncated": false,
+          "error_report": {
+            "entries": [
+              {
+                "code": "SBOM_VAL_E020_JSON_PARSE_FAILED",
+                "severity": "error",
+                "stage": "detect",
+                "path": "",
+                "message": "JSON parser failed at line 1, column 2: Expecting property name enclosed in double quotes",
+                "remediation": "Validate the document with a JSON linter before upload.",
+                "spec_reference": null,
+                "stage_number": 2,
+                "can_ai_fix": true
+              }
+            ],
+            "truncated": false,
+            "failed_stage": "detect",
+            "error_count": 1,
+            "warning_count": 0,
+            "info_count": 0,
+            "http_status": 400,
+            "status": "failed"
+          },
+          "workspace_id": "7fe433f4-20c0-4d87-a658-24a41231340f",
+          "detected_format": null,
+          "detected_spec_version": null,
+          "detection_confidence": 0,
+          "detection_evidence": {
+            "evidence": [],
+            "warnings": [
+              "no supported SBOM signature found"
+            ]
+          },
+          "total_lines": 1,
+          "is_large_file": false,
+          "full_editor_allowed": true
+        }
+      },
+      "requestId": "659c8b3d5620"
+    },
+    "api": 400,
+    "status": "PASS",
+    "defect": null,
+    "time": "2026-10-19T15:45:03.079Z"
+  },
+  {
+    "id": "UAT-SBOM-UPLOAD-DENY-viewer",
+    "module": "SBOM authorization",
+    "role": "viewer",
+    "preconditions": "Independent Native bearer authentication per role; direct loopback API; greenfield development stack; no browser session reused",
+    "steps": "Direct multipart upload with prohibited role; UAT project/product only",
+    "expected": "Upload mutation rejected HTTP 403 before processing file",
+    "actual": {
+      "status": 403,
+      "count": 0,
+      "keys": [
+        "detail"
+      ],
+      "error": {
+        "detail": "Insufficient permission"
+      },
+      "requestId": "f8c35361c060"
+    },
+    "api": 403,
+    "status": "PASS",
+    "defect": null,
+    "time": "2026-10-19T15:45:03.098Z"
+  },
+  {
+    "id": "UAT-ANALYSIS-DENY-viewer",
+    "module": "Analysis authorization",
+    "role": "viewer",
+    "preconditions": "Independent Native bearer authentication per role; direct loopback API; greenfield development stack; no browser session reused",
+    "steps": "Attempt analyze on UAT-owned SBOM",
+    "expected": "Analysis mutation rejected HTTP 403",
+    "actual": {
+      "status": 403,
+      "data": {
+        "detail": "Insufficient permission"
+      },
+      "requestId": "12434df1ac41"
+    },
+    "api": 403,
+    "status": "PASS",
+    "defect": null,
+    "time": "2026-10-19T15:45:03.118Z"
+  },
+  {
+    "id": "UAT-SBOM-UPLOAD-DENY-developer",
+    "module": "SBOM authorization",
+    "role": "developer",
+    "preconditions": "Independent Native bearer authentication per role; direct loopback API; greenfield development stack; no browser session reused",
+    "steps": "Direct multipart upload with prohibited role; UAT project/product only",
+    "expected": "Upload mutation rejected HTTP 403 before processing file",
+    "actual": {
+      "status": 403,
+      "count": 0,
+      "keys": [
+        "detail"
+      ],
+      "error": {
+        "detail": "Insufficient permission"
+      },
+      "requestId": "aa8f05dcd98d"
+    },
+    "api": 403,
+    "status": "PASS",
+    "defect": null,
+    "time": "2026-10-19T15:45:03.136Z"
+  },
+  {
+    "id": "UAT-ANALYSIS-DENY-developer",
+    "module": "Analysis authorization",
+    "role": "developer",
+    "preconditions": "Independent Native bearer authentication per role; direct loopback API; greenfield development stack; no browser session reused",
+    "steps": "Attempt analyze on UAT-owned SBOM",
+    "expected": "Analysis mutation rejected HTTP 403",
+    "actual": {
+      "status": 403,
+      "data": {
+        "detail": "Insufficient permission"
+      },
+      "requestId": "c17cdd8db46a"
+    },
+    "api": 403,
+    "status": "PASS",
+    "defect": null,
+    "time": "2026-10-19T15:45:03.156Z"
+  },
+  {
+    "id": "UAT-SBOM-NEW-VERSION",
+    "module": "SBOM lifecycle and versioning",
+    "role": "admin",
+    "preconditions": "Independent Native bearer authentication per role; direct loopback API; greenfield development stack; no browser session reused",
+    "steps": "Upload second version with explicit original parent and logical UUID",
+    "expected": "New revision receives a separate UUID and preserves original lineage",
+    "actual": {
+      "status": 202,
+      "count": 0,
+      "keys": [
+        "status",
+        "workspace_id",
+        "validation_session_id",
+        "repair_workspace_url",
+        "sbom_id",
+        "logical_sbom_id",
+        "sbom_name",
+        "sbom_version",
+        "product_version",
+        "project_id",
+        "product_id",
+        "product_name",
+        "is_current",
+        "project_name",
+        "spec",
+        "spec_version",
+        "detected_format",
+        "detected_spec_version",
+        "detection_confidence",
+        "detection_evidence"
+      ],
+      "requestId": "a280e0e8b62b",
+      "sbom_id": "d6a91bb2-6ae4-4cfb-9664-b84a6a0bca7b"
+    },
+    "api": 202,
+    "status": "PASS",
+    "defect": null,
+    "time": "2026-10-19T15:45:03.321Z"
+  },
+  {
+    "id": "UAT-SBOM-VERSION-HISTORY",
+    "module": "SBOM lifecycle and versioning",
+    "role": "admin",
+    "preconditions": "Independent Native bearer authentication per role; direct loopback API; greenfield development stack; no browser session reused",
+    "steps": "GET second version and logical version history",
+    "expected": "Two versions remain readable in same logical lineage and parent UUID is preserved",
+    "actual": {
+      "next": {
+        "status": 200,
+        "parent_id": "729992e8-b107-4d3d-96a9-5cac4bcf5f8d",
+        "logical_sbom_id": "726c1fa0-74ca-4daa-bb8a-4c7dd5ef55eb"
+      },
+      "versions": [
+        {
+          "id": "d6a91bb2-6ae4-4cfb-9664-b84a6a0bca7b",
+          "sbom_version": "2.0.0"
+        },
+        {
+          "id": "729992e8-b107-4d3d-96a9-5cac4bcf5f8d",
+          "sbom_version": "1.0.0"
+        }
+      ]
+    },
+    "api": null,
+    "status": "PASS",
+    "defect": null,
+    "time": "2026-10-19T15:45:03.420Z"
+  },
+  {
+    "id": "UAT-TENANT-CREATE-DENY",
+    "module": "Tenant Management",
+    "role": "admin",
+    "preconditions": "Independent Native bearer authentication per role; direct loopback API; greenfield development stack; no browser session reused",
+    "steps": "POST entirely disposable tenant payload using tenant administrator authority",
+    "expected": "Tenant Admin cannot create platform tenants",
+    "actual": {
+      "status": 403,
+      "data": {
+        "detail": {
+          "code": "IAM_TENANT_SELECTION_REQUIRED",
+          "message": "Select an authorized tenant before accessing SBOM Analyzer."
+        }
+      },
+      "requestId": "e84db501959a"
+    },
+    "api": 403,
+    "status": "PASS",
+    "defect": null,
+    "time": "2026-10-19T15:45:03.434Z"
+  },
+  {
+    "id": "UAT-TENANT-CREATE",
+    "module": "Tenant Management",
+    "role": "platform",
+    "preconditions": "Independent Native bearer authentication per role; direct loopback API; greenfield development stack; no browser session reused",
+    "steps": "Create UAT tenant and synthetic initial administrator; mail transport verified local",
+    "expected": "Platform creates disposable tenant with new initial administrator, without changing seeded memberships",
+    "actual": {
+      "status": 201,
+      "count": 0,
+      "keys": [
+        "tenant",
+        "initial_administrator"
+      ],
+      "requestId": "249c3433cd38",
+      "tenant": {
+        "id": "b8d8eddd-2984-45c1-8372-b4be665c1a25",
+        "name": "UAT Tenant 1792424703421",
+        "slug": "uat-tenant-1792424703421",
+        "external_iam_tenant_id": null,
+        "identity_mapping": null,
+        "status": "PENDING",
+        "created_at": "2026-10-19T15:45:03.462584Z",
+        "updated_at": "2026-10-19T15:45:03.462584Z"
+      },
+      "initial_administrator": {
+        "user_id": 8,
+        "email": "uat-tenant-admin-1792424703421@example.test",
+        "display_name": "UAT Tenant Administrator",
+        "membership_status": "ACTIVE",
+        "role": "TENANT_ADMIN"
+      }
+    },
+    "api": 201,
+    "status": "PASS",
+    "defect": null,
+    "time": "2026-10-19T15:45:03.506Z"
+  },
+  {
+    "id": "UAT-TENANT-DISABLED",
+    "module": "Tenant Management",
+    "role": "platform",
+    "preconditions": "Independent Native bearer authentication per role; direct loopback API; greenfield development stack; no browser session reused",
+    "steps": "PATCH status only on tenant created by this UAT",
+    "expected": "Platform changes status of UAT-created tenant",
+    "actual": {
+      "status": 200,
+      "data": {
+        "tenant_id": "b8d8eddd-2984-45c1-8372-b4be665c1a25",
+        "status": "DISABLED"
+      },
+      "requestId": "a1337c70f42e"
+    },
+    "api": 200,
+    "status": "PASS",
+    "defect": null,
+    "time": "2026-10-19T15:45:03.528Z"
+  },
+  {
+    "id": "UAT-TENANT-PLATFORM-DENY",
+    "module": "Tenant Management",
+    "role": "foreign",
+    "preconditions": "Independent Native bearer authentication per role; direct loopback API; greenfield development stack; no browser session reused",
+    "steps": "GET supported platform administration route without platform privilege",
+    "expected": "Foreign Tenant Admin cannot read platform tenant-management detail",
+    "actual": {
+      "status": 403,
+      "data": {
+        "detail": {
+          "code": "IAM_PLATFORM_PERMISSION_DENIED",
+          "message": "Platform permission is required for this action."
+        }
+      },
+      "requestId": "6564e2127806"
+    },
+    "api": 403,
+    "status": "PASS",
+    "defect": null,
+    "time": "2026-10-19T15:45:03.570Z"
+  },
+  {
+    "id": "UAT-ENV-FRONTEND-RESTART",
+    "module": "Environment stability",
+    "role": "browser all roles",
+    "preconditions": "Next development server; one sequential Chrome account at a time; TLS validation enabled",
+    "steps": "Navigate module pages; correlate ERR_EMPTY_RESPONSE/timeouts with frontend log; probe HTTPS afterward",
+    "expected": "Frontend remains available across module navigation",
+    "actual": {
+      "log": [
+        "\u26a0 Server is approaching the used memory threshold, restarting..."
+      ],
+      "observed": "net::ERR_EMPTY_RESPONSE during vendor-record page; subsequent HTTPS probe returned 200 after server self-restart",
+      "hostSwapMB": 9045,
+      "cause_limit": "Next explicitly reported its memory restart threshold; underlying host pressure and exact allocation cause were not profiled."
+    },
+    "api": null,
+    "status": "BLOCKED",
+    "defect": "ENV-001",
+    "time": "2026-10-19T15:47:46.596432+00:00"
+  },
+  {
+    "id": "UAT-TENANT-ACTIVATE-PENDING-ADMIN",
+    "module": "Tenant Management",
+    "role": "platform/disposable tenant administrator",
+    "preconditions": "Only UAT-created tenant and administrator; local Mailpit; seeded accounts unchanged",
+    "steps": "Attempt activation before initial administrator completes the invitation",
+    "expected": "Activation is rejected with 409 while the only administrator is unverified",
+    "actual": {
+      "status": 409,
+      "data": {
+        "detail": "An effective Tenant Administrator is required before activating this tenant"
+      },
+      "requestId": "6fa5cd7c1cef"
+    },
+    "api": 409,
+    "status": "PASS",
+    "defect": null,
+    "time": "2026-10-19T15:49:07.646149+00:00"
+  },
+  {
+    "id": "UAT-TENANT-ADMIN-ACTIVATION",
+    "module": "Tenant Management",
+    "role": "platform/disposable tenant administrator",
+    "preconditions": "Only UAT-created tenant and administrator; local Mailpit; seeded accounts unchanged",
+    "steps": "Consume only UAT tenant administrator Mailpit activation link through Native API; password stays in memory",
+    "expected": "Local invitation activates the UAT-created initial administrator",
+    "actual": {
+      "status": 200,
+      "account_status": "ACTIVE",
+      "request_id": "9425a0c4a286",
+      "mail_recipient": "uat-tenant-admin-1792424703421@example.test"
+    },
+    "api": 200,
+    "status": "PASS",
+    "defect": null,
+    "time": "2026-10-19T15:49:08.152236+00:00"
+  },
+  {
+    "id": "UAT-TENANT-ACTIVE",
+    "module": "Tenant Management",
+    "role": "platform/disposable tenant administrator",
+    "preconditions": "Only UAT-created tenant and administrator; local Mailpit; seeded accounts unchanged",
+    "steps": "Activate only UAT-created tenant after initial administrator activation",
+    "expected": "Verified effective administrator permits tenant activation",
+    "actual": {
+      "status": 200,
+      "result": {
+        "tenant_id": "b8d8eddd-2984-45c1-8372-b4be665c1a25",
+        "status": "ACTIVE"
+      },
+      "request_id": "6e7a605ba0e2"
+    },
+    "api": 200,
+    "status": "PASS",
+    "defect": null,
+    "time": "2026-10-19T15:49:08.193925+00:00"
+  },
+  {
+    "id": "UAT-TENANT-ADMIN-CONTEXT",
+    "module": "Tenant Management",
+    "role": "platform/disposable tenant administrator",
+    "preconditions": "Only UAT-created tenant and administrator; local Mailpit; seeded accounts unchanged",
+    "steps": "Native Login newly activated disposable administrator; read its authorized context",
+    "expected": "New initial administrator resolves only its authorized tenant context",
+    "actual": {
+      "login_status": 200,
+      "me_status": 200,
+      "tenant_id": "b8d8eddd-2984-45c1-8372-b4be665c1a25",
+      "roles": [
+        "TENANT_ADMIN"
+      ]
+    },
+    "api": 200,
+    "status": "PASS",
+    "defect": null,
+    "time": "2026-10-19T15:49:08.404145+00:00"
+  },
+  {
+    "id": "UAT-TENANT-CLEANUP-DISABLED",
+    "module": "Tenant Management",
+    "role": "platform/disposable tenant administrator",
+    "preconditions": "Only UAT-created tenant and administrator; local Mailpit; seeded accounts unchanged",
+    "steps": "Disable only UAT-created tenant; no seeded tenant status changes",
+    "expected": "Leave disposable tenant disabled after activation test",
+    "actual": {
+      "status": 200,
+      "result": {
+        "tenant_id": "b8d8eddd-2984-45c1-8372-b4be665c1a25",
+        "status": "DISABLED"
+      },
+      "request_id": "d09883484b78"
+    },
+    "api": 200,
+    "status": "PASS",
+    "defect": null,
+    "time": "2026-10-19T15:49:08.431548+00:00"
+  },
+  {
+    "id": "UAT-TENANT-INACTIVE-DENIAL",
+    "module": "Tenant Management",
+    "role": "platform/disposable tenant administrator",
+    "preconditions": "Only UAT-created tenant and administrator; local Mailpit; seeded accounts unchanged",
+    "steps": "Use existing disposable administrator token after its tenant is disabled",
+    "expected": "Disabled tenant prevents protected project access for its administrator",
+    "actual": {
+      "status": 403,
+      "result": {
+        "detail": {
+          "code": "IAM_UNAUTHORIZED_TENANT",
+          "message": "The requested tenant is not available to this account."
+        }
+      },
+      "request_id": "0087e5cfbf52"
+    },
+    "api": 403,
+    "status": "PASS",
+    "defect": null,
+    "time": "2026-10-19T15:49:08.439478+00:00"
+  },
+  {
+    "id": "UAT-PROJECT-UPDATE",
+    "module": "Projects",
+    "role": "admin",
+    "preconditions": "Live greenfield stack; private credentials in memory; only UAT-created records mutated",
+    "steps": "PATCH only UAT-created project",
+    "expected": "Authorized project update persists on UAT record",
+    "actual": {
+      "status": 200,
+      "data": {
+        "id": "d4828e7c-e71c-40f7-bb6c-dde0f4d48d09",
+        "project_name": "UAT Business 1792424242404",
+        "project_details": "UAT confirmed project update",
+        "project_status": 1,
+        "created_on": "2026-10-19T15:37:22+00:00",
+        "created_by": "admin@olympus.example.test",
+        "modified_on": "2026-10-19T15:54:30+00:00",
+        "modified_by": "admin@olympus.example.test",
+        "sbom_count": 2
+      },
+      "request_id": "ab86d8add4ed"
+    },
+    "api": 200,
+    "status": "PASS",
+    "defect": null,
+    "time": "2026-10-19T15:54:30.879990+00:00"
+  },
+  {
+    "id": "UAT-OSV-FINDING-EVIDENCE",
+    "module": "Vulnerability analysis and OSV",
+    "role": "admin",
+    "preconditions": "Live greenfield stack; private credentials in memory; only UAT-created records mutated",
+    "steps": "Read actual findings for UAT run; provider transport cache-vs-outbound was not separately instrumented",
+    "expected": "Persisted findings identify OSV as observed source",
+    "actual": {
+      "status": 200,
+      "findings": [
+        {
+          "vuln_id": "CVE-2020-28500",
+          "source": "OSV",
+          "severity": "MEDIUM",
+          "component_id": "ef09b91c-f21d-420a-9a6c-9b8f43427502"
+        },
+        {
+          "vuln_id": "CVE-2021-23337",
+          "source": "OSV",
+          "severity": "HIGH",
+          "component_id": "ef09b91c-f21d-420a-9a6c-9b8f43427502"
+        },
+        {
+          "vuln_id": "CVE-2025-13465",
+          "source": "OSV",
+          "severity": "MEDIUM",
+          "component_id": "ef09b91c-f21d-420a-9a6c-9b8f43427502"
+        },
+        {
+          "vuln_id": "CVE-2026-2950",
+          "source": "OSV",
+          "severity": "MEDIUM",
+          "component_id": "ef09b91c-f21d-420a-9a6c-9b8f43427502"
+        },
+        {
+          "vuln_id": "CVE-2026-4800",
+          "source": "OSV",
+          "severity": "HIGH",
+          "component_id": "ef09b91c-f21d-420a-9a6c-9b8f43427502"
+        }
+      ]
+    },
+    "api": 200,
+    "status": "PASS",
+    "defect": null,
+    "time": "2026-10-19T15:54:31.321904+00:00"
+  },
+  {
+    "id": "UAT-REPORT-XLSX-CONTENT",
+    "module": "Reports",
+    "role": "admin",
+    "preconditions": "Live greenfield stack; private credentials in memory; only UAT-created records mutated",
+    "steps": "Download UAT report in memory; check ZIP CRC, workbook XML and finding identifiers; no production report saved",
+    "expected": "XLSX archive is valid and includes all UAT finding identifiers",
+    "actual": {
+      "status": 200,
+      "zip_crc_error": null,
+      "contains_workbook": true,
+      "finding_count": 5,
+      "missing_finding_ids": []
+    },
+    "api": 200,
+    "status": "PASS",
+    "defect": null,
+    "time": "2026-10-19T15:54:31.533408+00:00"
+  },
+  {
+    "id": "UAT-REPORT-EXPORT-DENY-viewer",
+    "module": "Reports authorization",
+    "role": "viewer",
+    "preconditions": "Live greenfield stack; private credentials in memory; only UAT-created records mutated",
+    "steps": "GET UAT report independently of UI",
+    "expected": "Report export enforces sbom:export and tenant scope",
+    "actual": {
+      "status": 403,
+      "data": {
+        "detail": "Insufficient permission"
+      },
+      "request_id": "ba31e42d9168"
+    },
+    "api": 403,
+    "status": "PASS",
+    "defect": null,
+    "time": "2026-10-19T15:54:31.786939+00:00"
+  },
+  {
+    "id": "UAT-REPORT-EXPORT-DENY-developer",
+    "module": "Reports authorization",
+    "role": "developer",
+    "preconditions": "Live greenfield stack; private credentials in memory; only UAT-created records mutated",
+    "steps": "GET UAT report independently of UI",
+    "expected": "Report export enforces sbom:export and tenant scope",
+    "actual": {
+      "status": 403,
+      "data": {
+        "detail": "Insufficient permission"
+      },
+      "request_id": "396c96c62241"
+    },
+    "api": 403,
+    "status": "PASS",
+    "defect": null,
+    "time": "2026-10-19T15:54:32.003436+00:00"
+  },
+  {
+    "id": "UAT-REPORT-EXPORT-DENY-foreign",
+    "module": "Reports authorization",
+    "role": "foreign",
+    "preconditions": "Live greenfield stack; private credentials in memory; only UAT-created records mutated",
+    "steps": "GET UAT report independently of UI",
+    "expected": "Report export enforces sbom:export and tenant scope",
+    "actual": {
+      "status": 404,
+      "data": {
+        "detail": "Resource not found"
+      },
+      "request_id": "62408484660b"
+    },
+    "api": 404,
+    "status": "PASS",
+    "defect": null,
+    "time": "2026-10-19T15:54:32.215019+00:00"
+  },
+  {
+    "id": "UAT-REPORT-OWNERSHIP-SETUP",
+    "module": "Reports authorization",
+    "role": "admin",
+    "preconditions": "Live greenfield stack; private credentials in memory; only UAT-created records mutated",
+    "steps": "Create disabled subscription for ownership controls",
+    "expected": "Create disabled disposable report subscription",
+    "actual": {
+      "status": 201,
+      "id": 9
+    },
+    "api": 201,
+    "status": "PASS",
+    "defect": null,
+    "time": "2026-10-19T15:54:32.300551+00:00"
+  },
+  {
+    "id": "UAT-REPORT-OWNERSHIP-viewer",
+    "module": "Reports authorization",
+    "role": "viewer",
+    "preconditions": "Live greenfield stack; private credentials in memory; only UAT-created records mutated",
+    "steps": "PATCH only a disabled UAT-created subscription",
+    "expected": "Other-user/cross-tenant subscription mutation is concealed with 404",
+    "actual": {
+      "status": 404,
+      "data": {
+        "detail": {
+          "code": "REPORT_SUBSCRIPTION_NOT_FOUND",
+          "message": "Subscription not found."
+        }
+      },
+      "request_id": "df7b114762bd"
+    },
+    "api": 404,
+    "status": "PASS",
+    "defect": null,
+    "time": "2026-10-19T15:54:32.334905+00:00"
+  },
+  {
+    "id": "UAT-REPORT-OWNERSHIP-foreign",
+    "module": "Reports authorization",
+    "role": "foreign",
+    "preconditions": "Live greenfield stack; private credentials in memory; only UAT-created records mutated",
+    "steps": "PATCH only a disabled UAT-created subscription",
+    "expected": "Other-user/cross-tenant subscription mutation is concealed with 404",
+    "actual": {
+      "status": 404,
+      "data": {
+        "detail": {
+          "code": "REPORT_SUBSCRIPTION_NOT_FOUND",
+          "message": "Subscription not found."
+        }
+      },
+      "request_id": "9ad0dc65a0b7"
+    },
+    "api": 404,
+    "status": "PASS",
+    "defect": null,
+    "time": "2026-10-19T15:54:32.360432+00:00"
+  },
+  {
+    "id": "UAT-REPORT-OWNERSHIP-CLEANUP",
+    "module": "Reports authorization",
+    "role": "admin",
+    "preconditions": "Live greenfield stack; private credentials in memory; only UAT-created records mutated",
+    "steps": "DELETE newly created disabled subscription",
+    "expected": "Remove only temporary ownership-test subscription",
+    "actual": {
+      "status": 204
+    },
+    "api": 204,
+    "status": "PASS",
+    "defect": null,
+    "time": "2026-10-19T15:54:32.390080+00:00"
+  },
+  {
+    "id": "UAT-SBOM-LIFECYCLE-INACTIVE",
+    "module": "SBOM lifecycle and versioning",
+    "role": "admin",
+    "preconditions": "Live greenfield stack; private credentials in memory; only UAT-created records mutated",
+    "steps": "Transition only UAT-created second SBOM revision",
+    "expected": "Authorized lifecycle transition returns expected status for UAT second revision",
+    "actual": {
+      "status": 200,
+      "data": {
+        "logical_sbom_id": "726c1fa0-74ca-4daa-bb8a-4c7dd5ef55eb",
+        "lifecycle_status": "INACTIVE",
+        "lifecycle_revision": 1,
+        "analysis_requires_reanalysis": false,
+        "processing_eligibility": {
+          "eligible": false,
+          "reason_code": "SBOM_INACTIVE",
+          "reason": "Analysis unavailable because this SBOM is inactive."
+        },
+        "id": "d6a91bb2-6ae4-4cfb-9664-b84a6a0bca7b",
+        "sbom_name": "UAT SBOM 1792424303035",
+        "sbom_data": null,
+        "sbom_type": null,
+        "projectid": "d4828e7c-e71c-40f7-bb6c-dde0f4d48d09",
+        "project_id": "d4828e7c-e71c-40f7-bb6c-dde0f4d48d09",
+        "project_name": "UAT Business 1792424242404",
+        "product_id": "60de2b20-c45c-4a49-9b36-e0af7b5790fc",
+        "product_name": "UAT Gateway 1792424242404",
+        "component_count": 2,
+        "created_on": "2026-10-19T15:45:03+00:00",
+        "sbom_version": "2.0.0",
+        "parent_id": "729992e8-b107-4d3d-96a9-5cac4bcf5f8d",
+        "change_summary": "Uploaded as a new version of UAT SBOM 1792424303035 1.0.0",
+        "completeness_score": 64.0,
+        "completeness_report": {
+          "completeness_score": 64.0,
+          "missing_fields": [
+            {
+              "bom_ref": "uat-app",
+              "name": "uat-gateway",
+              "version": "1.0.0",
+              "missing": [
+                "license",
+                "hash"
+              ]
+            },
+            {
+              "bom_ref": "uat-lodash",
+              "name": "lodash",
+              "version": "4.17.20",
+              "missing": [
+                "license",
+                "hash"
+              ]
+            }
+          ],
+          "document_warnings": [],
+          "total_components": 2,
+          "complete_components": 0
+        },
+        "created_by": "admin@olympus.example.test",
+        "productver": "2.0.0",
+        "modified_on": null,
+        "modified_by": null,
+        "name": "UAT SBOM 1792424303035",
+        "product_version": "2.0.0",
+        "format": "cyclonedx",
+        "spec_version": "1.6",
+        "created_at": "2026-10-19T15:45:03+00:00",
+        "updated_at": null,
+        "description": null,
+        "status": "validated",
+        "failed_stage": null,
+        "validation_errors": null,
+        "error_count": 0,
+        "warning_count": 0,
+        "validated_at": "2026-10-19T15:45:03+00:00",
+        "workspace_id": "794f0350-1f6b-49ef-938c-76d103a746f3",
+        "validation_session_id": "794f0350-1f6b-49ef-938c-76d103a746f3",
+        "repair_workspace_url": "/repair/794f0350-1f6b-49ef-938c-76d103a746f3",
+        "workspace_available": true,
+        "workspace_source": "existing_workspace",
+        "workspace_unavailable_reason": null,
+        "validation_status": "valid",
+        "detected_format": "cyclonedx_json",
+        "detected_spec_version": "1.6",
+        "original_size_bytes": 600,
+        "original_sha256": "3f5f218f8a30a7502e39b4fc90d67d6f38869d2949eb23afffbca06c429cd337",
+        "original_format": "cyclonedx",
+        "current_format": "cyclonedx",
+        "converted_from_format": null,
+        "source_sbom_id": null,
+        "converted_sbom_id": null,
+        "conversion_status": null,
+        "conversion_warnings_json": null,
+        "conversion_report_json": null,
+        "converted_at": null,
+        "converted_by": null,
+        "enrichment_status": "completed",
+        "conversion_started_at": null,
+        "conversion_completed_at": null,
+        "enrichment_started_at": "2026-10-19T15:45:03+00:00",
+        "enrichment_completed_at": "2026-10-19T15:45:03+00:00",
+        "last_enriched_at": "2026-10-19T15:45:03+00:00",
+        "conversion_error": null,
+        "enrichment_error": null,
+        "component_extraction_status": "completed",
+        "component_extraction_error": null,
+        "component_extraction_attempted_at": "2026-10-19T15:45:03+00:00",
+        "component_extraction_completed_at": "2026-10-19T15:45:03+00:00",
+        "latest_analysis": null
+      },
+      "request_id": "bf86434f8b00"
+    },
+    "api": 200,
+    "status": "PASS",
+    "defect": null,
+    "time": "2026-10-19T15:54:32.698484+00:00"
+  },
+  {
+    "id": "UAT-SBOM-LIFECYCLE-ACTIVE",
+    "module": "SBOM lifecycle and versioning",
+    "role": "admin",
+    "preconditions": "Live greenfield stack; private credentials in memory; only UAT-created records mutated",
+    "steps": "Transition only UAT-created second SBOM revision",
+    "expected": "Authorized lifecycle transition returns expected status for UAT second revision",
+    "actual": {
+      "status": 200,
+      "data": {
+        "logical_sbom_id": "726c1fa0-74ca-4daa-bb8a-4c7dd5ef55eb",
+        "lifecycle_status": "ACTIVE",
+        "lifecycle_revision": 2,
+        "analysis_requires_reanalysis": true,
+        "processing_eligibility": {
+          "eligible": true,
+          "reason_code": null,
+          "reason": null
+        },
+        "id": "d6a91bb2-6ae4-4cfb-9664-b84a6a0bca7b",
+        "sbom_name": "UAT SBOM 1792424303035",
+        "sbom_data": null,
+        "sbom_type": null,
+        "projectid": "d4828e7c-e71c-40f7-bb6c-dde0f4d48d09",
+        "project_id": "d4828e7c-e71c-40f7-bb6c-dde0f4d48d09",
+        "project_name": "UAT Business 1792424242404",
+        "product_id": "60de2b20-c45c-4a49-9b36-e0af7b5790fc",
+        "product_name": "UAT Gateway 1792424242404",
+        "component_count": 2,
+        "created_on": "2026-10-19T15:45:03+00:00",
+        "sbom_version": "2.0.0",
+        "parent_id": "729992e8-b107-4d3d-96a9-5cac4bcf5f8d",
+        "change_summary": "Uploaded as a new version of UAT SBOM 1792424303035 1.0.0",
+        "completeness_score": 64.0,
+        "completeness_report": {
+          "completeness_score": 64.0,
+          "missing_fields": [
+            {
+              "bom_ref": "uat-app",
+              "name": "uat-gateway",
+              "version": "1.0.0",
+              "missing": [
+                "license",
+                "hash"
+              ]
+            },
+            {
+              "bom_ref": "uat-lodash",
+              "name": "lodash",
+              "version": "4.17.20",
+              "missing": [
+                "license",
+                "hash"
+              ]
+            }
+          ],
+          "document_warnings": [],
+          "total_components": 2,
+          "complete_components": 0
+        },
+        "created_by": "admin@olympus.example.test",
+        "productver": "2.0.0",
+        "modified_on": null,
+        "modified_by": null,
+        "name": "UAT SBOM 1792424303035",
+        "product_version": "2.0.0",
+        "format": "cyclonedx",
+        "spec_version": "1.6",
+        "created_at": "2026-10-19T15:45:03+00:00",
+        "updated_at": null,
+        "description": null,
+        "status": "validated",
+        "failed_stage": null,
+        "validation_errors": null,
+        "error_count": 0,
+        "warning_count": 0,
+        "validated_at": "2026-10-19T15:45:03+00:00",
+        "workspace_id": "794f0350-1f6b-49ef-938c-76d103a746f3",
+        "validation_session_id": "794f0350-1f6b-49ef-938c-76d103a746f3",
+        "repair_workspace_url": "/repair/794f0350-1f6b-49ef-938c-76d103a746f3",
+        "workspace_available": true,
+        "workspace_source": "existing_workspace",
+        "workspace_unavailable_reason": null,
+        "validation_status": "valid",
+        "detected_format": "cyclonedx_json",
+        "detected_spec_version": "1.6",
+        "original_size_bytes": 600,
+        "original_sha256": "3f5f218f8a30a7502e39b4fc90d67d6f38869d2949eb23afffbca06c429cd337",
+        "original_format": "cyclonedx",
+        "current_format": "cyclonedx",
+        "converted_from_format": null,
+        "source_sbom_id": null,
+        "converted_sbom_id": null,
+        "conversion_status": null,
+        "conversion_warnings_json": null,
+        "conversion_report_json": null,
+        "converted_at": null,
+        "converted_by": null,
+        "enrichment_status": "completed",
+        "conversion_started_at": null,
+        "conversion_completed_at": null,
+        "enrichment_started_at": "2026-10-19T15:45:03+00:00",
+        "enrichment_completed_at": "2026-10-19T15:45:03+00:00",
+        "last_enriched_at": "2026-10-19T15:45:03+00:00",
+        "conversion_error": null,
+        "enrichment_error": null,
+        "component_extraction_status": "completed",
+        "component_extraction_error": null,
+        "component_extraction_attempted_at": "2026-10-19T15:45:03+00:00",
+        "component_extraction_completed_at": "2026-10-19T15:45:03+00:00",
+        "latest_analysis": null
+      },
+      "request_id": "2356c7de4a4b"
+    },
+    "api": 200,
+    "status": "PASS",
+    "defect": null,
+    "time": "2026-10-19T15:54:32.750741+00:00"
+  },
+  {
+    "id": "UAT-SBOM-LIFECYCLE-HISTORY",
+    "module": "SBOM lifecycle and versioning",
+    "role": "admin",
+    "preconditions": "Live greenfield stack; private credentials in memory; only UAT-created records mutated",
+    "steps": "Read UAT revision lifecycle audit history",
+    "expected": "Lifecycle transition history is readable and nonempty",
+    "actual": {
+      "status": 200,
+      "data": [
+        {
+          "id": 3264,
+          "sbom_id": "d6a91bb2-6ae4-4cfb-9664-b84a6a0bca7b",
+          "tenant_id": "3a900179-36bf-4b5f-b2e1-2a4a9d06e6af",
+          "actor": null,
+          "actor_id": 1,
+          "timestamp": "2026-10-19T15:54:32.721725+00:00",
+          "old_status": "INACTIVE",
+          "new_status": "ACTIVE",
+          "reason": "Disposable UAT lifecycle transition",
+          "lifecycle_revision": 2,
+          "reanalysis_required": true
+        },
+        {
+          "id": 3262,
+          "sbom_id": "d6a91bb2-6ae4-4cfb-9664-b84a6a0bca7b",
+          "tenant_id": "3a900179-36bf-4b5f-b2e1-2a4a9d06e6af",
+          "actor": null,
+          "actor_id": 1,
+          "timestamp": "2026-10-19T15:54:32.431723+00:00",
+          "old_status": "ACTIVE",
+          "new_status": "INACTIVE",
+          "reason": "Disposable UAT lifecycle transition",
+          "lifecycle_revision": 1,
+          "reanalysis_required": false
+        }
+      ]
+    },
+    "api": 200,
+    "status": "PASS",
+    "defect": null,
+    "time": "2026-10-19T15:54:32.789781+00:00"
+  },
+  {
+    "id": "UAT-SBOM-LIFECYCLE-DENY",
+    "module": "SBOM authorization",
+    "role": "viewer",
+    "preconditions": "Live greenfield stack; private credentials in memory; only UAT-created records mutated",
+    "steps": "POST valid lifecycle transition on UAT-owned revision",
+    "expected": "Viewer lifecycle mutation rejected HTTP 403",
+    "actual": {
+      "status": 403,
+      "data": {
+        "detail": "Insufficient permission"
+      },
+      "request_id": "a7c89747b6c2"
+    },
+    "api": 403,
+    "status": "PASS",
+    "defect": null,
+    "time": "2026-10-19T15:54:32.820953+00:00"
+  },
+  {
+    "id": "UAT-SCHEDULE-CUSTOM",
+    "module": "Schedules",
+    "role": "admin",
+    "preconditions": "Live greenfield stack; private credentials in memory; only UAT-created records mutated",
+    "steps": "Submit valid disabled cron; inspect current optional parser prerequisite",
+    "expected": "Valid custom cron can be stored without enabling execution",
+    "actual": {
+      "status": 422,
+      "data": {
+        "detail": "CUSTOM cadence needs the 'croniter' package; pip install croniter"
+      },
+      "request_id": "8dc965547435"
+    },
+    "api": 422,
+    "status": "BLOCKED",
+    "defect": "ENV-002",
+    "time": "2026-10-19T15:54:32.849516+00:00"
+  },
+  {
+    "id": "UAT-KEV-SYNC-DENY-analyst",
+    "module": "CISA KEV authorization",
+    "role": "analyst",
+    "preconditions": "Live greenfield stack; private credentials in memory; only UAT-created records mutated",
+    "steps": "POST no-prune future cutoff with tenant role; no catalog change",
+    "expected": "Only current platform authority can sync the global catalogue",
+    "actual": {
+      "status": 403,
+      "data": {
+        "detail": {
+          "code": "IAM_PLATFORM_PERMISSION_DENIED",
+          "message": "Platform permission is required for this action."
+        }
+      },
+      "request_id": "c09bef32fba8"
+    },
+    "api": 403,
+    "status": "PASS",
+    "defect": null,
+    "time": "2026-10-19T15:54:33.065412+00:00"
+  },
+  {
+    "id": "UAT-KEV-SYNC-DENY-developer",
+    "module": "CISA KEV authorization",
+    "role": "developer",
+    "preconditions": "Live greenfield stack; private credentials in memory; only UAT-created records mutated",
+    "steps": "POST no-prune future cutoff with tenant role; no catalog change",
+    "expected": "Only current platform authority can sync the global catalogue",
+    "actual": {
+      "status": 403,
+      "data": {
+        "detail": {
+          "code": "IAM_PLATFORM_PERMISSION_DENIED",
+          "message": "Platform permission is required for this action."
+        }
+      },
+      "request_id": "7909c4061674"
+    },
+    "api": 403,
+    "status": "PASS",
+    "defect": null,
+    "time": "2026-10-19T15:54:33.081909+00:00"
+  },
+  {
+    "id": "UAT-KEV-SYNC-DENY-viewer",
+    "module": "CISA KEV authorization",
+    "role": "viewer",
+    "preconditions": "Live greenfield stack; private credentials in memory; only UAT-created records mutated",
+    "steps": "POST no-prune future cutoff with tenant role; no catalog change",
+    "expected": "Only current platform authority can sync the global catalogue",
+    "actual": {
+      "status": 403,
+      "data": {
+        "detail": {
+          "code": "IAM_PLATFORM_PERMISSION_DENIED",
+          "message": "Platform permission is required for this action."
+        }
+      },
+      "request_id": "9b2a9f9c471a"
+    },
+    "api": 403,
+    "status": "PASS",
+    "defect": null,
+    "time": "2026-10-19T15:54:33.098557+00:00"
+  },
+  {
+    "id": "UAT-KEV-SYNC-DENY-foreign",
+    "module": "CISA KEV authorization",
+    "role": "foreign",
+    "preconditions": "Live greenfield stack; private credentials in memory; only UAT-created records mutated",
+    "steps": "POST no-prune future cutoff with tenant role; no catalog change",
+    "expected": "Only current platform authority can sync the global catalogue",
+    "actual": {
+      "status": 403,
+      "data": {
+        "detail": {
+          "code": "IAM_PLATFORM_PERMISSION_DENIED",
+          "message": "Platform permission is required for this action."
+        }
+      },
+      "request_id": "364b249efaa2"
+    },
+    "api": 403,
+    "status": "PASS",
+    "defect": null,
+    "time": "2026-10-19T15:54:33.115934+00:00"
+  },
+  {
+    "id": "UAT-KEV-SYNC-DENY-admin",
+    "module": "CISA KEV authorization",
+    "role": "admin",
+    "preconditions": "Live greenfield stack; private credentials in memory; only UAT-created records mutated",
+    "steps": "POST no-prune future cutoff with tenant role; no catalog change",
+    "expected": "Only current platform authority can sync the global catalogue",
+    "actual": {
+      "status": 403,
+      "data": {
+        "detail": {
+          "code": "IAM_TENANT_SELECTION_REQUIRED",
+          "message": "Select an authorized tenant before accessing SBOM Analyzer."
+        }
+      },
+      "request_id": "991e6626ae1c"
+    },
+    "api": 403,
+    "status": "PASS",
+    "defect": null,
+    "time": "2026-10-19T15:54:33.124337+00:00"
+  },
+  {
+    "id": "UAT-KEV-SYNC-PLATFORM",
+    "module": "CISA KEV",
+    "role": "platform",
+    "preconditions": "Live greenfield stack; private credentials in memory; only UAT-created records mutated",
+    "steps": "POST future cutoff and prune_stale=false to exercise configured provider/auth without changing existing catalogue rows",
+    "expected": "Platform can fetch the actual CISA feed with no matching rows or destructive pruning",
+    "actual": {
+      "status": 200,
+      "data": {
+        "ok": true,
+        "catalog_version": "2026.10.16",
+        "catalog_date_released": "2026-10-16T17:15:48.875200+00:00",
+        "total_in_feed": 1748,
+        "filtered_since": "2099-01-01",
+        "matched_after_filter": 0,
+        "upserted": 0,
+        "duration_seconds": 0.363
+      },
+      "request_id": "450fbab8cb1f"
+    },
+    "api": 200,
+    "status": "PASS",
+    "defect": null,
+    "time": "2026-10-19T15:54:33.716861+00:00"
+  }
+]

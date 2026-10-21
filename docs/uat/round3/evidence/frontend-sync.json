@@ -1,0 +1,8 @@
+{
+  "source": "frontend/src/hooks/useAuth.tsx",
+  "runtimeWorkspace": "isolated Greenfield frontend",
+  "beforeSha256": "86e79d95f07dd1fd2d06c59ee4d68bf51b65d51c6dc0e9f4e220a72244440e43",
+  "sourceSha256": "917d9944c6b61806cb472544a5e9138c2a5d598a41cf44230f1e6c6f6cc386e8",
+  "operation": "Copy only authorized corrected hook into existing isolated development workspace; no service/bootstrap/database change",
+  "afterSha256": "917d9944c6b61806cb472544a5e9138c2a5d598a41cf44230f1e6c6f6cc386e8"
+}

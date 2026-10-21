@@ -1,0 +1,54 @@
+{
+  "status": "ROUND3_UAT_PARTIALLY_COMPLETED",
+  "signoff": "FULL_UAT_SIGNOFF_WITHHELD",
+  "original19": {
+    "PASS": 14,
+    "BLOCKED": 5,
+    "FAIL": 0,
+    "NOT RUN": 0
+  },
+  "historical485Unchanged": true,
+  "backendDiagnostic": {
+    "PASS": 3645,
+    "FAIL": 244,
+    "SKIP": 9,
+    "ERROR": 0,
+    "XFAIL": 0,
+    "deselected": 19,
+    "unfinishedInThatRun": 422,
+    "subtestsPassed": 4
+  },
+  "currentInventoryObservedAcrossRuns": {
+    "total": 4368,
+    "everExecuted": 4022,
+    "PASS": 3785,
+    "FAIL": 228,
+    "SKIP": 9,
+    "NOT RUN": 346,
+    "qualification": "Targeted retests override earlier diagnostic observations; source qualifications preserved per node. Not a frozen current-source full execution."
+  },
+  "frontendFinal": {
+    "PASS": 1805,
+    "FAIL": 0,
+    "SKIP": 0,
+    "files": 199,
+    "typecheckExit": 0,
+    "eslintExit": 0,
+    "eslintWarnings": 52,
+    "buildExit": 0
+  },
+  "nextActions": [
+    "Triage227 still-unresolved diagnostic baseline nodes and1 additional Advisor benchmark fixture failure; preserve authorization/public-ID guards.",
+    "Run remaining346 current inventory nodes on fresh task-owned databases using run-remaining-backend.py, then fix and rerun affected cases.",
+    "Complete relevant full current-source backend acceptance after corrections, without adding skips or changing product policy.",
+    "Obtain Product/Security decisions for platform status capability, independent Native idle-expiry criterion and SBO-73 discovery; verifier release-scope disposition.",
+    "Execute agreed Ubuntu/staging/CI evidence before formal acceptance."
+  ],
+  "liveApiPid": 1966,
+  "frontendPid": 80918,
+  "backgroundDiagnosticStopped": true,
+  "ownedLocalModelAndReportWorkersStopped": true,
+  "noCommitPushMergeDeploymentOrTrackerWrite": true,
+  "remediationSourceDiff": "round3-source.patch",
+  "remainingSelectorFile": "remaining-backend-nodes.json"
+}

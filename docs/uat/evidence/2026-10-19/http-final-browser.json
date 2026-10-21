@@ -1,0 +1,498 @@
+[
+  {
+    "role": "admin",
+    "time": "2026-10-19T17:57:06.414Z",
+    "path": "/api/auth/session",
+    "method": "GET",
+    "status": 200,
+    "requestId": null
+  },
+  {
+    "role": "admin",
+    "time": "2026-10-19T17:57:06.443Z",
+    "path": "/api/auth/session",
+    "method": "GET",
+    "status": 200,
+    "requestId": null
+  },
+  {
+    "role": "admin",
+    "time": "2026-10-19T17:57:06.517Z",
+    "path": "/api/auth/entra",
+    "method": "GET",
+    "status": 200,
+    "requestId": null
+  },
+  {
+    "role": "admin",
+    "time": "2026-10-19T17:57:06.522Z",
+    "path": "/api/auth/entra",
+    "method": "GET",
+    "status": 200,
+    "requestId": null
+  },
+  {
+    "role": "admin",
+    "time": "2026-10-19T17:57:09.586Z",
+    "path": "/api/auth/native/login",
+    "method": "POST",
+    "status": 200,
+    "requestId": null
+  },
+  {
+    "role": "admin",
+    "time": "2026-10-19T17:57:11.609Z",
+    "path": "/api/auth/session",
+    "method": "GET",
+    "status": 200,
+    "requestId": null
+  },
+  {
+    "role": "admin",
+    "time": "2026-10-19T17:57:11.623Z",
+    "path": "/api/auth/session",
+    "method": "GET",
+    "status": 200,
+    "requestId": null
+  },
+  {
+    "role": "admin",
+    "time": "2026-10-19T17:57:12.180Z",
+    "path": "/api/backend/api/auth/me",
+    "method": "GET",
+    "status": 200,
+    "requestId": "bc6f99a1304f"
+  },
+  {
+    "role": "admin",
+    "time": "2026-10-19T17:57:12.193Z",
+    "path": "/api/backend/api/auth/me",
+    "method": "GET",
+    "status": 200,
+    "requestId": "5da0e8a145ea"
+  },
+  {
+    "role": "admin",
+    "time": "2026-10-19T17:57:12.686Z",
+    "path": "/api/auth/session",
+    "method": "GET",
+    "status": 200,
+    "requestId": null
+  },
+  {
+    "role": "admin",
+    "time": "2026-10-19T17:57:13.238Z",
+    "path": "/api/backend/api/auth/me",
+    "method": "GET",
+    "status": 200,
+    "requestId": "9c1e8ce34f4f"
+  },
+  {
+    "role": "admin",
+    "time": "2026-10-19T17:57:14.467Z",
+    "path": "/api/backend/health",
+    "method": "GET",
+    "status": 200,
+    "requestId": "f39ab90120a3"
+  },
+  {
+    "role": "admin",
+    "time": "2026-10-19T17:57:17.448Z",
+    "path": "/api/backend/dashboard/recent-sboms",
+    "method": "GET",
+    "status": 200,
+    "requestId": "1c9aa68128be"
+  },
+  {
+    "role": "admin",
+    "time": "2026-10-19T17:57:17.449Z",
+    "path": "/api/backend/dashboard/filter-options/projects",
+    "method": "GET",
+    "status": 200,
+    "requestId": "23382f1558c5"
+  },
+  {
+    "role": "admin",
+    "time": "2026-10-19T17:57:17.626Z",
+    "path": "/api/backend/api/analysis/config",
+    "method": "GET",
+    "status": 200,
+    "requestId": "8dd747c559f9"
+  },
+  {
+    "role": "admin",
+    "time": "2026-10-19T17:57:17.658Z",
+    "path": "/api/backend/api/runs",
+    "method": "GET",
+    "status": 200,
+    "requestId": "967f56e2b66d"
+  },
+  {
+    "role": "admin",
+    "time": "2026-10-19T17:57:18.296Z",
+    "path": "/api/backend/dashboard/priority-findings",
+    "method": "GET",
+    "status": 200,
+    "requestId": "1efc014ed16f"
+  },
+  {
+    "role": "admin",
+    "time": "2026-10-19T17:57:20.265Z",
+    "path": "/api/backend/dashboard/runs",
+    "method": "GET",
+    "status": 200,
+    "requestId": "6c1014f7ed5b"
+  },
+  {
+    "role": "admin",
+    "time": "2026-10-19T17:57:20.281Z",
+    "path": "/api/backend/dashboard/runs",
+    "method": "GET",
+    "status": 200,
+    "requestId": "12ec5c74688a"
+  },
+  {
+    "role": "admin",
+    "time": "2026-10-19T17:57:20.282Z",
+    "path": "/api/backend/api/projects",
+    "method": "GET",
+    "status": 200,
+    "requestId": "e6e89c6745a0"
+  },
+  {
+    "role": "admin",
+    "time": "2026-10-19T17:57:20.356Z",
+    "path": "/api/backend/dashboard/trend",
+    "method": "GET",
+    "status": 200,
+    "requestId": "568d30decbb3"
+  },
+  {
+    "role": "admin",
+    "time": "2026-10-19T17:57:21.038Z",
+    "path": "/api/backend/dashboard/recent-sboms",
+    "method": "GET",
+    "status": 200,
+    "requestId": "2238bbcabf53"
+  },
+  {
+    "role": "admin",
+    "time": "2026-10-19T17:57:21.271Z",
+    "path": "/api/backend/dashboard/runs",
+    "method": "GET",
+    "status": 200,
+    "requestId": "96b0a854ba18"
+  },
+  {
+    "role": "admin",
+    "time": "2026-10-19T17:57:21.284Z",
+    "path": "/api/backend/api/auth/me",
+    "method": "GET",
+    "status": 200,
+    "requestId": "c15b71fa3f5e"
+  },
+  {
+    "role": "admin",
+    "time": "2026-10-19T17:57:22.815Z",
+    "path": "/api/backend/api/v1/kev/sync",
+    "method": "POST",
+    "status": 403,
+    "requestId": "e57b134a8bc8"
+  },
+  {
+    "role": "admin",
+    "time": "2026-10-19T17:57:24.062Z",
+    "path": "/api/auth/session",
+    "method": "GET",
+    "status": 200,
+    "requestId": null
+  },
+  {
+    "role": "admin",
+    "time": "2026-10-19T17:57:24.063Z",
+    "path": "/api/auth/session",
+    "method": "GET",
+    "status": 200,
+    "requestId": null
+  },
+  {
+    "role": "admin",
+    "time": "2026-10-19T17:57:24.311Z",
+    "path": "/api/backend/api/auth/me",
+    "method": "GET",
+    "status": 200,
+    "requestId": "8f449b9dee53"
+  },
+  {
+    "role": "admin",
+    "time": "2026-10-19T17:57:24.397Z",
+    "path": "/api/backend/api/auth/me",
+    "method": "GET",
+    "status": 200,
+    "requestId": "04ce7defe70a"
+  },
+  {
+    "role": "admin",
+    "time": "2026-10-19T17:57:25.344Z",
+    "path": "/api/backend/health",
+    "method": "GET",
+    "status": 200,
+    "requestId": "dd25f61f261a"
+  },
+  {
+    "role": "admin",
+    "time": "2026-10-19T17:57:25.375Z",
+    "path": "/api/backend/dashboard/recent-sboms",
+    "method": "GET",
+    "status": 200,
+    "requestId": "5cadf63390d1"
+  },
+  {
+    "role": "admin",
+    "time": "2026-10-19T17:57:25.461Z",
+    "path": "/api/backend/api/runs",
+    "method": "GET",
+    "status": 200,
+    "requestId": "eb5efe72ce17"
+  },
+  {
+    "role": "admin",
+    "time": "2026-10-19T17:57:26.557Z",
+    "path": "/api/backend/dashboard/filter-options/projects",
+    "method": "GET",
+    "status": 200,
+    "requestId": "5b50d9cabe0f"
+  },
+  {
+    "role": "admin",
+    "time": "2026-10-19T17:57:26.613Z",
+    "path": "/api/backend/api/analysis/config",
+    "method": "GET",
+    "status": 200,
+    "requestId": "dc98835e37db"
+  },
+  {
+    "role": "admin",
+    "time": "2026-10-19T17:57:29.404Z",
+    "path": "/api/backend/dashboard/runs",
+    "method": "GET",
+    "status": 200,
+    "requestId": "62849ee765c9"
+  },
+  {
+    "role": "admin",
+    "time": "2026-10-19T17:57:29.417Z",
+    "path": "/api/backend/dashboard/priority-findings",
+    "method": "GET",
+    "status": 200,
+    "requestId": "d3cac90e2eb4"
+  },
+  {
+    "role": "admin",
+    "time": "2026-10-19T17:57:29.419Z",
+    "path": "/api/backend/dashboard/runs",
+    "method": "GET",
+    "status": 200,
+    "requestId": "28ec58d0b70a"
+  },
+  {
+    "role": "admin",
+    "time": "2026-10-19T17:57:30.025Z",
+    "path": "/api/backend/api/projects",
+    "method": "GET",
+    "status": 200,
+    "requestId": "9568a0b33026"
+  },
+  {
+    "role": "admin",
+    "time": "2026-10-19T17:57:30.025Z",
+    "path": "/api/backend/dashboard/trend",
+    "method": "GET",
+    "status": 200,
+    "requestId": "053783a10955"
+  },
+  {
+    "role": "admin",
+    "time": "2026-10-19T17:57:32.127Z",
+    "path": "/api/backend/dashboard/recent-sboms",
+    "method": "GET",
+    "status": 200,
+    "requestId": "3623e3ecdbd6"
+  },
+  {
+    "role": "admin",
+    "time": "2026-10-19T17:57:32.134Z",
+    "path": "/api/backend/dashboard/runs",
+    "method": "GET",
+    "status": 200,
+    "requestId": "667f9a252efd"
+  },
+  {
+    "role": "admin",
+    "time": "2026-10-19T17:57:33.432Z",
+    "path": "/api/backend/dashboard/summary",
+    "method": "GET",
+    "status": 200,
+    "requestId": "4cbe80919556"
+  },
+  {
+    "role": "admin",
+    "time": "2026-10-19T17:57:55.584Z",
+    "path": "/api/backend/health",
+    "method": "GET",
+    "status": 200,
+    "requestId": "80e41ebe2035"
+  },
+  {
+    "role": "admin",
+    "time": "2026-10-19T17:58:00.853Z",
+    "path": "/api/auth/session",
+    "method": "GET",
+    "status": 200,
+    "requestId": null
+  },
+  {
+    "role": "admin",
+    "time": "2026-10-19T17:58:00.857Z",
+    "path": "/api/auth/session",
+    "method": "GET",
+    "status": 200,
+    "requestId": null
+  },
+  {
+    "role": "admin",
+    "time": "2026-10-19T17:58:01.121Z",
+    "path": "/api/backend/api/auth/me",
+    "method": "GET",
+    "status": 200,
+    "requestId": "36cad7067233"
+  },
+  {
+    "role": "admin",
+    "time": "2026-10-19T17:58:01.123Z",
+    "path": "/api/backend/api/auth/me",
+    "method": "GET",
+    "status": 200,
+    "requestId": "b8c97e654553"
+  },
+  {
+    "role": "admin",
+    "time": "2026-10-19T17:58:02.402Z",
+    "path": "/api/backend/health",
+    "method": "GET",
+    "status": 200,
+    "requestId": "192aa1eb8bd3"
+  },
+  {
+    "role": "admin",
+    "time": "2026-10-19T17:58:02.402Z",
+    "path": "/api/backend/dashboard/recent-sboms",
+    "method": "GET",
+    "status": 200,
+    "requestId": "9ac6136d9d25"
+  },
+  {
+    "role": "admin",
+    "time": "2026-10-19T17:58:02.715Z",
+    "path": "/api/backend/dashboard/filter-options/projects",
+    "method": "GET",
+    "status": 200,
+    "requestId": "78449714fde1"
+  },
+  {
+    "role": "admin",
+    "time": "2026-10-19T17:58:03.043Z",
+    "path": "/api/backend/api/runs",
+    "method": "GET",
+    "status": 200,
+    "requestId": "2afc11656d17"
+  },
+  {
+    "role": "admin",
+    "time": "2026-10-19T17:58:03.232Z",
+    "path": "/api/backend/api/analysis/config",
+    "method": "GET",
+    "status": 200,
+    "requestId": "eea11492ec01"
+  },
+  {
+    "role": "admin",
+    "time": "2026-10-19T17:58:05.023Z",
+    "path": "/api/backend/dashboard/runs",
+    "method": "GET",
+    "status": 200,
+    "requestId": "eae980ca5942"
+  },
+  {
+    "role": "admin",
+    "time": "2026-10-19T17:58:05.025Z",
+    "path": "/api/backend/dashboard/priority-findings",
+    "method": "GET",
+    "status": 200,
+    "requestId": "c7cc58d07c34"
+  },
+  {
+    "role": "admin",
+    "time": "2026-10-19T17:58:05.042Z",
+    "path": "/api/backend/dashboard/runs",
+    "method": "GET",
+    "status": 200,
+    "requestId": "9bd3d1e2d611"
+  },
+  {
+    "role": "admin",
+    "time": "2026-10-19T17:58:06.654Z",
+    "path": "/api/backend/api/projects",
+    "method": "GET",
+    "status": 200,
+    "requestId": "dad65f85d181"
+  },
+  {
+    "role": "admin",
+    "time": "2026-10-19T17:58:06.668Z",
+    "path": "/api/backend/dashboard/trend",
+    "method": "GET",
+    "status": 200,
+    "requestId": "1a3a339c46d6"
+  },
+  {
+    "role": "admin",
+    "time": "2026-10-19T17:58:07.064Z",
+    "path": "/api/backend/dashboard/recent-sboms",
+    "method": "GET",
+    "status": 200,
+    "requestId": "cc8bd531f81a"
+  },
+  {
+    "role": "admin",
+    "time": "2026-10-19T17:58:07.069Z",
+    "path": "/api/backend/dashboard/runs",
+    "method": "GET",
+    "status": 200,
+    "requestId": "507f1add95ac"
+  },
+  {
+    "role": "admin",
+    "time": "2026-10-19T17:58:07.958Z",
+    "path": "/api/backend/dashboard/summary",
+    "method": "GET",
+    "status": 200,
+    "requestId": "fa7ca4ac6863"
+  },
+  {
+    "role": "admin",
+    "time": "2026-10-19T17:58:23.927Z",
+    "path": "/api/backend/api/tenants/3a900179-36bf-4b5f-b2e1-2a4a9d06e6af/users/10",
+    "method": "DELETE",
+    "status": 204,
+    "requestId": "bc4cb0e4e33c"
+  },
+  {
+    "role": "admin",
+    "time": "2026-10-19T17:58:24.029Z",
+    "path": "/api/backend/api/tenants/3a900179-36bf-4b5f-b2e1-2a4a9d06e6af/users",
+    "method": "GET",
+    "status": 200,
+    "requestId": "73ed5ff3b8c4"
+  }
+]

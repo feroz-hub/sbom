@@ -1,0 +1,358 @@
+[
+  {
+    "id": "R3-AI-ISOLATED-FEATURE",
+    "role": "disposable tenant admin",
+    "preconditions": "Verified isolated Greenfield UUID; task-owned fixtures; credentials kept in memory",
+    "stepsExecuted": "Enable only new disposable tenant override",
+    "expected": "200; global setting unchanged",
+    "actual": {
+      "status": 200,
+      "data": {
+        "feature_enabled": true,
+        "kill_switch_active": false,
+        "budget_per_request_usd": 0.1,
+        "budget_per_scan_usd": 5.0,
+        "budget_daily_usd": 5.0,
+        "updated_at": "2026-10-20T09:01:26.956507+00:00",
+        "updated_by_user_id": null,
+        "source": "db"
+      },
+      "request_id": "e542469809af"
+    },
+    "result": "PASS",
+    "time": "2026-10-20T09:01:27.010356+00:00"
+  },
+  {
+    "id": "R3-AI-LOCAL-CONFIG",
+    "role": "disposable tenant admin",
+    "preconditions": "Verified isolated Greenfield UUID; task-owned fixtures; credentials kept in memory",
+    "stepsExecuted": "Create own tenant local-only free credential",
+    "expected": "201; separate model service",
+    "actual": {
+      "status": 201,
+      "data": {
+        "id": 1,
+        "provider_name": "ollama",
+        "label": "Round3 isolated free model",
+        "api_key_present": false,
+        "api_key_preview": null,
+        "base_url": "http://127.0.0.1:11435",
+        "default_model": "qwen2.5:0.5b",
+        "tier": "free",
+        "is_default": true,
+        "is_fallback": false,
+        "enabled": true,
+        "cost_per_1k_input_usd": 0.0,
+        "cost_per_1k_output_usd": 0.0,
+        "is_local": true,
+        "max_concurrent": 1,
+        "rate_per_minute": null,
+        "created_at": "2026-10-20T09:01:27.047926+00:00",
+        "updated_at": "2026-10-20T09:01:27.047926+00:00",
+        "last_test_at": null,
+        "last_test_success": null,
+        "last_test_error": null,
+        "verification_status": "UNVERIFIED"
+      },
+      "request_id": "161696f00d9b"
+    },
+    "result": "PASS",
+    "time": "2026-10-20T09:01:27.099806+00:00"
+  },
+  {
+    "id": "R3-AI-LOCAL-HEALTH",
+    "role": "disposable tenant admin",
+    "preconditions": "Verified isolated Greenfield UUID; task-owned fixtures; credentials kept in memory",
+    "stepsExecuted": "Application adapter probes separate real local model",
+    "expected": "200 successful real provider readiness",
+    "actual": {
+      "status": 200,
+      "data": {
+        "success": true,
+        "latency_ms": 79,
+        "detected_models": [
+          "qwen2.5:0.5b"
+        ],
+        "error_message": null,
+        "error_kind": null,
+        "http_status": null,
+        "provider": "ollama",
+        "model_tested": "qwen2.5:0.5b"
+      },
+      "request_id": "126bc72a7f60"
+    },
+    "result": "PASS",
+    "time": "2026-10-20T09:01:27.226657+00:00"
+  },
+  {
+    "id": "UAT-AI-LIVE-PROVIDER",
+    "role": "disposable tenant admin",
+    "preconditions": "Verified isolated Greenfield UUID; task-owned fixtures; credentials kept in memory",
+    "stepsExecuted": "Real authenticated application Copilot request to approved separate local Ollama",
+    "expected": "200 nonempty local model completion at zero cost",
+    "actual": {
+      "status": 200,
+      "data": {
+        "answer": "0",
+        "question": "How many SBOMs are in this portfolio? Answer in one short sentence using only the snapshot.",
+        "generated_at": "2026-10-20T09:01:31+00:00",
+        "provider": "ollama",
+        "model": "qwen2.5:0.5b",
+        "cost_usd": 0.0,
+        "schema_version": 1
+      },
+      "request_id": "c14255120ec8"
+    },
+    "result": "PASS",
+    "time": "2026-10-20T09:01:31.703223+00:00"
+  },
+  {
+    "id": "R3-SECRET-CREATE",
+    "role": "disposable tenant admin",
+    "preconditions": "Verified isolated Greenfield UUID; task-owned fixtures; credentials kept in memory",
+    "stepsExecuted": "Create only synthetic scoped credential",
+    "expected": "201; secret preview redacted and key-present true",
+    "actual": {
+      "status": 201,
+      "data": {
+        "id": 2,
+        "provider_name": "custom_openai",
+        "label": "Round3 synthetic rotation",
+        "api_key_present": true,
+        "api_key_preview": null,
+        "base_url": "http://127.0.0.1:18444/v1",
+        "default_model": "r3-mock-model",
+        "tier": "free",
+        "is_default": false,
+        "is_fallback": false,
+        "enabled": true,
+        "cost_per_1k_input_usd": 0.0,
+        "cost_per_1k_output_usd": 0.0,
+        "is_local": true,
+        "max_concurrent": null,
+        "rate_per_minute": null,
+        "created_at": "2026-10-20T09:01:31.782352+00:00",
+        "updated_at": "2026-10-20T09:01:31.782352+00:00",
+        "last_test_at": null,
+        "last_test_success": null,
+        "last_test_error": null,
+        "verification_status": "UNVERIFIED"
+      },
+      "request_id": "db02eed29b86"
+    },
+    "result": "PASS",
+    "time": "2026-10-20T09:01:31.828982+00:00"
+  },
+  {
+    "id": "R3-SECRET-UPSTREAM-initial",
+    "role": "disposable tenant admin",
+    "preconditions": "Verified isolated Greenfield UUID; task-owned fixtures; credentials kept in memory",
+    "stepsExecuted": "Call local authenticated mock through application provider adapter",
+    "expected": "200 success; mock received current synthetic key",
+    "actual": {
+      "response": {
+        "status": 200,
+        "data": {
+          "success": true,
+          "latency_ms": 1,
+          "detected_models": [
+            "r3-mock-model"
+          ],
+          "error_message": null,
+          "error_kind": null,
+          "http_status": null,
+          "provider": "custom_openai",
+          "model_tested": "r3-mock-model"
+        },
+        "request_id": "2c1c143e65bb"
+      },
+      "mockRequests": [
+        {
+          "method": "GET",
+          "path": "/v1/models",
+          "authenticatedWithCurrentSyntheticKey": true
+        },
+        {
+          "method": "POST",
+          "path": "/v1/chat/completions",
+          "authenticatedWithCurrentSyntheticKey": true
+        }
+      ],
+      "mockProvider": true
+    },
+    "result": "PASS",
+    "time": "2026-10-20T09:01:31.884315+00:00"
+  },
+  {
+    "id": "R3-SECRET-ROTATE",
+    "role": "disposable tenant admin",
+    "preconditions": "Verified isolated Greenfield UUID; task-owned fixtures; credentials kept in memory",
+    "stepsExecuted": "Rotate synthetic secret only, same credential identity",
+    "expected": "200 redacted, verification reset",
+    "actual": {
+      "status": 200,
+      "data": {
+        "id": 2,
+        "provider_name": "custom_openai",
+        "label": "Round3 synthetic rotation",
+        "api_key_present": true,
+        "api_key_preview": null,
+        "base_url": "http://127.0.0.1:18444/v1",
+        "default_model": "r3-mock-model",
+        "tier": "free",
+        "is_default": false,
+        "is_fallback": false,
+        "enabled": true,
+        "cost_per_1k_input_usd": 0.0,
+        "cost_per_1k_output_usd": 0.0,
+        "is_local": true,
+        "max_concurrent": null,
+        "rate_per_minute": null,
+        "created_at": "2026-10-20T09:01:31.782352+00:00",
+        "updated_at": "2026-10-20T09:01:31.909632+00:00",
+        "last_test_at": null,
+        "last_test_success": null,
+        "last_test_error": null,
+        "verification_status": "UNVERIFIED"
+      },
+      "request_id": "efd26c80aba1"
+    },
+    "result": "PASS",
+    "time": "2026-10-20T09:01:31.925415+00:00"
+  },
+  {
+    "id": "R3-SECRET-UPSTREAM-rotated",
+    "role": "disposable tenant admin",
+    "preconditions": "Verified isolated Greenfield UUID; task-owned fixtures; credentials kept in memory",
+    "stepsExecuted": "Call local authenticated mock through application provider adapter",
+    "expected": "200 success; mock received current synthetic key",
+    "actual": {
+      "response": {
+        "status": 200,
+        "data": {
+          "success": true,
+          "latency_ms": 1,
+          "detected_models": [
+            "r3-mock-model"
+          ],
+          "error_message": null,
+          "error_kind": null,
+          "http_status": null,
+          "provider": "custom_openai",
+          "model_tested": "r3-mock-model"
+        },
+        "request_id": "ead1aa3407bf"
+      },
+      "mockRequests": [
+        {
+          "method": "GET",
+          "path": "/v1/models",
+          "authenticatedWithCurrentSyntheticKey": true
+        },
+        {
+          "method": "POST",
+          "path": "/v1/chat/completions",
+          "authenticatedWithCurrentSyntheticKey": true
+        }
+      ],
+      "mockProvider": true
+    },
+    "result": "PASS",
+    "time": "2026-10-20T09:01:31.965910+00:00"
+  },
+  {
+    "id": "R3-SECRET-ROLE-DENIED",
+    "role": "disposable tenant admin",
+    "preconditions": "Verified isolated Greenfield UUID; task-owned fixtures; credentials kept in memory",
+    "stepsExecuted": "Viewer attempts scoped credential update",
+    "expected": "403",
+    "actual": {
+      "status": 403,
+      "data": {
+        "detail": "Insufficient permission"
+      },
+      "request_id": "a97df860a099"
+    },
+    "result": "PASS",
+    "time": "2026-10-20T09:01:32.298768+00:00"
+  },
+  {
+    "id": "R3-SECRET-FOREIGN-DENIED",
+    "role": "disposable tenant admin",
+    "preconditions": "Verified isolated Greenfield UUID; task-owned fixtures; credentials kept in memory",
+    "stepsExecuted": "Foreign administrator reads owned credential ID",
+    "expected": "404",
+    "actual": {
+      "status": 404,
+      "data": {
+        "detail": "Credential 2 not found."
+      },
+      "request_id": "13634921e684"
+    },
+    "result": "PASS",
+    "time": "2026-10-20T09:01:32.625453+00:00"
+  },
+  {
+    "id": "R3-SECRET-REVOKE",
+    "role": "disposable tenant admin",
+    "preconditions": "Verified isolated Greenfield UUID; task-owned fixtures; credentials kept in memory",
+    "stepsExecuted": "Delete only newly owned synthetic credential",
+    "expected": "204",
+    "actual": {
+      "status": 204,
+      "data": {
+        "bytes": 0,
+        "contentType": "application/json"
+      },
+      "request_id": "1d4e6e847d2c"
+    },
+    "result": "PASS",
+    "time": "2026-10-20T09:01:32.666771+00:00"
+  },
+  {
+    "id": "R3-SECRET-REVOKED-READ",
+    "role": "disposable tenant admin",
+    "preconditions": "Verified isolated Greenfield UUID; task-owned fixtures; credentials kept in memory",
+    "stepsExecuted": "Read revoked own synthetic credential",
+    "expected": "404",
+    "actual": {
+      "status": 404,
+      "data": {
+        "detail": "Credential 2 not found."
+      },
+      "request_id": "a2eecd533689"
+    },
+    "result": "PASS",
+    "time": "2026-10-20T09:01:32.693517+00:00"
+  },
+  {
+    "id": "R3-AI-CLEANUP",
+    "role": "disposable tenant admin",
+    "preconditions": "Verified isolated Greenfield UUID; task-owned fixtures; credentials kept in memory",
+    "stepsExecuted": "Remove own override/providers; disable only owned tenant",
+    "expected": "200",
+    "actual": {
+      "status": 200,
+      "data": {
+        "tenant_id": "2b8cf03c-4497-4e3a-a93c-330ed4cea7ab",
+        "status": "DISABLED"
+      },
+      "request_id": "68a12930829a"
+    },
+    "result": "PASS",
+    "time": "2026-10-20T09:01:32.787381+00:00"
+  },
+  {
+    "id": "R3-AI-GLOBAL-PRESERVED",
+    "role": "disposable tenant admin",
+    "preconditions": "Verified isolated Greenfield UUID; task-owned fixtures; credentials kept in memory",
+    "stepsExecuted": "Compare global AI settings before/after scoped local test",
+    "expected": "Exact global settings unchanged",
+    "actual": {
+      "unchanged": true,
+      "featureEnabled": null
+    },
+    "result": "PASS",
+    "time": "2026-10-20T09:01:32.803742+00:00"
+  }
+]

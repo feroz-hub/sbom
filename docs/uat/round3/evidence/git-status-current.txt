@@ -1,0 +1,238 @@
+ M README.md
+ M app/core/permissions.py
+ M app/core/security.py
+ M app/db.py
+ M app/main.py
+ M app/metrics/component_advisor.py
+ M app/models.py
+ M app/routers/projects.py
+ M app/routers/sboms_crud.py
+ M app/routers/tenants.py
+ M app/routers/vex_investigations.py
+ M app/schemas.py
+ M app/schemas_identity.py
+ M app/services/auth_context_service.py
+ M app/services/component_advisor/recommendations/service.py
+ M app/services/fda_510k_excel_report_service.py
+ M app/services/report_composer.py
+ M app/services/sbom_delete_service.py
+ M app/services/scheduling.py
+ M app/validation/schemas/cyclonedx/SOURCE.md
+ M app/validation/stages/schema.py
+ M app/workers/report_notifications.py
+ M docs/DATABASE_BOOTSTRAP_AND_UPGRADE.md
+ M docs/authorization-catalog.md
+ M docs/hierarchical-analysis-scheduler.md
+ M docs/native-iam-greenfield-setup.md
+ M docs/plans/vex-implementation-plan.md
+ M docs/runbook-report-notifications.md
+ M docs/sbom-quality-scoring.md
+ M docs/secure-component-advisor/implementation-plan.md
+ M frontend/src/app/__tests__/dashboard-drilldown.integration.test.tsx
+ M frontend/src/app/analysis/page.tsx
+ M frontend/src/app/component-advisor/components/[key]/page.tsx
+ M frontend/src/app/component-advisor/page.tsx
+ M frontend/src/app/kev/page.tsx
+ M frontend/src/app/platform/data-sync.integration.test.tsx
+ M frontend/src/app/platform/page.tsx
+ M frontend/src/app/products/[id]/page.test.tsx
+ M frontend/src/app/products/[id]/page.tsx
+ M frontend/src/app/projects/page.test.tsx
+ M frontend/src/app/projects/page.tsx
+ M frontend/src/app/sboms/[id]/page.tsx
+ M frontend/src/app/sboms/logical/[id]/page.tsx
+ M frontend/src/app/sboms/page.tsx
+ M frontend/src/app/schedules/page.tsx
+ M frontend/src/app/settings/platform/page.test.tsx
+ M frontend/src/app/settings/platform/tenants/[tenantId]/page.test.tsx
+ M frontend/src/app/settings/platform/tenants/[tenantId]/page.tsx
+ M frontend/src/app/settings/platform/tenants/page.test.tsx
+ M frontend/src/app/settings/platform/tenants/page.tsx
+ M frontend/src/app/settings/tenant/page.test.tsx
+ M frontend/src/app/settings/users/audit/page.test.tsx
+ M frontend/src/app/settings/users/audit/page.tsx
+ M frontend/src/app/settings/users/page.tsx
+ M frontend/src/app/vex-investigation/page.test.tsx
+ M frontend/src/app/vex-investigation/page.tsx
+ M frontend/src/components/admin/MemberActionMenu.tsx
+ M frontend/src/components/admin/MembershipConfirmDialogs.tsx
+ M frontend/src/components/admin/NativeUserInviteForm.test.tsx
+ M frontend/src/components/admin/NativeUserInviteForm.tsx
+ M frontend/src/components/admin/PlatformTenantOverview.tsx
+ M frontend/src/components/admin/ScopedAdvisorPolicies.tsx
+ M frontend/src/components/admin/TenantAuditHistory.tsx
+ M frontend/src/components/admin/TenantContextHeader.test.tsx
+ M frontend/src/components/admin/TenantContextHeader.tsx
+ M frontend/src/components/admin/TenantMembersTable.tsx
+ M frontend/src/components/admin/TenantUsersAccess.tsx
+ M frontend/src/components/admin/UserLifecycle.tsx
+ M frontend/src/components/admin/UserSearchCombobox.test.tsx
+ M frontend/src/components/admin/UserSearchCombobox.tsx
+ M frontend/src/components/admin/__tests__/MemberActionMenu.test.tsx
+ M frontend/src/components/admin/__tests__/MembershipConfirmDialogs.test.tsx
+ M frontend/src/components/admin/__tests__/UserSearchCombobox.test.tsx
+ M frontend/src/components/admin/advisor-policies/PolicyEditor.tsx
+ M frontend/src/components/admin/advisor-policies/PolicyHistory.tsx
+ M frontend/src/components/analysis/ConsolidatedAnalysisPanel.tsx
+ M frontend/src/components/analysis/FindingsTable.tsx
+ M frontend/src/components/analysis/SbomPreflightChecklist.tsx
+ M frontend/src/components/analysis/VulnerabilitiesByScope.tsx
+ M frontend/src/components/compare/PostureHero/PostureHero.tsx
+ M frontend/src/components/compare/Sparkline/Sparkline.tsx
+ M frontend/src/components/dashboard/DashboardFilters.test.tsx
+ M frontend/src/components/dashboard/DashboardFilters.tsx
+ M frontend/src/components/dashboard/TrendExplorer.tsx
+ M frontend/src/components/projects/ProjectApplications.tsx
+ M frontend/src/components/projects/ProjectsTable.tsx
+ M frontend/src/components/reports/NotifyMeLink.tsx
+ M frontend/src/components/reports/ReportNotificationsPage.tsx
+ M frontend/src/components/sboms/AnalysisStatusBadge.tsx
+ M frontend/src/components/sboms/ComponentVexManager.tsx
+ M frontend/src/components/sboms/Fda510kReportDialog.tsx
+ M frontend/src/components/sboms/LogicalSbomHistory.tsx
+ M frontend/src/components/sboms/SbomConversionCard.tsx
+ M frontend/src/components/sboms/SbomDetail.lifecycle.test.tsx
+ M frontend/src/components/sboms/SbomDetail.tsx
+ M frontend/src/components/sboms/SbomQualityPanel.tsx
+ M frontend/src/components/sboms/SbomRawViewer.tsx
+ M frontend/src/components/sboms/SbomStatusBadge.tsx
+ M frontend/src/components/sboms/SbomUploadModal.repair.test.tsx
+ M frontend/src/components/sboms/SbomUploadModal.tsx
+ M frontend/src/components/sboms/SbomsTable.tsx
+ M frontend/src/components/sboms/ValidationRepairWorkspace.tsx
+ M frontend/src/components/schedules/ScheduleCard.tsx
+ M frontend/src/components/schedules/ScheduleEditor.tsx
+ M frontend/src/components/ui/Dialog.tsx
+ M frontend/src/components/ui/PinButton.tsx
+ M frontend/src/components/vex/VexDecisionEditor.tsx
+ M frontend/src/components/vex/VexInvestigationPanel.tsx
+ M frontend/src/components/vex/VexRunHistoryPanel.tsx
+ M frontend/src/components/vex/VexVersionComparisonPanel.tsx
+ M frontend/src/components/vulnerabilities/CveDetailDialog/CveDetailDialog.tsx
+ M frontend/src/components/vulnerabilities/CveDetailDialog/hooks.ts
+ M frontend/src/components/vulnerabilities/CveDetailDialog/queryKey.ts
+ M frontend/src/hooks/analysis-stream-sync.test.tsx
+ M frontend/src/hooks/useAnalysisStream.test.tsx
+ M frontend/src/hooks/useAnalysisStream.ts
+ M frontend/src/hooks/useAnalysisTerminal.ts
+ M frontend/src/hooks/useAuth.test.tsx
+ M frontend/src/hooks/useAuth.tsx
+ M frontend/src/hooks/useBackgroundAnalysis.ts
+ M frontend/src/hooks/useReportNotifications.ts
+ M frontend/src/hooks/useSbomMutations.ts
+ M frontend/src/lib/advisorPolicyApi.ts
+ M frontend/src/lib/analysisSync.ts
+ M frontend/src/lib/api.tenantHeader.test.ts
+ M frontend/src/lib/api.ts
+ M frontend/src/lib/auth.tenantCookie.test.ts
+ M frontend/src/lib/auth.ts
+ M frontend/src/lib/auth/tenantHeader.test.ts
+ M frontend/src/lib/auth/tenantHeader.ts
+ M frontend/src/lib/dashboardScopeUrl.test.ts
+ M frontend/src/lib/dashboardScopeUrl.ts
+ M frontend/src/lib/pendingAnalysis.ts
+ M frontend/src/lib/pinned.ts
+ M frontend/src/lib/queryInvalidation.ts
+ M frontend/src/lib/reportApi.ts
+ M frontend/src/lib/topVulnerableRuns.ts
+ M frontend/src/types/compare.ts
+ M frontend/src/types/componentAdvisor.ts
+ M frontend/src/types/dashboardAdvanced.ts
+ M frontend/src/types/index.ts
+ M frontend/src/types/reports.ts
+ M frontend/src/types/sbomAutoRepair.ts
+ M pyproject.toml
+ M requirements.txt
+ M scripts/dev.py
+ M tests/report_load_probe.py
+ M tests/sources/test_provider_applicability.py
+ M tests/test_alembic_metadata_commands.py
+ M tests/test_analysis_domain_logging.py
+ M tests/test_analyze_endpoints_snapshot.py
+ M tests/test_component_advisor_bench.py
+ M tests/test_component_advisor_classification.py
+ M tests/test_component_advisor_policy.py
+ M tests/test_component_advisor_scoring.py
+ M tests/test_dashboard_scope.py
+ M tests/test_dev_lifecycle.py
+ M tests/test_fda_510k_excel_report.py
+ M tests/test_hierarchical_scheduler_migration.py
+ M tests/test_identity_mapping_service.py
+ M tests/test_lifecycle_engine_v2.py
+ M tests/test_logical_sbom_versions.py
+ M tests/test_native_backup_acceptance.py
+ M tests/test_native_iam_foundation.py
+ M tests/test_native_iam_phase2.py
+ M tests/test_native_iam_phase5.py
+ M tests/test_native_session_lifetime.py
+ M tests/test_native_tenant_provisioning.py
+ M tests/test_permission_ui_catalogue.py
+ M tests/test_phase9_fresh_database_bootstrap.py
+ M tests/test_platform_advisor_policies.py
+ M tests/test_platform_tenant_v2.py
+ M tests/test_product_hierarchy.py
+ M tests/test_report_migrations.py
+ M tests/test_report_notifications.py
+ M tests/test_sbom_auto_repair.py
+ M tests/test_sbom_repair_migration.py
+ M tests/test_sbom_selection_policy.py
+ M tests/test_sbom_spdx_cyclonedx_conversion.py
+ M tests/test_scheduling_service.py
+ M tests/test_scoped_configuration.py
+ M tests/test_tenant_user_candidates.py
+ M tests/test_user_search.py
+ M tests/test_validation_repair_workspace.py
+ M tests/test_vex_acceptance_e2e.py
+ M tests/test_vex_audit_concurrency.py
+ M tests/test_vex_enrichment.py
+ M tests/test_vex_investigations_api.py
+ M tests/test_vex_lifecycle_completion.py
+ M tests/test_vex_roadmap.py
+ M tests/test_vex_version_lifecycle.py
+ M tests/test_vex_work_queue.py
+ M tests/vex_foreign_fixture.py
+?? Makefile
+?? alembic/versions/100_greenfield_uuid_final.py
+?? app/greenfield_schema.py
+?? app/public_api.py
+?? app/public_identity.py
+?? app/validation/schemas/cyclonedx/jsf-0.82.schema.json
+?? data/sbom-workspaces/2fc1bc7e-93d6-4cbd-b4a3-3fa9cc01945b/
+?? data/sbom-workspaces/6f407587-f226-4271-a4ef-c9e1ba277d15/
+?? data/sbom-workspaces/9347d998-f80f-4a64-b698-84990cb1cb30/
+?? data/sbom-workspaces/980eb45a-f428-4307-b016-1e9f652546b8/
+?? data/sbom-workspaces/ac86a503-7094-4b7e-91bb-2f6066751b08/
+?? data/sbom-workspaces/c3a8f1ae-531b-4504-93e8-ec8ecebf1bf7/
+?? data/sbom-workspaces/c951987a-393d-470d-a333-52a15fc24f93/
+?? docs/uat/
+?? docs/uuid-migration/
+?? frontend/e2e/greenfield-login.config.ts
+?? frontend/e2e/greenfield-login.spec.ts
+?? frontend/e2e/greenfield.config.ts
+?? frontend/e2e/greenfield.spec.ts
+?? frontend/src/components/admin/PlatformKevSync.test.tsx
+?? frontend/src/components/admin/PlatformKevSync.tsx
+?? frontend/src/components/admin/TenantMembersTable.test.tsx
+?? frontend/src/lib/publicId.ts
+?? infra/
+?? scripts/dev_greenfield.py
+?? scripts/greenfield_acceptance.py
+?? scripts/greenfield_https.py
+?? scripts/greenfield_integrity.py
+?? scripts/greenfield_references.py
+?? scripts/greenfield_regression.py
+?? scripts/greenfield_schema_check.py
+?? scripts/greenfield_seed.py
+?? scripts/greenfield_uuid.py
+?? scripts/greenfield_worker.py
+?? scripts/test_greenfield_setup.py
+?? tests/public_id_fixture.py
+?? tests/test_dev_greenfield.py
+?? tests/test_greenfield_https.py
+?? tests/test_legacy_analysis_public_identity.py
+?? tests/test_policy_public_identity.py
+?? tests/test_repair_candidate_public_boundary.py
+?? tests/test_round3_native_expiry.py
+?? tests/test_vex_confidence_serialization.py
+?? tests/test_vex_source_public_identity.py
+?? tests/validation/test_signed_schema_dependency.py

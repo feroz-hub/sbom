@@ -1,0 +1,3048 @@
+[
+  {
+    "id": "UAT-VEX-DETAIL",
+    "phase": "round1-protection",
+    "role": "admin",
+    "expected": "Detail serializes analyzer confidence without HTTP 500",
+    "actual": {
+      "status": 200,
+      "data": {
+        "id": 47,
+        "sbom_id": "a18b1310-f4d9-401f-b8b1-f6beee5933ac",
+        "project_name": "UAT R1 1792465600082474000",
+        "product_name": "UAT R1 1792465600082474000 Application",
+        "sbom_name": "UAT R1 1792465600082474000 SBOM",
+        "sbom_version": null,
+        "historical": false,
+        "analysis_run_id": 22,
+        "vulnerability": {
+          "canonical_vulnerability_id": "CVE-2020-28500",
+          "aliases": [
+            "GHSA-29MW-WPGM-HMR9"
+          ],
+          "severity": "MEDIUM",
+          "cvss_score": 5.3,
+          "description": "Regular Expression Denial of Service (ReDoS) in lodash",
+          "references": [
+            "https://cert-portal.siemens.com/productcert/pdf/ssa-637483.pdf"
+          ]
+        },
+        "component": {
+          "component_id": "06036bc5-2ed5-40cf-82c8-52b9cb39c84d",
+          "name": "lodash",
+          "version": "4.17.20",
+          "purl": "pkg:npm/lodash@4.17.20",
+          "cpe": null,
+          "bom_ref": "uat-lodash",
+          "supplier": "UAT"
+        },
+        "analyzer_evidence": {
+          "detection_state": "DETECTED",
+          "sources": [
+            "OSV"
+          ],
+          "analysis_run_id": 22,
+          "match_strategy": "purl_direct",
+          "match_confidence": "0.812",
+          "matched_range": null,
+          "first_seen_at": "2026-10-20T03:06:44+00:00",
+          "last_seen_at": "2026-10-20T03:39:17+00:00"
+        },
+        "imported_vex": [
+          {
+            "statement_id": 8,
+            "source_format": "manual",
+            "source_status": "under_investigation",
+            "normalized_status": "UNDER_INVESTIGATION",
+            "author": "Manual VEX Override",
+            "source_document_id": null,
+            "source_document_version": null,
+            "asserted_at": "2026-10-20T03:06:46+00:00",
+            "justification": null,
+            "impact_statement": null,
+            "action_statement": null,
+            "mitigation": null,
+            "fixed_version": null,
+            "evidence_url": null,
+            "mapping_confidence": "WEAK",
+            "match_strategy": "NAME_ONLY",
+            "version_applicable": null,
+            "is_effective": false,
+            "superseded": false
+          },
+          {
+            "statement_id": 9,
+            "source_format": "manual",
+            "source_status": "under_investigation",
+            "normalized_status": "UNDER_INVESTIGATION",
+            "author": "Manual VEX Override",
+            "source_document_id": null,
+            "source_document_version": null,
+            "asserted_at": "2026-10-20T03:08:43+00:00",
+            "justification": null,
+            "impact_statement": null,
+            "action_statement": null,
+            "mitigation": null,
+            "fixed_version": null,
+            "evidence_url": null,
+            "mapping_confidence": "WEAK",
+            "match_strategy": "NAME_ONLY",
+            "version_applicable": null,
+            "is_effective": false,
+            "superseded": false
+          },
+          {
+            "statement_id": 10,
+            "source_format": "manual",
+            "source_status": "affected",
+            "normalized_status": "AFFECTED",
+            "author": "Manual VEX Override",
+            "source_document_id": null,
+            "source_document_version": null,
+            "asserted_at": "2026-10-20T03:08:46+00:00",
+            "justification": null,
+            "impact_statement": null,
+            "action_statement": null,
+            "mitigation": null,
+            "fixed_version": null,
+            "evidence_url": null,
+            "mapping_confidence": "WEAK",
+            "match_strategy": "NAME_ONLY",
+            "version_applicable": null,
+            "is_effective": false,
+            "superseded": false
+          },
+          {
+            "statement_id": 11,
+            "source_format": "manual",
+            "source_status": "under_investigation",
+            "normalized_status": "UNDER_INVESTIGATION",
+            "author": "Manual VEX Override",
+            "source_document_id": null,
+            "source_document_version": null,
+            "asserted_at": "2026-10-20T03:22:52+00:00",
+            "justification": null,
+            "impact_statement": null,
+            "action_statement": null,
+            "mitigation": null,
+            "fixed_version": null,
+            "evidence_url": null,
+            "mapping_confidence": "WEAK",
+            "match_strategy": "NAME_ONLY",
+            "version_applicable": null,
+            "is_effective": false,
+            "superseded": false
+          },
+          {
+            "statement_id": 12,
+            "source_format": "manual",
+            "source_status": "under_investigation",
+            "normalized_status": "UNDER_INVESTIGATION",
+            "author": "Manual VEX Override",
+            "source_document_id": null,
+            "source_document_version": null,
+            "asserted_at": "2026-10-20T03:30:00+00:00",
+            "justification": null,
+            "impact_statement": null,
+            "action_statement": null,
+            "mitigation": null,
+            "fixed_version": null,
+            "evidence_url": null,
+            "mapping_confidence": "WEAK",
+            "match_strategy": "NAME_ONLY",
+            "version_applicable": null,
+            "is_effective": false,
+            "superseded": false
+          }
+        ],
+        "internal_decision": {
+          "effective_status": "AFFECTED",
+          "reviewer": "developer@olympus.example.test",
+          "assigned_to": null,
+          "reason": "Round 1 actual assigned Developer browser save",
+          "justification": null,
+          "impact_statement": null,
+          "action_statement": null,
+          "mitigation": null,
+          "fixed_version": null,
+          "evidence_url": null,
+          "updated_at": "2026-10-20T03:31:27+00:00"
+        },
+        "reconciliation_status": "MATCHED",
+        "effective_status": "AFFECTED",
+        "history": [
+          {
+            "at": "2026-10-20T03:06:47+00:00",
+            "kind": "decision",
+            "actor": "admin@olympus.example.test",
+            "summary": "Round 1 before one deliberate decision e4574746-4e06-4429-98a7-fa14aec3cdb9",
+            "previous_status": null,
+            "new_status": "UNDER_INVESTIGATION",
+            "reason": "Round 1 before one deliberate decision e4574746-4e06-4429-98a7-fa14aec3cdb9"
+          },
+          {
+            "at": "2026-10-20T03:06:47+00:00",
+            "kind": "decision",
+            "actor": "admin@olympus.example.test",
+            "summary": "Round 1 before one deliberate decision e4574746-4e06-4429-98a7-fa14aec3cdb9",
+            "previous_status": "UNDER_INVESTIGATION",
+            "new_status": "UNDER_INVESTIGATION",
+            "reason": "Round 1 before one deliberate decision e4574746-4e06-4429-98a7-fa14aec3cdb9"
+          },
+          {
+            "at": "2026-10-20T03:08:43+00:00",
+            "kind": "decision",
+            "actor": "admin@olympus.example.test",
+            "summary": "Round 1 after one deliberate decision 9a8cc3ca-c887-4980-b939-c4a27e5a30fc",
+            "previous_status": "UNDER_INVESTIGATION",
+            "new_status": "UNDER_INVESTIGATION",
+            "reason": "Round 1 after one deliberate decision 9a8cc3ca-c887-4980-b939-c4a27e5a30fc"
+          },
+          {
+            "at": "2026-10-20T03:08:43+00:00",
+            "kind": "decision",
+            "actor": "admin@olympus.example.test",
+            "summary": "Round 1 after one deliberate decision 9a8cc3ca-c887-4980-b939-c4a27e5a30fc",
+            "previous_status": "UNDER_INVESTIGATION",
+            "new_status": "UNDER_INVESTIGATION",
+            "reason": "Round 1 after one deliberate decision 9a8cc3ca-c887-4980-b939-c4a27e5a30fc"
+          },
+          {
+            "at": "2026-10-20T03:08:46+00:00",
+            "kind": "assignment",
+            "actor": "admin@olympus.example.test",
+            "summary": "Unassigned \u2192 Synthetic Olympus developer. Round 1 assigned Developer acceptance",
+            "previous_status": "UNDER_INVESTIGATION",
+            "new_status": "UNDER_INVESTIGATION",
+            "reason": "Unassigned \u2192 Synthetic Olympus developer. Round 1 assigned Developer acceptance"
+          },
+          {
+            "at": "2026-10-20T03:08:46+00:00",
+            "kind": "decision",
+            "actor": "developer@olympus.example.test",
+            "summary": "Round 1 assigned Developer actual review",
+            "previous_status": "UNDER_INVESTIGATION",
+            "new_status": "AFFECTED",
+            "reason": "Round 1 assigned Developer actual review"
+          },
+          {
+            "at": "2026-10-20T03:08:46+00:00",
+            "kind": "decision",
+            "actor": "developer@olympus.example.test",
+            "summary": "Round 1 assigned Developer actual review",
+            "previous_status": "UNDER_INVESTIGATION",
+            "new_status": "AFFECTED",
+            "reason": "Round 1 assigned Developer actual review"
+          },
+          {
+            "at": "2026-10-20T03:08:47+00:00",
+            "kind": "assignment",
+            "actor": "admin@olympus.example.test",
+            "summary": "Synthetic Olympus developer \u2192 Unassigned. Round 1 remove disposable assignment",
+            "previous_status": "AFFECTED",
+            "new_status": "AFFECTED",
+            "reason": "Synthetic Olympus developer \u2192 Unassigned. Round 1 remove disposable assignment"
+          },
+          {
+            "at": "2026-10-20T03:22:52+00:00",
+            "kind": "decision",
+            "actor": "admin@olympus.example.test",
+            "summary": "Round 1 actual Admin browser save",
+            "previous_status": "AFFECTED",
+            "new_status": "UNDER_INVESTIGATION",
+            "reason": "Round 1 actual Admin browser save"
+          },
+          {
+            "at": "2026-10-20T03:22:52+00:00",
+            "kind": "decision",
+            "actor": "admin@olympus.example.test",
+            "summary": "Round 1 actual Admin browser save",
+            "previous_status": "AFFECTED",
+            "new_status": "UNDER_INVESTIGATION",
+            "reason": "Round 1 actual Admin browser save"
+          },
+          {
+            "at": "2026-10-20T03:30:00+00:00",
+            "kind": "decision",
+            "actor": "admin@olympus.example.test",
+            "summary": "Round 1 actual Admin browser save",
+            "previous_status": "UNDER_INVESTIGATION",
+            "new_status": "UNDER_INVESTIGATION",
+            "reason": "Round 1 actual Admin browser save"
+          },
+          {
+            "at": "2026-10-20T03:30:01+00:00",
+            "kind": "decision",
+            "actor": "admin@olympus.example.test",
+            "summary": "Round 1 actual Admin browser save",
+            "previous_status": "UNDER_INVESTIGATION",
+            "new_status": "UNDER_INVESTIGATION",
+            "reason": "Round 1 actual Admin browser save"
+          },
+          {
+            "at": "2026-10-20T03:30:03+00:00",
+            "kind": "assignment",
+            "actor": "admin@olympus.example.test",
+            "summary": "Unassigned \u2192 Synthetic Olympus developer. Assignment updated",
+            "previous_status": "UNDER_INVESTIGATION",
+            "new_status": "UNDER_INVESTIGATION",
+            "reason": "Unassigned \u2192 Synthetic Olympus developer. Assignment updated"
+          },
+          {
+            "at": "2026-10-20T03:30:39+00:00",
+            "kind": "decision",
+            "actor": "developer@olympus.example.test",
+            "summary": "Round 1 actual assigned Developer browser save",
+            "previous_status": "UNDER_INVESTIGATION",
+            "new_status": "AFFECTED",
+            "reason": "Round 1 actual assigned Developer browser save"
+          },
+          {
+            "at": "2026-10-20T03:30:39+00:00",
+            "kind": "decision",
+            "actor": "developer@olympus.example.test",
+            "summary": "Round 1 actual assigned Developer browser save",
+            "previous_status": "UNDER_INVESTIGATION",
+            "new_status": "AFFECTED",
+            "reason": "Round 1 actual assigned Developer browser save"
+          },
+          {
+            "at": "2026-10-20T03:31:27+00:00",
+            "kind": "assignment",
+            "actor": "admin@olympus.example.test",
+            "summary": "Synthetic Olympus developer \u2192 Unassigned. Round 1 UI ownership cleanup",
+            "previous_status": "AFFECTED",
+            "new_status": "AFFECTED",
+            "reason": "Synthetic Olympus developer \u2192 Unassigned. Round 1 UI ownership cleanup"
+          }
+        ],
+        "capabilities": {
+          "historical": false,
+          "can_assign": true,
+          "can_unassign": true,
+          "can_update": true,
+          "can_map": true,
+          "eligible_roles": [
+            "DEVELOPER",
+            "SECURITY_ANALYST"
+          ],
+          "candidates": [
+            {
+              "id": "membership:2",
+              "label": "Synthetic Olympus analyst",
+              "email": "analyst@olympus.example.test",
+              "roles": [
+                "SECURITY_ANALYST"
+              ]
+            },
+            {
+              "id": "membership:3",
+              "label": "Synthetic Olympus developer",
+              "email": "developer@olympus.example.test",
+              "roles": [
+                "DEVELOPER"
+              ]
+            }
+          ],
+          "owner": {
+            "id": null,
+            "label": "Unassigned",
+            "active": false,
+            "email": null,
+            "is_self": false,
+            "roles": []
+          },
+          "read_only_reason": null
+        },
+        "previous_decisions": [],
+        "row_version": 17
+      },
+      "request_id": "2cf4abde28b6"
+    },
+    "result": "PASS",
+    "time": "2026-10-20T04:55:59.859400+00:00"
+  },
+  {
+    "id": "UAT-VEX-DECISION",
+    "phase": "round1-protection",
+    "role": "admin",
+    "expected": "One decision returns 200 with persisted row_version",
+    "actual": {
+      "status": 200,
+      "response": {
+        "id": 47,
+        "sbom_id": "a18b1310-f4d9-401f-b8b1-f6beee5933ac",
+        "project_name": "UAT R1 1792465600082474000",
+        "product_name": "UAT R1 1792465600082474000 Application",
+        "sbom_name": "UAT R1 1792465600082474000 SBOM",
+        "sbom_version": null,
+        "historical": false,
+        "analysis_run_id": 22,
+        "vulnerability": {
+          "canonical_vulnerability_id": "CVE-2020-28500",
+          "aliases": [
+            "GHSA-29MW-WPGM-HMR9"
+          ],
+          "severity": "MEDIUM",
+          "cvss_score": 5.3,
+          "description": "Regular Expression Denial of Service (ReDoS) in lodash",
+          "references": [
+            "https://cert-portal.siemens.com/productcert/pdf/ssa-637483.pdf"
+          ]
+        },
+        "component": {
+          "component_id": "06036bc5-2ed5-40cf-82c8-52b9cb39c84d",
+          "name": "lodash",
+          "version": "4.17.20",
+          "purl": "pkg:npm/lodash@4.17.20",
+          "cpe": null,
+          "bom_ref": "uat-lodash",
+          "supplier": "UAT"
+        },
+        "analyzer_evidence": {
+          "detection_state": "DETECTED",
+          "sources": [
+            "OSV"
+          ],
+          "analysis_run_id": 22,
+          "match_strategy": "purl_direct",
+          "match_confidence": "0.812",
+          "matched_range": null,
+          "first_seen_at": "2026-10-20T03:06:44+00:00",
+          "last_seen_at": "2026-10-20T04:56:00+00:00"
+        },
+        "imported_vex": [
+          {
+            "statement_id": 8,
+            "source_format": "manual",
+            "source_status": "under_investigation",
+            "normalized_status": "UNDER_INVESTIGATION",
+            "author": "Manual VEX Override",
+            "source_document_id": null,
+            "source_document_version": null,
+            "asserted_at": "2026-10-20T03:06:46+00:00",
+            "justification": null,
+            "impact_statement": null,
+            "action_statement": null,
+            "mitigation": null,
+            "fixed_version": null,
+            "evidence_url": null,
+            "mapping_confidence": "WEAK",
+            "match_strategy": "NAME_ONLY",
+            "version_applicable": null,
+            "is_effective": false,
+            "superseded": false
+          },
+          {
+            "statement_id": 9,
+            "source_format": "manual",
+            "source_status": "under_investigation",
+            "normalized_status": "UNDER_INVESTIGATION",
+            "author": "Manual VEX Override",
+            "source_document_id": null,
+            "source_document_version": null,
+            "asserted_at": "2026-10-20T03:08:43+00:00",
+            "justification": null,
+            "impact_statement": null,
+            "action_statement": null,
+            "mitigation": null,
+            "fixed_version": null,
+            "evidence_url": null,
+            "mapping_confidence": "WEAK",
+            "match_strategy": "NAME_ONLY",
+            "version_applicable": null,
+            "is_effective": false,
+            "superseded": false
+          },
+          {
+            "statement_id": 10,
+            "source_format": "manual",
+            "source_status": "affected",
+            "normalized_status": "AFFECTED",
+            "author": "Manual VEX Override",
+            "source_document_id": null,
+            "source_document_version": null,
+            "asserted_at": "2026-10-20T03:08:46+00:00",
+            "justification": null,
+            "impact_statement": null,
+            "action_statement": null,
+            "mitigation": null,
+            "fixed_version": null,
+            "evidence_url": null,
+            "mapping_confidence": "WEAK",
+            "match_strategy": "NAME_ONLY",
+            "version_applicable": null,
+            "is_effective": false,
+            "superseded": false
+          },
+          {
+            "statement_id": 11,
+            "source_format": "manual",
+            "source_status": "under_investigation",
+            "normalized_status": "UNDER_INVESTIGATION",
+            "author": "Manual VEX Override",
+            "source_document_id": null,
+            "source_document_version": null,
+            "asserted_at": "2026-10-20T03:22:52+00:00",
+            "justification": null,
+            "impact_statement": null,
+            "action_statement": null,
+            "mitigation": null,
+            "fixed_version": null,
+            "evidence_url": null,
+            "mapping_confidence": "WEAK",
+            "match_strategy": "NAME_ONLY",
+            "version_applicable": null,
+            "is_effective": false,
+            "superseded": false
+          },
+          {
+            "statement_id": 12,
+            "source_format": "manual",
+            "source_status": "under_investigation",
+            "normalized_status": "UNDER_INVESTIGATION",
+            "author": "Manual VEX Override",
+            "source_document_id": null,
+            "source_document_version": null,
+            "asserted_at": "2026-10-20T03:30:00+00:00",
+            "justification": null,
+            "impact_statement": null,
+            "action_statement": null,
+            "mitigation": null,
+            "fixed_version": null,
+            "evidence_url": null,
+            "mapping_confidence": "WEAK",
+            "match_strategy": "NAME_ONLY",
+            "version_applicable": null,
+            "is_effective": false,
+            "superseded": false
+          },
+          {
+            "statement_id": 13,
+            "source_format": "manual",
+            "source_status": "affected",
+            "normalized_status": "AFFECTED",
+            "author": "Manual VEX Override",
+            "source_document_id": null,
+            "source_document_version": null,
+            "asserted_at": "2026-10-20T03:30:39+00:00",
+            "justification": null,
+            "impact_statement": null,
+            "action_statement": null,
+            "mitigation": null,
+            "fixed_version": null,
+            "evidence_url": null,
+            "mapping_confidence": "WEAK",
+            "match_strategy": "NAME_ONLY",
+            "version_applicable": null,
+            "is_effective": false,
+            "superseded": false
+          }
+        ],
+        "internal_decision": {
+          "effective_status": "UNDER_INVESTIGATION",
+          "reviewer": "admin@olympus.example.test",
+          "assigned_to": null,
+          "reason": "Round 2 protection round1-protection one deliberate decision 4e743a91-7501-45b9-bb6c-98082b2bb8b9",
+          "justification": null,
+          "impact_statement": null,
+          "action_statement": null,
+          "mitigation": null,
+          "fixed_version": null,
+          "evidence_url": null,
+          "updated_at": "2026-10-20T04:56:00+00:00"
+        },
+        "reconciliation_status": "MATCHED",
+        "effective_status": "UNDER_INVESTIGATION",
+        "history": [
+          {
+            "at": "2026-10-20T03:06:47+00:00",
+            "kind": "decision",
+            "actor": "admin@olympus.example.test",
+            "summary": "Round 1 before one deliberate decision e4574746-4e06-4429-98a7-fa14aec3cdb9",
+            "previous_status": null,
+            "new_status": "UNDER_INVESTIGATION",
+            "reason": "Round 1 before one deliberate decision e4574746-4e06-4429-98a7-fa14aec3cdb9"
+          },
+          {
+            "at": "2026-10-20T03:06:47+00:00",
+            "kind": "decision",
+            "actor": "admin@olympus.example.test",
+            "summary": "Round 1 before one deliberate decision e4574746-4e06-4429-98a7-fa14aec3cdb9",
+            "previous_status": "UNDER_INVESTIGATION",
+            "new_status": "UNDER_INVESTIGATION",
+            "reason": "Round 1 before one deliberate decision e4574746-4e06-4429-98a7-fa14aec3cdb9"
+          },
+          {
+            "at": "2026-10-20T03:08:43+00:00",
+            "kind": "decision",
+            "actor": "admin@olympus.example.test",
+            "summary": "Round 1 after one deliberate decision 9a8cc3ca-c887-4980-b939-c4a27e5a30fc",
+            "previous_status": "UNDER_INVESTIGATION",
+            "new_status": "UNDER_INVESTIGATION",
+            "reason": "Round 1 after one deliberate decision 9a8cc3ca-c887-4980-b939-c4a27e5a30fc"
+          },
+          {
+            "at": "2026-10-20T03:08:43+00:00",
+            "kind": "decision",
+            "actor": "admin@olympus.example.test",
+            "summary": "Round 1 after one deliberate decision 9a8cc3ca-c887-4980-b939-c4a27e5a30fc",
+            "previous_status": "UNDER_INVESTIGATION",
+            "new_status": "UNDER_INVESTIGATION",
+            "reason": "Round 1 after one deliberate decision 9a8cc3ca-c887-4980-b939-c4a27e5a30fc"
+          },
+          {
+            "at": "2026-10-20T03:08:46+00:00",
+            "kind": "assignment",
+            "actor": "admin@olympus.example.test",
+            "summary": "Unassigned \u2192 Synthetic Olympus developer. Round 1 assigned Developer acceptance",
+            "previous_status": "UNDER_INVESTIGATION",
+            "new_status": "UNDER_INVESTIGATION",
+            "reason": "Unassigned \u2192 Synthetic Olympus developer. Round 1 assigned Developer acceptance"
+          },
+          {
+            "at": "2026-10-20T03:08:46+00:00",
+            "kind": "decision",
+            "actor": "developer@olympus.example.test",
+            "summary": "Round 1 assigned Developer actual review",
+            "previous_status": "UNDER_INVESTIGATION",
+            "new_status": "AFFECTED",
+            "reason": "Round 1 assigned Developer actual review"
+          },
+          {
+            "at": "2026-10-20T03:08:46+00:00",
+            "kind": "decision",
+            "actor": "developer@olympus.example.test",
+            "summary": "Round 1 assigned Developer actual review",
+            "previous_status": "UNDER_INVESTIGATION",
+            "new_status": "AFFECTED",
+            "reason": "Round 1 assigned Developer actual review"
+          },
+          {
+            "at": "2026-10-20T03:08:47+00:00",
+            "kind": "assignment",
+            "actor": "admin@olympus.example.test",
+            "summary": "Synthetic Olympus developer \u2192 Unassigned. Round 1 remove disposable assignment",
+            "previous_status": "AFFECTED",
+            "new_status": "AFFECTED",
+            "reason": "Synthetic Olympus developer \u2192 Unassigned. Round 1 remove disposable assignment"
+          },
+          {
+            "at": "2026-10-20T03:22:52+00:00",
+            "kind": "decision",
+            "actor": "admin@olympus.example.test",
+            "summary": "Round 1 actual Admin browser save",
+            "previous_status": "AFFECTED",
+            "new_status": "UNDER_INVESTIGATION",
+            "reason": "Round 1 actual Admin browser save"
+          },
+          {
+            "at": "2026-10-20T03:22:52+00:00",
+            "kind": "decision",
+            "actor": "admin@olympus.example.test",
+            "summary": "Round 1 actual Admin browser save",
+            "previous_status": "AFFECTED",
+            "new_status": "UNDER_INVESTIGATION",
+            "reason": "Round 1 actual Admin browser save"
+          },
+          {
+            "at": "2026-10-20T03:30:00+00:00",
+            "kind": "decision",
+            "actor": "admin@olympus.example.test",
+            "summary": "Round 1 actual Admin browser save",
+            "previous_status": "UNDER_INVESTIGATION",
+            "new_status": "UNDER_INVESTIGATION",
+            "reason": "Round 1 actual Admin browser save"
+          },
+          {
+            "at": "2026-10-20T03:30:01+00:00",
+            "kind": "decision",
+            "actor": "admin@olympus.example.test",
+            "summary": "Round 1 actual Admin browser save",
+            "previous_status": "UNDER_INVESTIGATION",
+            "new_status": "UNDER_INVESTIGATION",
+            "reason": "Round 1 actual Admin browser save"
+          },
+          {
+            "at": "2026-10-20T03:30:03+00:00",
+            "kind": "assignment",
+            "actor": "admin@olympus.example.test",
+            "summary": "Unassigned \u2192 Synthetic Olympus developer. Assignment updated",
+            "previous_status": "UNDER_INVESTIGATION",
+            "new_status": "UNDER_INVESTIGATION",
+            "reason": "Unassigned \u2192 Synthetic Olympus developer. Assignment updated"
+          },
+          {
+            "at": "2026-10-20T03:30:39+00:00",
+            "kind": "decision",
+            "actor": "developer@olympus.example.test",
+            "summary": "Round 1 actual assigned Developer browser save",
+            "previous_status": "UNDER_INVESTIGATION",
+            "new_status": "AFFECTED",
+            "reason": "Round 1 actual assigned Developer browser save"
+          },
+          {
+            "at": "2026-10-20T03:30:39+00:00",
+            "kind": "decision",
+            "actor": "developer@olympus.example.test",
+            "summary": "Round 1 actual assigned Developer browser save",
+            "previous_status": "UNDER_INVESTIGATION",
+            "new_status": "AFFECTED",
+            "reason": "Round 1 actual assigned Developer browser save"
+          },
+          {
+            "at": "2026-10-20T03:31:27+00:00",
+            "kind": "assignment",
+            "actor": "admin@olympus.example.test",
+            "summary": "Synthetic Olympus developer \u2192 Unassigned. Round 1 UI ownership cleanup",
+            "previous_status": "AFFECTED",
+            "new_status": "AFFECTED",
+            "reason": "Synthetic Olympus developer \u2192 Unassigned. Round 1 UI ownership cleanup"
+          },
+          {
+            "at": "2026-10-20T04:56:00+00:00",
+            "kind": "decision",
+            "actor": "admin@olympus.example.test",
+            "summary": "Round 2 protection round1-protection one deliberate decision 4e743a91-7501-45b9-bb6c-98082b2bb8b9",
+            "previous_status": "AFFECTED",
+            "new_status": "UNDER_INVESTIGATION",
+            "reason": "Round 2 protection round1-protection one deliberate decision 4e743a91-7501-45b9-bb6c-98082b2bb8b9"
+          },
+          {
+            "at": "2026-10-20T04:56:00+00:00",
+            "kind": "decision",
+            "actor": "admin@olympus.example.test",
+            "summary": "Round 2 protection round1-protection one deliberate decision 4e743a91-7501-45b9-bb6c-98082b2bb8b9",
+            "previous_status": "AFFECTED",
+            "new_status": "UNDER_INVESTIGATION",
+            "reason": "Round 2 protection round1-protection one deliberate decision 4e743a91-7501-45b9-bb6c-98082b2bb8b9"
+          }
+        ],
+        "capabilities": {
+          "historical": false,
+          "can_assign": true,
+          "can_unassign": true,
+          "can_update": true,
+          "can_map": true,
+          "eligible_roles": [
+            "DEVELOPER",
+            "SECURITY_ANALYST"
+          ],
+          "candidates": [
+            {
+              "id": "membership:2",
+              "label": "Synthetic Olympus analyst",
+              "email": "analyst@olympus.example.test",
+              "roles": [
+                "SECURITY_ANALYST"
+              ]
+            },
+            {
+              "id": "membership:3",
+              "label": "Synthetic Olympus developer",
+              "email": "developer@olympus.example.test",
+              "roles": [
+                "DEVELOPER"
+              ]
+            }
+          ],
+          "owner": {
+            "id": null,
+            "label": "Unassigned",
+            "active": false,
+            "email": null,
+            "is_self": false,
+            "roles": []
+          },
+          "read_only_reason": null
+        },
+        "previous_decisions": [],
+        "row_version": 19
+      },
+      "beforeVersion": 17,
+      "persistedVersion": 19,
+      "request_id": "4654792c2628"
+    },
+    "result": "PASS",
+    "time": "2026-10-20T04:56:02.369003+00:00"
+  },
+  {
+    "id": "UAT-VEX-STALE",
+    "phase": "round1-protection",
+    "role": "admin",
+    "expected": "Stale version returns 409 and does not mutate again",
+    "actual": {
+      "status": 409,
+      "response": {
+        "id": 47,
+        "sbom_id": "a18b1310-f4d9-401f-b8b1-f6beee5933ac",
+        "project_name": "UAT R1 1792465600082474000",
+        "product_name": "UAT R1 1792465600082474000 Application",
+        "sbom_name": "UAT R1 1792465600082474000 SBOM",
+        "sbom_version": null,
+        "historical": false,
+        "analysis_run_id": 22,
+        "vulnerability": {
+          "canonical_vulnerability_id": "CVE-2020-28500",
+          "aliases": [
+            "GHSA-29MW-WPGM-HMR9"
+          ],
+          "severity": "MEDIUM",
+          "cvss_score": 5.3,
+          "description": "Regular Expression Denial of Service (ReDoS) in lodash",
+          "references": [
+            "https://cert-portal.siemens.com/productcert/pdf/ssa-637483.pdf"
+          ]
+        },
+        "component": {
+          "component_id": "06036bc5-2ed5-40cf-82c8-52b9cb39c84d",
+          "name": "lodash",
+          "version": "4.17.20",
+          "purl": "pkg:npm/lodash@4.17.20",
+          "cpe": null,
+          "bom_ref": "uat-lodash",
+          "supplier": "UAT"
+        },
+        "analyzer_evidence": {
+          "detection_state": "DETECTED",
+          "sources": [
+            "OSV"
+          ],
+          "analysis_run_id": 22,
+          "match_strategy": "purl_direct",
+          "match_confidence": "0.812",
+          "matched_range": null,
+          "first_seen_at": "2026-10-20T03:06:44+00:00",
+          "last_seen_at": "2026-10-20T04:56:00+00:00"
+        },
+        "imported_vex": [
+          {
+            "statement_id": 8,
+            "source_format": "manual",
+            "source_status": "under_investigation",
+            "normalized_status": "UNDER_INVESTIGATION",
+            "author": "Manual VEX Override",
+            "source_document_id": null,
+            "source_document_version": null,
+            "asserted_at": "2026-10-20T03:06:46+00:00",
+            "justification": null,
+            "impact_statement": null,
+            "action_statement": null,
+            "mitigation": null,
+            "fixed_version": null,
+            "evidence_url": null,
+            "mapping_confidence": "WEAK",
+            "match_strategy": "NAME_ONLY",
+            "version_applicable": null,
+            "is_effective": false,
+            "superseded": false
+          },
+          {
+            "statement_id": 9,
+            "source_format": "manual",
+            "source_status": "under_investigation",
+            "normalized_status": "UNDER_INVESTIGATION",
+            "author": "Manual VEX Override",
+            "source_document_id": null,
+            "source_document_version": null,
+            "asserted_at": "2026-10-20T03:08:43+00:00",
+            "justification": null,
+            "impact_statement": null,
+            "action_statement": null,
+            "mitigation": null,
+            "fixed_version": null,
+            "evidence_url": null,
+            "mapping_confidence": "WEAK",
+            "match_strategy": "NAME_ONLY",
+            "version_applicable": null,
+            "is_effective": false,
+            "superseded": false
+          },
+          {
+            "statement_id": 10,
+            "source_format": "manual",
+            "source_status": "affected",
+            "normalized_status": "AFFECTED",
+            "author": "Manual VEX Override",
+            "source_document_id": null,
+            "source_document_version": null,
+            "asserted_at": "2026-10-20T03:08:46+00:00",
+            "justification": null,
+            "impact_statement": null,
+            "action_statement": null,
+            "mitigation": null,
+            "fixed_version": null,
+            "evidence_url": null,
+            "mapping_confidence": "WEAK",
+            "match_strategy": "NAME_ONLY",
+            "version_applicable": null,
+            "is_effective": false,
+            "superseded": false
+          },
+          {
+            "statement_id": 11,
+            "source_format": "manual",
+            "source_status": "under_investigation",
+            "normalized_status": "UNDER_INVESTIGATION",
+            "author": "Manual VEX Override",
+            "source_document_id": null,
+            "source_document_version": null,
+            "asserted_at": "2026-10-20T03:22:52+00:00",
+            "justification": null,
+            "impact_statement": null,
+            "action_statement": null,
+            "mitigation": null,
+            "fixed_version": null,
+            "evidence_url": null,
+            "mapping_confidence": "WEAK",
+            "match_strategy": "NAME_ONLY",
+            "version_applicable": null,
+            "is_effective": false,
+            "superseded": false
+          },
+          {
+            "statement_id": 12,
+            "source_format": "manual",
+            "source_status": "under_investigation",
+            "normalized_status": "UNDER_INVESTIGATION",
+            "author": "Manual VEX Override",
+            "source_document_id": null,
+            "source_document_version": null,
+            "asserted_at": "2026-10-20T03:30:00+00:00",
+            "justification": null,
+            "impact_statement": null,
+            "action_statement": null,
+            "mitigation": null,
+            "fixed_version": null,
+            "evidence_url": null,
+            "mapping_confidence": "WEAK",
+            "match_strategy": "NAME_ONLY",
+            "version_applicable": null,
+            "is_effective": false,
+            "superseded": false
+          },
+          {
+            "statement_id": 13,
+            "source_format": "manual",
+            "source_status": "affected",
+            "normalized_status": "AFFECTED",
+            "author": "Manual VEX Override",
+            "source_document_id": null,
+            "source_document_version": null,
+            "asserted_at": "2026-10-20T03:30:39+00:00",
+            "justification": null,
+            "impact_statement": null,
+            "action_statement": null,
+            "mitigation": null,
+            "fixed_version": null,
+            "evidence_url": null,
+            "mapping_confidence": "WEAK",
+            "match_strategy": "NAME_ONLY",
+            "version_applicable": null,
+            "is_effective": false,
+            "superseded": false
+          }
+        ],
+        "internal_decision": {
+          "effective_status": "UNDER_INVESTIGATION",
+          "reviewer": "admin@olympus.example.test",
+          "assigned_to": null,
+          "reason": "Round 2 protection round1-protection one deliberate decision 4e743a91-7501-45b9-bb6c-98082b2bb8b9",
+          "justification": null,
+          "impact_statement": null,
+          "action_statement": null,
+          "mitigation": null,
+          "fixed_version": null,
+          "evidence_url": null,
+          "updated_at": "2026-10-20T04:56:00+00:00"
+        },
+        "reconciliation_status": "MATCHED",
+        "effective_status": "UNDER_INVESTIGATION",
+        "history": [
+          {
+            "at": "2026-10-20T03:06:47+00:00",
+            "kind": "decision",
+            "actor": "admin@olympus.example.test",
+            "summary": "Round 1 before one deliberate decision e4574746-4e06-4429-98a7-fa14aec3cdb9",
+            "previous_status": null,
+            "new_status": "UNDER_INVESTIGATION",
+            "reason": "Round 1 before one deliberate decision e4574746-4e06-4429-98a7-fa14aec3cdb9"
+          },
+          {
+            "at": "2026-10-20T03:06:47+00:00",
+            "kind": "decision",
+            "actor": "admin@olympus.example.test",
+            "summary": "Round 1 before one deliberate decision e4574746-4e06-4429-98a7-fa14aec3cdb9",
+            "previous_status": "UNDER_INVESTIGATION",
+            "new_status": "UNDER_INVESTIGATION",
+            "reason": "Round 1 before one deliberate decision e4574746-4e06-4429-98a7-fa14aec3cdb9"
+          },
+          {
+            "at": "2026-10-20T03:08:43+00:00",
+            "kind": "decision",
+            "actor": "admin@olympus.example.test",
+            "summary": "Round 1 after one deliberate decision 9a8cc3ca-c887-4980-b939-c4a27e5a30fc",
+            "previous_status": "UNDER_INVESTIGATION",
+            "new_status": "UNDER_INVESTIGATION",
+            "reason": "Round 1 after one deliberate decision 9a8cc3ca-c887-4980-b939-c4a27e5a30fc"
+          },
+          {
+            "at": "2026-10-20T03:08:43+00:00",
+            "kind": "decision",
+            "actor": "admin@olympus.example.test",
+            "summary": "Round 1 after one deliberate decision 9a8cc3ca-c887-4980-b939-c4a27e5a30fc",
+            "previous_status": "UNDER_INVESTIGATION",
+            "new_status": "UNDER_INVESTIGATION",
+            "reason": "Round 1 after one deliberate decision 9a8cc3ca-c887-4980-b939-c4a27e5a30fc"
+          },
+          {
+            "at": "2026-10-20T03:08:46+00:00",
+            "kind": "assignment",
+            "actor": "admin@olympus.example.test",
+            "summary": "Unassigned \u2192 Synthetic Olympus developer. Round 1 assigned Developer acceptance",
+            "previous_status": "UNDER_INVESTIGATION",
+            "new_status": "UNDER_INVESTIGATION",
+            "reason": "Unassigned \u2192 Synthetic Olympus developer. Round 1 assigned Developer acceptance"
+          },
+          {
+            "at": "2026-10-20T03:08:46+00:00",
+            "kind": "decision",
+            "actor": "developer@olympus.example.test",
+            "summary": "Round 1 assigned Developer actual review",
+            "previous_status": "UNDER_INVESTIGATION",
+            "new_status": "AFFECTED",
+            "reason": "Round 1 assigned Developer actual review"
+          },
+          {
+            "at": "2026-10-20T03:08:46+00:00",
+            "kind": "decision",
+            "actor": "developer@olympus.example.test",
+            "summary": "Round 1 assigned Developer actual review",
+            "previous_status": "UNDER_INVESTIGATION",
+            "new_status": "AFFECTED",
+            "reason": "Round 1 assigned Developer actual review"
+          },
+          {
+            "at": "2026-10-20T03:08:47+00:00",
+            "kind": "assignment",
+            "actor": "admin@olympus.example.test",
+            "summary": "Synthetic Olympus developer \u2192 Unassigned. Round 1 remove disposable assignment",
+            "previous_status": "AFFECTED",
+            "new_status": "AFFECTED",
+            "reason": "Synthetic Olympus developer \u2192 Unassigned. Round 1 remove disposable assignment"
+          },
+          {
+            "at": "2026-10-20T03:22:52+00:00",
+            "kind": "decision",
+            "actor": "admin@olympus.example.test",
+            "summary": "Round 1 actual Admin browser save",
+            "previous_status": "AFFECTED",
+            "new_status": "UNDER_INVESTIGATION",
+            "reason": "Round 1 actual Admin browser save"
+          },
+          {
+            "at": "2026-10-20T03:22:52+00:00",
+            "kind": "decision",
+            "actor": "admin@olympus.example.test",
+            "summary": "Round 1 actual Admin browser save",
+            "previous_status": "AFFECTED",
+            "new_status": "UNDER_INVESTIGATION",
+            "reason": "Round 1 actual Admin browser save"
+          },
+          {
+            "at": "2026-10-20T03:30:00+00:00",
+            "kind": "decision",
+            "actor": "admin@olympus.example.test",
+            "summary": "Round 1 actual Admin browser save",
+            "previous_status": "UNDER_INVESTIGATION",
+            "new_status": "UNDER_INVESTIGATION",
+            "reason": "Round 1 actual Admin browser save"
+          },
+          {
+            "at": "2026-10-20T03:30:01+00:00",
+            "kind": "decision",
+            "actor": "admin@olympus.example.test",
+            "summary": "Round 1 actual Admin browser save",
+            "previous_status": "UNDER_INVESTIGATION",
+            "new_status": "UNDER_INVESTIGATION",
+            "reason": "Round 1 actual Admin browser save"
+          },
+          {
+            "at": "2026-10-20T03:30:03+00:00",
+            "kind": "assignment",
+            "actor": "admin@olympus.example.test",
+            "summary": "Unassigned \u2192 Synthetic Olympus developer. Assignment updated",
+            "previous_status": "UNDER_INVESTIGATION",
+            "new_status": "UNDER_INVESTIGATION",
+            "reason": "Unassigned \u2192 Synthetic Olympus developer. Assignment updated"
+          },
+          {
+            "at": "2026-10-20T03:30:39+00:00",
+            "kind": "decision",
+            "actor": "developer@olympus.example.test",
+            "summary": "Round 1 actual assigned Developer browser save",
+            "previous_status": "UNDER_INVESTIGATION",
+            "new_status": "AFFECTED",
+            "reason": "Round 1 actual assigned Developer browser save"
+          },
+          {
+            "at": "2026-10-20T03:30:39+00:00",
+            "kind": "decision",
+            "actor": "developer@olympus.example.test",
+            "summary": "Round 1 actual assigned Developer browser save",
+            "previous_status": "UNDER_INVESTIGATION",
+            "new_status": "AFFECTED",
+            "reason": "Round 1 actual assigned Developer browser save"
+          },
+          {
+            "at": "2026-10-20T03:31:27+00:00",
+            "kind": "assignment",
+            "actor": "admin@olympus.example.test",
+            "summary": "Synthetic Olympus developer \u2192 Unassigned. Round 1 UI ownership cleanup",
+            "previous_status": "AFFECTED",
+            "new_status": "AFFECTED",
+            "reason": "Synthetic Olympus developer \u2192 Unassigned. Round 1 UI ownership cleanup"
+          },
+          {
+            "at": "2026-10-20T04:56:00+00:00",
+            "kind": "decision",
+            "actor": "admin@olympus.example.test",
+            "summary": "Round 2 protection round1-protection one deliberate decision 4e743a91-7501-45b9-bb6c-98082b2bb8b9",
+            "previous_status": "AFFECTED",
+            "new_status": "UNDER_INVESTIGATION",
+            "reason": "Round 2 protection round1-protection one deliberate decision 4e743a91-7501-45b9-bb6c-98082b2bb8b9"
+          },
+          {
+            "at": "2026-10-20T04:56:00+00:00",
+            "kind": "decision",
+            "actor": "admin@olympus.example.test",
+            "summary": "Round 2 protection round1-protection one deliberate decision 4e743a91-7501-45b9-bb6c-98082b2bb8b9",
+            "previous_status": "AFFECTED",
+            "new_status": "UNDER_INVESTIGATION",
+            "reason": "Round 2 protection round1-protection one deliberate decision 4e743a91-7501-45b9-bb6c-98082b2bb8b9"
+          }
+        ],
+        "capabilities": {
+          "historical": false,
+          "can_assign": true,
+          "can_unassign": true,
+          "can_update": true,
+          "can_map": true,
+          "eligible_roles": [
+            "DEVELOPER",
+            "SECURITY_ANALYST"
+          ],
+          "candidates": [
+            {
+              "id": "membership:2",
+              "label": "Synthetic Olympus analyst",
+              "email": "analyst@olympus.example.test",
+              "roles": [
+                "SECURITY_ANALYST"
+              ]
+            },
+            {
+              "id": "membership:3",
+              "label": "Synthetic Olympus developer",
+              "email": "developer@olympus.example.test",
+              "roles": [
+                "DEVELOPER"
+              ]
+            }
+          ],
+          "owner": {
+            "id": null,
+            "label": "Unassigned",
+            "active": false,
+            "email": null,
+            "is_self": false,
+            "roles": []
+          },
+          "read_only_reason": null
+        },
+        "previous_decisions": [],
+        "row_version": 19
+      },
+      "beforeStale": {
+        "id": 47,
+        "canonical_vulnerability_id": "CVE-2020-28500",
+        "aliases": [
+          "GHSA-29MW-WPGM-HMR9"
+        ],
+        "severity": "MEDIUM",
+        "component_id": "06036bc5-2ed5-40cf-82c8-52b9cb39c84d",
+        "component_name": "lodash",
+        "component_version": "4.17.20",
+        "project_id": "3b481333-d56a-4730-9427-7fc5c332309a",
+        "project_name": "UAT R1 1792465600082474000",
+        "product_id": "256b25f8-b44b-4a14-a1b2-2dedae5aa4dc",
+        "product_name": "UAT R1 1792465600082474000 Application",
+        "sbom_id": "a18b1310-f4d9-401f-b8b1-f6beee5933ac",
+        "sbom_name": "UAT R1 1792465600082474000 SBOM",
+        "sbom_version": null,
+        "historical": false,
+        "analysis_run_id": 22,
+        "analyzer_detection_state": "DETECTED",
+        "analyzer_sources": [
+          "OSV"
+        ],
+        "vex_source": "Manual VEX Override",
+        "native_vex_status": "under_investigation",
+        "effective_status": "UNDER_INVESTIGATION",
+        "reconciliation_status": "MATCHED",
+        "justification": null,
+        "assigned_to": null,
+        "assigned_to_label": "Unassigned",
+        "assigned_to_is_self": false,
+        "assigned_to_active": false,
+        "reviewed_by": "admin@olympus.example.test",
+        "last_seen_at": "2026-10-20T04:56:00+00:00",
+        "updated_at": "2026-10-20T04:56:00+00:00",
+        "row_version": 19,
+        "needs_review": false
+      },
+      "afterStale": {
+        "id": 47,
+        "canonical_vulnerability_id": "CVE-2020-28500",
+        "aliases": [
+          "GHSA-29MW-WPGM-HMR9"
+        ],
+        "severity": "MEDIUM",
+        "component_id": "06036bc5-2ed5-40cf-82c8-52b9cb39c84d",
+        "component_name": "lodash",
+        "component_version": "4.17.20",
+        "project_id": "3b481333-d56a-4730-9427-7fc5c332309a",
+        "project_name": "UAT R1 1792465600082474000",
+        "product_id": "256b25f8-b44b-4a14-a1b2-2dedae5aa4dc",
+        "product_name": "UAT R1 1792465600082474000 Application",
+        "sbom_id": "a18b1310-f4d9-401f-b8b1-f6beee5933ac",
+        "sbom_name": "UAT R1 1792465600082474000 SBOM",
+        "sbom_version": null,
+        "historical": false,
+        "analysis_run_id": 22,
+        "analyzer_detection_state": "DETECTED",
+        "analyzer_sources": [
+          "OSV"
+        ],
+        "vex_source": "Manual VEX Override",
+        "native_vex_status": "under_investigation",
+        "effective_status": "UNDER_INVESTIGATION",
+        "reconciliation_status": "MATCHED",
+        "justification": null,
+        "assigned_to": null,
+        "assigned_to_label": "Unassigned",
+        "assigned_to_is_self": false,
+        "assigned_to_active": false,
+        "reviewed_by": "admin@olympus.example.test",
+        "last_seen_at": "2026-10-20T04:56:00+00:00",
+        "updated_at": "2026-10-20T04:56:00+00:00",
+        "row_version": 19,
+        "needs_review": false
+      },
+      "request_id": "86caa8735c52"
+    },
+    "result": "PASS",
+    "time": "2026-10-20T04:56:03.760545+00:00"
+  },
+  {
+    "id": "R1-VEX-NO-DUPLICATE",
+    "phase": "round1-protection",
+    "role": "admin",
+    "expected": "One component audit plus one context audit are appended; stale request appends none",
+    "actual": {
+      "status": 200,
+      "decisionHistoryBefore": 12,
+      "decisionHistoryAfter": 14,
+      "reasonOccurrencesAcrossTwoAuditScopes": 2
+    },
+    "result": "PASS",
+    "time": "2026-10-20T04:56:04.138661+00:00"
+  },
+  {
+    "id": "UAT-VEX-VALIDATION",
+    "phase": "round1-protection",
+    "role": "admin",
+    "expected": "NOT_AFFECTED without justification is rejected with 422",
+    "actual": {
+      "status": 422,
+      "data": {
+        "detail": "VEX not_affected requires justification or impact statement"
+      },
+      "request_id": "3c07d4fd5603"
+    },
+    "result": "PASS",
+    "time": "2026-10-20T04:56:04.372206+00:00"
+  },
+  {
+    "id": "UAT-VEX-DENY-viewer",
+    "phase": "round1-protection",
+    "role": "viewer",
+    "expected": "Unowned/foreign decision rejected HTTP 403",
+    "actual": {
+      "status": 403,
+      "data": {
+        "detail": "You can view this investigation, but only the assigned Developer, a Security Analyst, or Tenant Administrator can update it."
+      },
+      "request_id": "0451385005f1"
+    },
+    "result": "PASS",
+    "time": "2026-10-20T04:56:05.120739+00:00"
+  },
+  {
+    "id": "UAT-VEX-DENY-developer",
+    "phase": "round1-protection",
+    "role": "developer",
+    "expected": "Unowned/foreign decision rejected HTTP 403",
+    "actual": {
+      "status": 403,
+      "data": {
+        "detail": "This investigation must be assigned to you before you can update it. This investigation must be assigned by a Tenant Administrator or Security Analyst before you can update it."
+      },
+      "request_id": "bbf97882d3e9"
+    },
+    "result": "PASS",
+    "time": "2026-10-20T04:56:05.670019+00:00"
+  },
+  {
+    "id": "UAT-VEX-DENY-foreign",
+    "phase": "round1-protection",
+    "role": "foreign",
+    "expected": "Unowned/foreign decision rejected HTTP 404",
+    "actual": {
+      "status": 404,
+      "data": {
+        "detail": "Investigation not found"
+      },
+      "request_id": "45ca07f6191b"
+    },
+    "result": "PASS",
+    "time": "2026-10-20T04:56:06.238302+00:00"
+  },
+  {
+    "id": "R1-VEX-FOREIGN-DETAIL",
+    "phase": "round1-protection",
+    "role": "foreign",
+    "expected": "Cross-tenant detail concealed with 404",
+    "actual": {
+      "status": 404,
+      "data": {
+        "detail": "Investigation not found"
+      },
+      "request_id": "68c4ebef4095"
+    },
+    "result": "PASS",
+    "time": "2026-10-20T04:56:06.282313+00:00"
+  },
+  {
+    "id": "R1-VEX-ASSIGN",
+    "phase": "round1-protection",
+    "role": "admin",
+    "expected": "Assignment returns fully serialized detail",
+    "actual": {
+      "status": 200,
+      "data": {
+        "id": 47,
+        "sbom_id": "a18b1310-f4d9-401f-b8b1-f6beee5933ac",
+        "project_name": "UAT R1 1792465600082474000",
+        "product_name": "UAT R1 1792465600082474000 Application",
+        "sbom_name": "UAT R1 1792465600082474000 SBOM",
+        "sbom_version": null,
+        "historical": false,
+        "analysis_run_id": 22,
+        "vulnerability": {
+          "canonical_vulnerability_id": "CVE-2020-28500",
+          "aliases": [
+            "GHSA-29MW-WPGM-HMR9"
+          ],
+          "severity": "MEDIUM",
+          "cvss_score": 5.3,
+          "description": "Regular Expression Denial of Service (ReDoS) in lodash",
+          "references": [
+            "https://cert-portal.siemens.com/productcert/pdf/ssa-637483.pdf"
+          ]
+        },
+        "component": {
+          "component_id": "06036bc5-2ed5-40cf-82c8-52b9cb39c84d",
+          "name": "lodash",
+          "version": "4.17.20",
+          "purl": "pkg:npm/lodash@4.17.20",
+          "cpe": null,
+          "bom_ref": "uat-lodash",
+          "supplier": "UAT"
+        },
+        "analyzer_evidence": {
+          "detection_state": "DETECTED",
+          "sources": [
+            "OSV"
+          ],
+          "analysis_run_id": 22,
+          "match_strategy": "purl_direct",
+          "match_confidence": "0.812",
+          "matched_range": null,
+          "first_seen_at": "2026-10-20T03:06:44+00:00",
+          "last_seen_at": "2026-10-20T04:56:00+00:00"
+        },
+        "imported_vex": [
+          {
+            "statement_id": 8,
+            "source_format": "manual",
+            "source_status": "under_investigation",
+            "normalized_status": "UNDER_INVESTIGATION",
+            "author": "Manual VEX Override",
+            "source_document_id": null,
+            "source_document_version": null,
+            "asserted_at": "2026-10-20T03:06:46+00:00",
+            "justification": null,
+            "impact_statement": null,
+            "action_statement": null,
+            "mitigation": null,
+            "fixed_version": null,
+            "evidence_url": null,
+            "mapping_confidence": "WEAK",
+            "match_strategy": "NAME_ONLY",
+            "version_applicable": null,
+            "is_effective": false,
+            "superseded": false
+          },
+          {
+            "statement_id": 9,
+            "source_format": "manual",
+            "source_status": "under_investigation",
+            "normalized_status": "UNDER_INVESTIGATION",
+            "author": "Manual VEX Override",
+            "source_document_id": null,
+            "source_document_version": null,
+            "asserted_at": "2026-10-20T03:08:43+00:00",
+            "justification": null,
+            "impact_statement": null,
+            "action_statement": null,
+            "mitigation": null,
+            "fixed_version": null,
+            "evidence_url": null,
+            "mapping_confidence": "WEAK",
+            "match_strategy": "NAME_ONLY",
+            "version_applicable": null,
+            "is_effective": false,
+            "superseded": false
+          },
+          {
+            "statement_id": 10,
+            "source_format": "manual",
+            "source_status": "affected",
+            "normalized_status": "AFFECTED",
+            "author": "Manual VEX Override",
+            "source_document_id": null,
+            "source_document_version": null,
+            "asserted_at": "2026-10-20T03:08:46+00:00",
+            "justification": null,
+            "impact_statement": null,
+            "action_statement": null,
+            "mitigation": null,
+            "fixed_version": null,
+            "evidence_url": null,
+            "mapping_confidence": "WEAK",
+            "match_strategy": "NAME_ONLY",
+            "version_applicable": null,
+            "is_effective": false,
+            "superseded": false
+          },
+          {
+            "statement_id": 11,
+            "source_format": "manual",
+            "source_status": "under_investigation",
+            "normalized_status": "UNDER_INVESTIGATION",
+            "author": "Manual VEX Override",
+            "source_document_id": null,
+            "source_document_version": null,
+            "asserted_at": "2026-10-20T03:22:52+00:00",
+            "justification": null,
+            "impact_statement": null,
+            "action_statement": null,
+            "mitigation": null,
+            "fixed_version": null,
+            "evidence_url": null,
+            "mapping_confidence": "WEAK",
+            "match_strategy": "NAME_ONLY",
+            "version_applicable": null,
+            "is_effective": false,
+            "superseded": false
+          },
+          {
+            "statement_id": 12,
+            "source_format": "manual",
+            "source_status": "under_investigation",
+            "normalized_status": "UNDER_INVESTIGATION",
+            "author": "Manual VEX Override",
+            "source_document_id": null,
+            "source_document_version": null,
+            "asserted_at": "2026-10-20T03:30:00+00:00",
+            "justification": null,
+            "impact_statement": null,
+            "action_statement": null,
+            "mitigation": null,
+            "fixed_version": null,
+            "evidence_url": null,
+            "mapping_confidence": "WEAK",
+            "match_strategy": "NAME_ONLY",
+            "version_applicable": null,
+            "is_effective": false,
+            "superseded": false
+          },
+          {
+            "statement_id": 13,
+            "source_format": "manual",
+            "source_status": "affected",
+            "normalized_status": "AFFECTED",
+            "author": "Manual VEX Override",
+            "source_document_id": null,
+            "source_document_version": null,
+            "asserted_at": "2026-10-20T03:30:39+00:00",
+            "justification": null,
+            "impact_statement": null,
+            "action_statement": null,
+            "mitigation": null,
+            "fixed_version": null,
+            "evidence_url": null,
+            "mapping_confidence": "WEAK",
+            "match_strategy": "NAME_ONLY",
+            "version_applicable": null,
+            "is_effective": false,
+            "superseded": false
+          }
+        ],
+        "internal_decision": {
+          "effective_status": "UNDER_INVESTIGATION",
+          "reviewer": "admin@olympus.example.test",
+          "assigned_to": "membership:3",
+          "reason": "Round 2 protection round1-protection one deliberate decision 4e743a91-7501-45b9-bb6c-98082b2bb8b9",
+          "justification": null,
+          "impact_statement": null,
+          "action_statement": null,
+          "mitigation": null,
+          "fixed_version": null,
+          "evidence_url": null,
+          "updated_at": "2026-10-20T04:56:06+00:00"
+        },
+        "reconciliation_status": "MATCHED",
+        "effective_status": "UNDER_INVESTIGATION",
+        "history": [
+          {
+            "at": "2026-10-20T03:06:47+00:00",
+            "kind": "decision",
+            "actor": "admin@olympus.example.test",
+            "summary": "Round 1 before one deliberate decision e4574746-4e06-4429-98a7-fa14aec3cdb9",
+            "previous_status": null,
+            "new_status": "UNDER_INVESTIGATION",
+            "reason": "Round 1 before one deliberate decision e4574746-4e06-4429-98a7-fa14aec3cdb9"
+          },
+          {
+            "at": "2026-10-20T03:06:47+00:00",
+            "kind": "decision",
+            "actor": "admin@olympus.example.test",
+            "summary": "Round 1 before one deliberate decision e4574746-4e06-4429-98a7-fa14aec3cdb9",
+            "previous_status": "UNDER_INVESTIGATION",
+            "new_status": "UNDER_INVESTIGATION",
+            "reason": "Round 1 before one deliberate decision e4574746-4e06-4429-98a7-fa14aec3cdb9"
+          },
+          {
+            "at": "2026-10-20T03:08:43+00:00",
+            "kind": "decision",
+            "actor": "admin@olympus.example.test",
+            "summary": "Round 1 after one deliberate decision 9a8cc3ca-c887-4980-b939-c4a27e5a30fc",
+            "previous_status": "UNDER_INVESTIGATION",
+            "new_status": "UNDER_INVESTIGATION",
+            "reason": "Round 1 after one deliberate decision 9a8cc3ca-c887-4980-b939-c4a27e5a30fc"
+          },
+          {
+            "at": "2026-10-20T03:08:43+00:00",
+            "kind": "decision",
+            "actor": "admin@olympus.example.test",
+            "summary": "Round 1 after one deliberate decision 9a8cc3ca-c887-4980-b939-c4a27e5a30fc",
+            "previous_status": "UNDER_INVESTIGATION",
+            "new_status": "UNDER_INVESTIGATION",
+            "reason": "Round 1 after one deliberate decision 9a8cc3ca-c887-4980-b939-c4a27e5a30fc"
+          },
+          {
+            "at": "2026-10-20T03:08:46+00:00",
+            "kind": "assignment",
+            "actor": "admin@olympus.example.test",
+            "summary": "Unassigned \u2192 Synthetic Olympus developer. Round 1 assigned Developer acceptance",
+            "previous_status": "UNDER_INVESTIGATION",
+            "new_status": "UNDER_INVESTIGATION",
+            "reason": "Unassigned \u2192 Synthetic Olympus developer. Round 1 assigned Developer acceptance"
+          },
+          {
+            "at": "2026-10-20T03:08:46+00:00",
+            "kind": "decision",
+            "actor": "developer@olympus.example.test",
+            "summary": "Round 1 assigned Developer actual review",
+            "previous_status": "UNDER_INVESTIGATION",
+            "new_status": "AFFECTED",
+            "reason": "Round 1 assigned Developer actual review"
+          },
+          {
+            "at": "2026-10-20T03:08:46+00:00",
+            "kind": "decision",
+            "actor": "developer@olympus.example.test",
+            "summary": "Round 1 assigned Developer actual review",
+            "previous_status": "UNDER_INVESTIGATION",
+            "new_status": "AFFECTED",
+            "reason": "Round 1 assigned Developer actual review"
+          },
+          {
+            "at": "2026-10-20T03:08:47+00:00",
+            "kind": "assignment",
+            "actor": "admin@olympus.example.test",
+            "summary": "Synthetic Olympus developer \u2192 Unassigned. Round 1 remove disposable assignment",
+            "previous_status": "AFFECTED",
+            "new_status": "AFFECTED",
+            "reason": "Synthetic Olympus developer \u2192 Unassigned. Round 1 remove disposable assignment"
+          },
+          {
+            "at": "2026-10-20T03:22:52+00:00",
+            "kind": "decision",
+            "actor": "admin@olympus.example.test",
+            "summary": "Round 1 actual Admin browser save",
+            "previous_status": "AFFECTED",
+            "new_status": "UNDER_INVESTIGATION",
+            "reason": "Round 1 actual Admin browser save"
+          },
+          {
+            "at": "2026-10-20T03:22:52+00:00",
+            "kind": "decision",
+            "actor": "admin@olympus.example.test",
+            "summary": "Round 1 actual Admin browser save",
+            "previous_status": "AFFECTED",
+            "new_status": "UNDER_INVESTIGATION",
+            "reason": "Round 1 actual Admin browser save"
+          },
+          {
+            "at": "2026-10-20T03:30:00+00:00",
+            "kind": "decision",
+            "actor": "admin@olympus.example.test",
+            "summary": "Round 1 actual Admin browser save",
+            "previous_status": "UNDER_INVESTIGATION",
+            "new_status": "UNDER_INVESTIGATION",
+            "reason": "Round 1 actual Admin browser save"
+          },
+          {
+            "at": "2026-10-20T03:30:01+00:00",
+            "kind": "decision",
+            "actor": "admin@olympus.example.test",
+            "summary": "Round 1 actual Admin browser save",
+            "previous_status": "UNDER_INVESTIGATION",
+            "new_status": "UNDER_INVESTIGATION",
+            "reason": "Round 1 actual Admin browser save"
+          },
+          {
+            "at": "2026-10-20T03:30:03+00:00",
+            "kind": "assignment",
+            "actor": "admin@olympus.example.test",
+            "summary": "Unassigned \u2192 Synthetic Olympus developer. Assignment updated",
+            "previous_status": "UNDER_INVESTIGATION",
+            "new_status": "UNDER_INVESTIGATION",
+            "reason": "Unassigned \u2192 Synthetic Olympus developer. Assignment updated"
+          },
+          {
+            "at": "2026-10-20T03:30:39+00:00",
+            "kind": "decision",
+            "actor": "developer@olympus.example.test",
+            "summary": "Round 1 actual assigned Developer browser save",
+            "previous_status": "UNDER_INVESTIGATION",
+            "new_status": "AFFECTED",
+            "reason": "Round 1 actual assigned Developer browser save"
+          },
+          {
+            "at": "2026-10-20T03:30:39+00:00",
+            "kind": "decision",
+            "actor": "developer@olympus.example.test",
+            "summary": "Round 1 actual assigned Developer browser save",
+            "previous_status": "UNDER_INVESTIGATION",
+            "new_status": "AFFECTED",
+            "reason": "Round 1 actual assigned Developer browser save"
+          },
+          {
+            "at": "2026-10-20T03:31:27+00:00",
+            "kind": "assignment",
+            "actor": "admin@olympus.example.test",
+            "summary": "Synthetic Olympus developer \u2192 Unassigned. Round 1 UI ownership cleanup",
+            "previous_status": "AFFECTED",
+            "new_status": "AFFECTED",
+            "reason": "Synthetic Olympus developer \u2192 Unassigned. Round 1 UI ownership cleanup"
+          },
+          {
+            "at": "2026-10-20T04:56:00+00:00",
+            "kind": "decision",
+            "actor": "admin@olympus.example.test",
+            "summary": "Round 2 protection round1-protection one deliberate decision 4e743a91-7501-45b9-bb6c-98082b2bb8b9",
+            "previous_status": "AFFECTED",
+            "new_status": "UNDER_INVESTIGATION",
+            "reason": "Round 2 protection round1-protection one deliberate decision 4e743a91-7501-45b9-bb6c-98082b2bb8b9"
+          },
+          {
+            "at": "2026-10-20T04:56:00+00:00",
+            "kind": "decision",
+            "actor": "admin@olympus.example.test",
+            "summary": "Round 2 protection round1-protection one deliberate decision 4e743a91-7501-45b9-bb6c-98082b2bb8b9",
+            "previous_status": "AFFECTED",
+            "new_status": "UNDER_INVESTIGATION",
+            "reason": "Round 2 protection round1-protection one deliberate decision 4e743a91-7501-45b9-bb6c-98082b2bb8b9"
+          },
+          {
+            "at": "2026-10-20T04:56:06+00:00",
+            "kind": "assignment",
+            "actor": "admin@olympus.example.test",
+            "summary": "Unassigned \u2192 Synthetic Olympus developer. Round 2 protection assigned Developer acceptance",
+            "previous_status": "UNDER_INVESTIGATION",
+            "new_status": "UNDER_INVESTIGATION",
+            "reason": "Unassigned \u2192 Synthetic Olympus developer. Round 2 protection assigned Developer acceptance"
+          }
+        ],
+        "capabilities": {
+          "historical": false,
+          "can_assign": true,
+          "can_unassign": true,
+          "can_update": true,
+          "can_map": true,
+          "eligible_roles": [
+            "DEVELOPER",
+            "SECURITY_ANALYST"
+          ],
+          "candidates": [
+            {
+              "id": "membership:2",
+              "label": "Synthetic Olympus analyst",
+              "email": "analyst@olympus.example.test",
+              "roles": [
+                "SECURITY_ANALYST"
+              ]
+            },
+            {
+              "id": "membership:3",
+              "label": "Synthetic Olympus developer",
+              "email": "developer@olympus.example.test",
+              "roles": [
+                "DEVELOPER"
+              ]
+            }
+          ],
+          "owner": {
+            "id": "membership:3",
+            "label": "Synthetic Olympus developer",
+            "active": true,
+            "email": "developer@olympus.example.test",
+            "is_self": false,
+            "roles": [
+              "DEVELOPER"
+            ]
+          },
+          "read_only_reason": null
+        },
+        "previous_decisions": [],
+        "row_version": 20
+      },
+      "request_id": "6e3e81e6880e"
+    },
+    "result": "PASS",
+    "time": "2026-10-20T04:56:06.971695+00:00"
+  },
+  {
+    "id": "UAT-VEX-ASSIGNED-DEVELOPER-DETAIL",
+    "phase": "round1-protection",
+    "role": "developer",
+    "expected": "Assigned Developer can read detail with update capability",
+    "actual": {
+      "status": 200,
+      "data": {
+        "id": 47,
+        "sbom_id": "a18b1310-f4d9-401f-b8b1-f6beee5933ac",
+        "project_name": "UAT R1 1792465600082474000",
+        "product_name": "UAT R1 1792465600082474000 Application",
+        "sbom_name": "UAT R1 1792465600082474000 SBOM",
+        "sbom_version": null,
+        "historical": false,
+        "analysis_run_id": 22,
+        "vulnerability": {
+          "canonical_vulnerability_id": "CVE-2020-28500",
+          "aliases": [
+            "GHSA-29MW-WPGM-HMR9"
+          ],
+          "severity": "MEDIUM",
+          "cvss_score": 5.3,
+          "description": "Regular Expression Denial of Service (ReDoS) in lodash",
+          "references": [
+            "https://cert-portal.siemens.com/productcert/pdf/ssa-637483.pdf"
+          ]
+        },
+        "component": {
+          "component_id": "06036bc5-2ed5-40cf-82c8-52b9cb39c84d",
+          "name": "lodash",
+          "version": "4.17.20",
+          "purl": "pkg:npm/lodash@4.17.20",
+          "cpe": null,
+          "bom_ref": "uat-lodash",
+          "supplier": "UAT"
+        },
+        "analyzer_evidence": {
+          "detection_state": "DETECTED",
+          "sources": [
+            "OSV"
+          ],
+          "analysis_run_id": 22,
+          "match_strategy": "purl_direct",
+          "match_confidence": "0.812",
+          "matched_range": null,
+          "first_seen_at": "2026-10-20T03:06:44+00:00",
+          "last_seen_at": "2026-10-20T04:56:00+00:00"
+        },
+        "imported_vex": [
+          {
+            "statement_id": 8,
+            "source_format": "manual",
+            "source_status": "under_investigation",
+            "normalized_status": "UNDER_INVESTIGATION",
+            "author": "Manual VEX Override",
+            "source_document_id": null,
+            "source_document_version": null,
+            "asserted_at": "2026-10-20T03:06:46+00:00",
+            "justification": null,
+            "impact_statement": null,
+            "action_statement": null,
+            "mitigation": null,
+            "fixed_version": null,
+            "evidence_url": null,
+            "mapping_confidence": "WEAK",
+            "match_strategy": "NAME_ONLY",
+            "version_applicable": null,
+            "is_effective": false,
+            "superseded": false
+          },
+          {
+            "statement_id": 9,
+            "source_format": "manual",
+            "source_status": "under_investigation",
+            "normalized_status": "UNDER_INVESTIGATION",
+            "author": "Manual VEX Override",
+            "source_document_id": null,
+            "source_document_version": null,
+            "asserted_at": "2026-10-20T03:08:43+00:00",
+            "justification": null,
+            "impact_statement": null,
+            "action_statement": null,
+            "mitigation": null,
+            "fixed_version": null,
+            "evidence_url": null,
+            "mapping_confidence": "WEAK",
+            "match_strategy": "NAME_ONLY",
+            "version_applicable": null,
+            "is_effective": false,
+            "superseded": false
+          },
+          {
+            "statement_id": 10,
+            "source_format": "manual",
+            "source_status": "affected",
+            "normalized_status": "AFFECTED",
+            "author": "Manual VEX Override",
+            "source_document_id": null,
+            "source_document_version": null,
+            "asserted_at": "2026-10-20T03:08:46+00:00",
+            "justification": null,
+            "impact_statement": null,
+            "action_statement": null,
+            "mitigation": null,
+            "fixed_version": null,
+            "evidence_url": null,
+            "mapping_confidence": "WEAK",
+            "match_strategy": "NAME_ONLY",
+            "version_applicable": null,
+            "is_effective": false,
+            "superseded": false
+          },
+          {
+            "statement_id": 11,
+            "source_format": "manual",
+            "source_status": "under_investigation",
+            "normalized_status": "UNDER_INVESTIGATION",
+            "author": "Manual VEX Override",
+            "source_document_id": null,
+            "source_document_version": null,
+            "asserted_at": "2026-10-20T03:22:52+00:00",
+            "justification": null,
+            "impact_statement": null,
+            "action_statement": null,
+            "mitigation": null,
+            "fixed_version": null,
+            "evidence_url": null,
+            "mapping_confidence": "WEAK",
+            "match_strategy": "NAME_ONLY",
+            "version_applicable": null,
+            "is_effective": false,
+            "superseded": false
+          },
+          {
+            "statement_id": 12,
+            "source_format": "manual",
+            "source_status": "under_investigation",
+            "normalized_status": "UNDER_INVESTIGATION",
+            "author": "Manual VEX Override",
+            "source_document_id": null,
+            "source_document_version": null,
+            "asserted_at": "2026-10-20T03:30:00+00:00",
+            "justification": null,
+            "impact_statement": null,
+            "action_statement": null,
+            "mitigation": null,
+            "fixed_version": null,
+            "evidence_url": null,
+            "mapping_confidence": "WEAK",
+            "match_strategy": "NAME_ONLY",
+            "version_applicable": null,
+            "is_effective": false,
+            "superseded": false
+          },
+          {
+            "statement_id": 13,
+            "source_format": "manual",
+            "source_status": "affected",
+            "normalized_status": "AFFECTED",
+            "author": "Manual VEX Override",
+            "source_document_id": null,
+            "source_document_version": null,
+            "asserted_at": "2026-10-20T03:30:39+00:00",
+            "justification": null,
+            "impact_statement": null,
+            "action_statement": null,
+            "mitigation": null,
+            "fixed_version": null,
+            "evidence_url": null,
+            "mapping_confidence": "WEAK",
+            "match_strategy": "NAME_ONLY",
+            "version_applicable": null,
+            "is_effective": false,
+            "superseded": false
+          }
+        ],
+        "internal_decision": {
+          "effective_status": "UNDER_INVESTIGATION",
+          "reviewer": "admin@olympus.example.test",
+          "assigned_to": "membership:3",
+          "reason": "Round 2 protection round1-protection one deliberate decision 4e743a91-7501-45b9-bb6c-98082b2bb8b9",
+          "justification": null,
+          "impact_statement": null,
+          "action_statement": null,
+          "mitigation": null,
+          "fixed_version": null,
+          "evidence_url": null,
+          "updated_at": "2026-10-20T04:56:06+00:00"
+        },
+        "reconciliation_status": "MATCHED",
+        "effective_status": "UNDER_INVESTIGATION",
+        "history": [
+          {
+            "at": "2026-10-20T03:06:47+00:00",
+            "kind": "decision",
+            "actor": "admin@olympus.example.test",
+            "summary": "Round 1 before one deliberate decision e4574746-4e06-4429-98a7-fa14aec3cdb9",
+            "previous_status": null,
+            "new_status": "UNDER_INVESTIGATION",
+            "reason": "Round 1 before one deliberate decision e4574746-4e06-4429-98a7-fa14aec3cdb9"
+          },
+          {
+            "at": "2026-10-20T03:06:47+00:00",
+            "kind": "decision",
+            "actor": "admin@olympus.example.test",
+            "summary": "Round 1 before one deliberate decision e4574746-4e06-4429-98a7-fa14aec3cdb9",
+            "previous_status": "UNDER_INVESTIGATION",
+            "new_status": "UNDER_INVESTIGATION",
+            "reason": "Round 1 before one deliberate decision e4574746-4e06-4429-98a7-fa14aec3cdb9"
+          },
+          {
+            "at": "2026-10-20T03:08:43+00:00",
+            "kind": "decision",
+            "actor": "admin@olympus.example.test",
+            "summary": "Round 1 after one deliberate decision 9a8cc3ca-c887-4980-b939-c4a27e5a30fc",
+            "previous_status": "UNDER_INVESTIGATION",
+            "new_status": "UNDER_INVESTIGATION",
+            "reason": "Round 1 after one deliberate decision 9a8cc3ca-c887-4980-b939-c4a27e5a30fc"
+          },
+          {
+            "at": "2026-10-20T03:08:43+00:00",
+            "kind": "decision",
+            "actor": "admin@olympus.example.test",
+            "summary": "Round 1 after one deliberate decision 9a8cc3ca-c887-4980-b939-c4a27e5a30fc",
+            "previous_status": "UNDER_INVESTIGATION",
+            "new_status": "UNDER_INVESTIGATION",
+            "reason": "Round 1 after one deliberate decision 9a8cc3ca-c887-4980-b939-c4a27e5a30fc"
+          },
+          {
+            "at": "2026-10-20T03:08:46+00:00",
+            "kind": "assignment",
+            "actor": "admin@olympus.example.test",
+            "summary": "Unassigned \u2192 Synthetic Olympus developer. Round 1 assigned Developer acceptance",
+            "previous_status": "UNDER_INVESTIGATION",
+            "new_status": "UNDER_INVESTIGATION",
+            "reason": "Unassigned \u2192 Synthetic Olympus developer. Round 1 assigned Developer acceptance"
+          },
+          {
+            "at": "2026-10-20T03:08:46+00:00",
+            "kind": "decision",
+            "actor": "developer@olympus.example.test",
+            "summary": "Round 1 assigned Developer actual review",
+            "previous_status": "UNDER_INVESTIGATION",
+            "new_status": "AFFECTED",
+            "reason": "Round 1 assigned Developer actual review"
+          },
+          {
+            "at": "2026-10-20T03:08:46+00:00",
+            "kind": "decision",
+            "actor": "developer@olympus.example.test",
+            "summary": "Round 1 assigned Developer actual review",
+            "previous_status": "UNDER_INVESTIGATION",
+            "new_status": "AFFECTED",
+            "reason": "Round 1 assigned Developer actual review"
+          },
+          {
+            "at": "2026-10-20T03:08:47+00:00",
+            "kind": "assignment",
+            "actor": "admin@olympus.example.test",
+            "summary": "Synthetic Olympus developer \u2192 Unassigned. Round 1 remove disposable assignment",
+            "previous_status": "AFFECTED",
+            "new_status": "AFFECTED",
+            "reason": "Synthetic Olympus developer \u2192 Unassigned. Round 1 remove disposable assignment"
+          },
+          {
+            "at": "2026-10-20T03:22:52+00:00",
+            "kind": "decision",
+            "actor": "admin@olympus.example.test",
+            "summary": "Round 1 actual Admin browser save",
+            "previous_status": "AFFECTED",
+            "new_status": "UNDER_INVESTIGATION",
+            "reason": "Round 1 actual Admin browser save"
+          },
+          {
+            "at": "2026-10-20T03:22:52+00:00",
+            "kind": "decision",
+            "actor": "admin@olympus.example.test",
+            "summary": "Round 1 actual Admin browser save",
+            "previous_status": "AFFECTED",
+            "new_status": "UNDER_INVESTIGATION",
+            "reason": "Round 1 actual Admin browser save"
+          },
+          {
+            "at": "2026-10-20T03:30:00+00:00",
+            "kind": "decision",
+            "actor": "admin@olympus.example.test",
+            "summary": "Round 1 actual Admin browser save",
+            "previous_status": "UNDER_INVESTIGATION",
+            "new_status": "UNDER_INVESTIGATION",
+            "reason": "Round 1 actual Admin browser save"
+          },
+          {
+            "at": "2026-10-20T03:30:01+00:00",
+            "kind": "decision",
+            "actor": "admin@olympus.example.test",
+            "summary": "Round 1 actual Admin browser save",
+            "previous_status": "UNDER_INVESTIGATION",
+            "new_status": "UNDER_INVESTIGATION",
+            "reason": "Round 1 actual Admin browser save"
+          },
+          {
+            "at": "2026-10-20T03:30:03+00:00",
+            "kind": "assignment",
+            "actor": "admin@olympus.example.test",
+            "summary": "Unassigned \u2192 Synthetic Olympus developer. Assignment updated",
+            "previous_status": "UNDER_INVESTIGATION",
+            "new_status": "UNDER_INVESTIGATION",
+            "reason": "Unassigned \u2192 Synthetic Olympus developer. Assignment updated"
+          },
+          {
+            "at": "2026-10-20T03:30:39+00:00",
+            "kind": "decision",
+            "actor": "developer@olympus.example.test",
+            "summary": "Round 1 actual assigned Developer browser save",
+            "previous_status": "UNDER_INVESTIGATION",
+            "new_status": "AFFECTED",
+            "reason": "Round 1 actual assigned Developer browser save"
+          },
+          {
+            "at": "2026-10-20T03:30:39+00:00",
+            "kind": "decision",
+            "actor": "developer@olympus.example.test",
+            "summary": "Round 1 actual assigned Developer browser save",
+            "previous_status": "UNDER_INVESTIGATION",
+            "new_status": "AFFECTED",
+            "reason": "Round 1 actual assigned Developer browser save"
+          },
+          {
+            "at": "2026-10-20T03:31:27+00:00",
+            "kind": "assignment",
+            "actor": "admin@olympus.example.test",
+            "summary": "Synthetic Olympus developer \u2192 Unassigned. Round 1 UI ownership cleanup",
+            "previous_status": "AFFECTED",
+            "new_status": "AFFECTED",
+            "reason": "Synthetic Olympus developer \u2192 Unassigned. Round 1 UI ownership cleanup"
+          },
+          {
+            "at": "2026-10-20T04:56:00+00:00",
+            "kind": "decision",
+            "actor": "admin@olympus.example.test",
+            "summary": "Round 2 protection round1-protection one deliberate decision 4e743a91-7501-45b9-bb6c-98082b2bb8b9",
+            "previous_status": "AFFECTED",
+            "new_status": "UNDER_INVESTIGATION",
+            "reason": "Round 2 protection round1-protection one deliberate decision 4e743a91-7501-45b9-bb6c-98082b2bb8b9"
+          },
+          {
+            "at": "2026-10-20T04:56:00+00:00",
+            "kind": "decision",
+            "actor": "admin@olympus.example.test",
+            "summary": "Round 2 protection round1-protection one deliberate decision 4e743a91-7501-45b9-bb6c-98082b2bb8b9",
+            "previous_status": "AFFECTED",
+            "new_status": "UNDER_INVESTIGATION",
+            "reason": "Round 2 protection round1-protection one deliberate decision 4e743a91-7501-45b9-bb6c-98082b2bb8b9"
+          },
+          {
+            "at": "2026-10-20T04:56:06+00:00",
+            "kind": "assignment",
+            "actor": "admin@olympus.example.test",
+            "summary": "Unassigned \u2192 Synthetic Olympus developer. Round 2 protection assigned Developer acceptance",
+            "previous_status": "UNDER_INVESTIGATION",
+            "new_status": "UNDER_INVESTIGATION",
+            "reason": "Unassigned \u2192 Synthetic Olympus developer. Round 2 protection assigned Developer acceptance"
+          }
+        ],
+        "capabilities": {
+          "historical": false,
+          "can_assign": false,
+          "can_unassign": false,
+          "can_update": true,
+          "can_map": false,
+          "eligible_roles": [],
+          "candidates": [],
+          "owner": {
+            "id": "membership:3",
+            "label": "Synthetic Olympus developer",
+            "active": true,
+            "email": "developer@olympus.example.test",
+            "is_self": true,
+            "roles": [
+              "DEVELOPER"
+            ]
+          },
+          "read_only_reason": null
+        },
+        "previous_decisions": [],
+        "row_version": 20
+      },
+      "request_id": "b7050970c1c2"
+    },
+    "result": "PASS",
+    "time": "2026-10-20T04:56:07.524540+00:00"
+  },
+  {
+    "id": "UAT-VEX-ASSIGNED-DEVELOPER",
+    "phase": "round1-protection",
+    "role": "developer",
+    "expected": "Assigned Developer decision returns 200 with persisted state",
+    "actual": {
+      "status": 200,
+      "data": {
+        "id": 47,
+        "sbom_id": "a18b1310-f4d9-401f-b8b1-f6beee5933ac",
+        "project_name": "UAT R1 1792465600082474000",
+        "product_name": "UAT R1 1792465600082474000 Application",
+        "sbom_name": "UAT R1 1792465600082474000 SBOM",
+        "sbom_version": null,
+        "historical": false,
+        "analysis_run_id": 22,
+        "vulnerability": {
+          "canonical_vulnerability_id": "CVE-2020-28500",
+          "aliases": [
+            "GHSA-29MW-WPGM-HMR9"
+          ],
+          "severity": "MEDIUM",
+          "cvss_score": 5.3,
+          "description": "Regular Expression Denial of Service (ReDoS) in lodash",
+          "references": [
+            "https://cert-portal.siemens.com/productcert/pdf/ssa-637483.pdf"
+          ]
+        },
+        "component": {
+          "component_id": "06036bc5-2ed5-40cf-82c8-52b9cb39c84d",
+          "name": "lodash",
+          "version": "4.17.20",
+          "purl": "pkg:npm/lodash@4.17.20",
+          "cpe": null,
+          "bom_ref": "uat-lodash",
+          "supplier": "UAT"
+        },
+        "analyzer_evidence": {
+          "detection_state": "DETECTED",
+          "sources": [
+            "OSV"
+          ],
+          "analysis_run_id": 22,
+          "match_strategy": "purl_direct",
+          "match_confidence": "0.812",
+          "matched_range": null,
+          "first_seen_at": "2026-10-20T03:06:44+00:00",
+          "last_seen_at": "2026-10-20T04:56:07+00:00"
+        },
+        "imported_vex": [
+          {
+            "statement_id": 8,
+            "source_format": "manual",
+            "source_status": "under_investigation",
+            "normalized_status": "UNDER_INVESTIGATION",
+            "author": "Manual VEX Override",
+            "source_document_id": null,
+            "source_document_version": null,
+            "asserted_at": "2026-10-20T03:06:46+00:00",
+            "justification": null,
+            "impact_statement": null,
+            "action_statement": null,
+            "mitigation": null,
+            "fixed_version": null,
+            "evidence_url": null,
+            "mapping_confidence": "WEAK",
+            "match_strategy": "NAME_ONLY",
+            "version_applicable": null,
+            "is_effective": false,
+            "superseded": false
+          },
+          {
+            "statement_id": 9,
+            "source_format": "manual",
+            "source_status": "under_investigation",
+            "normalized_status": "UNDER_INVESTIGATION",
+            "author": "Manual VEX Override",
+            "source_document_id": null,
+            "source_document_version": null,
+            "asserted_at": "2026-10-20T03:08:43+00:00",
+            "justification": null,
+            "impact_statement": null,
+            "action_statement": null,
+            "mitigation": null,
+            "fixed_version": null,
+            "evidence_url": null,
+            "mapping_confidence": "WEAK",
+            "match_strategy": "NAME_ONLY",
+            "version_applicable": null,
+            "is_effective": false,
+            "superseded": false
+          },
+          {
+            "statement_id": 10,
+            "source_format": "manual",
+            "source_status": "affected",
+            "normalized_status": "AFFECTED",
+            "author": "Manual VEX Override",
+            "source_document_id": null,
+            "source_document_version": null,
+            "asserted_at": "2026-10-20T03:08:46+00:00",
+            "justification": null,
+            "impact_statement": null,
+            "action_statement": null,
+            "mitigation": null,
+            "fixed_version": null,
+            "evidence_url": null,
+            "mapping_confidence": "WEAK",
+            "match_strategy": "NAME_ONLY",
+            "version_applicable": null,
+            "is_effective": false,
+            "superseded": false
+          },
+          {
+            "statement_id": 11,
+            "source_format": "manual",
+            "source_status": "under_investigation",
+            "normalized_status": "UNDER_INVESTIGATION",
+            "author": "Manual VEX Override",
+            "source_document_id": null,
+            "source_document_version": null,
+            "asserted_at": "2026-10-20T03:22:52+00:00",
+            "justification": null,
+            "impact_statement": null,
+            "action_statement": null,
+            "mitigation": null,
+            "fixed_version": null,
+            "evidence_url": null,
+            "mapping_confidence": "WEAK",
+            "match_strategy": "NAME_ONLY",
+            "version_applicable": null,
+            "is_effective": false,
+            "superseded": false
+          },
+          {
+            "statement_id": 12,
+            "source_format": "manual",
+            "source_status": "under_investigation",
+            "normalized_status": "UNDER_INVESTIGATION",
+            "author": "Manual VEX Override",
+            "source_document_id": null,
+            "source_document_version": null,
+            "asserted_at": "2026-10-20T03:30:00+00:00",
+            "justification": null,
+            "impact_statement": null,
+            "action_statement": null,
+            "mitigation": null,
+            "fixed_version": null,
+            "evidence_url": null,
+            "mapping_confidence": "WEAK",
+            "match_strategy": "NAME_ONLY",
+            "version_applicable": null,
+            "is_effective": false,
+            "superseded": false
+          },
+          {
+            "statement_id": 13,
+            "source_format": "manual",
+            "source_status": "affected",
+            "normalized_status": "AFFECTED",
+            "author": "Manual VEX Override",
+            "source_document_id": null,
+            "source_document_version": null,
+            "asserted_at": "2026-10-20T03:30:39+00:00",
+            "justification": null,
+            "impact_statement": null,
+            "action_statement": null,
+            "mitigation": null,
+            "fixed_version": null,
+            "evidence_url": null,
+            "mapping_confidence": "WEAK",
+            "match_strategy": "NAME_ONLY",
+            "version_applicable": null,
+            "is_effective": false,
+            "superseded": false
+          },
+          {
+            "statement_id": 15,
+            "source_format": "manual",
+            "source_status": "under_investigation",
+            "normalized_status": "UNDER_INVESTIGATION",
+            "author": "Manual VEX Override",
+            "source_document_id": null,
+            "source_document_version": null,
+            "asserted_at": "2026-10-20T04:56:00+00:00",
+            "justification": null,
+            "impact_statement": null,
+            "action_statement": null,
+            "mitigation": null,
+            "fixed_version": null,
+            "evidence_url": null,
+            "mapping_confidence": "WEAK",
+            "match_strategy": "NAME_ONLY",
+            "version_applicable": null,
+            "is_effective": false,
+            "superseded": false
+          }
+        ],
+        "internal_decision": {
+          "effective_status": "AFFECTED",
+          "reviewer": "developer@olympus.example.test",
+          "assigned_to": "membership:3",
+          "reason": "Round 2 protection assigned Developer actual review",
+          "justification": null,
+          "impact_statement": null,
+          "action_statement": null,
+          "mitigation": null,
+          "fixed_version": null,
+          "evidence_url": null,
+          "updated_at": "2026-10-20T04:56:07+00:00"
+        },
+        "reconciliation_status": "MATCHED",
+        "effective_status": "AFFECTED",
+        "history": [
+          {
+            "at": "2026-10-20T03:06:47+00:00",
+            "kind": "decision",
+            "actor": "admin@olympus.example.test",
+            "summary": "Round 1 before one deliberate decision e4574746-4e06-4429-98a7-fa14aec3cdb9",
+            "previous_status": null,
+            "new_status": "UNDER_INVESTIGATION",
+            "reason": "Round 1 before one deliberate decision e4574746-4e06-4429-98a7-fa14aec3cdb9"
+          },
+          {
+            "at": "2026-10-20T03:06:47+00:00",
+            "kind": "decision",
+            "actor": "admin@olympus.example.test",
+            "summary": "Round 1 before one deliberate decision e4574746-4e06-4429-98a7-fa14aec3cdb9",
+            "previous_status": "UNDER_INVESTIGATION",
+            "new_status": "UNDER_INVESTIGATION",
+            "reason": "Round 1 before one deliberate decision e4574746-4e06-4429-98a7-fa14aec3cdb9"
+          },
+          {
+            "at": "2026-10-20T03:08:43+00:00",
+            "kind": "decision",
+            "actor": "admin@olympus.example.test",
+            "summary": "Round 1 after one deliberate decision 9a8cc3ca-c887-4980-b939-c4a27e5a30fc",
+            "previous_status": "UNDER_INVESTIGATION",
+            "new_status": "UNDER_INVESTIGATION",
+            "reason": "Round 1 after one deliberate decision 9a8cc3ca-c887-4980-b939-c4a27e5a30fc"
+          },
+          {
+            "at": "2026-10-20T03:08:43+00:00",
+            "kind": "decision",
+            "actor": "admin@olympus.example.test",
+            "summary": "Round 1 after one deliberate decision 9a8cc3ca-c887-4980-b939-c4a27e5a30fc",
+            "previous_status": "UNDER_INVESTIGATION",
+            "new_status": "UNDER_INVESTIGATION",
+            "reason": "Round 1 after one deliberate decision 9a8cc3ca-c887-4980-b939-c4a27e5a30fc"
+          },
+          {
+            "at": "2026-10-20T03:08:46+00:00",
+            "kind": "assignment",
+            "actor": "admin@olympus.example.test",
+            "summary": "Unassigned \u2192 Synthetic Olympus developer. Round 1 assigned Developer acceptance",
+            "previous_status": "UNDER_INVESTIGATION",
+            "new_status": "UNDER_INVESTIGATION",
+            "reason": "Unassigned \u2192 Synthetic Olympus developer. Round 1 assigned Developer acceptance"
+          },
+          {
+            "at": "2026-10-20T03:08:46+00:00",
+            "kind": "decision",
+            "actor": "developer@olympus.example.test",
+            "summary": "Round 1 assigned Developer actual review",
+            "previous_status": "UNDER_INVESTIGATION",
+            "new_status": "AFFECTED",
+            "reason": "Round 1 assigned Developer actual review"
+          },
+          {
+            "at": "2026-10-20T03:08:46+00:00",
+            "kind": "decision",
+            "actor": "developer@olympus.example.test",
+            "summary": "Round 1 assigned Developer actual review",
+            "previous_status": "UNDER_INVESTIGATION",
+            "new_status": "AFFECTED",
+            "reason": "Round 1 assigned Developer actual review"
+          },
+          {
+            "at": "2026-10-20T03:08:47+00:00",
+            "kind": "assignment",
+            "actor": "admin@olympus.example.test",
+            "summary": "Synthetic Olympus developer \u2192 Unassigned. Round 1 remove disposable assignment",
+            "previous_status": "AFFECTED",
+            "new_status": "AFFECTED",
+            "reason": "Synthetic Olympus developer \u2192 Unassigned. Round 1 remove disposable assignment"
+          },
+          {
+            "at": "2026-10-20T03:22:52+00:00",
+            "kind": "decision",
+            "actor": "admin@olympus.example.test",
+            "summary": "Round 1 actual Admin browser save",
+            "previous_status": "AFFECTED",
+            "new_status": "UNDER_INVESTIGATION",
+            "reason": "Round 1 actual Admin browser save"
+          },
+          {
+            "at": "2026-10-20T03:22:52+00:00",
+            "kind": "decision",
+            "actor": "admin@olympus.example.test",
+            "summary": "Round 1 actual Admin browser save",
+            "previous_status": "AFFECTED",
+            "new_status": "UNDER_INVESTIGATION",
+            "reason": "Round 1 actual Admin browser save"
+          },
+          {
+            "at": "2026-10-20T03:30:00+00:00",
+            "kind": "decision",
+            "actor": "admin@olympus.example.test",
+            "summary": "Round 1 actual Admin browser save",
+            "previous_status": "UNDER_INVESTIGATION",
+            "new_status": "UNDER_INVESTIGATION",
+            "reason": "Round 1 actual Admin browser save"
+          },
+          {
+            "at": "2026-10-20T03:30:01+00:00",
+            "kind": "decision",
+            "actor": "admin@olympus.example.test",
+            "summary": "Round 1 actual Admin browser save",
+            "previous_status": "UNDER_INVESTIGATION",
+            "new_status": "UNDER_INVESTIGATION",
+            "reason": "Round 1 actual Admin browser save"
+          },
+          {
+            "at": "2026-10-20T03:30:03+00:00",
+            "kind": "assignment",
+            "actor": "admin@olympus.example.test",
+            "summary": "Unassigned \u2192 Synthetic Olympus developer. Assignment updated",
+            "previous_status": "UNDER_INVESTIGATION",
+            "new_status": "UNDER_INVESTIGATION",
+            "reason": "Unassigned \u2192 Synthetic Olympus developer. Assignment updated"
+          },
+          {
+            "at": "2026-10-20T03:30:39+00:00",
+            "kind": "decision",
+            "actor": "developer@olympus.example.test",
+            "summary": "Round 1 actual assigned Developer browser save",
+            "previous_status": "UNDER_INVESTIGATION",
+            "new_status": "AFFECTED",
+            "reason": "Round 1 actual assigned Developer browser save"
+          },
+          {
+            "at": "2026-10-20T03:30:39+00:00",
+            "kind": "decision",
+            "actor": "developer@olympus.example.test",
+            "summary": "Round 1 actual assigned Developer browser save",
+            "previous_status": "UNDER_INVESTIGATION",
+            "new_status": "AFFECTED",
+            "reason": "Round 1 actual assigned Developer browser save"
+          },
+          {
+            "at": "2026-10-20T03:31:27+00:00",
+            "kind": "assignment",
+            "actor": "admin@olympus.example.test",
+            "summary": "Synthetic Olympus developer \u2192 Unassigned. Round 1 UI ownership cleanup",
+            "previous_status": "AFFECTED",
+            "new_status": "AFFECTED",
+            "reason": "Synthetic Olympus developer \u2192 Unassigned. Round 1 UI ownership cleanup"
+          },
+          {
+            "at": "2026-10-20T04:56:00+00:00",
+            "kind": "decision",
+            "actor": "admin@olympus.example.test",
+            "summary": "Round 2 protection round1-protection one deliberate decision 4e743a91-7501-45b9-bb6c-98082b2bb8b9",
+            "previous_status": "AFFECTED",
+            "new_status": "UNDER_INVESTIGATION",
+            "reason": "Round 2 protection round1-protection one deliberate decision 4e743a91-7501-45b9-bb6c-98082b2bb8b9"
+          },
+          {
+            "at": "2026-10-20T04:56:00+00:00",
+            "kind": "decision",
+            "actor": "admin@olympus.example.test",
+            "summary": "Round 2 protection round1-protection one deliberate decision 4e743a91-7501-45b9-bb6c-98082b2bb8b9",
+            "previous_status": "AFFECTED",
+            "new_status": "UNDER_INVESTIGATION",
+            "reason": "Round 2 protection round1-protection one deliberate decision 4e743a91-7501-45b9-bb6c-98082b2bb8b9"
+          },
+          {
+            "at": "2026-10-20T04:56:06+00:00",
+            "kind": "assignment",
+            "actor": "admin@olympus.example.test",
+            "summary": "Unassigned \u2192 Synthetic Olympus developer. Round 2 protection assigned Developer acceptance",
+            "previous_status": "UNDER_INVESTIGATION",
+            "new_status": "UNDER_INVESTIGATION",
+            "reason": "Unassigned \u2192 Synthetic Olympus developer. Round 2 protection assigned Developer acceptance"
+          },
+          {
+            "at": "2026-10-20T04:56:07+00:00",
+            "kind": "decision",
+            "actor": "developer@olympus.example.test",
+            "summary": "Round 2 protection assigned Developer actual review",
+            "previous_status": "UNDER_INVESTIGATION",
+            "new_status": "AFFECTED",
+            "reason": "Round 2 protection assigned Developer actual review"
+          },
+          {
+            "at": "2026-10-20T04:56:07+00:00",
+            "kind": "decision",
+            "actor": "developer@olympus.example.test",
+            "summary": "Round 2 protection assigned Developer actual review",
+            "previous_status": "UNDER_INVESTIGATION",
+            "new_status": "AFFECTED",
+            "reason": "Round 2 protection assigned Developer actual review"
+          }
+        ],
+        "capabilities": {
+          "historical": false,
+          "can_assign": false,
+          "can_unassign": false,
+          "can_update": true,
+          "can_map": false,
+          "eligible_roles": [],
+          "candidates": [],
+          "owner": {
+            "id": "membership:3",
+            "label": "Synthetic Olympus developer",
+            "active": true,
+            "email": "developer@olympus.example.test",
+            "is_self": true,
+            "roles": [
+              "DEVELOPER"
+            ]
+          },
+          "read_only_reason": null
+        },
+        "previous_decisions": [],
+        "row_version": 22
+      },
+      "request_id": "ddbc5d3aa043"
+    },
+    "result": "PASS",
+    "time": "2026-10-20T04:56:09.182795+00:00"
+  },
+  {
+    "id": "R1-VEX-UNASSIGN",
+    "phase": "round1-protection",
+    "role": "admin",
+    "expected": "Admin unassigns disposable context without changing seeded membership",
+    "actual": {
+      "status": 200,
+      "data": {
+        "id": 47,
+        "sbom_id": "a18b1310-f4d9-401f-b8b1-f6beee5933ac",
+        "project_name": "UAT R1 1792465600082474000",
+        "product_name": "UAT R1 1792465600082474000 Application",
+        "sbom_name": "UAT R1 1792465600082474000 SBOM",
+        "sbom_version": null,
+        "historical": false,
+        "analysis_run_id": 22,
+        "vulnerability": {
+          "canonical_vulnerability_id": "CVE-2020-28500",
+          "aliases": [
+            "GHSA-29MW-WPGM-HMR9"
+          ],
+          "severity": "MEDIUM",
+          "cvss_score": 5.3,
+          "description": "Regular Expression Denial of Service (ReDoS) in lodash",
+          "references": [
+            "https://cert-portal.siemens.com/productcert/pdf/ssa-637483.pdf"
+          ]
+        },
+        "component": {
+          "component_id": "06036bc5-2ed5-40cf-82c8-52b9cb39c84d",
+          "name": "lodash",
+          "version": "4.17.20",
+          "purl": "pkg:npm/lodash@4.17.20",
+          "cpe": null,
+          "bom_ref": "uat-lodash",
+          "supplier": "UAT"
+        },
+        "analyzer_evidence": {
+          "detection_state": "DETECTED",
+          "sources": [
+            "OSV"
+          ],
+          "analysis_run_id": 22,
+          "match_strategy": "purl_direct",
+          "match_confidence": "0.812",
+          "matched_range": null,
+          "first_seen_at": "2026-10-20T03:06:44+00:00",
+          "last_seen_at": "2026-10-20T04:56:07+00:00"
+        },
+        "imported_vex": [
+          {
+            "statement_id": 8,
+            "source_format": "manual",
+            "source_status": "under_investigation",
+            "normalized_status": "UNDER_INVESTIGATION",
+            "author": "Manual VEX Override",
+            "source_document_id": null,
+            "source_document_version": null,
+            "asserted_at": "2026-10-20T03:06:46+00:00",
+            "justification": null,
+            "impact_statement": null,
+            "action_statement": null,
+            "mitigation": null,
+            "fixed_version": null,
+            "evidence_url": null,
+            "mapping_confidence": "WEAK",
+            "match_strategy": "NAME_ONLY",
+            "version_applicable": null,
+            "is_effective": false,
+            "superseded": false
+          },
+          {
+            "statement_id": 9,
+            "source_format": "manual",
+            "source_status": "under_investigation",
+            "normalized_status": "UNDER_INVESTIGATION",
+            "author": "Manual VEX Override",
+            "source_document_id": null,
+            "source_document_version": null,
+            "asserted_at": "2026-10-20T03:08:43+00:00",
+            "justification": null,
+            "impact_statement": null,
+            "action_statement": null,
+            "mitigation": null,
+            "fixed_version": null,
+            "evidence_url": null,
+            "mapping_confidence": "WEAK",
+            "match_strategy": "NAME_ONLY",
+            "version_applicable": null,
+            "is_effective": false,
+            "superseded": false
+          },
+          {
+            "statement_id": 10,
+            "source_format": "manual",
+            "source_status": "affected",
+            "normalized_status": "AFFECTED",
+            "author": "Manual VEX Override",
+            "source_document_id": null,
+            "source_document_version": null,
+            "asserted_at": "2026-10-20T03:08:46+00:00",
+            "justification": null,
+            "impact_statement": null,
+            "action_statement": null,
+            "mitigation": null,
+            "fixed_version": null,
+            "evidence_url": null,
+            "mapping_confidence": "WEAK",
+            "match_strategy": "NAME_ONLY",
+            "version_applicable": null,
+            "is_effective": false,
+            "superseded": false
+          },
+          {
+            "statement_id": 11,
+            "source_format": "manual",
+            "source_status": "under_investigation",
+            "normalized_status": "UNDER_INVESTIGATION",
+            "author": "Manual VEX Override",
+            "source_document_id": null,
+            "source_document_version": null,
+            "asserted_at": "2026-10-20T03:22:52+00:00",
+            "justification": null,
+            "impact_statement": null,
+            "action_statement": null,
+            "mitigation": null,
+            "fixed_version": null,
+            "evidence_url": null,
+            "mapping_confidence": "WEAK",
+            "match_strategy": "NAME_ONLY",
+            "version_applicable": null,
+            "is_effective": false,
+            "superseded": false
+          },
+          {
+            "statement_id": 12,
+            "source_format": "manual",
+            "source_status": "under_investigation",
+            "normalized_status": "UNDER_INVESTIGATION",
+            "author": "Manual VEX Override",
+            "source_document_id": null,
+            "source_document_version": null,
+            "asserted_at": "2026-10-20T03:30:00+00:00",
+            "justification": null,
+            "impact_statement": null,
+            "action_statement": null,
+            "mitigation": null,
+            "fixed_version": null,
+            "evidence_url": null,
+            "mapping_confidence": "WEAK",
+            "match_strategy": "NAME_ONLY",
+            "version_applicable": null,
+            "is_effective": false,
+            "superseded": false
+          },
+          {
+            "statement_id": 13,
+            "source_format": "manual",
+            "source_status": "affected",
+            "normalized_status": "AFFECTED",
+            "author": "Manual VEX Override",
+            "source_document_id": null,
+            "source_document_version": null,
+            "asserted_at": "2026-10-20T03:30:39+00:00",
+            "justification": null,
+            "impact_statement": null,
+            "action_statement": null,
+            "mitigation": null,
+            "fixed_version": null,
+            "evidence_url": null,
+            "mapping_confidence": "WEAK",
+            "match_strategy": "NAME_ONLY",
+            "version_applicable": null,
+            "is_effective": false,
+            "superseded": false
+          },
+          {
+            "statement_id": 15,
+            "source_format": "manual",
+            "source_status": "under_investigation",
+            "normalized_status": "UNDER_INVESTIGATION",
+            "author": "Manual VEX Override",
+            "source_document_id": null,
+            "source_document_version": null,
+            "asserted_at": "2026-10-20T04:56:00+00:00",
+            "justification": null,
+            "impact_statement": null,
+            "action_statement": null,
+            "mitigation": null,
+            "fixed_version": null,
+            "evidence_url": null,
+            "mapping_confidence": "WEAK",
+            "match_strategy": "NAME_ONLY",
+            "version_applicable": null,
+            "is_effective": false,
+            "superseded": false
+          }
+        ],
+        "internal_decision": {
+          "effective_status": "AFFECTED",
+          "reviewer": "developer@olympus.example.test",
+          "assigned_to": null,
+          "reason": "Round 2 protection assigned Developer actual review",
+          "justification": null,
+          "impact_statement": null,
+          "action_statement": null,
+          "mitigation": null,
+          "fixed_version": null,
+          "evidence_url": null,
+          "updated_at": "2026-10-20T04:56:09+00:00"
+        },
+        "reconciliation_status": "MATCHED",
+        "effective_status": "AFFECTED",
+        "history": [
+          {
+            "at": "2026-10-20T03:06:47+00:00",
+            "kind": "decision",
+            "actor": "admin@olympus.example.test",
+            "summary": "Round 1 before one deliberate decision e4574746-4e06-4429-98a7-fa14aec3cdb9",
+            "previous_status": null,
+            "new_status": "UNDER_INVESTIGATION",
+            "reason": "Round 1 before one deliberate decision e4574746-4e06-4429-98a7-fa14aec3cdb9"
+          },
+          {
+            "at": "2026-10-20T03:06:47+00:00",
+            "kind": "decision",
+            "actor": "admin@olympus.example.test",
+            "summary": "Round 1 before one deliberate decision e4574746-4e06-4429-98a7-fa14aec3cdb9",
+            "previous_status": "UNDER_INVESTIGATION",
+            "new_status": "UNDER_INVESTIGATION",
+            "reason": "Round 1 before one deliberate decision e4574746-4e06-4429-98a7-fa14aec3cdb9"
+          },
+          {
+            "at": "2026-10-20T03:08:43+00:00",
+            "kind": "decision",
+            "actor": "admin@olympus.example.test",
+            "summary": "Round 1 after one deliberate decision 9a8cc3ca-c887-4980-b939-c4a27e5a30fc",
+            "previous_status": "UNDER_INVESTIGATION",
+            "new_status": "UNDER_INVESTIGATION",
+            "reason": "Round 1 after one deliberate decision 9a8cc3ca-c887-4980-b939-c4a27e5a30fc"
+          },
+          {
+            "at": "2026-10-20T03:08:43+00:00",
+            "kind": "decision",
+            "actor": "admin@olympus.example.test",
+            "summary": "Round 1 after one deliberate decision 9a8cc3ca-c887-4980-b939-c4a27e5a30fc",
+            "previous_status": "UNDER_INVESTIGATION",
+            "new_status": "UNDER_INVESTIGATION",
+            "reason": "Round 1 after one deliberate decision 9a8cc3ca-c887-4980-b939-c4a27e5a30fc"
+          },
+          {
+            "at": "2026-10-20T03:08:46+00:00",
+            "kind": "assignment",
+            "actor": "admin@olympus.example.test",
+            "summary": "Unassigned \u2192 Synthetic Olympus developer. Round 1 assigned Developer acceptance",
+            "previous_status": "UNDER_INVESTIGATION",
+            "new_status": "UNDER_INVESTIGATION",
+            "reason": "Unassigned \u2192 Synthetic Olympus developer. Round 1 assigned Developer acceptance"
+          },
+          {
+            "at": "2026-10-20T03:08:46+00:00",
+            "kind": "decision",
+            "actor": "developer@olympus.example.test",
+            "summary": "Round 1 assigned Developer actual review",
+            "previous_status": "UNDER_INVESTIGATION",
+            "new_status": "AFFECTED",
+            "reason": "Round 1 assigned Developer actual review"
+          },
+          {
+            "at": "2026-10-20T03:08:46+00:00",
+            "kind": "decision",
+            "actor": "developer@olympus.example.test",
+            "summary": "Round 1 assigned Developer actual review",
+            "previous_status": "UNDER_INVESTIGATION",
+            "new_status": "AFFECTED",
+            "reason": "Round 1 assigned Developer actual review"
+          },
+          {
+            "at": "2026-10-20T03:08:47+00:00",
+            "kind": "assignment",
+            "actor": "admin@olympus.example.test",
+            "summary": "Synthetic Olympus developer \u2192 Unassigned. Round 1 remove disposable assignment",
+            "previous_status": "AFFECTED",
+            "new_status": "AFFECTED",
+            "reason": "Synthetic Olympus developer \u2192 Unassigned. Round 1 remove disposable assignment"
+          },
+          {
+            "at": "2026-10-20T03:22:52+00:00",
+            "kind": "decision",
+            "actor": "admin@olympus.example.test",
+            "summary": "Round 1 actual Admin browser save",
+            "previous_status": "AFFECTED",
+            "new_status": "UNDER_INVESTIGATION",
+            "reason": "Round 1 actual Admin browser save"
+          },
+          {
+            "at": "2026-10-20T03:22:52+00:00",
+            "kind": "decision",
+            "actor": "admin@olympus.example.test",
+            "summary": "Round 1 actual Admin browser save",
+            "previous_status": "AFFECTED",
+            "new_status": "UNDER_INVESTIGATION",
+            "reason": "Round 1 actual Admin browser save"
+          },
+          {
+            "at": "2026-10-20T03:30:00+00:00",
+            "kind": "decision",
+            "actor": "admin@olympus.example.test",
+            "summary": "Round 1 actual Admin browser save",
+            "previous_status": "UNDER_INVESTIGATION",
+            "new_status": "UNDER_INVESTIGATION",
+            "reason": "Round 1 actual Admin browser save"
+          },
+          {
+            "at": "2026-10-20T03:30:01+00:00",
+            "kind": "decision",
+            "actor": "admin@olympus.example.test",
+            "summary": "Round 1 actual Admin browser save",
+            "previous_status": "UNDER_INVESTIGATION",
+            "new_status": "UNDER_INVESTIGATION",
+            "reason": "Round 1 actual Admin browser save"
+          },
+          {
+            "at": "2026-10-20T03:30:03+00:00",
+            "kind": "assignment",
+            "actor": "admin@olympus.example.test",
+            "summary": "Unassigned \u2192 Synthetic Olympus developer. Assignment updated",
+            "previous_status": "UNDER_INVESTIGATION",
+            "new_status": "UNDER_INVESTIGATION",
+            "reason": "Unassigned \u2192 Synthetic Olympus developer. Assignment updated"
+          },
+          {
+            "at": "2026-10-20T03:30:39+00:00",
+            "kind": "decision",
+            "actor": "developer@olympus.example.test",
+            "summary": "Round 1 actual assigned Developer browser save",
+            "previous_status": "UNDER_INVESTIGATION",
+            "new_status": "AFFECTED",
+            "reason": "Round 1 actual assigned Developer browser save"
+          },
+          {
+            "at": "2026-10-20T03:30:39+00:00",
+            "kind": "decision",
+            "actor": "developer@olympus.example.test",
+            "summary": "Round 1 actual assigned Developer browser save",
+            "previous_status": "UNDER_INVESTIGATION",
+            "new_status": "AFFECTED",
+            "reason": "Round 1 actual assigned Developer browser save"
+          },
+          {
+            "at": "2026-10-20T03:31:27+00:00",
+            "kind": "assignment",
+            "actor": "admin@olympus.example.test",
+            "summary": "Synthetic Olympus developer \u2192 Unassigned. Round 1 UI ownership cleanup",
+            "previous_status": "AFFECTED",
+            "new_status": "AFFECTED",
+            "reason": "Synthetic Olympus developer \u2192 Unassigned. Round 1 UI ownership cleanup"
+          },
+          {
+            "at": "2026-10-20T04:56:00+00:00",
+            "kind": "decision",
+            "actor": "admin@olympus.example.test",
+            "summary": "Round 2 protection round1-protection one deliberate decision 4e743a91-7501-45b9-bb6c-98082b2bb8b9",
+            "previous_status": "AFFECTED",
+            "new_status": "UNDER_INVESTIGATION",
+            "reason": "Round 2 protection round1-protection one deliberate decision 4e743a91-7501-45b9-bb6c-98082b2bb8b9"
+          },
+          {
+            "at": "2026-10-20T04:56:00+00:00",
+            "kind": "decision",
+            "actor": "admin@olympus.example.test",
+            "summary": "Round 2 protection round1-protection one deliberate decision 4e743a91-7501-45b9-bb6c-98082b2bb8b9",
+            "previous_status": "AFFECTED",
+            "new_status": "UNDER_INVESTIGATION",
+            "reason": "Round 2 protection round1-protection one deliberate decision 4e743a91-7501-45b9-bb6c-98082b2bb8b9"
+          },
+          {
+            "at": "2026-10-20T04:56:06+00:00",
+            "kind": "assignment",
+            "actor": "admin@olympus.example.test",
+            "summary": "Unassigned \u2192 Synthetic Olympus developer. Round 2 protection assigned Developer acceptance",
+            "previous_status": "UNDER_INVESTIGATION",
+            "new_status": "UNDER_INVESTIGATION",
+            "reason": "Unassigned \u2192 Synthetic Olympus developer. Round 2 protection assigned Developer acceptance"
+          },
+          {
+            "at": "2026-10-20T04:56:07+00:00",
+            "kind": "decision",
+            "actor": "developer@olympus.example.test",
+            "summary": "Round 2 protection assigned Developer actual review",
+            "previous_status": "UNDER_INVESTIGATION",
+            "new_status": "AFFECTED",
+            "reason": "Round 2 protection assigned Developer actual review"
+          },
+          {
+            "at": "2026-10-20T04:56:07+00:00",
+            "kind": "decision",
+            "actor": "developer@olympus.example.test",
+            "summary": "Round 2 protection assigned Developer actual review",
+            "previous_status": "UNDER_INVESTIGATION",
+            "new_status": "AFFECTED",
+            "reason": "Round 2 protection assigned Developer actual review"
+          },
+          {
+            "at": "2026-10-20T04:56:09+00:00",
+            "kind": "assignment",
+            "actor": "admin@olympus.example.test",
+            "summary": "Synthetic Olympus developer \u2192 Unassigned. Round 2 protection remove disposable assignment",
+            "previous_status": "AFFECTED",
+            "new_status": "AFFECTED",
+            "reason": "Synthetic Olympus developer \u2192 Unassigned. Round 2 protection remove disposable assignment"
+          }
+        ],
+        "capabilities": {
+          "historical": false,
+          "can_assign": true,
+          "can_unassign": true,
+          "can_update": true,
+          "can_map": true,
+          "eligible_roles": [
+            "DEVELOPER",
+            "SECURITY_ANALYST"
+          ],
+          "candidates": [
+            {
+              "id": "membership:2",
+              "label": "Synthetic Olympus analyst",
+              "email": "analyst@olympus.example.test",
+              "roles": [
+                "SECURITY_ANALYST"
+              ]
+            },
+            {
+              "id": "membership:3",
+              "label": "Synthetic Olympus developer",
+              "email": "developer@olympus.example.test",
+              "roles": [
+                "DEVELOPER"
+              ]
+            }
+          ],
+          "owner": {
+            "id": null,
+            "label": "Unassigned",
+            "active": false,
+            "email": null,
+            "is_self": false,
+            "roles": []
+          },
+          "read_only_reason": null
+        },
+        "previous_decisions": [],
+        "row_version": 23
+      },
+      "request_id": "d69c660961be"
+    },
+    "result": "PASS",
+    "time": "2026-10-20T04:56:09.788096+00:00"
+  },
+  {
+    "id": "R1-VEX-OWNERSHIP-REVOKED",
+    "phase": "round1-protection",
+    "role": "developer",
+    "expected": "Previously assigned Developer immediately loses mutation authority",
+    "actual": {
+      "status": 403,
+      "data": {
+        "detail": "This investigation must be assigned to you before you can update it. This investigation must be assigned by a Tenant Administrator or Security Analyst before you can update it."
+      },
+      "request_id": "aa9fcf3d3d75"
+    },
+    "result": "PASS",
+    "time": "2026-10-20T04:56:09.998620+00:00"
+  }
+]

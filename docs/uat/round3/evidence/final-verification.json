@@ -1,0 +1,40 @@
+{
+  "caseCounts": {
+    "BLOCKED": 5,
+    "PASS": 14
+  },
+  "exact19IdsPreserved": true,
+  "protectedHistorical": {
+    "protectedFiles": 1700,
+    "changed": [],
+    "unchanged": true,
+    "branch": "feat/native-user-management",
+    "head": "2f48ff835d9e692fc84b31aaa951aad2495888ac"
+  },
+  "sixIdentityChecks": true,
+  "olympusMembers": 4,
+  "kevUnchanged": true,
+  "policyUnchanged": true,
+  "gitWhitespaceExit": 0,
+  "invalidEvidenceJson": [],
+  "invalidJUnitXml": [],
+  "secretCandidateFileNames": [],
+  "noCommitPushMergeDeploymentOrTrackerWrite": true,
+  "historical485Counts": {
+    "PASS": 454,
+    "FAIL": 12,
+    "BLOCKED": 11,
+    "NOT RUN": 8
+  },
+  "original19DescriptionComparisonErrors": [],
+  "original19DescriptionsExactlyMatchCanonicalIndex": true,
+  "missingLocalEvidenceLinks": [],
+  "requiredReportsPresent": [
+    "ROUND3_UAT_RESULTS.md",
+    "ROUND3_TEST_CASES.json",
+    "ROUND3_COVERAGE_MATRIX.md",
+    "ROUND3_REGRESSION_RESULTS.md",
+    "ROUND3_DEFECTS.md",
+    "LINEAR_RESULTS.md"
+  ]
+}

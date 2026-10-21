@@ -1,0 +1,157 @@
+[
+  {
+    "id": "R3-LARGE-SAFE-BOUNDARY",
+    "role": "admin",
+    "preconditions": "Verified isolated Greenfield UUID; task-owned fixtures; credentials kept in memory",
+    "stepsExecuted": "Read existing >5MiB automatic-repair safety decision",
+    "expected": "200 MANUAL_REVIEW_REQUIRED with explicit size limit",
+    "actual": {
+      "status": 200,
+      "bytes": 5840719,
+      "repair_status": "MANUAL_REVIEW_REQUIRED",
+      "reason": "Document exceeds the automatic repair size limit; use manual handling."
+    },
+    "result": "PASS",
+    "time": "2026-10-20T09:52:45.627527+00:00"
+  },
+  {
+    "id": "R3-LARGE-PATCH-DENY-viewer",
+    "role": "admin",
+    "preconditions": "Verified isolated Greenfield UUID; task-owned fixtures; credentials kept in memory",
+    "stepsExecuted": "Attempt explicit bounded line patch as viewer",
+    "expected": "403",
+    "actual": {
+      "status": 403,
+      "data": {
+        "detail": "Insufficient permission"
+      },
+      "request_id": "fbea64e5aab8"
+    },
+    "result": "PASS",
+    "time": "2026-10-20T09:52:46.038210+00:00"
+  },
+  {
+    "id": "R3-LARGE-PATCH-DENY-foreign",
+    "role": "admin",
+    "preconditions": "Verified isolated Greenfield UUID; task-owned fixtures; credentials kept in memory",
+    "stepsExecuted": "Attempt explicit bounded line patch as foreign",
+    "expected": "404",
+    "actual": {
+      "status": 404,
+      "data": {
+        "detail": "Validation session not found"
+      },
+      "request_id": "c833632599a5"
+    },
+    "result": "PASS",
+    "time": "2026-10-20T09:52:46.393474+00:00"
+  },
+  {
+    "id": "R3-LARGE-STREAM-PATCH",
+    "role": "admin",
+    "preconditions": "Verified isolated Greenfield UUID; task-owned fixtures; credentials kept in memory",
+    "stepsExecuted": "Admin applies one reviewed line replacement through filesystem patch endpoint",
+    "expected": "200 repair_draft; large-file mode retained",
+    "actual": {
+      "status": 200,
+      "validation_status": "repair_draft",
+      "is_large_file": true,
+      "full_editor_allowed": false
+    },
+    "result": "PASS",
+    "time": "2026-10-20T09:52:46.696629+00:00"
+  },
+  {
+    "id": "R3-LARGE-REVALIDATE",
+    "role": "admin",
+    "preconditions": "Verified isolated Greenfield UUID; task-owned fixtures; credentials kept in memory",
+    "stepsExecuted": "Run same validator on stream-patched draft",
+    "expected": "200; no validation errors",
+    "actual": {
+      "status": 200,
+      "validation_status": "repaired_valid",
+      "error_count": 0
+    },
+    "result": "PASS",
+    "time": "2026-10-20T09:52:46.984135+00:00"
+  },
+  {
+    "id": "R3-LARGE-IMPORT-DENY-viewer",
+    "role": "admin",
+    "preconditions": "Verified isolated Greenfield UUID; task-owned fixtures; credentials kept in memory",
+    "stepsExecuted": "Attempt import as viewer",
+    "expected": "403",
+    "actual": {
+      "status": 403,
+      "data": {
+        "detail": "Insufficient permission"
+      },
+      "request_id": "fe2263439afa"
+    },
+    "result": "PASS",
+    "time": "2026-10-20T09:52:47.011802+00:00"
+  },
+  {
+    "id": "R3-LARGE-IMPORT-DENY-foreign",
+    "role": "admin",
+    "preconditions": "Verified isolated Greenfield UUID; task-owned fixtures; credentials kept in memory",
+    "stepsExecuted": "Attempt import as foreign",
+    "expected": "404",
+    "actual": {
+      "status": 404,
+      "data": {
+        "detail": "Validation session not found"
+      },
+      "request_id": "e9a88c0dd09f"
+    },
+    "result": "PASS",
+    "time": "2026-10-20T09:52:47.053563+00:00"
+  },
+  {
+    "id": "R3-LARGE-IMPORT",
+    "role": "admin",
+    "preconditions": "Verified isolated Greenfield UUID; task-owned fixtures; credentials kept in memory",
+    "stepsExecuted": "Explicit Admin import after manual review/revalidation",
+    "expected": "200 imported UUID",
+    "actual": {
+      "status": 200,
+      "id": "babeb75e-107b-453e-8254-70b44c11a357",
+      "upload_status": null
+    },
+    "result": "PASS",
+    "time": "2026-10-20T09:52:48.484469+00:00"
+  },
+  {
+    "id": "R3-LARGE-LINEAGE",
+    "role": "admin",
+    "preconditions": "Verified isolated Greenfield UUID; task-owned fixtures; credentials kept in memory",
+    "stepsExecuted": "Read immutable original and history after import",
+    "expected": "Same source byte hash; line patch/revalidation/import history",
+    "actual": {
+      "originalStatus": 200,
+      "originalBytes": 5840719,
+      "originalSha256": "6d6ac5c252a18abaed5996e2099da42b5308cab83f27e1ff2b4980ea6fe7ca16",
+      "afterSha256": "6d6ac5c252a18abaed5996e2099da42b5308cab83f27e1ff2b4980ea6fe7ca16",
+      "historyStatus": 200,
+      "actions": [
+        "created",
+        "SBOM_QUALITY_CALCULATED",
+        "SBOM_REPAIR_ANALYZED",
+        "SBOM_REPAIR_STARTED",
+        "SBOM_QUALITY_CALCULATED",
+        "SBOM_QUALITY_CALCULATED",
+        "SBOM_REPAIR_REVALIDATED",
+        "SBOM_REPAIR_COMPLETED",
+        "original_downloaded",
+        "SBOM_REPAIR_ANALYZED",
+        "line_patch_saved",
+        "validation_run",
+        "validation_run",
+        "imported",
+        "original_downloaded"
+      ]
+    },
+    "result": "PASS",
+    "time": "2026-10-20T09:52:48.908567+00:00"
+  }
+]

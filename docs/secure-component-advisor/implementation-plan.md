@@ -493,3 +493,7 @@ _Pending — both full runs are in progress; the comparison will be recorded her
 - Windows: a stopped background pytest leaves orphan processes on the test DB. Kill them before the next run.
 - Regression runs must use a frozen worktree: twice, a migration added mid-run made later app-startup tests fail
   with "schema not at head", which invalidated those runs.
+
+### UAT remediation Round 2 — 20 October 2026
+
+SBO-76: policy history IDs remain the policy subsystem's integers. Removed generic `versions` inference from the public UUID boundary and explicitly identified the three genuine SBOM-source version collections, including the VEX version picker. Restore-version request IDs retain explicit SBOM UUID resolution. Tenant/platform policy permissions, append-only publication and row_version conflicts are unchanged. Regression cases cover empty/nonempty histories for all kinds, same-number policy/SBOM collisions, no-SBOM tenants, platform/tenant separation and role denials. Live disposable-tenant HTTP and browser history checks passed for trust, accepted-risk and scoring; publication 201 and stale 409 remain intact. Final exact suite results and evidence are in `docs/uat/remediation/2026-10-20-round2/RESULTS.md`. No original UAT sign-off is implied.

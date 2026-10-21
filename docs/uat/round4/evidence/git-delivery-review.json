@@ -1,0 +1,52 @@
+{
+  "time": "2026-10-21T02:47:59.686637+00:00",
+  "originalHead": "2f48ff835d9e692fc84b31aaa951aad2495888ac",
+  "implementationCommit": "d88ea570418787bc899ce08e26086b40fc28642e",
+  "implementationFiles": 277,
+  "existingDocumentationFiles": 531,
+  "privateValueMatches": 0,
+  "privateKeyOrJwtMatches": 0,
+  "actualPrivateValuesCheckedInMemory": 12,
+  "gitleaksVersion": "8.30.1",
+  "codeCandidateUnresolvedFindings": 0,
+  "documentationCandidateUnresolvedFindings": 0,
+  "stagedCodeUnresolvedFindings": 0,
+  "reviewedFalsePositives": {
+    "total": 1134,
+    "implementation": 1,
+    "documentation": 1133,
+    "reasons": [
+      "SHA256 source hashes and public-package fixture hash",
+      "Audit/catalog integrity digests",
+      "Two noncredential prose matches"
+    ],
+    "handling": "Exact reviewed fingerprints only; no global rule suppression"
+  },
+  "securityScanId": "50f41e5b-f503-4131-874b-9378e2b6bce8",
+  "validatedReportableSecurityFindings": 0,
+  "securityReviewScope": "Selected Greenfield implementation and UAT delivery; excludes unrelated migration prototypes and raw binary/runtime artifacts",
+  "frozenSourceFilesVerified": 1593,
+  "applicationSourceChangedSinceFinalValidation": false,
+  "reusedValidation": "Unchanged frozen-source final Round4 execution, not a newly executed test suite",
+  "backend": {
+    "PASS": 4385,
+    "SKIP": 7,
+    "FAIL": 0,
+    "ERROR": 0,
+    "additionalPassingSubtests": 12
+  },
+  "frontend": {
+    "PASS": 1805,
+    "typecheck": "PASS",
+    "ruff": "PASS",
+    "eslintErrors": 0,
+    "eslintWarnings": 52,
+    "productionBuild": "PASS"
+  },
+  "fullApplicationUatSignoff": "WITHHELD",
+  "trackerWrites": false,
+  "mergeOrDeployment": false,
+  "documentationCandidateFilesAfterRawEvidenceExclusions": 524,
+  "rawEvidenceWhitespaceExclusions": 11,
+  "excludedLocalFiles": 1901
+}

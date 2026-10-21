@@ -1,0 +1,4 @@
+{
+  "freshNonTtyPythonSIGINTDisposition": "default_int_handler",
+  "note": "Diagnostic only; no target-process introspection or signals sent"
+}

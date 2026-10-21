@@ -1,0 +1,2273 @@
+{
+  "qualification": "Actual frozen-run outcomes only. Groups overlap; never sum into unique totals. Frontend popup, wording, Dashboard and HTTP503 use full final Vitest evidence separately.",
+  "groups": [
+    {
+      "name": "SBO-70 VEX serialization, concurrency and authorization",
+      "files": [
+        "tests/test_vex_confidence_serialization.py",
+        "tests/test_vex_audit_concurrency.py",
+        "tests/test_vex_investigations_api.py",
+        "tests/test_vex_scoped_authorization.py"
+      ],
+      "counts": {
+        "PASS": 69
+      },
+      "tests": [
+        {
+          "nodeid": "tests/test_vex_audit_concurrency.py::test_decision_writes_every_required_audit_field__VEX_AUD_001",
+          "evidenceNode": "tests/test_vex_audit_concurrency.py::test_decision_writes_every_required_audit_field__VEX_AUD_001",
+          "outcome": "PASS"
+        },
+        {
+          "nodeid": "tests/test_vex_audit_concurrency.py::test_audit_records_the_reconciliation_transition__VEX_AUD_001",
+          "evidenceNode": "tests/test_vex_audit_concurrency.py::test_audit_records_the_reconciliation_transition__VEX_AUD_001",
+          "outcome": "PASS"
+        },
+        {
+          "nodeid": "tests/test_vex_audit_concurrency.py::test_audit_is_append_only__VEX_AUD_001",
+          "evidenceNode": "tests/test_vex_audit_concurrency.py::test_audit_is_append_only__VEX_AUD_001",
+          "outcome": "PASS"
+        },
+        {
+          "nodeid": "tests/test_vex_audit_concurrency.py::test_every_mutation_requires_row_version__VEX_AUD_002",
+          "evidenceNode": "tests/test_vex_audit_concurrency.py::test_every_mutation_requires_row_version__VEX_AUD_002",
+          "outcome": "PASS"
+        },
+        {
+          "nodeid": "tests/test_vex_audit_concurrency.py::test_assignment_conflicts_on_a_stale_version__VEX_AUD_002",
+          "evidenceNode": "tests/test_vex_audit_concurrency.py::test_assignment_conflicts_on_a_stale_version__VEX_AUD_002",
+          "outcome": "PASS"
+        },
+        {
+          "nodeid": "tests/test_vex_audit_concurrency.py::test_reconciliation_does_not_bump_version_when_nothing_changed__VEX_AUD_002",
+          "evidenceNode": "tests/test_vex_audit_concurrency.py::test_reconciliation_does_not_bump_version_when_nothing_changed__VEX_AUD_002",
+          "outcome": "PASS"
+        },
+        {
+          "nodeid": "tests/test_vex_audit_concurrency.py::test_reconciliation_preserves_a_manual_decision__VEX_INV_004",
+          "evidenceNode": "tests/test_vex_audit_concurrency.py::test_reconciliation_preserves_a_manual_decision__VEX_INV_004",
+          "outcome": "PASS"
+        },
+        {
+          "nodeid": "tests/test_vex_audit_concurrency.py::test_assignment_is_recorded_and_audited",
+          "evidenceNode": "tests/test_vex_audit_concurrency.py::test_assignment_is_recorded_and_audited",
+          "outcome": "PASS"
+        },
+        {
+          "nodeid": "tests/test_vex_audit_concurrency.py::test_unassignment_is_audited",
+          "evidenceNode": "tests/test_vex_audit_concurrency.py::test_unassignment_is_audited",
+          "outcome": "PASS"
+        },
+        {
+          "nodeid": "tests/test_vex_audit_concurrency.py::test_analyst_can_bind_an_unresolved_assertion__VEX_MAP_001",
+          "evidenceNode": "tests/test_vex_audit_concurrency.py::test_analyst_can_bind_an_unresolved_assertion__VEX_MAP_001",
+          "outcome": "PASS"
+        },
+        {
+          "nodeid": "tests/test_vex_audit_concurrency.py::test_binding_is_audited_while_component_was_null__VEX_AUD_001",
+          "evidenceNode": "tests/test_vex_audit_concurrency.py::test_binding_is_audited_while_component_was_null__VEX_AUD_001",
+          "outcome": "PASS"
+        },
+        {
+          "nodeid": "tests/test_vex_audit_concurrency.py::test_binding_a_resolved_context_is_refused",
+          "evidenceNode": "tests/test_vex_audit_concurrency.py::test_binding_a_resolved_context_is_refused",
+          "outcome": "PASS"
+        },
+        {
+          "nodeid": "tests/test_vex_audit_concurrency.py::test_binding_to_a_component_in_another_sbom_is_refused__VEX_CTX_001",
+          "evidenceNode": "tests/test_vex_audit_concurrency.py::test_binding_to_a_component_in_another_sbom_is_refused__VEX_CTX_001",
+          "outcome": "PASS"
+        },
+        {
+          "nodeid": "tests/test_vex_audit_concurrency.py::test_reconciliation_never_crosses_tenants__VEX_SEC_002",
+          "evidenceNode": "tests/test_vex_audit_concurrency.py::test_reconciliation_never_crosses_tenants__VEX_SEC_002",
+          "outcome": "PASS"
+        },
+        {
+          "nodeid": "tests/test_vex_audit_concurrency.py::test_cross_tenant_mutations_are_rejected__VEX_SEC_002",
+          "evidenceNode": "tests/test_vex_audit_concurrency.py::test_cross_tenant_mutations_are_rejected__VEX_SEC_002",
+          "outcome": "PASS"
+        },
+        {
+          "nodeid": "tests/test_vex_audit_concurrency.py::test_role_permissions_match_the_spec__VEX_SEC_001",
+          "evidenceNode": "tests/test_vex_audit_concurrency.py::test_role_permissions_match_the_spec__VEX_SEC_001",
+          "outcome": "PASS"
+        },
+        {
+          "nodeid": "tests/test_vex_audit_concurrency.py::test_every_investigation_route_maps_to_a_vex_permission__VEX_SEC_001",
+          "evidenceNode": "tests/test_vex_audit_concurrency.py::test_every_investigation_route_maps_to_a_vex_permission__VEX_SEC_001",
+          "outcome": "PASS"
+        },
+        {
+          "nodeid": "tests/test_vex_audit_concurrency.py::test_real_request_denies_unmapped_vex_operations[POST-/api/vex/investigations/1/decision]",
+          "evidenceNode": "tests/test_vex_audit_concurrency.py::test_real_request_denies_unmapped_vex_operations[POST-/api/vex/investigations/1/decision]",
+          "outcome": "PASS"
+        },
+        {
+          "nodeid": "tests/test_vex_audit_concurrency.py::test_real_request_denies_unmapped_vex_operations[DELETE-/api/vex/investigations/1]",
+          "evidenceNode": "tests/test_vex_audit_concurrency.py::test_real_request_denies_unmapped_vex_operations[DELETE-/api/vex/investigations/1]",
+          "outcome": "PASS"
+        },
+        {
+          "nodeid": "tests/test_vex_audit_concurrency.py::test_real_request_denies_unmapped_vex_operations[GET-/api/vex/investigations/1/unmapped]",
+          "evidenceNode": "tests/test_vex_audit_concurrency.py::test_real_request_denies_unmapped_vex_operations[GET-/api/vex/investigations/1/unmapped]",
+          "outcome": "PASS"
+        },
+        {
+          "nodeid": "tests/test_vex_audit_concurrency.py::test_selected_unmapped_route_cannot_inherit_vex_url_permission",
+          "evidenceNode": "tests/test_vex_audit_concurrency.py::test_selected_unmapped_route_cannot_inherit_vex_url_permission",
+          "outcome": "PASS"
+        },
+        {
+          "nodeid": "tests/test_vex_confidence_serialization.py::test_numeric_confidence_detail__VEX_UI_003[None]",
+          "evidenceNode": "tests/test_vex_confidence_serialization.py::test_numeric_confidence_detail__VEX_UI_003[None]",
+          "outcome": "PASS"
+        },
+        {
+          "nodeid": "tests/test_vex_confidence_serialization.py::test_numeric_confidence_detail__VEX_UI_003[0.0]",
+          "evidenceNode": "tests/test_vex_confidence_serialization.py::test_numeric_confidence_detail__VEX_UI_003[0.0]",
+          "outcome": "PASS"
+        },
+        {
+          "nodeid": "tests/test_vex_confidence_serialization.py::test_numeric_confidence_detail__VEX_UI_003[0.875]",
+          "evidenceNode": "tests/test_vex_confidence_serialization.py::test_numeric_confidence_detail__VEX_UI_003[0.875]",
+          "outcome": "PASS"
+        },
+        {
+          "nodeid": "tests/test_vex_confidence_serialization.py::test_numeric_confidence_detail__VEX_UI_003[1.0]",
+          "evidenceNode": "tests/test_vex_confidence_serialization.py::test_numeric_confidence_detail__VEX_UI_003[1.0]",
+          "outcome": "PASS"
+        },
+        {
+          "nodeid": "tests/test_vex_confidence_serialization.py::test_numeric_confidence_success_conflict_no_duplicate__VEX_AUD_001_002",
+          "evidenceNode": "tests/test_vex_confidence_serialization.py::test_numeric_confidence_success_conflict_no_duplicate__VEX_AUD_001_002",
+          "outcome": "PASS"
+        },
+        {
+          "nodeid": "tests/test_vex_confidence_serialization.py::test_invalid_decision_preserves_numeric_evidence_and_state__VEX_VAL_001",
+          "evidenceNode": "tests/test_vex_confidence_serialization.py::test_invalid_decision_preserves_numeric_evidence_and_state__VEX_VAL_001",
+          "outcome": "PASS"
+        },
+        {
+          "nodeid": "tests/test_vex_investigations_api.py::test_returns_the_paginated_envelope__VEX_UI_001",
+          "evidenceNode": "tests/test_vex_investigations_api.py::test_returns_the_paginated_envelope__VEX_UI_001",
+          "outcome": "PASS"
+        },
+        {
+          "nodeid": "tests/test_vex_investigations_api.py::test_rows_carry_the_section_27_columns__VEX_UI_001",
+          "evidenceNode": "tests/test_vex_investigations_api.py::test_rows_carry_the_section_27_columns__VEX_UI_001",
+          "outcome": "PASS"
+        },
+        {
+          "nodeid": "tests/test_vex_investigations_api.py::test_filter_by_effective_status__VEX_UI_002",
+          "evidenceNode": "tests/test_vex_investigations_api.py::test_filter_by_effective_status__VEX_UI_002",
+          "outcome": "PASS"
+        },
+        {
+          "nodeid": "tests/test_vex_investigations_api.py::test_filter_by_reconciliation_status__VEX_UI_002",
+          "evidenceNode": "tests/test_vex_investigations_api.py::test_filter_by_reconciliation_status__VEX_UI_002",
+          "outcome": "PASS"
+        },
+        {
+          "nodeid": "tests/test_vex_investigations_api.py::test_filter_by_component__VEX_UI_002",
+          "evidenceNode": "tests/test_vex_investigations_api.py::test_filter_by_component__VEX_UI_002",
+          "outcome": "PASS"
+        },
+        {
+          "nodeid": "tests/test_vex_investigations_api.py::test_filter_by_sbom__VEX_UI_002",
+          "evidenceNode": "tests/test_vex_investigations_api.py::test_filter_by_sbom__VEX_UI_002",
+          "outcome": "PASS"
+        },
+        {
+          "nodeid": "tests/test_vex_investigations_api.py::test_integer_resource_ids_are_rejected_at_public_boundary",
+          "evidenceNode": "tests/test_vex_investigations_api.py::test_integer_resource_ids_are_rejected_at_public_boundary",
+          "outcome": "PASS"
+        },
+        {
+          "nodeid": "tests/test_vex_investigations_api.py::test_search_by_vulnerability_id__VEX_UI_002",
+          "evidenceNode": "tests/test_vex_investigations_api.py::test_search_by_vulnerability_id__VEX_UI_002",
+          "outcome": "PASS"
+        },
+        {
+          "nodeid": "tests/test_vex_investigations_api.py::test_filter_by_severity_uses_analyser_findings__VEX_UI_002",
+          "evidenceNode": "tests/test_vex_investigations_api.py::test_filter_by_severity_uses_analyser_findings__VEX_UI_002",
+          "outcome": "PASS"
+        },
+        {
+          "nodeid": "tests/test_vex_investigations_api.py::test_needs_review_toggle__VEX_UI_002",
+          "evidenceNode": "tests/test_vex_investigations_api.py::test_needs_review_toggle__VEX_UI_002",
+          "outcome": "PASS"
+        },
+        {
+          "nodeid": "tests/test_vex_investigations_api.py::test_severity_sort_is_refused_rather_than_faked",
+          "evidenceNode": "tests/test_vex_investigations_api.py::test_severity_sort_is_refused_rather_than_faked",
+          "outcome": "PASS"
+        },
+        {
+          "nodeid": "tests/test_vex_investigations_api.py::test_pagination_does_not_repeat_a_row",
+          "evidenceNode": "tests/test_vex_investigations_api.py::test_pagination_does_not_repeat_a_row",
+          "outcome": "PASS"
+        },
+        {
+          "nodeid": "tests/test_vex_investigations_api.py::test_sort_order_is_honoured",
+          "evidenceNode": "tests/test_vex_investigations_api.py::test_sort_order_is_honoured",
+          "outcome": "PASS"
+        },
+        {
+          "nodeid": "tests/test_vex_investigations_api.py::test_tile_counts_equal_row_counts_for_the_same_filters__VEX_DASH_004",
+          "evidenceNode": "tests/test_vex_investigations_api.py::test_tile_counts_equal_row_counts_for_the_same_filters__VEX_DASH_004",
+          "outcome": "PASS"
+        },
+        {
+          "nodeid": "tests/test_vex_investigations_api.py::test_sections_are_present_and_separate__VEX_UI_003",
+          "evidenceNode": "tests/test_vex_investigations_api.py::test_sections_are_present_and_separate__VEX_UI_003",
+          "outcome": "PASS"
+        },
+        {
+          "nodeid": "tests/test_vex_investigations_api.py::test_imported_assertions_keep_native_and_normalized_status__VEX_STAT_002",
+          "evidenceNode": "tests/test_vex_investigations_api.py::test_imported_assertions_keep_native_and_normalized_status__VEX_STAT_002",
+          "outcome": "PASS"
+        },
+        {
+          "nodeid": "tests/test_vex_investigations_api.py::test_severity_comes_from_the_vulnerability__VEX_DATA_005",
+          "evidenceNode": "tests/test_vex_investigations_api.py::test_severity_comes_from_the_vulnerability__VEX_DATA_005",
+          "outcome": "PASS"
+        },
+        {
+          "nodeid": "tests/test_vex_investigations_api.py::test_analyzer_evidence_is_reported",
+          "evidenceNode": "tests/test_vex_investigations_api.py::test_analyzer_evidence_is_reported",
+          "outcome": "PASS"
+        },
+        {
+          "nodeid": "tests/test_vex_investigations_api.py::test_unknown_id_is_404",
+          "evidenceNode": "tests/test_vex_investigations_api.py::test_unknown_id_is_404",
+          "outcome": "PASS"
+        },
+        {
+          "nodeid": "tests/test_vex_investigations_api.py::test_cross_tenant_detail_is_404_not_403__VEX_SEC_002",
+          "evidenceNode": "tests/test_vex_investigations_api.py::test_cross_tenant_detail_is_404_not_403__VEX_SEC_002",
+          "outcome": "PASS"
+        },
+        {
+          "nodeid": "tests/test_vex_investigations_api.py::test_decision_is_recorded_and_bumps_the_version__VEX_INV_003",
+          "evidenceNode": "tests/test_vex_investigations_api.py::test_decision_is_recorded_and_bumps_the_version__VEX_INV_003",
+          "outcome": "PASS"
+        },
+        {
+          "nodeid": "tests/test_vex_investigations_api.py::test_stale_row_version_conflicts__VEX_AUD_002",
+          "evidenceNode": "tests/test_vex_investigations_api.py::test_stale_row_version_conflicts__VEX_AUD_002",
+          "outcome": "PASS"
+        },
+        {
+          "nodeid": "tests/test_vex_investigations_api.py::test_not_affected_without_evidence_is_rejected__VEX_VAL_001",
+          "evidenceNode": "tests/test_vex_investigations_api.py::test_not_affected_without_evidence_is_rejected__VEX_VAL_001",
+          "outcome": "PASS"
+        },
+        {
+          "nodeid": "tests/test_vex_investigations_api.py::test_fixed_without_remediation_evidence_is_rejected__VEX_VAL_002",
+          "evidenceNode": "tests/test_vex_investigations_api.py::test_fixed_without_remediation_evidence_is_rejected__VEX_VAL_002",
+          "outcome": "PASS"
+        },
+        {
+          "nodeid": "tests/test_vex_investigations_api.py::test_reason_is_mandatory__VEX_AUD_001",
+          "evidenceNode": "tests/test_vex_investigations_api.py::test_reason_is_mandatory__VEX_AUD_001",
+          "outcome": "PASS"
+        },
+        {
+          "nodeid": "tests/test_vex_investigations_api.py::test_decision_survives_reconciliation__VEX_INV_004",
+          "evidenceNode": "tests/test_vex_investigations_api.py::test_decision_survives_reconciliation__VEX_INV_004",
+          "outcome": "PASS"
+        },
+        {
+          "nodeid": "tests/test_vex_investigations_api.py::test_component_vulnerabilities_endpoint_still_responds",
+          "evidenceNode": "tests/test_vex_investigations_api.py::test_component_vulnerabilities_endpoint_still_responds",
+          "outcome": "PASS"
+        },
+        {
+          "nodeid": "tests/test_vex_investigations_api.py::test_sbom_vex_list_endpoint_still_responds",
+          "evidenceNode": "tests/test_vex_investigations_api.py::test_sbom_vex_list_endpoint_still_responds",
+          "outcome": "PASS"
+        },
+        {
+          "nodeid": "tests/test_vex_investigations_api.py::test_resolve_finds_the_context_for_a_pair",
+          "evidenceNode": "tests/test_vex_investigations_api.py::test_resolve_finds_the_context_for_a_pair",
+          "outcome": "PASS"
+        },
+        {
+          "nodeid": "tests/test_vex_investigations_api.py::test_resolve_returns_404_when_nothing_has_asserted_it",
+          "evidenceNode": "tests/test_vex_investigations_api.py::test_resolve_returns_404_when_nothing_has_asserted_it",
+          "outcome": "PASS"
+        },
+        {
+          "nodeid": "tests/test_vex_investigations_api.py::test_resolve_matches_an_alias__VEX_CTX_002",
+          "evidenceNode": "tests/test_vex_investigations_api.py::test_resolve_matches_an_alias__VEX_CTX_002",
+          "outcome": "PASS"
+        },
+        {
+          "nodeid": "tests/test_vex_investigations_api.py::test_resolve_is_tenant_scoped__VEX_SEC_002",
+          "evidenceNode": "tests/test_vex_investigations_api.py::test_resolve_is_tenant_scoped__VEX_SEC_002",
+          "outcome": "PASS"
+        },
+        {
+          "nodeid": "tests/test_vex_investigations_api.py::test_resolve_does_not_create_a_context",
+          "evidenceNode": "tests/test_vex_investigations_api.py::test_resolve_does_not_create_a_context",
+          "outcome": "PASS"
+        },
+        {
+          "nodeid": "tests/test_vex_investigations_api.py::test_mitigation_survives_the_decision_endpoint",
+          "evidenceNode": "tests/test_vex_investigations_api.py::test_mitigation_survives_the_decision_endpoint",
+          "outcome": "PASS"
+        },
+        {
+          "nodeid": "tests/test_vex_scoped_authorization.py::test_assignment_matrix_http",
+          "evidenceNode": "tests/test_vex_scoped_authorization.py::test_assignment_matrix_http",
+          "outcome": "PASS"
+        },
+        {
+          "nodeid": "tests/test_vex_scoped_authorization.py::test_decision_matrix_and_revocation_http",
+          "evidenceNode": "tests/test_vex_scoped_authorization.py::test_decision_matrix_and_revocation_http",
+          "outcome": "PASS"
+        },
+        {
+          "nodeid": "tests/test_vex_scoped_authorization.py::test_candidates_invalid_targets_and_payload_bypass",
+          "evidenceNode": "tests/test_vex_scoped_authorization.py::test_candidates_invalid_targets_and_payload_bypass",
+          "outcome": "PASS"
+        },
+        {
+          "nodeid": "tests/test_vex_scoped_authorization.py::test_assignment_history_unassignment_and_separate_decision",
+          "evidenceNode": "tests/test_vex_scoped_authorization.py::test_assignment_history_unassignment_and_separate_decision",
+          "outcome": "PASS"
+        },
+        {
+          "nodeid": "tests/test_vex_scoped_authorization.py::test_no_broad_developer_bypass_or_legacy_owner_authority",
+          "evidenceNode": "tests/test_vex_scoped_authorization.py::test_no_broad_developer_bypass_or_legacy_owner_authority",
+          "outcome": "PASS"
+        },
+        {
+          "nodeid": "tests/test_vex_scoped_authorization.py::test_platform_override_stays_tenant_bound",
+          "evidenceNode": "tests/test_vex_scoped_authorization.py::test_platform_override_stays_tenant_bound",
+          "outcome": "PASS"
+        },
+        {
+          "nodeid": "tests/test_vex_scoped_authorization.py::test_analyst_unassignment_and_removed_membership",
+          "evidenceNode": "tests/test_vex_scoped_authorization.py::test_analyst_unassignment_and_removed_membership",
+          "outcome": "PASS"
+        },
+        {
+          "nodeid": "tests/test_vex_scoped_authorization.py::test_history_keeps_alias_decisions_without_other_vulnerabilities",
+          "evidenceNode": "tests/test_vex_scoped_authorization.py::test_history_keeps_alias_decisions_without_other_vulnerabilities",
+          "outcome": "PASS"
+        }
+      ]
+    },
+    {
+      "name": "SBO-71 Dashboard UUID hierarchy",
+      "files": [
+        "tests/test_dashboard_scope.py"
+      ],
+      "counts": {
+        "PASS": 10
+      },
+      "tests": [
+        {
+          "nodeid": "tests/test_dashboard_scope.py::test_scope_filters_every_metric_to_active_hierarchy",
+          "evidenceNode": "tests/test_dashboard_scope.py::test_scope_filters_every_metric_to_active_hierarchy",
+          "outcome": "PASS"
+        },
+        {
+          "nodeid": "tests/test_dashboard_scope.py::test_latest_successful_run_replaces_previous_findings",
+          "evidenceNode": "tests/test_dashboard_scope.py::test_latest_successful_run_replaces_previous_findings",
+          "outcome": "PASS"
+        },
+        {
+          "nodeid": "tests/test_dashboard_scope.py::test_deactivated_or_deleted_parent_excludes_child_sboms",
+          "evidenceNode": "tests/test_dashboard_scope.py::test_deactivated_or_deleted_parent_excludes_child_sboms",
+          "outcome": "PASS"
+        },
+        {
+          "nodeid": "tests/test_dashboard_scope.py::test_scope_rejects_invalid_or_inactive_selection[ids0-404]",
+          "evidenceNode": "tests/test_dashboard_scope.py::test_scope_rejects_invalid_or_inactive_selection[ids0-404]",
+          "outcome": "PASS"
+        },
+        {
+          "nodeid": "tests/test_dashboard_scope.py::test_scope_rejects_invalid_or_inactive_selection[ids1-404]",
+          "evidenceNode": "tests/test_dashboard_scope.py::test_scope_rejects_invalid_or_inactive_selection[ids1-404]",
+          "outcome": "PASS"
+        },
+        {
+          "nodeid": "tests/test_dashboard_scope.py::test_scope_rejects_invalid_or_inactive_selection[ids2-404]",
+          "evidenceNode": "tests/test_dashboard_scope.py::test_scope_rejects_invalid_or_inactive_selection[ids2-404]",
+          "outcome": "PASS"
+        },
+        {
+          "nodeid": "tests/test_dashboard_scope.py::test_scope_rejects_invalid_or_inactive_selection[ids3-400]",
+          "evidenceNode": "tests/test_dashboard_scope.py::test_scope_rejects_invalid_or_inactive_selection[ids3-400]",
+          "outcome": "PASS"
+        },
+        {
+          "nodeid": "tests/test_dashboard_scope.py::test_scope_rejects_invalid_or_inactive_selection[ids4-400]",
+          "evidenceNode": "tests/test_dashboard_scope.py::test_scope_rejects_invalid_or_inactive_selection[ids4-400]",
+          "outcome": "PASS"
+        },
+        {
+          "nodeid": "tests/test_dashboard_scope.py::test_scope_rejects_invalid_or_inactive_selection[ids5-404]",
+          "evidenceNode": "tests/test_dashboard_scope.py::test_scope_rejects_invalid_or_inactive_selection[ids5-404]",
+          "outcome": "PASS"
+        },
+        {
+          "nodeid": "tests/test_dashboard_scope.py::test_dashboard_option_and_metric_routes_share_scope",
+          "evidenceNode": "tests/test_dashboard_scope.py::test_dashboard_option_and_metric_routes_share_scope",
+          "outcome": "PASS"
+        }
+      ]
+    },
+    {
+      "name": "SBO-76 Advisor policy history",
+      "files": [
+        "tests/test_policy_public_identity.py"
+      ],
+      "counts": {
+        "PASS": 10
+      },
+      "tests": [
+        {
+          "nodeid": "tests/test_policy_public_identity.py::test_history_without_any_sbom_never_resolves_an_sbom[trust]",
+          "evidenceNode": "tests/test_policy_public_identity.py::test_history_without_any_sbom_never_resolves_an_sbom[trust]",
+          "outcome": "PASS"
+        },
+        {
+          "nodeid": "tests/test_policy_public_identity.py::test_history_without_any_sbom_never_resolves_an_sbom[accepted-risk]",
+          "evidenceNode": "tests/test_policy_public_identity.py::test_history_without_any_sbom_never_resolves_an_sbom[accepted-risk]",
+          "outcome": "PASS"
+        },
+        {
+          "nodeid": "tests/test_policy_public_identity.py::test_history_without_any_sbom_never_resolves_an_sbom[scoring]",
+          "evidenceNode": "tests/test_policy_public_identity.py::test_history_without_any_sbom_never_resolves_an_sbom[scoring]",
+          "outcome": "PASS"
+        },
+        {
+          "nodeid": "tests/test_policy_public_identity.py::test_tenant_history_preserves_policy_identity_with_sbom_collision[trust]",
+          "evidenceNode": "tests/test_policy_public_identity.py::test_tenant_history_preserves_policy_identity_with_sbom_collision[trust]",
+          "outcome": "PASS"
+        },
+        {
+          "nodeid": "tests/test_policy_public_identity.py::test_tenant_history_preserves_policy_identity_with_sbom_collision[accepted-risk]",
+          "evidenceNode": "tests/test_policy_public_identity.py::test_tenant_history_preserves_policy_identity_with_sbom_collision[accepted-risk]",
+          "outcome": "PASS"
+        },
+        {
+          "nodeid": "tests/test_policy_public_identity.py::test_tenant_history_preserves_policy_identity_with_sbom_collision[scoring]",
+          "evidenceNode": "tests/test_policy_public_identity.py::test_tenant_history_preserves_policy_identity_with_sbom_collision[scoring]",
+          "outcome": "PASS"
+        },
+        {
+          "nodeid": "tests/test_policy_public_identity.py::test_platform_history_is_platform_scoped_and_numeric[trust]",
+          "evidenceNode": "tests/test_policy_public_identity.py::test_platform_history_is_platform_scoped_and_numeric[trust]",
+          "outcome": "PASS"
+        },
+        {
+          "nodeid": "tests/test_policy_public_identity.py::test_platform_history_is_platform_scoped_and_numeric[accepted-risk]",
+          "evidenceNode": "tests/test_policy_public_identity.py::test_platform_history_is_platform_scoped_and_numeric[accepted-risk]",
+          "outcome": "PASS"
+        },
+        {
+          "nodeid": "tests/test_policy_public_identity.py::test_platform_history_is_platform_scoped_and_numeric[scoring]",
+          "evidenceNode": "tests/test_policy_public_identity.py::test_platform_history_is_platform_scoped_and_numeric[scoring]",
+          "outcome": "PASS"
+        },
+        {
+          "nodeid": "tests/test_policy_public_identity.py::test_sbom_versions_still_have_public_uuid_identities",
+          "evidenceNode": "tests/test_policy_public_identity.py::test_sbom_versions_still_have_public_uuid_identities",
+          "outcome": "PASS"
+        }
+      ]
+    },
+    {
+      "name": "SBO-74 KEV permissions",
+      "files": [
+        "tests/test_kev_router.py",
+        "tests/test_kev_sync_worker.py"
+      ],
+      "counts": {
+        "PASS": 25
+      },
+      "tests": [
+        {
+          "nodeid": "tests/test_kev_router.py::test_post_kev_sync_uses_service",
+          "evidenceNode": "tests/test_kev_router.py::test_post_kev_sync_uses_service",
+          "outcome": "PASS"
+        },
+        {
+          "nodeid": "tests/test_kev_router.py::test_post_kev_sync_rejects_invalid_since",
+          "evidenceNode": "tests/test_kev_router.py::test_post_kev_sync_rejects_invalid_since",
+          "outcome": "PASS"
+        },
+        {
+          "nodeid": "tests/test_kev_router.py::test_get_kev_detail",
+          "evidenceNode": "tests/test_kev_router.py::test_get_kev_detail",
+          "outcome": "PASS"
+        },
+        {
+          "nodeid": "tests/test_kev_router.py::test_search_uses_or_across_supported_fields[CVE-2021-44228-CVE-2021-44228]",
+          "evidenceNode": "tests/test_kev_router.py::test_search_uses_or_across_supported_fields[CVE-2021-44228-CVE-2021-44228]",
+          "outcome": "PASS"
+        },
+        {
+          "nodeid": "tests/test_kev_router.py::test_search_uses_or_across_supported_fields[Apache-CVE-2021-44228]",
+          "evidenceNode": "tests/test_kev_router.py::test_search_uses_or_across_supported_fields[Apache-CVE-2021-44228]",
+          "outcome": "PASS"
+        },
+        {
+          "nodeid": "tests/test_kev_router.py::test_search_uses_or_across_supported_fields[Log4j2-CVE-2021-44228]",
+          "evidenceNode": "tests/test_kev_router.py::test_search_uses_or_across_supported_fields[Log4j2-CVE-2021-44228]",
+          "outcome": "PASS"
+        },
+        {
+          "nodeid": "tests/test_kev_router.py::test_search_uses_or_across_supported_fields[remote code-CVE-2021-44228]",
+          "evidenceNode": "tests/test_kev_router.py::test_search_uses_or_across_supported_fields[remote code-CVE-2021-44228]",
+          "outcome": "PASS"
+        },
+        {
+          "nodeid": "tests/test_kev_router.py::test_search_uses_or_across_supported_fields[JNDI-CVE-2021-44228]",
+          "evidenceNode": "tests/test_kev_router.py::test_search_uses_or_across_supported_fields[JNDI-CVE-2021-44228]",
+          "outcome": "PASS"
+        },
+        {
+          "nodeid": "tests/test_kev_router.py::test_search_uses_or_across_supported_fields[Upgrade Log4j-CVE-2021-44228]",
+          "evidenceNode": "tests/test_kev_router.py::test_search_uses_or_across_supported_fields[Upgrade Log4j-CVE-2021-44228]",
+          "outcome": "PASS"
+        },
+        {
+          "nodeid": "tests/test_kev_router.py::test_search_uses_or_across_supported_fields[internet-facing-CVE-2021-44228]",
+          "evidenceNode": "tests/test_kev_router.py::test_search_uses_or_across_supported_fields[internet-facing-CVE-2021-44228]",
+          "outcome": "PASS"
+        },
+        {
+          "nodeid": "tests/test_kev_router.py::test_search_uses_or_across_supported_fields[CWE-502-CVE-2021-44228]",
+          "evidenceNode": "tests/test_kev_router.py::test_search_uses_or_across_supported_fields[CWE-502-CVE-2021-44228]",
+          "outcome": "PASS"
+        },
+        {
+          "nodeid": "tests/test_kev_router.py::test_vendor_product_and_combined_filters_use_and",
+          "evidenceNode": "tests/test_kev_router.py::test_vendor_product_and_combined_filters_use_and",
+          "outcome": "PASS"
+        },
+        {
+          "nodeid": "tests/test_kev_router.py::test_ransomware_filters_are_exact",
+          "evidenceNode": "tests/test_kev_router.py::test_ransomware_filters_are_exact",
+          "outcome": "PASS"
+        },
+        {
+          "nodeid": "tests/test_kev_router.py::test_date_added_and_due_date_ranges_are_inclusive",
+          "evidenceNode": "tests/test_kev_router.py::test_date_added_and_due_date_ranges_are_inclusive",
+          "outcome": "PASS"
+        },
+        {
+          "nodeid": "tests/test_kev_router.py::test_invalid_date_ranges_are_rejected[params0]",
+          "evidenceNode": "tests/test_kev_router.py::test_invalid_date_ranges_are_rejected[params0]",
+          "outcome": "PASS"
+        },
+        {
+          "nodeid": "tests/test_kev_router.py::test_invalid_date_ranges_are_rejected[params1]",
+          "evidenceNode": "tests/test_kev_router.py::test_invalid_date_ranges_are_rejected[params1]",
+          "outcome": "PASS"
+        },
+        {
+          "nodeid": "tests/test_kev_router.py::test_invalid_date_ranges_are_rejected[params2]",
+          "evidenceNode": "tests/test_kev_router.py::test_invalid_date_ranges_are_rejected[params2]",
+          "outcome": "PASS"
+        },
+        {
+          "nodeid": "tests/test_kev_router.py::test_catalog_version_and_cwe_filters",
+          "evidenceNode": "tests/test_kev_router.py::test_catalog_version_and_cwe_filters",
+          "outcome": "PASS"
+        },
+        {
+          "nodeid": "tests/test_kev_router.py::test_sorting_allowlist_and_directions",
+          "evidenceNode": "tests/test_kev_router.py::test_sorting_allowlist_and_directions",
+          "outcome": "PASS"
+        },
+        {
+          "nodeid": "tests/test_kev_router.py::test_filtered_count_and_pagination_apply_after_filters",
+          "evidenceNode": "tests/test_kev_router.py::test_filtered_count_and_pagination_apply_after_filters",
+          "outcome": "PASS"
+        },
+        {
+          "nodeid": "tests/test_kev_router.py::test_filter_options_are_distinct_sorted_and_vendor_aware",
+          "evidenceNode": "tests/test_kev_router.py::test_filter_options_are_distinct_sorted_and_vendor_aware",
+          "outcome": "PASS"
+        },
+        {
+          "nodeid": "tests/test_kev_router.py::test_router_dependencies_can_preserve_authorization",
+          "evidenceNode": "tests/test_kev_router.py::test_router_dependencies_can_preserve_authorization",
+          "outcome": "PASS"
+        },
+        {
+          "nodeid": "tests/test_kev_sync_worker.py::test_kev_sync_task_registered_on_celery_app",
+          "evidenceNode": "tests/test_kev_sync_worker.py::test_kev_sync_task_registered_on_celery_app",
+          "outcome": "PASS"
+        },
+        {
+          "nodeid": "tests/test_kev_sync_worker.py::test_sync_kev_catalog_calls_service_with_existing_session",
+          "evidenceNode": "tests/test_kev_sync_worker.py::test_sync_kev_catalog_calls_service_with_existing_session",
+          "outcome": "PASS"
+        },
+        {
+          "nodeid": "tests/test_kev_sync_worker.py::test_sync_kev_catalog_rolls_back_on_failure",
+          "evidenceNode": "tests/test_kev_sync_worker.py::test_sync_kev_catalog_rolls_back_on_failure",
+          "outcome": "PASS"
+        }
+      ]
+    },
+    {
+      "name": "Native IAM and Users & Access",
+      "files": [
+        "tests/test_native_iam_foundation.py",
+        "tests/test_native_iam_phase2.py",
+        "tests/test_native_iam_phase3.py",
+        "tests/test_native_iam_phase4.py",
+        "tests/test_native_iam_phase5.py",
+        "tests/test_native_iam_acceptance.py",
+        "tests/test_phase9_role_assignment_api.py"
+      ],
+      "counts": {
+        "PASS": 227
+      },
+      "tests": [
+        {
+          "nodeid": "tests/test_native_iam_acceptance.py::test_password_change_proof_has_no_login_side_effects",
+          "evidenceNode": "tests/test_native_iam_acceptance.py::test_password_change_proof_has_no_login_side_effects",
+          "outcome": "PASS"
+        },
+        {
+          "nodeid": "tests/test_native_iam_acceptance.py::test_forced_proof_has_no_login_activity",
+          "evidenceNode": "tests/test_native_iam_acceptance.py::test_forced_proof_has_no_login_activity",
+          "outcome": "PASS"
+        },
+        {
+          "nodeid": "tests/test_native_iam_acceptance.py::test_public_only_validator_needs_no_private_key",
+          "evidenceNode": "tests/test_native_iam_acceptance.py::test_public_only_validator_needs_no_private_key",
+          "outcome": "PASS"
+        },
+        {
+          "nodeid": "tests/test_native_iam_acceptance.py::test_validation_does_not_fallback_to_private_key",
+          "evidenceNode": "tests/test_native_iam_acceptance.py::test_validation_does_not_fallback_to_private_key",
+          "outcome": "PASS"
+        },
+        {
+          "nodeid": "tests/test_native_iam_acceptance.py::test_password_proof_retains_global_lockout",
+          "evidenceNode": "tests/test_native_iam_acceptance.py::test_password_proof_retains_global_lockout",
+          "outcome": "PASS"
+        },
+        {
+          "nodeid": "tests/test_native_iam_acceptance.py::test_inventory_preserves_tenant_roles_without_email_or_credentials",
+          "evidenceNode": "tests/test_native_iam_acceptance.py::test_inventory_preserves_tenant_roles_without_email_or_credentials",
+          "outcome": "PASS"
+        },
+        {
+          "nodeid": "tests/test_native_iam_acceptance.py::test_active_public_key_pair_mismatch_fails_production",
+          "evidenceNode": "tests/test_native_iam_acceptance.py::test_active_public_key_pair_mismatch_fails_production",
+          "outcome": "PASS"
+        },
+        {
+          "nodeid": "tests/test_native_iam_foundation.py::test_native_defaults_do_not_enable_authentication",
+          "evidenceNode": "tests/test_native_iam_foundation.py::test_native_defaults_do_not_enable_authentication",
+          "outcome": "PASS"
+        },
+        {
+          "nodeid": "tests/test_native_iam_foundation.py::test_email_normalization[Foo@Example.com]",
+          "evidenceNode": "tests/test_native_iam_foundation.py::test_email_normalization[Foo@Example.com]",
+          "outcome": "PASS"
+        },
+        {
+          "nodeid": "tests/test_native_iam_foundation.py::test_email_normalization[foo@example.com]",
+          "evidenceNode": "tests/test_native_iam_foundation.py::test_email_normalization[foo@example.com]",
+          "outcome": "PASS"
+        },
+        {
+          "nodeid": "tests/test_native_iam_foundation.py::test_email_normalization[ \\tFoo@Example.COM\\n]",
+          "evidenceNode": "tests/test_native_iam_foundation.py::test_email_normalization[ \\tFoo@Example.COM\\n]",
+          "outcome": "PASS"
+        },
+        {
+          "nodeid": "tests/test_native_iam_foundation.py::test_one_person_can_have_both_identities_without_email_linking",
+          "evidenceNode": "tests/test_native_iam_foundation.py::test_one_person_can_have_both_identities_without_email_linking",
+          "outcome": "PASS"
+        },
+        {
+          "nodeid": "tests/test_native_iam_foundation.py::test_hcl_identity_uniqueness_and_idempotent_mirror",
+          "evidenceNode": "tests/test_native_iam_foundation.py::test_hcl_identity_uniqueness_and_idempotent_mirror",
+          "outcome": "PASS"
+        },
+        {
+          "nodeid": "tests/test_native_iam_foundation.py::test_email_collision_report_does_not_merge_hcl_profiles",
+          "evidenceNode": "tests/test_native_iam_foundation.py::test_email_collision_report_does_not_merge_hcl_profiles",
+          "outcome": "PASS"
+        },
+        {
+          "nodeid": "tests/test_native_iam_foundation.py::test_concurrent_native_identifier_creation_has_one_winner",
+          "evidenceNode": "tests/test_native_iam_foundation.py::test_concurrent_native_identifier_creation_has_one_winner",
+          "outcome": "PASS"
+        },
+        {
+          "nodeid": "tests/test_native_iam_foundation.py::test_valid_status_transitions[PENDING_EMAIL_VERIFICATION-ACTIVE-proof0]",
+          "evidenceNode": "tests/test_native_iam_foundation.py::test_valid_status_transitions[PENDING_EMAIL_VERIFICATION-ACTIVE-proof0]",
+          "outcome": "PASS"
+        },
+        {
+          "nodeid": "tests/test_native_iam_foundation.py::test_valid_status_transitions[ACTIVE-LOCKED-proof1]",
+          "evidenceNode": "tests/test_native_iam_foundation.py::test_valid_status_transitions[ACTIVE-LOCKED-proof1]",
+          "outcome": "PASS"
+        },
+        {
+          "nodeid": "tests/test_native_iam_foundation.py::test_valid_status_transitions[LOCKED-ACTIVE-proof2]",
+          "evidenceNode": "tests/test_native_iam_foundation.py::test_valid_status_transitions[LOCKED-ACTIVE-proof2]",
+          "outcome": "PASS"
+        },
+        {
+          "nodeid": "tests/test_native_iam_foundation.py::test_valid_status_transitions[ACTIVE-DISABLED-proof3]",
+          "evidenceNode": "tests/test_native_iam_foundation.py::test_valid_status_transitions[ACTIVE-DISABLED-proof3]",
+          "outcome": "PASS"
+        },
+        {
+          "nodeid": "tests/test_native_iam_foundation.py::test_valid_status_transitions[LOCKED-DISABLED-proof4]",
+          "evidenceNode": "tests/test_native_iam_foundation.py::test_valid_status_transitions[LOCKED-DISABLED-proof4]",
+          "outcome": "PASS"
+        },
+        {
+          "nodeid": "tests/test_native_iam_foundation.py::test_valid_status_transitions[PENDING_EMAIL_VERIFICATION-DISABLED-proof5]",
+          "evidenceNode": "tests/test_native_iam_foundation.py::test_valid_status_transitions[PENDING_EMAIL_VERIFICATION-DISABLED-proof5]",
+          "outcome": "PASS"
+        },
+        {
+          "nodeid": "tests/test_native_iam_foundation.py::test_valid_status_transitions[DISABLED-ACTIVE-proof6]",
+          "evidenceNode": "tests/test_native_iam_foundation.py::test_valid_status_transitions[DISABLED-ACTIVE-proof6]",
+          "outcome": "PASS"
+        },
+        {
+          "nodeid": "tests/test_native_iam_foundation.py::test_valid_status_transitions[ACTIVE-FORCE_PASSWORD_CHANGE-proof7]",
+          "evidenceNode": "tests/test_native_iam_foundation.py::test_valid_status_transitions[ACTIVE-FORCE_PASSWORD_CHANGE-proof7]",
+          "outcome": "PASS"
+        },
+        {
+          "nodeid": "tests/test_native_iam_foundation.py::test_valid_status_transitions[FORCE_PASSWORD_CHANGE-ACTIVE-proof8]",
+          "evidenceNode": "tests/test_native_iam_foundation.py::test_valid_status_transitions[FORCE_PASSWORD_CHANGE-ACTIVE-proof8]",
+          "outcome": "PASS"
+        },
+        {
+          "nodeid": "tests/test_native_iam_foundation.py::test_valid_status_transitions[PENDING-ACTIVE-proof9]",
+          "evidenceNode": "tests/test_native_iam_foundation.py::test_valid_status_transitions[PENDING-ACTIVE-proof9]",
+          "outcome": "PASS"
+        },
+        {
+          "nodeid": "tests/test_native_iam_foundation.py::test_invalid_or_unproven_transitions_fail_closed[PENDING_EMAIL_VERIFICATION-LOCKED]",
+          "evidenceNode": "tests/test_native_iam_foundation.py::test_invalid_or_unproven_transitions_fail_closed[PENDING_EMAIL_VERIFICATION-LOCKED]",
+          "outcome": "PASS"
+        },
+        {
+          "nodeid": "tests/test_native_iam_foundation.py::test_invalid_or_unproven_transitions_fail_closed[DISABLED-LOCKED]",
+          "evidenceNode": "tests/test_native_iam_foundation.py::test_invalid_or_unproven_transitions_fail_closed[DISABLED-LOCKED]",
+          "outcome": "PASS"
+        },
+        {
+          "nodeid": "tests/test_native_iam_foundation.py::test_invalid_or_unproven_transitions_fail_closed[ACTIVE-PENDING_EMAIL_VERIFICATION]",
+          "evidenceNode": "tests/test_native_iam_foundation.py::test_invalid_or_unproven_transitions_fail_closed[ACTIVE-PENDING_EMAIL_VERIFICATION]",
+          "outcome": "PASS"
+        },
+        {
+          "nodeid": "tests/test_native_iam_foundation.py::test_invalid_or_unproven_transitions_fail_closed[ACTIVE-UNKNOWN]",
+          "evidenceNode": "tests/test_native_iam_foundation.py::test_invalid_or_unproven_transitions_fail_closed[ACTIVE-UNKNOWN]",
+          "outcome": "PASS"
+        },
+        {
+          "nodeid": "tests/test_native_iam_foundation.py::test_invalid_or_unproven_transitions_fail_closed[UNKNOWN-ACTIVE]",
+          "evidenceNode": "tests/test_native_iam_foundation.py::test_invalid_or_unproven_transitions_fail_closed[UNKNOWN-ACTIVE]",
+          "outcome": "PASS"
+        },
+        {
+          "nodeid": "tests/test_native_iam_foundation.py::test_invalid_or_unproven_transitions_fail_closed[PENDING-ACTIVE]",
+          "evidenceNode": "tests/test_native_iam_foundation.py::test_invalid_or_unproven_transitions_fail_closed[PENDING-ACTIVE]",
+          "outcome": "PASS"
+        },
+        {
+          "nodeid": "tests/test_native_iam_foundation.py::test_invalid_or_unproven_transitions_fail_closed[PENDING-DISABLED]",
+          "evidenceNode": "tests/test_native_iam_foundation.py::test_invalid_or_unproven_transitions_fail_closed[PENDING-DISABLED]",
+          "outcome": "PASS"
+        },
+        {
+          "nodeid": "tests/test_native_iam_foundation.py::test_invalid_or_unproven_transitions_fail_closed[DISABLED-ACTIVE]",
+          "evidenceNode": "tests/test_native_iam_foundation.py::test_invalid_or_unproven_transitions_fail_closed[DISABLED-ACTIVE]",
+          "outcome": "PASS"
+        },
+        {
+          "nodeid": "tests/test_native_iam_foundation.py::test_invalid_or_unproven_transitions_fail_closed[LOCKED-ACTIVE]",
+          "evidenceNode": "tests/test_native_iam_foundation.py::test_invalid_or_unproven_transitions_fail_closed[LOCKED-ACTIVE]",
+          "outcome": "PASS"
+        },
+        {
+          "nodeid": "tests/test_native_iam_foundation.py::test_invalid_or_unproven_transitions_fail_closed[PENDING_EMAIL_VERIFICATION-ACTIVE]",
+          "evidenceNode": "tests/test_native_iam_foundation.py::test_invalid_or_unproven_transitions_fail_closed[PENDING_EMAIL_VERIFICATION-ACTIVE]",
+          "outcome": "PASS"
+        },
+        {
+          "nodeid": "tests/test_native_iam_foundation.py::test_invalid_or_unproven_transitions_fail_closed[FORCE_PASSWORD_CHANGE-ACTIVE]",
+          "evidenceNode": "tests/test_native_iam_foundation.py::test_invalid_or_unproven_transitions_fail_closed[FORCE_PASSWORD_CHANGE-ACTIVE]",
+          "outcome": "PASS"
+        },
+        {
+          "nodeid": "tests/test_native_iam_foundation.py::test_all_non_active_states_have_no_authority[LOCKED]",
+          "evidenceNode": "tests/test_native_iam_foundation.py::test_all_non_active_states_have_no_authority[LOCKED]",
+          "outcome": "PASS"
+        },
+        {
+          "nodeid": "tests/test_native_iam_foundation.py::test_all_non_active_states_have_no_authority[FORCE_PASSWORD_CHANGE]",
+          "evidenceNode": "tests/test_native_iam_foundation.py::test_all_non_active_states_have_no_authority[FORCE_PASSWORD_CHANGE]",
+          "outcome": "PASS"
+        },
+        {
+          "nodeid": "tests/test_native_iam_foundation.py::test_all_non_active_states_have_no_authority[PENDING_EMAIL_VERIFICATION]",
+          "evidenceNode": "tests/test_native_iam_foundation.py::test_all_non_active_states_have_no_authority[PENDING_EMAIL_VERIFICATION]",
+          "outcome": "PASS"
+        },
+        {
+          "nodeid": "tests/test_native_iam_foundation.py::test_all_non_active_states_have_no_authority[DISABLED]",
+          "evidenceNode": "tests/test_native_iam_foundation.py::test_all_non_active_states_have_no_authority[DISABLED]",
+          "outcome": "PASS"
+        },
+        {
+          "nodeid": "tests/test_native_iam_foundation.py::test_all_non_active_states_have_no_authority[PENDING]",
+          "evidenceNode": "tests/test_native_iam_foundation.py::test_all_non_active_states_have_no_authority[PENDING]",
+          "outcome": "PASS"
+        },
+        {
+          "nodeid": "tests/test_native_iam_foundation.py::test_password_primitives_and_no_secret_logging",
+          "evidenceNode": "tests/test_native_iam_foundation.py::test_password_primitives_and_no_secret_logging",
+          "outcome": "PASS"
+        },
+        {
+          "nodeid": "tests/test_native_iam_foundation.py::test_credential_storage_rejects_plaintext_and_duplicates",
+          "evidenceNode": "tests/test_native_iam_foundation.py::test_credential_storage_rejects_plaintext_and_duplicates",
+          "outcome": "PASS"
+        },
+        {
+          "nodeid": "tests/test_native_iam_foundation.py::test_activation_randomness_hash_purpose_ttl_single_use",
+          "evidenceNode": "tests/test_native_iam_foundation.py::test_activation_randomness_hash_purpose_ttl_single_use",
+          "outcome": "PASS"
+        },
+        {
+          "nodeid": "tests/test_native_iam_foundation.py::test_activation_rejections[expired]",
+          "evidenceNode": "tests/test_native_iam_foundation.py::test_activation_rejections[expired]",
+          "outcome": "PASS"
+        },
+        {
+          "nodeid": "tests/test_native_iam_foundation.py::test_activation_rejections[invalidated]",
+          "evidenceNode": "tests/test_native_iam_foundation.py::test_activation_rejections[invalidated]",
+          "outcome": "PASS"
+        },
+        {
+          "nodeid": "tests/test_native_iam_foundation.py::test_activation_rejections[wrong_user]",
+          "evidenceNode": "tests/test_native_iam_foundation.py::test_activation_rejections[wrong_user]",
+          "outcome": "PASS"
+        },
+        {
+          "nodeid": "tests/test_native_iam_foundation.py::test_activation_rejections[wrong_purpose]",
+          "evidenceNode": "tests/test_native_iam_foundation.py::test_activation_rejections[wrong_purpose]",
+          "outcome": "PASS"
+        },
+        {
+          "nodeid": "tests/test_native_iam_foundation.py::test_activation_rejections[changed_email]",
+          "evidenceNode": "tests/test_native_iam_foundation.py::test_activation_rejections[changed_email]",
+          "outcome": "PASS"
+        },
+        {
+          "nodeid": "tests/test_native_iam_foundation.py::test_activation_rejections[disabled]",
+          "evidenceNode": "tests/test_native_iam_foundation.py::test_activation_rejections[disabled]",
+          "outcome": "PASS"
+        },
+        {
+          "nodeid": "tests/test_native_iam_foundation.py::test_activation_concurrent_consumption_one_winner",
+          "evidenceNode": "tests/test_native_iam_foundation.py::test_activation_concurrent_consumption_one_winner",
+          "outcome": "PASS"
+        },
+        {
+          "nodeid": "tests/test_native_iam_foundation.py::test_required_audit_failure_rolls_back_token_and_state",
+          "evidenceNode": "tests/test_native_iam_foundation.py::test_required_audit_failure_rolls_back_token_and_state",
+          "outcome": "PASS"
+        },
+        {
+          "nodeid": "tests/test_native_iam_foundation.py::test_tenant_admin_can_delegate_basic_roles[SECURITY_ANALYST]",
+          "evidenceNode": "tests/test_native_iam_foundation.py::test_tenant_admin_can_delegate_basic_roles[SECURITY_ANALYST]",
+          "outcome": "PASS"
+        },
+        {
+          "nodeid": "tests/test_native_iam_foundation.py::test_tenant_admin_can_delegate_basic_roles[DEVELOPER]",
+          "evidenceNode": "tests/test_native_iam_foundation.py::test_tenant_admin_can_delegate_basic_roles[DEVELOPER]",
+          "outcome": "PASS"
+        },
+        {
+          "nodeid": "tests/test_native_iam_foundation.py::test_tenant_admin_can_delegate_basic_roles[VIEWER]",
+          "evidenceNode": "tests/test_native_iam_foundation.py::test_tenant_admin_can_delegate_basic_roles[VIEWER]",
+          "outcome": "PASS"
+        },
+        {
+          "nodeid": "tests/test_native_iam_foundation.py::test_tenant_admin_cannot_delegate_admin_roles[TENANT_ADMIN]",
+          "evidenceNode": "tests/test_native_iam_foundation.py::test_tenant_admin_cannot_delegate_admin_roles[TENANT_ADMIN]",
+          "outcome": "PASS"
+        },
+        {
+          "nodeid": "tests/test_native_iam_foundation.py::test_tenant_admin_cannot_delegate_admin_roles[PLATFORM_ADMIN]",
+          "evidenceNode": "tests/test_native_iam_foundation.py::test_tenant_admin_cannot_delegate_admin_roles[PLATFORM_ADMIN]",
+          "outcome": "PASS"
+        },
+        {
+          "nodeid": "tests/test_native_iam_foundation.py::test_platform_admin_can_delegate_tenant_admin",
+          "evidenceNode": "tests/test_native_iam_foundation.py::test_platform_admin_can_delegate_tenant_admin",
+          "outcome": "PASS"
+        },
+        {
+          "nodeid": "tests/test_native_iam_foundation.py::test_service_enforces_delegation_without_frontend[grant]",
+          "evidenceNode": "tests/test_native_iam_foundation.py::test_service_enforces_delegation_without_frontend[grant]",
+          "outcome": "PASS"
+        },
+        {
+          "nodeid": "tests/test_native_iam_foundation.py::test_service_enforces_delegation_without_frontend[replace]",
+          "evidenceNode": "tests/test_native_iam_foundation.py::test_service_enforces_delegation_without_frontend[replace]",
+          "outcome": "PASS"
+        },
+        {
+          "nodeid": "tests/test_native_iam_foundation.py::test_legacy_membership_endpoint_cannot_bypass_role_delegation",
+          "evidenceNode": "tests/test_native_iam_foundation.py::test_legacy_membership_endpoint_cannot_bypass_role_delegation",
+          "outcome": "PASS"
+        },
+        {
+          "nodeid": "tests/test_native_iam_foundation.py::test_token_audit_contains_no_raw_secret",
+          "evidenceNode": "tests/test_native_iam_foundation.py::test_token_audit_contains_no_raw_secret",
+          "outcome": "PASS"
+        },
+        {
+          "nodeid": "tests/test_native_iam_foundation.py::test_database_checks_reject_unknown_status_and_noncanonical_native_identifier",
+          "evidenceNode": "tests/test_native_iam_foundation.py::test_database_checks_reject_unknown_status_and_noncanonical_native_identifier",
+          "outcome": "PASS"
+        },
+        {
+          "nodeid": "tests/test_native_iam_foundation.py::test_native_security_state_mutations_are_audited_and_revoke_versions",
+          "evidenceNode": "tests/test_native_iam_foundation.py::test_native_security_state_mutations_are_audited_and_revoke_versions",
+          "outcome": "PASS"
+        },
+        {
+          "nodeid": "tests/test_native_iam_foundation.py::test_activation_cannot_enable_account_without_credentials_and_verification",
+          "evidenceNode": "tests/test_native_iam_foundation.py::test_activation_cannot_enable_account_without_credentials_and_verification",
+          "outcome": "PASS"
+        },
+        {
+          "nodeid": "tests/test_native_iam_foundation.py::test_native_access_removal_preserves_last_admin_guard",
+          "evidenceNode": "tests/test_native_iam_foundation.py::test_native_access_removal_preserves_last_admin_guard",
+          "outcome": "PASS"
+        },
+        {
+          "nodeid": "tests/test_native_iam_foundation.py::test_native_non_active_user_cannot_receive_platform_grant[LOCKED]",
+          "evidenceNode": "tests/test_native_iam_foundation.py::test_native_non_active_user_cannot_receive_platform_grant[LOCKED]",
+          "outcome": "PASS"
+        },
+        {
+          "nodeid": "tests/test_native_iam_foundation.py::test_native_non_active_user_cannot_receive_platform_grant[FORCE_PASSWORD_CHANGE]",
+          "evidenceNode": "tests/test_native_iam_foundation.py::test_native_non_active_user_cannot_receive_platform_grant[FORCE_PASSWORD_CHANGE]",
+          "outcome": "PASS"
+        },
+        {
+          "nodeid": "tests/test_native_iam_foundation.py::test_native_non_active_user_cannot_receive_platform_grant[PENDING_EMAIL_VERIFICATION]",
+          "evidenceNode": "tests/test_native_iam_foundation.py::test_native_non_active_user_cannot_receive_platform_grant[PENDING_EMAIL_VERIFICATION]",
+          "outcome": "PASS"
+        },
+        {
+          "nodeid": "tests/test_native_iam_foundation.py::test_feature_flag_blocks_token_issuance",
+          "evidenceNode": "tests/test_native_iam_foundation.py::test_feature_flag_blocks_token_issuance",
+          "outcome": "PASS"
+        },
+        {
+          "nodeid": "tests/test_native_iam_foundation.py::test_credential_and_native_identity_user_uniqueness",
+          "evidenceNode": "tests/test_native_iam_foundation.py::test_credential_and_native_identity_user_uniqueness",
+          "outcome": "PASS"
+        },
+        {
+          "nodeid": "tests/test_native_iam_foundation.py::test_database_exception_does_not_print_credential_hash",
+          "evidenceNode": "tests/test_native_iam_foundation.py::test_database_exception_does_not_print_credential_hash",
+          "outcome": "PASS"
+        },
+        {
+          "nodeid": "tests/test_native_iam_phase2.py::test_creation_delegation[True-assigned0-True]",
+          "evidenceNode": "tests/test_native_iam_phase2.py::test_creation_delegation[True-assigned0-True]",
+          "outcome": "PASS"
+        },
+        {
+          "nodeid": "tests/test_native_iam_phase2.py::test_creation_delegation[False-assigned1-True]",
+          "evidenceNode": "tests/test_native_iam_phase2.py::test_creation_delegation[False-assigned1-True]",
+          "outcome": "PASS"
+        },
+        {
+          "nodeid": "tests/test_native_iam_phase2.py::test_creation_delegation[False-assigned2-False]",
+          "evidenceNode": "tests/test_native_iam_phase2.py::test_creation_delegation[False-assigned2-False]",
+          "outcome": "PASS"
+        },
+        {
+          "nodeid": "tests/test_native_iam_phase2.py::test_creation_delegation[False-assigned3-False]",
+          "evidenceNode": "tests/test_native_iam_phase2.py::test_creation_delegation[False-assigned3-False]",
+          "outcome": "PASS"
+        },
+        {
+          "nodeid": "tests/test_native_iam_phase2.py::test_cross_tenant_and_duplicate",
+          "evidenceNode": "tests/test_native_iam_phase2.py::test_cross_tenant_and_duplicate",
+          "outcome": "PASS"
+        },
+        {
+          "nodeid": "tests/test_native_iam_phase2.py::test_activation_single_use_and_audit",
+          "evidenceNode": "tests/test_native_iam_phase2.py::test_activation_single_use_and_audit",
+          "outcome": "PASS"
+        },
+        {
+          "nodeid": "tests/test_native_iam_phase2.py::test_same_token_tenant_isolation_and_live_roles",
+          "evidenceNode": "tests/test_native_iam_phase2.py::test_same_token_tenant_isolation_and_live_roles",
+          "outcome": "PASS"
+        },
+        {
+          "nodeid": "tests/test_native_iam_phase2.py::test_lockout_last_platform_admin_revocation_and_unlock",
+          "evidenceNode": "tests/test_native_iam_phase2.py::test_lockout_last_platform_admin_revocation_and_unlock",
+          "outcome": "PASS"
+        },
+        {
+          "nodeid": "tests/test_native_iam_phase2.py::test_concurrent_failed_attempts",
+          "evidenceNode": "tests/test_native_iam_phase2.py::test_concurrent_failed_attempts",
+          "outcome": "PASS"
+        },
+        {
+          "nodeid": "tests/test_native_iam_phase2.py::test_bad_jwt_claims[iss-https://wrong.test]",
+          "evidenceNode": "tests/test_native_iam_phase2.py::test_bad_jwt_claims[iss-https://wrong.test]",
+          "outcome": "PASS"
+        },
+        {
+          "nodeid": "tests/test_native_iam_phase2.py::test_bad_jwt_claims[aud-wrong]",
+          "evidenceNode": "tests/test_native_iam_phase2.py::test_bad_jwt_claims[aud-wrong]",
+          "outcome": "PASS"
+        },
+        {
+          "nodeid": "tests/test_native_iam_phase2.py::test_bad_jwt_claims[exp-1]",
+          "evidenceNode": "tests/test_native_iam_phase2.py::test_bad_jwt_claims[exp-1]",
+          "outcome": "PASS"
+        },
+        {
+          "nodeid": "tests/test_native_iam_phase2.py::test_bad_jwt_claims[sub-abc]",
+          "evidenceNode": "tests/test_native_iam_phase2.py::test_bad_jwt_claims[sub-abc]",
+          "outcome": "PASS"
+        },
+        {
+          "nodeid": "tests/test_native_iam_phase2.py::test_bad_jwt_claims[sub-01]",
+          "evidenceNode": "tests/test_native_iam_phase2.py::test_bad_jwt_claims[sub-01]",
+          "outcome": "PASS"
+        },
+        {
+          "nodeid": "tests/test_native_iam_phase2.py::test_bad_jwt_claims[auth_provider-HCL_CS]",
+          "evidenceNode": "tests/test_native_iam_phase2.py::test_bad_jwt_claims[auth_provider-HCL_CS]",
+          "outcome": "PASS"
+        },
+        {
+          "nodeid": "tests/test_native_iam_phase2.py::test_bad_jwt_claims[security_version-True]",
+          "evidenceNode": "tests/test_native_iam_phase2.py::test_bad_jwt_claims[security_version-True]",
+          "outcome": "PASS"
+        },
+        {
+          "nodeid": "tests/test_native_iam_phase2.py::test_bad_jwt_claims[jti-]",
+          "evidenceNode": "tests/test_native_iam_phase2.py::test_bad_jwt_claims[jti-]",
+          "outcome": "PASS"
+        },
+        {
+          "nodeid": "tests/test_native_iam_phase2.py::test_bad_jwt_claims[iat-9999999999]",
+          "evidenceNode": "tests/test_native_iam_phase2.py::test_bad_jwt_claims[iat-9999999999]",
+          "outcome": "PASS"
+        },
+        {
+          "nodeid": "tests/test_native_iam_phase2.py::test_required_claims[iss]",
+          "evidenceNode": "tests/test_native_iam_phase2.py::test_required_claims[iss]",
+          "outcome": "PASS"
+        },
+        {
+          "nodeid": "tests/test_native_iam_phase2.py::test_required_claims[sub]",
+          "evidenceNode": "tests/test_native_iam_phase2.py::test_required_claims[sub]",
+          "outcome": "PASS"
+        },
+        {
+          "nodeid": "tests/test_native_iam_phase2.py::test_required_claims[aud]",
+          "evidenceNode": "tests/test_native_iam_phase2.py::test_required_claims[aud]",
+          "outcome": "PASS"
+        },
+        {
+          "nodeid": "tests/test_native_iam_phase2.py::test_required_claims[iat]",
+          "evidenceNode": "tests/test_native_iam_phase2.py::test_required_claims[iat]",
+          "outcome": "PASS"
+        },
+        {
+          "nodeid": "tests/test_native_iam_phase2.py::test_required_claims[exp]",
+          "evidenceNode": "tests/test_native_iam_phase2.py::test_required_claims[exp]",
+          "outcome": "PASS"
+        },
+        {
+          "nodeid": "tests/test_native_iam_phase2.py::test_required_claims[jti]",
+          "evidenceNode": "tests/test_native_iam_phase2.py::test_required_claims[jti]",
+          "outcome": "PASS"
+        },
+        {
+          "nodeid": "tests/test_native_iam_phase2.py::test_required_claims[auth_provider]",
+          "evidenceNode": "tests/test_native_iam_phase2.py::test_required_claims[auth_provider]",
+          "outcome": "PASS"
+        },
+        {
+          "nodeid": "tests/test_native_iam_phase2.py::test_required_claims[security_version]",
+          "evidenceNode": "tests/test_native_iam_phase2.py::test_required_claims[security_version]",
+          "outcome": "PASS"
+        },
+        {
+          "nodeid": "tests/test_native_iam_phase2.py::test_signature_algorithm_and_disabled",
+          "evidenceNode": "tests/test_native_iam_phase2.py::test_signature_algorithm_and_disabled",
+          "outcome": "PASS"
+        },
+        {
+          "nodeid": "tests/test_native_iam_phase2.py::test_audit_failure_rolls_back_activation",
+          "evidenceNode": "tests/test_native_iam_phase2.py::test_audit_failure_rolls_back_activation",
+          "outcome": "PASS"
+        },
+        {
+          "nodeid": "tests/test_native_iam_phase2.py::test_concurrent_enrollment_one_identity",
+          "evidenceNode": "tests/test_native_iam_phase2.py::test_concurrent_enrollment_one_identity",
+          "outcome": "PASS"
+        },
+        {
+          "nodeid": "tests/test_native_iam_phase2.py::test_concurrent_activation_one_winner",
+          "evidenceNode": "tests/test_native_iam_phase2.py::test_concurrent_activation_one_winner",
+          "outcome": "PASS"
+        },
+        {
+          "nodeid": "tests/test_native_iam_phase2.py::test_activation_rejection[expired]",
+          "evidenceNode": "tests/test_native_iam_phase2.py::test_activation_rejection[expired]",
+          "outcome": "PASS"
+        },
+        {
+          "nodeid": "tests/test_native_iam_phase2.py::test_activation_rejection[invalidated]",
+          "evidenceNode": "tests/test_native_iam_phase2.py::test_activation_rejection[invalidated]",
+          "outcome": "PASS"
+        },
+        {
+          "nodeid": "tests/test_native_iam_phase2.py::test_activation_rejection[email]",
+          "evidenceNode": "tests/test_native_iam_phase2.py::test_activation_rejection[email]",
+          "outcome": "PASS"
+        },
+        {
+          "nodeid": "tests/test_native_iam_phase2.py::test_activation_rejection[disabled]",
+          "evidenceNode": "tests/test_native_iam_phase2.py::test_activation_rejection[disabled]",
+          "outcome": "PASS"
+        },
+        {
+          "nodeid": "tests/test_native_iam_phase2.py::test_email_failure_resend_rotation_and_scope",
+          "evidenceNode": "tests/test_native_iam_phase2.py::test_email_failure_resend_rotation_and_scope",
+          "outcome": "PASS"
+        },
+        {
+          "nodeid": "tests/test_native_iam_phase2.py::test_success_resets_and_rehashes",
+          "evidenceNode": "tests/test_native_iam_phase2.py::test_success_resets_and_rehashes",
+          "outcome": "PASS"
+        },
+        {
+          "nodeid": "tests/test_native_iam_phase2.py::test_nonactive_login[PENDING_EMAIL_VERIFICATION]",
+          "evidenceNode": "tests/test_native_iam_phase2.py::test_nonactive_login[PENDING_EMAIL_VERIFICATION]",
+          "outcome": "PASS"
+        },
+        {
+          "nodeid": "tests/test_native_iam_phase2.py::test_nonactive_login[DISABLED]",
+          "evidenceNode": "tests/test_native_iam_phase2.py::test_nonactive_login[DISABLED]",
+          "outcome": "PASS"
+        },
+        {
+          "nodeid": "tests/test_native_iam_phase2.py::test_nonactive_login[FORCE_PASSWORD_CHANGE]",
+          "evidenceNode": "tests/test_native_iam_phase2.py::test_nonactive_login[FORCE_PASSWORD_CHANGE]",
+          "outcome": "PASS"
+        },
+        {
+          "nodeid": "tests/test_native_iam_phase2.py::test_creation_and_login_audit_rollback",
+          "evidenceNode": "tests/test_native_iam_phase2.py::test_creation_and_login_audit_rollback",
+          "outcome": "PASS"
+        },
+        {
+          "nodeid": "tests/test_native_iam_phase2.py::test_disable_enable_does_not_revive_token",
+          "evidenceNode": "tests/test_native_iam_phase2.py::test_disable_enable_does_not_revive_token",
+          "outcome": "PASS"
+        },
+        {
+          "nodeid": "tests/test_native_iam_phase2.py::test_signing_config_fails_closed[native_jwt_algorithm-HS256]",
+          "evidenceNode": "tests/test_native_iam_phase2.py::test_signing_config_fails_closed[native_jwt_algorithm-HS256]",
+          "outcome": "PASS"
+        },
+        {
+          "nodeid": "tests/test_native_iam_phase2.py::test_signing_config_fails_closed[native_jwt_private_key-]",
+          "evidenceNode": "tests/test_native_iam_phase2.py::test_signing_config_fails_closed[native_jwt_private_key-]",
+          "outcome": "PASS"
+        },
+        {
+          "nodeid": "tests/test_native_iam_phase2.py::test_signing_config_fails_closed[native_jwt_issuer-http://native.test]",
+          "evidenceNode": "tests/test_native_iam_phase2.py::test_signing_config_fails_closed[native_jwt_issuer-http://native.test]",
+          "outcome": "PASS"
+        },
+        {
+          "nodeid": "tests/test_native_iam_phase2.py::test_signing_config_fails_closed[native_jwt_audience-]",
+          "evidenceNode": "tests/test_native_iam_phase2.py::test_signing_config_fails_closed[native_jwt_audience-]",
+          "outcome": "PASS"
+        },
+        {
+          "nodeid": "tests/test_native_iam_phase2.py::test_signing_config_fails_closed[tenant_role_assignment_mode-LEGACY]",
+          "evidenceNode": "tests/test_native_iam_phase2.py::test_signing_config_fails_closed[tenant_role_assignment_mode-LEGACY]",
+          "outcome": "PASS"
+        },
+        {
+          "nodeid": "tests/test_native_iam_phase2.py::test_signing_config_fails_closed[authorization_catalog_fail_closed-False]",
+          "evidenceNode": "tests/test_native_iam_phase2.py::test_signing_config_fails_closed[authorization_catalog_fail_closed-False]",
+          "outcome": "PASS"
+        },
+        {
+          "nodeid": "tests/test_native_iam_phase2.py::test_public_and_admin_http_boundaries",
+          "evidenceNode": "tests/test_native_iam_phase2.py::test_public_and_admin_http_boundaries",
+          "outcome": "PASS"
+        },
+        {
+          "nodeid": "tests/test_native_iam_phase2.py::test_http_activation_login_and_shared_context",
+          "evidenceNode": "tests/test_native_iam_phase2.py::test_http_activation_login_and_shared_context",
+          "outcome": "PASS"
+        },
+        {
+          "nodeid": "tests/test_native_iam_phase2.py::test_login_uses_native_identifier_not_profile_email",
+          "evidenceNode": "tests/test_native_iam_phase2.py::test_login_uses_native_identifier_not_profile_email",
+          "outcome": "PASS"
+        },
+        {
+          "nodeid": "tests/test_native_iam_phase2.py::test_future_not_before_and_token_roles_are_not_authority",
+          "evidenceNode": "tests/test_native_iam_phase2.py::test_future_not_before_and_token_roles_are_not_authority",
+          "outcome": "PASS"
+        },
+        {
+          "nodeid": "tests/test_native_iam_phase2.py::test_configured_lockout_threshold_and_duration",
+          "evidenceNode": "tests/test_native_iam_phase2.py::test_configured_lockout_threshold_and_duration",
+          "outcome": "PASS"
+        },
+        {
+          "nodeid": "tests/test_native_iam_phase3.py::test_tenant_admin_can_readd_removed_native_account_without_external_id[DEVELOPER]",
+          "evidenceNode": "tests/test_native_iam_phase3.py::test_tenant_admin_can_readd_removed_native_account_without_external_id[DEVELOPER]",
+          "outcome": "PASS"
+        },
+        {
+          "nodeid": "tests/test_native_iam_phase3.py::test_tenant_admin_can_readd_removed_native_account_without_external_id[SECURITY_ANALYST]",
+          "evidenceNode": "tests/test_native_iam_phase3.py::test_tenant_admin_can_readd_removed_native_account_without_external_id[SECURITY_ANALYST]",
+          "outcome": "PASS"
+        },
+        {
+          "nodeid": "tests/test_native_iam_phase3.py::test_tenant_admin_can_readd_removed_native_account_without_external_id[VIEWER]",
+          "evidenceNode": "tests/test_native_iam_phase3.py::test_tenant_admin_can_readd_removed_native_account_without_external_id[VIEWER]",
+          "outcome": "PASS"
+        },
+        {
+          "nodeid": "tests/test_native_iam_phase3.py::test_add_member_identity_validation_and_tenant_scope",
+          "evidenceNode": "tests/test_native_iam_phase3.py::test_add_member_identity_validation_and_tenant_scope",
+          "outcome": "PASS"
+        },
+        {
+          "nodeid": "tests/test_native_iam_phase3.py::test_add_member_preserves_legacy_external_identity_requests",
+          "evidenceNode": "tests/test_native_iam_phase3.py::test_add_member_preserves_legacy_external_identity_requests",
+          "outcome": "PASS"
+        },
+        {
+          "nodeid": "tests/test_native_iam_phase3.py::test_platform_list_filters_detail_and_redaction",
+          "evidenceNode": "tests/test_native_iam_phase3.py::test_platform_list_filters_detail_and_redaction",
+          "outcome": "PASS"
+        },
+        {
+          "nodeid": "tests/test_native_iam_phase3.py::test_tenant_list_detail_search_and_audit_private",
+          "evidenceNode": "tests/test_native_iam_phase3.py::test_tenant_list_detail_search_and_audit_private",
+          "outcome": "PASS"
+        },
+        {
+          "nodeid": "tests/test_native_iam_phase3.py::test_profile_rejects_sensitive_or_invalid_fields[email-changed@example.test]",
+          "evidenceNode": "tests/test_native_iam_phase3.py::test_profile_rejects_sensitive_or_invalid_fields[email-changed@example.test]",
+          "outcome": "PASS"
+        },
+        {
+          "nodeid": "tests/test_native_iam_phase3.py::test_profile_rejects_sensitive_or_invalid_fields[provider_identifier-bad]",
+          "evidenceNode": "tests/test_native_iam_phase3.py::test_profile_rejects_sensitive_or_invalid_fields[provider_identifier-bad]",
+          "outcome": "PASS"
+        },
+        {
+          "nodeid": "tests/test_native_iam_phase3.py::test_profile_rejects_sensitive_or_invalid_fields[security_version-99]",
+          "evidenceNode": "tests/test_native_iam_phase3.py::test_profile_rejects_sensitive_or_invalid_fields[security_version-99]",
+          "outcome": "PASS"
+        },
+        {
+          "nodeid": "tests/test_native_iam_phase3.py::test_profile_rejects_sensitive_or_invalid_fields[email_verified-True]",
+          "evidenceNode": "tests/test_native_iam_phase3.py::test_profile_rejects_sensitive_or_invalid_fields[email_verified-True]",
+          "outcome": "PASS"
+        },
+        {
+          "nodeid": "tests/test_native_iam_phase3.py::test_profile_rejects_sensitive_or_invalid_fields[external_subject-bad]",
+          "evidenceNode": "tests/test_native_iam_phase3.py::test_profile_rejects_sensitive_or_invalid_fields[external_subject-bad]",
+          "outcome": "PASS"
+        },
+        {
+          "nodeid": "tests/test_native_iam_phase3.py::test_profile_rejects_sensitive_or_invalid_fields[first_name-\\n]",
+          "evidenceNode": "tests/test_native_iam_phase3.py::test_profile_rejects_sensitive_or_invalid_fields[first_name-\\n]",
+          "outcome": "PASS"
+        },
+        {
+          "nodeid": "tests/test_native_iam_phase3.py::test_profile_update_scope_and_audit",
+          "evidenceNode": "tests/test_native_iam_phase3.py::test_profile_update_scope_and_audit",
+          "outcome": "PASS"
+        },
+        {
+          "nodeid": "tests/test_native_iam_phase3.py::test_membership_deactivate_preserves_global_and_other_tenant",
+          "evidenceNode": "tests/test_native_iam_phase3.py::test_membership_deactivate_preserves_global_and_other_tenant",
+          "outcome": "PASS"
+        },
+        {
+          "nodeid": "tests/test_native_iam_phase3.py::test_global_disable_and_reenable_preserve_memberships",
+          "evidenceNode": "tests/test_native_iam_phase3.py::test_global_disable_and_reenable_preserve_memberships",
+          "outcome": "PASS"
+        },
+        {
+          "nodeid": "tests/test_native_iam_phase3.py::test_unlock_and_force_change",
+          "evidenceNode": "tests/test_native_iam_phase3.py::test_unlock_and_force_change",
+          "outcome": "PASS"
+        },
+        {
+          "nodeid": "tests/test_native_iam_phase3.py::test_tenant_admin_cannot_change_global_state[unlock-post-None]",
+          "evidenceNode": "tests/test_native_iam_phase3.py::test_tenant_admin_cannot_change_global_state[unlock-post-None]",
+          "outcome": "PASS"
+        },
+        {
+          "nodeid": "tests/test_native_iam_phase3.py::test_tenant_admin_cannot_change_global_state[force-password-change-post-None]",
+          "evidenceNode": "tests/test_native_iam_phase3.py::test_tenant_admin_cannot_change_global_state[force-password-change-post-None]",
+          "outcome": "PASS"
+        },
+        {
+          "nodeid": "tests/test_native_iam_phase3.py::test_tenant_admin_cannot_change_global_state[status-patch-body2]",
+          "evidenceNode": "tests/test_native_iam_phase3.py::test_tenant_admin_cannot_change_global_state[status-patch-body2]",
+          "outcome": "PASS"
+        },
+        {
+          "nodeid": "tests/test_native_iam_phase3.py::test_tenant_admin_cannot_change_global_state[status-patch-body3]",
+          "evidenceNode": "tests/test_native_iam_phase3.py::test_tenant_admin_cannot_change_global_state[status-patch-body3]",
+          "outcome": "PASS"
+        },
+        {
+          "nodeid": "tests/test_native_iam_phase3.py::test_roles_version_and_same_jwt",
+          "evidenceNode": "tests/test_native_iam_phase3.py::test_roles_version_and_same_jwt",
+          "outcome": "PASS"
+        },
+        {
+          "nodeid": "tests/test_native_iam_phase3.py::test_hcl_membership_lifecycle_no_native_credentials",
+          "evidenceNode": "tests/test_native_iam_phase3.py::test_hcl_membership_lifecycle_no_native_credentials",
+          "outcome": "PASS"
+        },
+        {
+          "nodeid": "tests/test_native_iam_phase3.py::test_final_platform_admin_protected",
+          "evidenceNode": "tests/test_native_iam_phase3.py::test_final_platform_admin_protected",
+          "outcome": "PASS"
+        },
+        {
+          "nodeid": "tests/test_native_iam_phase3.py::test_profile_audit_failure_rollback",
+          "evidenceNode": "tests/test_native_iam_phase3.py::test_profile_audit_failure_rollback",
+          "outcome": "PASS"
+        },
+        {
+          "nodeid": "tests/test_native_iam_phase3.py::test_concurrent_disable_vs_login",
+          "evidenceNode": "tests/test_native_iam_phase3.py::test_concurrent_disable_vs_login",
+          "outcome": "PASS"
+        },
+        {
+          "nodeid": "tests/test_native_iam_phase3.py::test_concurrent_membership_disable_vs_authorization",
+          "evidenceNode": "tests/test_native_iam_phase3.py::test_concurrent_membership_disable_vs_authorization",
+          "outcome": "PASS"
+        },
+        {
+          "nodeid": "tests/test_native_iam_phase3.py::test_concurrent_role_replace_vs_grant",
+          "evidenceNode": "tests/test_native_iam_phase3.py::test_concurrent_role_replace_vs_grant",
+          "outcome": "PASS"
+        },
+        {
+          "nodeid": "tests/test_native_iam_phase3.py::test_concurrent_enable_vs_disable",
+          "evidenceNode": "tests/test_native_iam_phase3.py::test_concurrent_enable_vs_disable",
+          "outcome": "PASS"
+        },
+        {
+          "nodeid": "tests/test_native_iam_phase3.py::test_concurrent_unlock_vs_login",
+          "evidenceNode": "tests/test_native_iam_phase3.py::test_concurrent_unlock_vs_login",
+          "outcome": "PASS"
+        },
+        {
+          "nodeid": "tests/test_native_iam_phase3.py::test_platform_cannot_assign_admin_and_tenant_cannot_remove_existing_admin",
+          "evidenceNode": "tests/test_native_iam_phase3.py::test_platform_cannot_assign_admin_and_tenant_cannot_remove_existing_admin",
+          "outcome": "PASS"
+        },
+        {
+          "nodeid": "tests/test_native_iam_phase3.py::test_profile_payload_scope_and_role_assignment_tampering",
+          "evidenceNode": "tests/test_native_iam_phase3.py::test_profile_payload_scope_and_role_assignment_tampering",
+          "outcome": "PASS"
+        },
+        {
+          "nodeid": "tests/test_native_iam_phase3.py::test_hcl_same_principal_obeys_membership_roles_and_global_status",
+          "evidenceNode": "tests/test_native_iam_phase3.py::test_hcl_same_principal_obeys_membership_roles_and_global_status",
+          "outcome": "PASS"
+        },
+        {
+          "nodeid": "tests/test_native_iam_phase3.py::test_global_transition_audit_failure_is_atomic",
+          "evidenceNode": "tests/test_native_iam_phase3.py::test_global_transition_audit_failure_is_atomic",
+          "outcome": "PASS"
+        },
+        {
+          "nodeid": "tests/test_native_iam_phase3.py::test_add_existing_member_reuses_identity_and_rejects_duplicate",
+          "evidenceNode": "tests/test_native_iam_phase3.py::test_add_existing_member_reuses_identity_and_rejects_duplicate",
+          "outcome": "PASS"
+        },
+        {
+          "nodeid": "tests/test_native_iam_phase3.py::test_two_administrators_cannot_silently_overwrite_role_replacement",
+          "evidenceNode": "tests/test_native_iam_phase3.py::test_two_administrators_cannot_silently_overwrite_role_replacement",
+          "outcome": "PASS"
+        },
+        {
+          "nodeid": "tests/test_native_iam_phase4.py::test_active_change_revokes_and_audits",
+          "evidenceNode": "tests/test_native_iam_phase4.py::test_active_change_revokes_and_audits",
+          "outcome": "PASS"
+        },
+        {
+          "nodeid": "tests/test_native_iam_phase4.py::test_change_rejections[wrong-a different secure passphrase 42-401]",
+          "evidenceNode": "tests/test_native_iam_phase4.py::test_change_rejections[wrong-a different secure passphrase 42-401]",
+          "outcome": "PASS"
+        },
+        {
+          "nodeid": "tests/test_native_iam_phase4.py::test_change_rejections[a long native test passphrase-a long native test passphrase-422]",
+          "evidenceNode": "tests/test_native_iam_phase4.py::test_change_rejections[a long native test passphrase-a long native test passphrase-422]",
+          "outcome": "PASS"
+        },
+        {
+          "nodeid": "tests/test_native_iam_phase4.py::test_change_rejections[a long native test passphrase-                    -422]",
+          "evidenceNode": "tests/test_native_iam_phase4.py::test_change_rejections[a long native test passphrase-                    -422]",
+          "outcome": "PASS"
+        },
+        {
+          "nodeid": "tests/test_native_iam_phase4.py::test_change_rejections[a long native test passphrase-short-422]",
+          "evidenceNode": "tests/test_native_iam_phase4.py::test_change_rejections[a long native test passphrase-short-422]",
+          "outcome": "PASS"
+        },
+        {
+          "nodeid": "tests/test_native_iam_phase4.py::test_change_rejections[a long native test passphrase-\\xfc\\xfc\\xfc\\xfc\\xfc\\xfc\\xfc\\xfc\\xfc\\xfc\\xfc\\xfc\\xfc\\xfc\\xfc\\xfc\\xfc\\xfc\\xfc\\xfc\\xfc\\xfc\\xfc\\xfc\\xfc\\xfc\\xfc\\xfc\\xfc\\xfc\\xfc\\xfc\\xfc\\xfc\\xfc\\xfc\\xfc\\xfc\\xfc\\xfc\\xfc\\xfc\\xfc\\xfc\\xfc\\xfc\\xfc\\xfc\\xfc\\xfc\\xfc\\xfc\\xfc\\xfc\\xfc\\xfc\\xfc\\xfc\\xfc\\xfc\\xfc\\xfc\\xfc\\xfc\\xfc\\xfc\\xfc\\xfc\\xfc\\xfc\\xfc\\xfc\\xfc\\xfc\\xfc\\xfc\\xfc\\xfc\\xfc\\xfc\\xfc\\xfc\\xfc\\xfc\\xfc\\xfc\\xfc\\xfc\\xfc\\xfc\\xfc\\xfc\\xfc\\xfc\\xfc\\xfc\\xfc\\xfc\\xfc\\xfc\\xfc\\xfc\\xfc\\xfc\\xfc\\xfc\\xfc\\xfc\\xfc\\xfc\\xfc\\xfc\\xfc\\xfc\\xfc\\xfc\\xfc\\xfc\\xfc\\xfc\\xfc\\xfc\\xfc\\xfc\\xfc\\xfc\\xfc\\xfc\\xfc\\xfc\\xfc\\xfc\\xfc\\xfc\\xfc\\xfc\\xfc\\xfc\\xfc\\xfc\\xfc\\xfc\\xfc\\xfc\\xfc\\xfc\\xfc\\xfc\\xfc\\xfc\\xfc\\xfc\\xfc\\xfc\\xfc\\xfc\\xfc\\xfc\\xfc\\xfc\\xfc\\xfc\\xfc\\xfc\\xfc\\xfc\\xfc\\xfc\\xfc\\xfc\\xfc\\xfc\\xfc\\xfc\\xfc\\xfc\\xfc\\xfc\\xfc\\xfc\\xfc\\xfc\\xfc\\xfc\\xfc\\xfc\\xfc\\xfc\\xfc\\xfc\\xfc\\xfc\\xfc\\xfc\\xfc\\xfc\\xfc\\xfc\\xfc\\xfc\\xfc\\xfc\\xfc\\xfc\\xfc\\xfc\\xfc\\xfc\\xfc\\xfc\\xfc\\xfc\\xfc\\xfc\\xfc\\xfc\\xfc\\xfc\\xfc\\xfc\\xfc\\xfc\\xfc\\xfc\\xfc\\xfc\\xfc\\xfc\\xfc\\xfc\\xfc\\xfc\\xfc\\xfc\\xfc\\xfc\\xfc\\xfc\\xfc\\xfc\\xfc\\xfc\\xfc\\xfc\\xfc\\xfc\\xfc\\xfc\\xfc\\xfc\\xfc\\xfc\\xfc\\xfc\\xfc\\xfc\\xfc\\xfc\\xfc\\xfc\\xfc\\xfc\\xfc\\xfc\\xfc\\xfc\\xfc\\xfc\\xfc\\xfc\\xfc\\xfc\\xfc\\xfc\\xfc\\xfc\\xfc\\xfc\\xfc\\xfc\\xfc\\xfc\\xfc\\xfc\\xfc\\xfc\\xfc\\xfc\\xfc\\xfc\\xfc\\xfc\\xfc\\xfc\\xfc\\xfc\\xfc\\xfc\\xfc\\xfc\\xfc\\xfc\\xfc\\xfc\\xfc\\xfc\\xfc\\xfc\\xfc\\xfc\\xfc\\xfc\\xfc\\xfc\\xfc\\xfc\\xfc\\xfc\\xfc\\xfc\\xfc\\xfc\\xfc\\xfc\\xfc\\xfc\\xfc\\xfc\\xfc\\xfc\\xfc\\xfc\\xfc\\xfc\\xfc\\xfc\\xfc\\xfc\\xfc\\xfc\\xfc\\xfc\\xfc\\xfc\\xfc\\xfc\\xfc\\xfc\\xfc\\xfc\\xfc\\xfc\\xfc\\xfc\\xfc\\xfc\\xfc\\xfc\\xfc\\xfc\\xfc\\xfc\\xfc\\xfc\\xfc\\xfc\\xfc\\xfc\\xfc\\xfc\\xfc\\xfc\\xfc\\xfc\\xfc\\xfc\\xfc\\xfc\\xfc\\xfc\\xfc\\xfc\\xfc\\xfc\\xfc\\xfc\\xfc\\xfc\\xfc\\xfc\\xfc\\xfc\\xfc\\xfc\\xfc\\xfc\\xfc\\xfc\\xfc\\xfc\\xfc\\xfc\\xfc\\xfc\\xfc\\xfc\\xfc\\xfc\\xfc\\xfc\\xfc\\xfc\\xfc\\xfc\\xfc\\xfc\\xfc\\xfc\\xfc\\xfc\\xfc\\xfc\\xfc\\xfc\\xfc\\xfc\\xfc\\xfc\\xfc\\xfc\\xfc\\xfc\\xfc\\xfc\\xfc\\xfc\\xfc\\xfc\\xfc\\xfc\\xfc\\xfc\\xfc\\xfc\\xfc\\xfc\\xfc\\xfc\\xfc\\xfc\\xfc\\xfc\\xfc\\xfc\\xfc\\xfc\\xfc\\xfc\\xfc\\xfc\\xfc\\xfc\\xfc\\xfc\\xfc\\xfc\\xfc\\xfc\\xfc\\xfc\\xfc\\xfc\\xfc\\xfc\\xfc\\xfc\\xfc\\xfc\\xfc\\xfc\\xfc\\xfc\\xfc\\xfc\\xfc\\xfc\\xfc\\xfc\\xfc\\xfc\\xfc\\xfc\\xfc\\xfc\\xfc\\xfc\\xfc\\xfc\\xfc\\xfc\\xfc\\xfc\\xfc\\xfc\\xfc\\xfc\\xfc\\xfc\\xfc\\xfc\\xfc\\xfc\\xfc\\xfc\\xfc\\xfc\\xfc\\xfc\\xfc\\xfc\\xfc\\xfc\\xfc\\xfc\\xfc\\xfc\\xfc\\xfc\\xfc\\xfc\\xfc\\xfc\\xfc\\xfc\\xfc\\xfc\\xfc\\xfc\\xfc\\xfc\\xfc\\xfc\\xfc\\xfc\\xfc\\xfc\\xfc\\xfc\\xfc\\xfc\\xfc\\xfc\\xfc\\xfc\\xfc\\xfc\\xfc\\xfc\\xfc\\xfc\\xfc\\xfc\\xfc\\xfc\\xfc\\xfc\\xfc\\xfc\\xfc\\xfc\\xfc\\xfc\\xfc\\xfc\\xfc\\xfc\\xfc\\xfc\\xfc\\xfc\\xfc\\xfc\\xfc\\xfc\\xfc\\xfc\\xfc\\xfc\\xfc\\xfc\\xfc\\xfc\\xfc\\xfc\\xfc\\xfc\\xfc\\xfc\\xfc\\xfc-422]",
+          "evidenceNode": "tests/test_native_iam_phase4.py::test_change_rejections[a long native test passphrase-\\xfc\\xfc\\xfc\\xfc\\xfc\\xfc\\xfc\\xfc\\xfc\\xfc\\xfc\\xfc\\xfc\\xfc\\xfc\\xfc\\xfc\\xfc\\xfc\\xfc\\xfc\\xfc\\xfc\\xfc\\xfc\\xfc\\xfc\\xfc\\xfc\\xfc\\xfc\\xfc\\xfc\\xfc\\xfc\\xfc\\xfc\\xfc\\xfc\\xfc\\xfc\\xfc\\xfc\\xfc\\xfc\\xfc\\xfc\\xfc\\xfc\\xfc\\xfc\\xfc\\xfc\\xfc\\xfc\\xfc\\xfc\\xfc\\xfc\\xfc\\xfc\\xfc\\xfc\\xfc\\xfc\\xfc\\xfc\\xfc\\xfc\\xfc\\xfc\\xfc\\xfc\\xfc\\xfc\\xfc\\xfc\\xfc\\xfc\\xfc\\xfc\\xfc\\xfc\\xfc\\xfc\\xfc\\xfc\\xfc\\xfc\\xfc\\xfc\\xfc\\xfc\\xfc\\xfc\\xfc\\xfc\\xfc\\xfc\\xfc\\xfc\\xfc\\xfc\\xfc\\xfc\\xfc\\xfc\\xfc\\xfc\\xfc\\xfc\\xfc\\xfc\\xfc\\xfc\\xfc\\xfc\\xfc\\xfc\\xfc\\xfc\\xfc\\xfc\\xfc\\xfc\\xfc\\xfc\\xfc\\xfc\\xfc\\xfc\\xfc\\xfc\\xfc\\xfc\\xfc\\xfc\\xfc\\xfc\\xfc\\xfc\\xfc\\xfc\\xfc\\xfc\\xfc\\xfc\\xfc\\xfc\\xfc\\xfc\\xfc\\xfc\\xfc\\xfc\\xfc\\xfc\\xfc\\xfc\\xfc\\xfc\\xfc\\xfc\\xfc\\xfc\\xfc\\xfc\\xfc\\xfc\\xfc\\xfc\\xfc\\xfc\\xfc\\xfc\\xfc\\xfc\\xfc\\xfc\\xfc\\xfc\\xfc\\xfc\\xfc\\xfc\\xfc\\xfc\\xfc\\xfc\\xfc\\xfc\\xfc\\xfc\\xfc\\xfc\\xfc\\xfc\\xfc\\xfc\\xfc\\xfc\\xfc\\xfc\\xfc\\xfc\\xfc\\xfc\\xfc\\xfc\\xfc\\xfc\\xfc\\xfc\\xfc\\xfc\\xfc\\xfc\\xfc\\xfc\\xfc\\xfc\\xfc\\xfc\\xfc\\xfc\\xfc\\xfc\\xfc\\xfc\\xfc\\xfc\\xfc\\xfc\\xfc\\xfc\\xfc\\xfc\\xfc\\xfc\\xfc\\xfc\\xfc\\xfc\\xfc\\xfc\\xfc\\xfc\\xfc\\xfc\\xfc\\xfc\\xfc\\xfc\\xfc\\xfc\\xfc\\xfc\\xfc\\xfc\\xfc\\xfc\\xfc\\xfc\\xfc\\xfc\\xfc\\xfc\\xfc\\xfc\\xfc\\xfc\\xfc\\xfc\\xfc\\xfc\\xfc\\xfc\\xfc\\xfc\\xfc\\xfc\\xfc\\xfc\\xfc\\xfc\\xfc\\xfc\\xfc\\xfc\\xfc\\xfc\\xfc\\xfc\\xfc\\xfc\\xfc\\xfc\\xfc\\xfc\\xfc\\xfc\\xfc\\xfc\\xfc\\xfc\\xfc\\xfc\\xfc\\xfc\\xfc\\xfc\\xfc\\xfc\\xfc\\xfc\\xfc\\xfc\\xfc\\xfc\\xfc\\xfc\\xfc\\xfc\\xfc\\xfc\\xfc\\xfc\\xfc\\xfc\\xfc\\xfc\\xfc\\xfc\\xfc\\xfc\\xfc\\xfc\\xfc\\xfc\\xfc\\xfc\\xfc\\xfc\\xfc\\xfc\\xfc\\xfc\\xfc\\xfc\\xfc\\xfc\\xfc\\xfc\\xfc\\xfc\\xfc\\xfc\\xfc\\xfc\\xfc\\xfc\\xfc\\xfc\\xfc\\xfc\\xfc\\xfc\\xfc\\xfc\\xfc\\xfc\\xfc\\xfc\\xfc\\xfc\\xfc\\xfc\\xfc\\xfc\\xfc\\xfc\\xfc\\xfc\\xfc\\xfc\\xfc\\xfc\\xfc\\xfc\\xfc\\xfc\\xfc\\xfc\\xfc\\xfc\\xfc\\xfc\\xfc\\xfc\\xfc\\xfc\\xfc\\xfc\\xfc\\xfc\\xfc\\xfc\\xfc\\xfc\\xfc\\xfc\\xfc\\xfc\\xfc\\xfc\\xfc\\xfc\\xfc\\xfc\\xfc\\xfc\\xfc\\xfc\\xfc\\xfc\\xfc\\xfc\\xfc\\xfc\\xfc\\xfc\\xfc\\xfc\\xfc\\xfc\\xfc\\xfc\\xfc\\xfc\\xfc\\xfc\\xfc\\xfc\\xfc\\xfc\\xfc\\xfc\\xfc\\xfc\\xfc\\xfc\\xfc\\xfc\\xfc\\xfc\\xfc\\xfc\\xfc\\xfc\\xfc\\xfc\\xfc\\xfc\\xfc\\xfc\\xfc\\xfc\\xfc\\xfc\\xfc\\xfc\\xfc\\xfc\\xfc\\xfc\\xfc\\xfc\\xfc\\xfc\\xfc\\xfc\\xfc\\xfc\\xfc\\xfc\\xfc\\xfc\\xfc\\xfc\\xfc\\xfc\\xfc\\xfc\\xfc\\xfc\\xfc\\xfc\\xfc\\xfc\\xfc\\xfc\\xfc\\xfc\\xfc\\xfc\\xfc\\xfc\\xfc\\xfc\\xfc\\xfc\\xfc\\xfc\\xfc\\xfc\\xfc\\xfc\\xfc\\xfc\\xfc\\xfc\\xfc\\xfc\\xfc\\xfc\\xfc\\xfc\\xfc\\xfc\\xfc\\xfc\\xfc\\xfc\\xfc\\xfc\\xfc\\xfc\\xfc\\xfc\\xfc\\xfc\\xfc\\xfc\\xfc\\xfc\\xfc\\xfc\\xfc\\xfc\\xfc\\xfc\\xfc\\xfc\\xfc\\xfc\\xfc\\xfc\\xfc\\xfc\\xfc\\xfc\\xfc\\xfc\\xfc\\xfc\\xfc\\xfc\\xfc\\xfc\\xfc\\xfc\\xfc\\xfc\\xfc\\xfc\\xfc\\xfc\\xfc\\xfc\\xfc\\xfc\\xfc\\xfc\\xfc\\xfc\\xfc\\xfc\\xfc\\xfc\\xfc\\xfc\\xfc\\xfc\\xfc\\xfc\\xfc\\xfc\\xfc\\xfc\\xfc-422]",
+          "outcome": "PASS"
+        },
+        {
+          "nodeid": "tests/test_native_iam_phase4.py::test_forced_login_only_routes_to_change_and_completes",
+          "evidenceNode": "tests/test_native_iam_phase4.py::test_forced_login_only_routes_to_change_and_completes",
+          "outcome": "PASS"
+        },
+        {
+          "nodeid": "tests/test_native_iam_phase4.py::test_reset_status_policy[ACTIVE-True]",
+          "evidenceNode": "tests/test_native_iam_phase4.py::test_reset_status_policy[ACTIVE-True]",
+          "outcome": "PASS"
+        },
+        {
+          "nodeid": "tests/test_native_iam_phase4.py::test_reset_status_policy[LOCKED-True]",
+          "evidenceNode": "tests/test_native_iam_phase4.py::test_reset_status_policy[LOCKED-True]",
+          "outcome": "PASS"
+        },
+        {
+          "nodeid": "tests/test_native_iam_phase4.py::test_reset_status_policy[FORCE_PASSWORD_CHANGE-True]",
+          "evidenceNode": "tests/test_native_iam_phase4.py::test_reset_status_policy[FORCE_PASSWORD_CHANGE-True]",
+          "outcome": "PASS"
+        },
+        {
+          "nodeid": "tests/test_native_iam_phase4.py::test_reset_status_policy[DISABLED-False]",
+          "evidenceNode": "tests/test_native_iam_phase4.py::test_reset_status_policy[DISABLED-False]",
+          "outcome": "PASS"
+        },
+        {
+          "nodeid": "tests/test_native_iam_phase4.py::test_reset_status_policy[PENDING_EMAIL_VERIFICATION-False]",
+          "evidenceNode": "tests/test_native_iam_phase4.py::test_reset_status_policy[PENDING_EMAIL_VERIFICATION-False]",
+          "outcome": "PASS"
+        },
+        {
+          "nodeid": "tests/test_native_iam_phase4.py::test_reset_status_policy[PENDING-False]",
+          "evidenceNode": "tests/test_native_iam_phase4.py::test_reset_status_policy[PENDING-False]",
+          "outcome": "PASS"
+        },
+        {
+          "nodeid": "tests/test_native_iam_phase4.py::test_forgot_generic_no_enumeration[unknown]",
+          "evidenceNode": "tests/test_native_iam_phase4.py::test_forgot_generic_no_enumeration[unknown]",
+          "outcome": "PASS"
+        },
+        {
+          "nodeid": "tests/test_native_iam_phase4.py::test_forgot_generic_no_enumeration[hcl]",
+          "evidenceNode": "tests/test_native_iam_phase4.py::test_forgot_generic_no_enumeration[hcl]",
+          "outcome": "PASS"
+        },
+        {
+          "nodeid": "tests/test_native_iam_phase4.py::test_forgot_generic_no_enumeration[native]",
+          "evidenceNode": "tests/test_native_iam_phase4.py::test_forgot_generic_no_enumeration[native]",
+          "outcome": "PASS"
+        },
+        {
+          "nodeid": "tests/test_native_iam_phase4.py::test_forgot_generic_no_enumeration[disabled]",
+          "evidenceNode": "tests/test_native_iam_phase4.py::test_forgot_generic_no_enumeration[disabled]",
+          "outcome": "PASS"
+        },
+        {
+          "nodeid": "tests/test_native_iam_phase4.py::test_reset_hashed_single_use_and_revokes",
+          "evidenceNode": "tests/test_native_iam_phase4.py::test_reset_hashed_single_use_and_revokes",
+          "outcome": "PASS"
+        },
+        {
+          "nodeid": "tests/test_native_iam_phase4.py::test_reset_rejects_invalid_binding[expired]",
+          "evidenceNode": "tests/test_native_iam_phase4.py::test_reset_rejects_invalid_binding[expired]",
+          "outcome": "PASS"
+        },
+        {
+          "nodeid": "tests/test_native_iam_phase4.py::test_reset_rejects_invalid_binding[invalidated]",
+          "evidenceNode": "tests/test_native_iam_phase4.py::test_reset_rejects_invalid_binding[invalidated]",
+          "outcome": "PASS"
+        },
+        {
+          "nodeid": "tests/test_native_iam_phase4.py::test_reset_rejects_invalid_binding[email]",
+          "evidenceNode": "tests/test_native_iam_phase4.py::test_reset_rejects_invalid_binding[email]",
+          "outcome": "PASS"
+        },
+        {
+          "nodeid": "tests/test_native_iam_phase4.py::test_reset_rejects_invalid_binding[disabled]",
+          "evidenceNode": "tests/test_native_iam_phase4.py::test_reset_rejects_invalid_binding[disabled]",
+          "outcome": "PASS"
+        },
+        {
+          "nodeid": "tests/test_native_iam_phase4.py::test_reset_rejects_invalid_binding[purpose]",
+          "evidenceNode": "tests/test_native_iam_phase4.py::test_reset_rejects_invalid_binding[purpose]",
+          "outcome": "PASS"
+        },
+        {
+          "nodeid": "tests/test_native_iam_phase4.py::test_reset_rotation_invalidates_previous",
+          "evidenceNode": "tests/test_native_iam_phase4.py::test_reset_rotation_invalidates_previous",
+          "outcome": "PASS"
+        },
+        {
+          "nodeid": "tests/test_native_iam_phase4.py::test_concurrent_password_operations_one_winner[change]",
+          "evidenceNode": "tests/test_native_iam_phase4.py::test_concurrent_password_operations_one_winner[change]",
+          "outcome": "PASS"
+        },
+        {
+          "nodeid": "tests/test_native_iam_phase4.py::test_concurrent_password_operations_one_winner[force]",
+          "evidenceNode": "tests/test_native_iam_phase4.py::test_concurrent_password_operations_one_winner[force]",
+          "outcome": "PASS"
+        },
+        {
+          "nodeid": "tests/test_native_iam_phase4.py::test_concurrent_password_operations_one_winner[reset]",
+          "evidenceNode": "tests/test_native_iam_phase4.py::test_concurrent_password_operations_one_winner[reset]",
+          "outcome": "PASS"
+        },
+        {
+          "nodeid": "tests/test_native_iam_phase4.py::test_audit_failure_rolls_back_hash_token_and_version",
+          "evidenceNode": "tests/test_native_iam_phase4.py::test_audit_failure_rolls_back_hash_token_and_version",
+          "outcome": "PASS"
+        },
+        {
+          "nodeid": "tests/test_native_iam_phase4.py::test_public_endpoint_abuse_limits[login-payload0]",
+          "evidenceNode": "tests/test_native_iam_phase4.py::test_public_endpoint_abuse_limits[login-payload0]",
+          "outcome": "PASS"
+        },
+        {
+          "nodeid": "tests/test_native_iam_phase4.py::test_public_endpoint_abuse_limits[forgot-password-payload1]",
+          "evidenceNode": "tests/test_native_iam_phase4.py::test_public_endpoint_abuse_limits[forgot-password-payload1]",
+          "outcome": "PASS"
+        },
+        {
+          "nodeid": "tests/test_native_iam_phase4.py::test_public_endpoint_abuse_limits[activate-payload2]",
+          "evidenceNode": "tests/test_native_iam_phase4.py::test_public_endpoint_abuse_limits[activate-payload2]",
+          "outcome": "PASS"
+        },
+        {
+          "nodeid": "tests/test_native_iam_phase4.py::test_public_endpoint_abuse_limits[reset-password-payload3]",
+          "evidenceNode": "tests/test_native_iam_phase4.py::test_public_endpoint_abuse_limits[reset-password-payload3]",
+          "outcome": "PASS"
+        },
+        {
+          "nodeid": "tests/test_native_iam_phase4.py::test_logout_all_revokes_old_jwt",
+          "evidenceNode": "tests/test_native_iam_phase4.py::test_logout_all_revokes_old_jwt",
+          "outcome": "PASS"
+        },
+        {
+          "nodeid": "tests/test_native_iam_phase4.py::test_policy_preserves_unicode_and_spaces",
+          "evidenceNode": "tests/test_native_iam_phase4.py::test_policy_preserves_unicode_and_spaces",
+          "outcome": "PASS"
+        },
+        {
+          "nodeid": "tests/test_native_iam_phase4.py::test_signing_rotation",
+          "evidenceNode": "tests/test_native_iam_phase4.py::test_signing_rotation",
+          "outcome": "PASS"
+        },
+        {
+          "nodeid": "tests/test_native_iam_phase4.py::test_forgot_normalizes_hash_cost_for_all_account_classes",
+          "evidenceNode": "tests/test_native_iam_phase4.py::test_forgot_normalizes_hash_cost_for_all_account_classes",
+          "outcome": "PASS"
+        },
+        {
+          "nodeid": "tests/test_native_iam_phase4.py::test_resend_route_is_throttled_before_token_or_email_work",
+          "evidenceNode": "tests/test_native_iam_phase4.py::test_resend_route_is_throttled_before_token_or_email_work",
+          "outcome": "PASS"
+        },
+        {
+          "nodeid": "tests/test_native_iam_phase4.py::test_resend_without_invitation_authority_has_no_side_effects",
+          "evidenceNode": "tests/test_native_iam_phase4.py::test_resend_without_invitation_authority_has_no_side_effects",
+          "outcome": "PASS"
+        },
+        {
+          "nodeid": "tests/test_native_iam_phase4.py::test_account_limit_is_normalized_and_independent_of_source",
+          "evidenceNode": "tests/test_native_iam_phase4.py::test_account_limit_is_normalized_and_independent_of_source",
+          "outcome": "PASS"
+        },
+        {
+          "nodeid": "tests/test_native_iam_phase4.py::test_disabled_account_cannot_complete_forced_flow",
+          "evidenceNode": "tests/test_native_iam_phase4.py::test_disabled_account_cannot_complete_forced_flow",
+          "outcome": "PASS"
+        },
+        {
+          "nodeid": "tests/test_native_iam_phase4.py::test_forced_wrong_password_temporary_lock_does_not_clear_requirement",
+          "evidenceNode": "tests/test_native_iam_phase4.py::test_forced_wrong_password_temporary_lock_does_not_clear_requirement",
+          "outcome": "PASS"
+        },
+        {
+          "nodeid": "tests/test_native_iam_phase4.py::test_expired_overlap_key_rejected",
+          "evidenceNode": "tests/test_native_iam_phase4.py::test_expired_overlap_key_rejected",
+          "outcome": "PASS"
+        },
+        {
+          "nodeid": "tests/test_native_iam_phase5.py::test_delivery_survives_new_session_and_scrubs_payload[activation]",
+          "evidenceNode": "tests/test_native_iam_phase5.py::test_delivery_survives_new_session_and_scrubs_payload[activation]",
+          "outcome": "PASS"
+        },
+        {
+          "nodeid": "tests/test_native_iam_phase5.py::test_delivery_survives_new_session_and_scrubs_payload[reset]",
+          "evidenceNode": "tests/test_native_iam_phase5.py::test_delivery_survives_new_session_and_scrubs_payload[reset]",
+          "outcome": "PASS"
+        },
+        {
+          "nodeid": "tests/test_native_iam_phase5.py::test_retry_backoff_exhaustion_and_erasure",
+          "evidenceNode": "tests/test_native_iam_phase5.py::test_retry_backoff_exhaustion_and_erasure",
+          "outcome": "PASS"
+        },
+        {
+          "nodeid": "tests/test_native_iam_phase5.py::test_concurrent_workers_one_send",
+          "evidenceNode": "tests/test_native_iam_phase5.py::test_concurrent_workers_one_send",
+          "outcome": "PASS"
+        },
+        {
+          "nodeid": "tests/test_native_iam_phase5.py::test_unsafe_delivery_never_sends[expiry]",
+          "evidenceNode": "tests/test_native_iam_phase5.py::test_unsafe_delivery_never_sends[expiry]",
+          "outcome": "PASS"
+        },
+        {
+          "nodeid": "tests/test_native_iam_phase5.py::test_unsafe_delivery_never_sends[invalidated]",
+          "evidenceNode": "tests/test_native_iam_phase5.py::test_unsafe_delivery_never_sends[invalidated]",
+          "outcome": "PASS"
+        },
+        {
+          "nodeid": "tests/test_native_iam_phase5.py::test_unsafe_delivery_never_sends[wrong_key]",
+          "evidenceNode": "tests/test_native_iam_phase5.py::test_unsafe_delivery_never_sends[wrong_key]",
+          "outcome": "PASS"
+        },
+        {
+          "nodeid": "tests/test_native_iam_phase5.py::test_unsafe_delivery_never_sends[disabled]",
+          "evidenceNode": "tests/test_native_iam_phase5.py::test_unsafe_delivery_never_sends[disabled]",
+          "outcome": "PASS"
+        },
+        {
+          "nodeid": "tests/test_native_iam_phase5.py::test_encryption_failure_rolls_back_user_and_token",
+          "evidenceNode": "tests/test_native_iam_phase5.py::test_encryption_failure_rolls_back_user_and_token",
+          "outcome": "PASS"
+        },
+        {
+          "nodeid": "tests/test_native_iam_phase5.py::test_safe_health_projection",
+          "evidenceNode": "tests/test_native_iam_phase5.py::test_safe_health_projection",
+          "outcome": "PASS"
+        },
+        {
+          "nodeid": "tests/test_native_iam_phase5.py::test_production_fails_safe_missing_configuration",
+          "evidenceNode": "tests/test_native_iam_phase5.py::test_production_fails_safe_missing_configuration",
+          "outcome": "PASS"
+        },
+        {
+          "nodeid": "tests/test_native_iam_phase5.py::test_spoofed_forwarding_cannot_bypass_source",
+          "evidenceNode": "tests/test_native_iam_phase5.py::test_spoofed_forwarding_cannot_bypass_source",
+          "outcome": "PASS"
+        },
+        {
+          "nodeid": "tests/test_native_iam_phase5.py::test_rate_storage_failure_closed",
+          "evidenceNode": "tests/test_native_iam_phase5.py::test_rate_storage_failure_closed",
+          "outcome": "PASS"
+        },
+        {
+          "nodeid": "tests/test_native_iam_phase5.py::test_new_issuance_cancels_previous_delivery",
+          "evidenceNode": "tests/test_native_iam_phase5.py::test_new_issuance_cancels_previous_delivery",
+          "outcome": "PASS"
+        },
+        {
+          "nodeid": "tests/test_native_iam_phase5.py::test_successful_retry_keeps_original_token",
+          "evidenceNode": "tests/test_native_iam_phase5.py::test_successful_retry_keeps_original_token",
+          "outcome": "PASS"
+        },
+        {
+          "nodeid": "tests/test_native_iam_phase5.py::test_rotation_timeline_two_validator_configurations",
+          "evidenceNode": "tests/test_native_iam_phase5.py::test_rotation_timeline_two_validator_configurations",
+          "outcome": "PASS"
+        },
+        {
+          "nodeid": "tests/test_native_iam_phase5.py::test_production_configuration_accepts_complete_settings",
+          "evidenceNode": "tests/test_native_iam_phase5.py::test_production_configuration_accepts_complete_settings",
+          "outcome": "PASS"
+        },
+        {
+          "nodeid": "tests/test_native_iam_phase5.py::test_readiness_storage_failure_is_safe",
+          "evidenceNode": "tests/test_native_iam_phase5.py::test_readiness_storage_failure_is_safe",
+          "outcome": "PASS"
+        },
+        {
+          "nodeid": "tests/test_native_iam_phase5.py::test_delivery_audit_failure_rolls_back_pending_state",
+          "evidenceNode": "tests/test_native_iam_phase5.py::test_delivery_audit_failure_rolls_back_pending_state",
+          "outcome": "PASS"
+        },
+        {
+          "nodeid": "tests/test_native_iam_phase5.py::test_operational_endpoints_are_platform_only",
+          "evidenceNode": "tests/test_native_iam_phase5.py::test_operational_endpoints_are_platform_only",
+          "outcome": "PASS"
+        },
+        {
+          "nodeid": "tests/test_native_iam_phase5.py::test_admin_logout_all_revokes_native_token",
+          "evidenceNode": "tests/test_native_iam_phase5.py::test_admin_logout_all_revokes_native_token",
+          "outcome": "PASS"
+        },
+        {
+          "nodeid": "tests/test_native_iam_phase5.py::test_separate_worker_process_delivers_committed_outbox[activation]",
+          "evidenceNode": "tests/test_native_iam_phase5.py::test_separate_worker_process_delivers_committed_outbox[activation]",
+          "outcome": "PASS"
+        },
+        {
+          "nodeid": "tests/test_native_iam_phase5.py::test_separate_worker_process_delivers_committed_outbox[reset]",
+          "evidenceNode": "tests/test_native_iam_phase5.py::test_separate_worker_process_delivers_committed_outbox[reset]",
+          "outcome": "PASS"
+        },
+        {
+          "nodeid": "tests/test_native_iam_phase5.py::test_outbox_downgrade_refuses_pending_delivery",
+          "evidenceNode": "tests/test_native_iam_phase5.py::test_outbox_downgrade_refuses_pending_delivery",
+          "outcome": "PASS"
+        },
+        {
+          "nodeid": "tests/test_phase9_role_assignment_api.py::test_role_assignment_api_grant_list_replace_and_revoke",
+          "evidenceNode": "tests/test_phase9_role_assignment_api.py::test_role_assignment_api_grant_list_replace_and_revoke",
+          "outcome": "PASS"
+        }
+      ]
+    },
+    {
+      "name": "Repair candidate-byte integrity",
+      "files": [
+        "tests/test_repair_candidate_public_boundary.py"
+      ],
+      "counts": {
+        "PASS": 1
+      },
+      "tests": [
+        {
+          "nodeid": "tests/test_repair_candidate_public_boundary.py::test_reviewed_candidate_hash_is_accepted_and_retry_does_not_import_twice",
+          "evidenceNode": "tests/test_repair_candidate_public_boundary.py::test_reviewed_candidate_hash_is_accepted_and_retry_does_not_import_twice",
+          "outcome": "PASS"
+        }
+      ]
+    },
+    {
+      "name": "CUSTOM cron and Monthly scheduling",
+      "files": [
+        "tests/test_scheduling_service.py",
+        "tests/test_schedules_api.py"
+      ],
+      "counts": {
+        "PASS": 46
+      },
+      "tests": [
+        {
+          "nodeid": "tests/test_schedules_api.py::test_create_project_schedule_weekly",
+          "evidenceNode": "tests/test_schedules_api.py::test_create_project_schedule_weekly",
+          "outcome": "PASS"
+        },
+        {
+          "nodeid": "tests/test_schedules_api.py::test_create_project_schedule_validates_cadence",
+          "evidenceNode": "tests/test_schedules_api.py::test_create_project_schedule_validates_cadence",
+          "outcome": "PASS"
+        },
+        {
+          "nodeid": "tests/test_schedules_api.py::test_get_project_schedule_404_when_missing",
+          "evidenceNode": "tests/test_schedules_api.py::test_get_project_schedule_404_when_missing",
+          "outcome": "PASS"
+        },
+        {
+          "nodeid": "tests/test_schedules_api.py::test_patch_project_schedule_replaces_only_set_fields",
+          "evidenceNode": "tests/test_schedules_api.py::test_patch_project_schedule_replaces_only_set_fields",
+          "outcome": "PASS"
+        },
+        {
+          "nodeid": "tests/test_schedules_api.py::test_delete_project_schedule_idempotent",
+          "evidenceNode": "tests/test_schedules_api.py::test_delete_project_schedule_idempotent",
+          "outcome": "PASS"
+        },
+        {
+          "nodeid": "tests/test_schedules_api.py::test_get_sbom_schedule_returns_inherited_from_project",
+          "evidenceNode": "tests/test_schedules_api.py::test_get_sbom_schedule_returns_inherited_from_project",
+          "outcome": "PASS"
+        },
+        {
+          "nodeid": "tests/test_schedules_api.py::test_sbom_override_takes_precedence_over_project",
+          "evidenceNode": "tests/test_schedules_api.py::test_sbom_override_takes_precedence_over_project",
+          "outcome": "PASS"
+        },
+        {
+          "nodeid": "tests/test_schedules_api.py::test_product_schedule_applies_to_product_sboms",
+          "evidenceNode": "tests/test_schedules_api.py::test_product_schedule_applies_to_product_sboms",
+          "outcome": "PASS"
+        },
+        {
+          "nodeid": "tests/test_schedules_api.py::test_sbom_schedule_overrides_product_schedule",
+          "evidenceNode": "tests/test_schedules_api.py::test_sbom_schedule_overrides_product_schedule",
+          "outcome": "PASS"
+        },
+        {
+          "nodeid": "tests/test_schedules_api.py::test_product_schedule_overrides_project_schedule",
+          "evidenceNode": "tests/test_schedules_api.py::test_product_schedule_overrides_project_schedule",
+          "outcome": "PASS"
+        },
+        {
+          "nodeid": "tests/test_schedules_api.py::test_delete_sbom_override_falls_back_to_inherited",
+          "evidenceNode": "tests/test_schedules_api.py::test_delete_sbom_override_falls_back_to_inherited",
+          "outcome": "PASS"
+        },
+        {
+          "nodeid": "tests/test_schedules_api.py::test_get_sbom_schedule_when_no_schedule_anywhere",
+          "evidenceNode": "tests/test_schedules_api.py::test_get_sbom_schedule_when_no_schedule_anywhere",
+          "outcome": "PASS"
+        },
+        {
+          "nodeid": "tests/test_schedules_api.py::test_list_schedules_filters_by_scope",
+          "evidenceNode": "tests/test_schedules_api.py::test_list_schedules_filters_by_scope",
+          "outcome": "PASS"
+        },
+        {
+          "nodeid": "tests/test_schedules_api.py::test_pause_then_resume_cycles_next_run_at",
+          "evidenceNode": "tests/test_schedules_api.py::test_pause_then_resume_cycles_next_run_at",
+          "outcome": "PASS"
+        },
+        {
+          "nodeid": "tests/test_schedules_api.py::test_run_now_for_project_fans_out_to_member_sboms",
+          "evidenceNode": "tests/test_schedules_api.py::test_run_now_for_project_fans_out_to_member_sboms",
+          "outcome": "PASS"
+        },
+        {
+          "nodeid": "tests/test_schedules_api.py::test_run_now_for_sbom_enqueues_only_that_sbom",
+          "evidenceNode": "tests/test_schedules_api.py::test_run_now_for_sbom_enqueues_only_that_sbom",
+          "outcome": "PASS"
+        },
+        {
+          "nodeid": "tests/test_schedules_api.py::test_run_now_for_product_fans_out_to_product_sboms",
+          "evidenceNode": "tests/test_schedules_api.py::test_run_now_for_product_fans_out_to_product_sboms",
+          "outcome": "PASS"
+        },
+        {
+          "nodeid": "tests/test_schedules_api.py::test_run_now_returns_502_when_broker_drops_every_enqueue",
+          "evidenceNode": "tests/test_schedules_api.py::test_run_now_returns_502_when_broker_drops_every_enqueue",
+          "outcome": "PASS"
+        },
+        {
+          "nodeid": "tests/test_schedules_api.py::test_run_now_skips_overridden_sbom_in_project_fan_out",
+          "evidenceNode": "tests/test_schedules_api.py::test_run_now_skips_overridden_sbom_in_project_fan_out",
+          "outcome": "PASS"
+        },
+        {
+          "nodeid": "tests/test_schedules_api.py::test_run_now_skips_product_overrides_in_project_fan_out",
+          "evidenceNode": "tests/test_schedules_api.py::test_run_now_skips_product_overrides_in_project_fan_out",
+          "outcome": "PASS"
+        },
+        {
+          "nodeid": "tests/test_schedules_api.py::test_product_effective_schedule_exclude_and_restore_inheritance",
+          "evidenceNode": "tests/test_schedules_api.py::test_product_effective_schedule_exclude_and_restore_inheritance",
+          "outcome": "PASS"
+        },
+        {
+          "nodeid": "tests/test_schedules_api.py::test_sbom_exclusion_blocks_parent_and_restore_reenables_inheritance",
+          "evidenceNode": "tests/test_schedules_api.py::test_sbom_exclusion_blocks_parent_and_restore_reenables_inheritance",
+          "outcome": "PASS"
+        },
+        {
+          "nodeid": "tests/test_schedules_api.py::test_preview_and_run_now_use_identical_product_targets",
+          "evidenceNode": "tests/test_schedules_api.py::test_preview_and_run_now_use_identical_product_targets",
+          "outcome": "PASS"
+        },
+        {
+          "nodeid": "tests/test_schedules_api.py::test_current_sbom_assignment_rejects_cross_product_and_changes_target",
+          "evidenceNode": "tests/test_schedules_api.py::test_current_sbom_assignment_rejects_cross_product_and_changes_target",
+          "outcome": "PASS"
+        },
+        {
+          "nodeid": "tests/test_schedules_api.py::test_new_upload_can_become_current_without_deleting_history",
+          "evidenceNode": "tests/test_schedules_api.py::test_new_upload_can_become_current_without_deleting_history",
+          "outcome": "PASS"
+        },
+        {
+          "nodeid": "tests/test_schedules_api.py::test_current_only_preview_reports_missing_current_sbom",
+          "evidenceNode": "tests/test_schedules_api.py::test_current_only_preview_reports_missing_current_sbom",
+          "outcome": "PASS"
+        },
+        {
+          "nodeid": "tests/test_scheduling_service.py::test_validate_rejects_unknown_cadence",
+          "evidenceNode": "tests/test_scheduling_service.py::test_validate_rejects_unknown_cadence",
+          "outcome": "PASS"
+        },
+        {
+          "nodeid": "tests/test_scheduling_service.py::test_validate_rejects_out_of_range_hour",
+          "evidenceNode": "tests/test_scheduling_service.py::test_validate_rejects_out_of_range_hour",
+          "outcome": "PASS"
+        },
+        {
+          "nodeid": "tests/test_scheduling_service.py::test_validate_weekly_requires_day_of_week",
+          "evidenceNode": "tests/test_scheduling_service.py::test_validate_weekly_requires_day_of_week",
+          "outcome": "PASS"
+        },
+        {
+          "nodeid": "tests/test_scheduling_service.py::test_validate_monthly_caps_day_of_month_at_28",
+          "evidenceNode": "tests/test_scheduling_service.py::test_validate_monthly_caps_day_of_month_at_28",
+          "outcome": "PASS"
+        },
+        {
+          "nodeid": "tests/test_scheduling_service.py::test_daily_today_if_hour_not_yet_passed",
+          "evidenceNode": "tests/test_scheduling_service.py::test_daily_today_if_hour_not_yet_passed",
+          "outcome": "PASS"
+        },
+        {
+          "nodeid": "tests/test_scheduling_service.py::test_daily_tomorrow_if_hour_passed",
+          "evidenceNode": "tests/test_scheduling_service.py::test_daily_tomorrow_if_hour_passed",
+          "outcome": "PASS"
+        },
+        {
+          "nodeid": "tests/test_scheduling_service.py::test_weekly_picks_correct_weekday",
+          "evidenceNode": "tests/test_scheduling_service.py::test_weekly_picks_correct_weekday",
+          "outcome": "PASS"
+        },
+        {
+          "nodeid": "tests/test_scheduling_service.py::test_weekly_skips_to_next_week_when_today_already_passed",
+          "evidenceNode": "tests/test_scheduling_service.py::test_weekly_skips_to_next_week_when_today_already_passed",
+          "outcome": "PASS"
+        },
+        {
+          "nodeid": "tests/test_scheduling_service.py::test_biweekly_advances_14_days",
+          "evidenceNode": "tests/test_scheduling_service.py::test_biweekly_advances_14_days",
+          "outcome": "PASS"
+        },
+        {
+          "nodeid": "tests/test_scheduling_service.py::test_monthly_this_month_if_day_not_yet_passed",
+          "evidenceNode": "tests/test_scheduling_service.py::test_monthly_this_month_if_day_not_yet_passed",
+          "outcome": "PASS"
+        },
+        {
+          "nodeid": "tests/test_scheduling_service.py::test_monthly_rolls_over_to_january",
+          "evidenceNode": "tests/test_scheduling_service.py::test_monthly_rolls_over_to_january",
+          "outcome": "PASS"
+        },
+        {
+          "nodeid": "tests/test_scheduling_service.py::test_quarterly_advances_three_months",
+          "evidenceNode": "tests/test_scheduling_service.py::test_quarterly_advances_three_months",
+          "outcome": "PASS"
+        },
+        {
+          "nodeid": "tests/test_scheduling_service.py::test_returns_strictly_future_value",
+          "evidenceNode": "tests/test_scheduling_service.py::test_returns_strictly_future_value",
+          "outcome": "PASS"
+        },
+        {
+          "nodeid": "tests/test_scheduling_service.py::test_failure_backoff_grows_then_caps",
+          "evidenceNode": "tests/test_scheduling_service.py::test_failure_backoff_grows_then_caps",
+          "outcome": "PASS"
+        },
+        {
+          "nodeid": "tests/test_scheduling_service.py::test_supported_custom_schedule_rejects_invalid_or_non_five_field_cron[not a cron]",
+          "evidenceNode": "tests/test_scheduling_service.py::test_supported_custom_schedule_rejects_invalid_or_non_five_field_cron[not a cron]",
+          "outcome": "PASS"
+        },
+        {
+          "nodeid": "tests/test_scheduling_service.py::test_supported_custom_schedule_rejects_invalid_or_non_five_field_cron[* * * * * *]",
+          "evidenceNode": "tests/test_scheduling_service.py::test_supported_custom_schedule_rejects_invalid_or_non_five_field_cron[* * * * * *]",
+          "outcome": "PASS"
+        },
+        {
+          "nodeid": "tests/test_scheduling_service.py::test_supported_custom_schedule_rejects_invalid_or_non_five_field_cron[* * * * * * 2099]",
+          "evidenceNode": "tests/test_scheduling_service.py::test_supported_custom_schedule_rejects_invalid_or_non_five_field_cron[* * * * * * 2099]",
+          "outcome": "PASS"
+        },
+        {
+          "nodeid": "tests/test_scheduling_service.py::test_supported_custom_schedule_rejects_invalid_or_non_five_field_cron[0 0 31 2 *]",
+          "evidenceNode": "tests/test_scheduling_service.py::test_supported_custom_schedule_rejects_invalid_or_non_five_field_cron[0 0 31 2 *]",
+          "outcome": "PASS"
+        },
+        {
+          "nodeid": "tests/test_scheduling_service.py::test_custom_schedule_uses_utc_for_offset_input_and_strictly_advances",
+          "evidenceNode": "tests/test_scheduling_service.py::test_custom_schedule_uses_utc_for_offset_input_and_strictly_advances",
+          "outcome": "PASS"
+        },
+        {
+          "nodeid": "tests/test_scheduling_service.py::test_schedule_payload_validates_display_timezone_without_shifting_utc_hour",
+          "evidenceNode": "tests/test_scheduling_service.py::test_schedule_payload_validates_display_timezone_without_shifting_utc_hour",
+          "outcome": "PASS"
+        }
+      ]
+    },
+    {
+      "name": "Native absolute session expiry",
+      "files": [
+        "tests/test_native_session_lifetime.py"
+      ],
+      "counts": {
+        "PASS": 7
+      },
+      "tests": [
+        {
+          "nodeid": "tests/test_native_session_lifetime.py::test_native_session_defaults_to_one_day",
+          "evidenceNode": "tests/test_native_session_lifetime.py::test_native_session_defaults_to_one_day",
+          "outcome": "PASS"
+        },
+        {
+          "nodeid": "tests/test_native_session_lifetime.py::test_native_session_accepts_supported_durations[60]",
+          "evidenceNode": "tests/test_native_session_lifetime.py::test_native_session_accepts_supported_durations[60]",
+          "outcome": "PASS"
+        },
+        {
+          "nodeid": "tests/test_native_session_lifetime.py::test_native_session_accepts_supported_durations[900]",
+          "evidenceNode": "tests/test_native_session_lifetime.py::test_native_session_accepts_supported_durations[900]",
+          "outcome": "PASS"
+        },
+        {
+          "nodeid": "tests/test_native_session_lifetime.py::test_native_session_accepts_supported_durations[86400]",
+          "evidenceNode": "tests/test_native_session_lifetime.py::test_native_session_accepts_supported_durations[86400]",
+          "outcome": "PASS"
+        },
+        {
+          "nodeid": "tests/test_native_session_lifetime.py::test_native_session_rejects_out_of_range_durations[59]",
+          "evidenceNode": "tests/test_native_session_lifetime.py::test_native_session_rejects_out_of_range_durations[59]",
+          "outcome": "PASS"
+        },
+        {
+          "nodeid": "tests/test_native_session_lifetime.py::test_native_session_rejects_out_of_range_durations[86401]",
+          "evidenceNode": "tests/test_native_session_lifetime.py::test_native_session_rejects_out_of_range_durations[86401]",
+          "outcome": "PASS"
+        },
+        {
+          "nodeid": "tests/test_native_session_lifetime.py::test_issued_token_is_valid_for_one_day",
+          "evidenceNode": "tests/test_native_session_lifetime.py::test_issued_token_is_valid_for_one_day",
+          "outcome": "PASS"
+        }
+      ]
+    },
+    {
+      "name": "Legacy analysis UUID boundaries",
+      "files": [
+        "tests/test_legacy_analysis_public_identity.py"
+      ],
+      "counts": {
+        "PASS": 10
+      },
+      "tests": [
+        {
+          "nodeid": "tests/test_legacy_analysis_public_identity.py::test_legacy_valid_uuid_returns_existing_run_with_public_successor[/analyze-sbom-consolidated]",
+          "evidenceNode": "tests/test_legacy_analysis_public_identity.py::test_legacy_valid_uuid_returns_existing_run_with_public_successor[/analyze-sbom-consolidated]",
+          "outcome": "PASS"
+        },
+        {
+          "nodeid": "tests/test_legacy_analysis_public_identity.py::test_legacy_valid_uuid_returns_existing_run_with_public_successor[/analyze-sbom-github]",
+          "evidenceNode": "tests/test_legacy_analysis_public_identity.py::test_legacy_valid_uuid_returns_existing_run_with_public_successor[/analyze-sbom-github]",
+          "outcome": "PASS"
+        },
+        {
+          "nodeid": "tests/test_legacy_analysis_public_identity.py::test_legacy_valid_uuid_returns_existing_run_with_public_successor[/analyze-sbom-nvd]",
+          "evidenceNode": "tests/test_legacy_analysis_public_identity.py::test_legacy_valid_uuid_returns_existing_run_with_public_successor[/analyze-sbom-nvd]",
+          "outcome": "PASS"
+        },
+        {
+          "nodeid": "tests/test_legacy_analysis_public_identity.py::test_legacy_valid_uuid_returns_existing_run_with_public_successor[/analyze-sbom-osv]",
+          "evidenceNode": "tests/test_legacy_analysis_public_identity.py::test_legacy_valid_uuid_returns_existing_run_with_public_successor[/analyze-sbom-osv]",
+          "outcome": "PASS"
+        },
+        {
+          "nodeid": "tests/test_legacy_analysis_public_identity.py::test_legacy_invalid_integer_foreign_and_viewer_never_mutate[/analyze-sbom-consolidated]",
+          "evidenceNode": "tests/test_legacy_analysis_public_identity.py::test_legacy_invalid_integer_foreign_and_viewer_never_mutate[/analyze-sbom-consolidated]",
+          "outcome": "PASS"
+        },
+        {
+          "nodeid": "tests/test_legacy_analysis_public_identity.py::test_legacy_invalid_integer_foreign_and_viewer_never_mutate[/analyze-sbom-github]",
+          "evidenceNode": "tests/test_legacy_analysis_public_identity.py::test_legacy_invalid_integer_foreign_and_viewer_never_mutate[/analyze-sbom-github]",
+          "outcome": "PASS"
+        },
+        {
+          "nodeid": "tests/test_legacy_analysis_public_identity.py::test_legacy_invalid_integer_foreign_and_viewer_never_mutate[/analyze-sbom-nvd]",
+          "evidenceNode": "tests/test_legacy_analysis_public_identity.py::test_legacy_invalid_integer_foreign_and_viewer_never_mutate[/analyze-sbom-nvd]",
+          "outcome": "PASS"
+        },
+        {
+          "nodeid": "tests/test_legacy_analysis_public_identity.py::test_legacy_invalid_integer_foreign_and_viewer_never_mutate[/analyze-sbom-osv]",
+          "evidenceNode": "tests/test_legacy_analysis_public_identity.py::test_legacy_invalid_integer_foreign_and_viewer_never_mutate[/analyze-sbom-osv]",
+          "outcome": "PASS"
+        },
+        {
+          "nodeid": "tests/test_legacy_analysis_public_identity.py::test_legacy_invalid_integer_foreign_and_viewer_never_mutate[/analyze-sbom-vulndb]",
+          "evidenceNode": "tests/test_legacy_analysis_public_identity.py::test_legacy_invalid_integer_foreign_and_viewer_never_mutate[/analyze-sbom-vulndb]",
+          "outcome": "PASS"
+        },
+        {
+          "nodeid": "tests/test_legacy_analysis_public_identity.py::test_legacy_vulndb_uuid_reaches_required_provider_configuration",
+          "evidenceNode": "tests/test_legacy_analysis_public_identity.py::test_legacy_vulndb_uuid_reaches_required_provider_configuration",
+          "outcome": "PASS"
+        }
+      ]
+    },
+    {
+      "name": "Round 4 scoped batch and operator fixes",
+      "files": [
+        "tests/test_public_identity_batch_serialization.py",
+        "tests/test_reconcile_analysis_run_scope.py",
+        "tests/test_round4_uuid_regression.py"
+      ],
+      "counts": {
+        "PASS": 24
+      },
+      "tests": [
+        {
+          "nodeid": "tests/test_public_identity_batch_serialization.py::test_distinct_references_use_one_scoped_lookup_not_one_per_row",
+          "evidenceNode": "tests/test_public_identity_batch_serialization.py::test_distinct_references_use_one_scoped_lookup_not_one_per_row",
+          "outcome": "PASS"
+        },
+        {
+          "nodeid": "tests/test_public_identity_batch_serialization.py::test_repeated_ids_native_documents_and_integer_nonresources_stay_distinct",
+          "evidenceNode": "tests/test_public_identity_batch_serialization.py::test_repeated_ids_native_documents_and_integer_nonresources_stay_distinct",
+          "outcome": "PASS"
+        },
+        {
+          "nodeid": "tests/test_public_identity_batch_serialization.py::test_foreign_reference_cannot_be_resolved_under_another_owner",
+          "evidenceNode": "tests/test_public_identity_batch_serialization.py::test_foreign_reference_cannot_be_resolved_under_another_owner",
+          "outcome": "PASS"
+        },
+        {
+          "nodeid": "tests/test_public_identity_batch_serialization.py::test_missing_reference_fails_closed",
+          "evidenceNode": "tests/test_public_identity_batch_serialization.py::test_missing_reference_fails_closed",
+          "outcome": "PASS"
+        },
+        {
+          "nodeid": "tests/test_public_identity_batch_serialization.py::test_more_than_one_lookup_chunk_preserves_every_uuid",
+          "evidenceNode": "tests/test_public_identity_batch_serialization.py::test_more_than_one_lookup_chunk_preserves_every_uuid",
+          "outcome": "PASS"
+        },
+        {
+          "nodeid": "tests/test_reconcile_analysis_run_scope.py::test_dry_run_never_updates_either_owner",
+          "evidenceNode": "tests/test_reconcile_analysis_run_scope.py::test_dry_run_never_updates_either_owner",
+          "outcome": "PASS"
+        },
+        {
+          "nodeid": "tests/test_reconcile_analysis_run_scope.py::test_explicit_scope_cannot_reconcile_foreign_run",
+          "evidenceNode": "tests/test_reconcile_analysis_run_scope.py::test_explicit_scope_cannot_reconcile_foreign_run",
+          "outcome": "PASS"
+        },
+        {
+          "nodeid": "tests/test_reconcile_analysis_run_scope.py::test_apply_all_is_scoped_audited_and_idempotent",
+          "evidenceNode": "tests/test_reconcile_analysis_run_scope.py::test_apply_all_is_scoped_audited_and_idempotent",
+          "outcome": "PASS"
+        },
+        {
+          "nodeid": "tests/test_reconcile_analysis_run_scope.py::test_inactive_owner_is_rejected",
+          "evidenceNode": "tests/test_reconcile_analysis_run_scope.py::test_inactive_owner_is_rejected",
+          "outcome": "PASS"
+        },
+        {
+          "nodeid": "tests/test_reconcile_analysis_run_scope.py::test_request_context_cannot_invoke_operator_discovery",
+          "evidenceNode": "tests/test_reconcile_analysis_run_scope.py::test_request_context_cannot_invoke_operator_discovery",
+          "outcome": "PASS"
+        },
+        {
+          "nodeid": "tests/test_reconcile_analysis_run_scope.py::test_mutation_failure_rolls_back_and_clears_scope",
+          "evidenceNode": "tests/test_reconcile_analysis_run_scope.py::test_mutation_failure_rolls_back_and_clears_scope",
+          "outcome": "PASS"
+        },
+        {
+          "nodeid": "tests/test_round4_uuid_regression.py::test_integer_public_identifiers_are_rejected[/api/projects/1]",
+          "evidenceNode": "tests/test_round4_uuid_regression.py::test_integer_public_identifiers_are_rejected[/api/projects/1]",
+          "outcome": "PASS"
+        },
+        {
+          "nodeid": "tests/test_round4_uuid_regression.py::test_integer_public_identifiers_are_rejected[/api/products/1]",
+          "evidenceNode": "tests/test_round4_uuid_regression.py::test_integer_public_identifiers_are_rejected[/api/products/1]",
+          "outcome": "PASS"
+        },
+        {
+          "nodeid": "tests/test_round4_uuid_regression.py::test_integer_public_identifiers_are_rejected[/api/sboms/1]",
+          "evidenceNode": "tests/test_round4_uuid_regression.py::test_integer_public_identifiers_are_rejected[/api/sboms/1]",
+          "outcome": "PASS"
+        },
+        {
+          "nodeid": "tests/test_round4_uuid_regression.py::test_integer_public_identifiers_are_rejected[/api/sboms/1/validation-report]",
+          "evidenceNode": "tests/test_round4_uuid_regression.py::test_integer_public_identifiers_are_rejected[/api/sboms/1/validation-report]",
+          "outcome": "PASS"
+        },
+        {
+          "nodeid": "tests/test_round4_uuid_regression.py::test_integer_public_identifiers_are_rejected[/api/sboms/1/reports/vulnerabilities.xlsx]",
+          "evidenceNode": "tests/test_round4_uuid_regression.py::test_integer_public_identifiers_are_rejected[/api/sboms/1/reports/vulnerabilities.xlsx]",
+          "outcome": "PASS"
+        },
+        {
+          "nodeid": "tests/test_round4_uuid_regression.py::test_integer_public_identifiers_are_rejected[/dashboard/priority-findings?project_id=1]",
+          "evidenceNode": "tests/test_round4_uuid_regression.py::test_integer_public_identifiers_are_rejected[/dashboard/priority-findings?project_id=1]",
+          "outcome": "PASS"
+        },
+        {
+          "nodeid": "tests/test_round4_uuid_regression.py::test_integer_public_identifiers_are_rejected[/api/component-advisor/summary?project_id=1]",
+          "evidenceNode": "tests/test_round4_uuid_regression.py::test_integer_public_identifiers_are_rejected[/api/component-advisor/summary?project_id=1]",
+          "outcome": "PASS"
+        },
+        {
+          "nodeid": "tests/test_round4_uuid_regression.py::test_integer_public_identifiers_are_rejected[/api/runs/aggregate?sbom_id=1]",
+          "evidenceNode": "tests/test_round4_uuid_regression.py::test_integer_public_identifiers_are_rejected[/api/runs/aggregate?sbom_id=1]",
+          "outcome": "PASS"
+        },
+        {
+          "nodeid": "tests/test_round4_uuid_regression.py::test_invalid_tenant_headers_do_not_select_a_tenant[1]",
+          "evidenceNode": "tests/test_round4_uuid_regression.py::test_invalid_tenant_headers_do_not_select_a_tenant[1]",
+          "outcome": "PASS"
+        },
+        {
+          "nodeid": "tests/test_round4_uuid_regression.py::test_invalid_tenant_headers_do_not_select_a_tenant[0]",
+          "evidenceNode": "tests/test_round4_uuid_regression.py::test_invalid_tenant_headers_do_not_select_a_tenant[0]",
+          "outcome": "PASS"
+        },
+        {
+          "nodeid": "tests/test_round4_uuid_regression.py::test_invalid_tenant_headers_do_not_select_a_tenant[not-a-uuid]",
+          "evidenceNode": "tests/test_round4_uuid_regression.py::test_invalid_tenant_headers_do_not_select_a_tenant[not-a-uuid]",
+          "outcome": "PASS"
+        },
+        {
+          "nodeid": "tests/test_round4_uuid_regression.py::test_wire_uuid_and_internal_integer_keys_are_distinct",
+          "evidenceNode": "tests/test_round4_uuid_regression.py::test_wire_uuid_and_internal_integer_keys_are_distinct",
+          "outcome": "PASS"
+        },
+        {
+          "nodeid": "tests/test_round4_uuid_regression.py::test_greenfield_public_identity_downgrade_stays_forbidden",
+          "evidenceNode": "tests/test_round4_uuid_regression.py::test_greenfield_public_identity_downgrade_stays_forbidden",
+          "outcome": "PASS"
+        }
+      ]
+    }
+  ]
+}

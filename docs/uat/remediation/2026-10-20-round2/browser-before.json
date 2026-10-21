@@ -1,0 +1,14 @@
+[
+  {
+    "id": "UAT-USER-014-before",
+    "role": "admin",
+    "preconditions": "Clean Chrome context; real Native BFF authentication fixture; TLS validation enabled",
+    "steps": "UAT-USER-014-before",
+    "expected": "Reproduce blocked pointer Cancel",
+    "actual": {
+      "candidateStatus": 200,
+      "normalPointerCancel": false
+    },
+    "result": "PASS"
+  }
+]

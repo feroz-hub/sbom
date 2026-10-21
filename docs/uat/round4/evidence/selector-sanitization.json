@@ -1,0 +1,31 @@
+{
+  "time": "2026-10-20T18:23:03.451572+00:00",
+  "scope": "Three synthetic database-safety parameter URLs in each collection/outcome file. No seeded credentials or actual test database URLs were present.",
+  "stableLabels": "SHA256-derived parameter labels retain distinct node identity and multiplicity; exact source-generated selectors remain in private mode0600 task files.",
+  "changedFiles": [
+    {
+      "file": "acceptance-inventory.json",
+      "parameterLabelsRedacted": 3,
+      "originalSha256": "b7b0a54f4620c962c8a9e8b77cdeb7a2bcadc9d062d41e7dc7f35bd96d6b07fc",
+      "publicSha256": "ce39f2411dd6d8701716fcdd493aaaf83c5df6609d8533376e119c66a26da1d6"
+    },
+    {
+      "file": "acceptance-outcomes.jsonl",
+      "parameterLabelsRedacted": 3,
+      "originalSha256": "e1d9d09d3dc59fb2032c2ba1e62b99f8d779fa05cea5d45d437e5cb7a50f5330",
+      "publicSha256": "21295f6b76eb9a9ae11b12bd2dffa2df5f4c1aa3af3ef158d353d60cfcd15c73"
+    },
+    {
+      "file": "acceptance-attempt2-inventory.json",
+      "parameterLabelsRedacted": 3,
+      "originalSha256": "2b6cf2a5dbd6aa68394f5c0ea1c44cce7fdc9dc50ea52195cb92a42368148f54",
+      "publicSha256": "03a18b1cd3e3c6962321b5e611b5e65ad6764c55a392d00386d5cf055e31b398"
+    },
+    {
+      "file": "acceptance-attempt2-outcomes.jsonl",
+      "parameterLabelsRedacted": 3,
+      "originalSha256": "6f142383b5c7449db90dcce0d79a3afe70921ed6d645f718cd12467ae0edfc36",
+      "publicSha256": "0d970948dc52ca6870ebbc7ba1e9fd7e315326ce369ef93385188c939ae205d6"
+    }
+  ]
+}

@@ -1,0 +1,522 @@
+[
+  {
+    "id": "UAT-VENDOR-CREATE-DENY-admin",
+    "module": "Vendor records and configuration",
+    "role": "admin",
+    "preconditions": "Only globally scoped UAT vendor record is created/updated/disabled; no seeded component matches its name",
+    "steps": "POST disabled synthetic record with tenant role; independently verify server rejection",
+    "expected": "Global vendor catalog writes require platform authority",
+    "actual": {
+      "status": 403,
+      "data": {
+        "detail": {
+          "code": "IAM_TENANT_SELECTION_REQUIRED",
+          "message": "Select an authorized tenant before accessing SBOM Analyzer."
+        }
+      },
+      "request_id": "9055dc8e8d8c"
+    },
+    "api": 403,
+    "status": "PASS",
+    "defect": null,
+    "time": "2026-10-19T18:06:25.731305+00:00"
+  },
+  {
+    "id": "UAT-VENDOR-CREATE-DENY-analyst",
+    "module": "Vendor records and configuration",
+    "role": "analyst",
+    "preconditions": "Only globally scoped UAT vendor record is created/updated/disabled; no seeded component matches its name",
+    "steps": "POST disabled synthetic record with tenant role; independently verify server rejection",
+    "expected": "Global vendor catalog writes require platform authority",
+    "actual": {
+      "status": 403,
+      "data": {
+        "detail": {
+          "code": "IAM_PLATFORM_PERMISSION_DENIED",
+          "message": "Platform permission is required for this action."
+        }
+      },
+      "request_id": "b87c2a46ba82"
+    },
+    "api": 403,
+    "status": "PASS",
+    "defect": null,
+    "time": "2026-10-19T18:06:27.827338+00:00"
+  },
+  {
+    "id": "UAT-VENDOR-CREATE-DENY-developer",
+    "module": "Vendor records and configuration",
+    "role": "developer",
+    "preconditions": "Only globally scoped UAT vendor record is created/updated/disabled; no seeded component matches its name",
+    "steps": "POST disabled synthetic record with tenant role; independently verify server rejection",
+    "expected": "Global vendor catalog writes require platform authority",
+    "actual": {
+      "status": 403,
+      "data": {
+        "detail": {
+          "code": "IAM_PLATFORM_PERMISSION_DENIED",
+          "message": "Platform permission is required for this action."
+        }
+      },
+      "request_id": "beddcbb56a27"
+    },
+    "api": 403,
+    "status": "PASS",
+    "defect": null,
+    "time": "2026-10-19T18:06:28.787502+00:00"
+  },
+  {
+    "id": "UAT-VENDOR-CREATE-DENY-viewer",
+    "module": "Vendor records and configuration",
+    "role": "viewer",
+    "preconditions": "Only globally scoped UAT vendor record is created/updated/disabled; no seeded component matches its name",
+    "steps": "POST disabled synthetic record with tenant role; independently verify server rejection",
+    "expected": "Global vendor catalog writes require platform authority",
+    "actual": {
+      "status": 403,
+      "data": {
+        "detail": {
+          "code": "IAM_PLATFORM_PERMISSION_DENIED",
+          "message": "Platform permission is required for this action."
+        }
+      },
+      "request_id": "3a7ac2bcfb09"
+    },
+    "api": 403,
+    "status": "PASS",
+    "defect": null,
+    "time": "2026-10-19T18:06:29.689171+00:00"
+  },
+  {
+    "id": "UAT-VENDOR-CREATE-DENY-foreign",
+    "module": "Vendor records and configuration",
+    "role": "foreign",
+    "preconditions": "Only globally scoped UAT vendor record is created/updated/disabled; no seeded component matches its name",
+    "steps": "POST disabled synthetic record with tenant role; independently verify server rejection",
+    "expected": "Global vendor catalog writes require platform authority",
+    "actual": {
+      "status": 403,
+      "data": {
+        "detail": {
+          "code": "IAM_PLATFORM_PERMISSION_DENIED",
+          "message": "Platform permission is required for this action."
+        }
+      },
+      "request_id": "e68ee8093057"
+    },
+    "api": 403,
+    "status": "PASS",
+    "defect": null,
+    "time": "2026-10-19T18:06:30.359845+00:00"
+  },
+  {
+    "id": "UAT-VENDOR-DATE-VALIDATION",
+    "module": "Vendor records and configuration",
+    "role": "platform",
+    "preconditions": "Only globally scoped UAT vendor record is created/updated/disabled; no seeded component matches its name",
+    "steps": "POST unique disabled vendor with malformed date",
+    "expected": "Invalid lifecycle date rejected HTTP 422 without persistence",
+    "actual": {
+      "status": 422,
+      "data": {
+        "detail": [
+          {
+            "type": "value_error",
+            "loc": [
+              "body",
+              "eol_date"
+            ],
+            "msg": "Value error, date must be YYYY-MM-DD",
+            "input": "invalid-date",
+            "ctx": {
+              "error": {}
+            }
+          }
+        ]
+      },
+      "request_id": "6063fe20197c"
+    },
+    "api": 422,
+    "status": "PASS",
+    "defect": null,
+    "time": "2026-10-19T18:06:30.855031+00:00"
+  },
+  {
+    "id": "UAT-VENDOR-CREATE",
+    "module": "Vendor records and configuration",
+    "role": "platform",
+    "preconditions": "Only globally scoped UAT vendor record is created/updated/disabled; no seeded component matches its name",
+    "steps": "POST only unique synthetic record; no change to provider credentials or existing vendor records",
+    "expected": "Platform can create a disabled disposable vendor record",
+    "actual": {
+      "status": 201,
+      "data": {
+        "id": 1,
+        "vendor_name": "UAT-Vendor-1792433181690579000",
+        "product_name": "UAT-Vendor-1792433181690579000-Product",
+        "product_aliases": [],
+        "ecosystem": "generic",
+        "version_pattern": null,
+        "version_start": null,
+        "version_end": null,
+        "lifecycle_status": "Supported",
+        "maintenance_status": null,
+        "eol_date": null,
+        "eos_date": null,
+        "eof_date": null,
+        "deprecated": false,
+        "unsupported": false,
+        "latest_supported_version": null,
+        "recommended_version": null,
+        "evidence_url": null,
+        "evidence": {
+          "purpose": "Synthetic UAT record only"
+        },
+        "confidence": "High",
+        "enabled": false,
+        "created_at": "2026-10-19T18:06:30+00:00",
+        "updated_at": "2026-10-19T18:06:30+00:00"
+      },
+      "request_id": "be3097fc0e36"
+    },
+    "api": 201,
+    "status": "PASS",
+    "defect": null,
+    "time": "2026-10-19T18:06:31.084947+00:00"
+  },
+  {
+    "id": "UAT-VENDOR-UPDATE-DENY-admin",
+    "module": "Vendor records and configuration",
+    "role": "admin",
+    "preconditions": "Only globally scoped UAT vendor record is created/updated/disabled; no seeded component matches its name",
+    "steps": "PUT only newly created synthetic vendor record",
+    "expected": "Tenant roles cannot update a global vendor record",
+    "actual": {
+      "status": 403,
+      "data": {
+        "detail": {
+          "code": "IAM_TENANT_SELECTION_REQUIRED",
+          "message": "Select an authorized tenant before accessing SBOM Analyzer."
+        }
+      },
+      "request_id": "cf0623ee02c3"
+    },
+    "api": 403,
+    "status": "PASS",
+    "defect": null,
+    "time": "2026-10-19T18:06:31.109878+00:00"
+  },
+  {
+    "id": "UAT-VENDOR-UPDATE-DENY-viewer",
+    "module": "Vendor records and configuration",
+    "role": "viewer",
+    "preconditions": "Only globally scoped UAT vendor record is created/updated/disabled; no seeded component matches its name",
+    "steps": "PUT only newly created synthetic vendor record",
+    "expected": "Tenant roles cannot update a global vendor record",
+    "actual": {
+      "status": 403,
+      "data": {
+        "detail": {
+          "code": "IAM_PLATFORM_PERMISSION_DENIED",
+          "message": "Platform permission is required for this action."
+        }
+      },
+      "request_id": "7e2a79cd9e98"
+    },
+    "api": 403,
+    "status": "PASS",
+    "defect": null,
+    "time": "2026-10-19T18:06:31.148681+00:00"
+  },
+  {
+    "id": "UAT-VENDOR-UPDATE-DENY-foreign",
+    "module": "Vendor records and configuration",
+    "role": "foreign",
+    "preconditions": "Only globally scoped UAT vendor record is created/updated/disabled; no seeded component matches its name",
+    "steps": "PUT only newly created synthetic vendor record",
+    "expected": "Tenant roles cannot update a global vendor record",
+    "actual": {
+      "status": 403,
+      "data": {
+        "detail": {
+          "code": "IAM_PLATFORM_PERMISSION_DENIED",
+          "message": "Platform permission is required for this action."
+        }
+      },
+      "request_id": "c5db05049956"
+    },
+    "api": 403,
+    "status": "PASS",
+    "defect": null,
+    "time": "2026-10-19T18:06:31.225650+00:00"
+  },
+  {
+    "id": "UAT-VENDOR-UPDATE",
+    "module": "Vendor records and configuration",
+    "role": "platform",
+    "preconditions": "Only globally scoped UAT vendor record is created/updated/disabled; no seeded component matches its name",
+    "steps": "Enable only a uniquely named UAT product that matches no real component",
+    "expected": "Platform can update/enable its synthetic vendor record",
+    "actual": {
+      "status": 200,
+      "data": {
+        "id": 1,
+        "vendor_name": "UAT-Vendor-1792433181690579000",
+        "product_name": "UAT-Vendor-1792433181690579000-Product",
+        "product_aliases": [],
+        "ecosystem": "generic",
+        "version_pattern": null,
+        "version_start": null,
+        "version_end": null,
+        "lifecycle_status": "Supported",
+        "maintenance_status": null,
+        "eol_date": null,
+        "eos_date": null,
+        "eof_date": null,
+        "deprecated": false,
+        "unsupported": false,
+        "latest_supported_version": null,
+        "recommended_version": "1.0.1",
+        "evidence_url": null,
+        "evidence": {
+          "purpose": "Synthetic UAT record only"
+        },
+        "confidence": "High",
+        "enabled": true,
+        "created_at": "2026-10-19T18:06:30+00:00",
+        "updated_at": "2026-10-19T18:06:31+00:00"
+      },
+      "request_id": "ffd5593dba04"
+    },
+    "api": 200,
+    "status": "PASS",
+    "defect": null,
+    "time": "2026-10-19T18:06:31.463414+00:00"
+  },
+  {
+    "id": "UAT-VENDOR-SEARCH",
+    "module": "Vendor records and configuration",
+    "role": "admin",
+    "preconditions": "Only globally scoped UAT vendor record is created/updated/disabled; no seeded component matches its name",
+    "steps": "Search public global catalog with authorized tenant reader; this shared catalog is distinct from tenant-owned business records",
+    "expected": "Catalog search returns the unique UAT record",
+    "actual": {
+      "status": 200,
+      "data": {
+        "items": [
+          {
+            "id": 1,
+            "vendor_name": "UAT-Vendor-1792433181690579000",
+            "product_name": "UAT-Vendor-1792433181690579000-Product",
+            "product_aliases": [],
+            "ecosystem": "generic",
+            "version_pattern": null,
+            "version_start": null,
+            "version_end": null,
+            "lifecycle_status": "Supported",
+            "maintenance_status": null,
+            "eol_date": null,
+            "eos_date": null,
+            "eof_date": null,
+            "deprecated": false,
+            "unsupported": false,
+            "latest_supported_version": null,
+            "recommended_version": "1.0.1",
+            "evidence_url": null,
+            "evidence": {
+              "purpose": "Synthetic UAT record only"
+            },
+            "confidence": "High",
+            "enabled": true,
+            "created_at": "2026-10-19T18:06:30+00:00",
+            "updated_at": "2026-10-19T18:06:31+00:00"
+          }
+        ],
+        "total": 1,
+        "limit": 50,
+        "offset": 0
+      },
+      "request_id": "ebb5dd37b465"
+    },
+    "api": 200,
+    "status": "PASS",
+    "defect": null,
+    "time": "2026-10-19T18:06:31.772813+00:00"
+  },
+  {
+    "id": "UAT-VENDOR-DELETE-DENY",
+    "module": "Vendor records and configuration",
+    "role": "viewer",
+    "preconditions": "Only globally scoped UAT vendor record is created/updated/disabled; no seeded component matches its name",
+    "steps": "DELETE only UAT-created vendor record",
+    "expected": "Viewer cannot disable even the synthetic global vendor record",
+    "actual": {
+      "status": 403,
+      "data": {
+        "detail": {
+          "code": "IAM_PLATFORM_PERMISSION_DENIED",
+          "message": "Platform permission is required for this action."
+        }
+      },
+      "request_id": "633c21333d0b"
+    },
+    "api": 403,
+    "status": "PASS",
+    "defect": null,
+    "time": "2026-10-19T18:06:31.916194+00:00"
+  },
+  {
+    "id": "UAT-VENDOR-CLEANUP",
+    "module": "Vendor records and configuration",
+    "role": "platform",
+    "preconditions": "Only globally scoped UAT vendor record is created/updated/disabled; no seeded component matches its name",
+    "steps": "Disable synthetic record after test; keep audit history",
+    "expected": "Platform deletion disables only UAT record HTTP 204",
+    "actual": {
+      "status": 204,
+      "data": null,
+      "request_id": "681a6811e32e"
+    },
+    "api": 204,
+    "status": "PASS",
+    "defect": null,
+    "time": "2026-10-19T18:06:32.138011+00:00"
+  },
+  {
+    "id": "UAT-POLICY-WRITE-DENY-analyst",
+    "module": "Vendor records and configuration",
+    "role": "analyst",
+    "preconditions": "Only globally scoped UAT vendor record is created/updated/disabled; no seeded component matches its name",
+    "steps": "POST protected policy write expected to be rejected before shared policy mutation",
+    "expected": "Non-administrators cannot publish tenant policy versions",
+    "actual": {
+      "status": 403,
+      "data": {
+        "detail": "Insufficient permission"
+      },
+      "request_id": "5b2e68d964b5"
+    },
+    "api": 403,
+    "status": "PASS",
+    "defect": null,
+    "time": "2026-10-19T18:06:32.833206+00:00"
+  },
+  {
+    "id": "UAT-POLICY-WRITE-DENY-developer",
+    "module": "Vendor records and configuration",
+    "role": "developer",
+    "preconditions": "Only globally scoped UAT vendor record is created/updated/disabled; no seeded component matches its name",
+    "steps": "POST protected policy write expected to be rejected before shared policy mutation",
+    "expected": "Non-administrators cannot publish tenant policy versions",
+    "actual": {
+      "status": 403,
+      "data": {
+        "detail": "Insufficient permission"
+      },
+      "request_id": "757f4941ec5c"
+    },
+    "api": 403,
+    "status": "PASS",
+    "defect": null,
+    "time": "2026-10-19T18:06:32.881853+00:00"
+  },
+  {
+    "id": "UAT-POLICY-WRITE-DENY-viewer",
+    "module": "Vendor records and configuration",
+    "role": "viewer",
+    "preconditions": "Only globally scoped UAT vendor record is created/updated/disabled; no seeded component matches its name",
+    "steps": "POST protected policy write expected to be rejected before shared policy mutation",
+    "expected": "Non-administrators cannot publish tenant policy versions",
+    "actual": {
+      "status": 403,
+      "data": {
+        "detail": "Insufficient permission"
+      },
+      "request_id": "a2954f9e7917"
+    },
+    "api": 403,
+    "status": "PASS",
+    "defect": null,
+    "time": "2026-10-19T18:06:32.969783+00:00"
+  },
+  {
+    "id": "UAT-VENDOR-EXPORT-PLATFORM-DENIED",
+    "module": "Vendor records and configuration",
+    "role": "platform",
+    "preconditions": "Only globally scoped UAT vendor record is created/updated/disabled; no seeded component matches its name",
+    "steps": "GET tenant lifecycle export with no inherited tenant context; separate authorized tenant reader test follows",
+    "expected": "Platform-only account without lifecycle:read/tenant context cannot use tenant export",
+    "actual": {
+      "status": 403,
+      "containsUatVendor": false,
+      "request_id": "1022f2ae11ee"
+    },
+    "api": 403,
+    "status": "PASS",
+    "defect": null,
+    "time": "2026-10-19T18:07:01.843194+00:00"
+  },
+  {
+    "id": "UAT-VENDOR-EXPORT",
+    "module": "Vendor records and configuration",
+    "role": "admin",
+    "preconditions": "Only globally scoped UAT vendor record is created/updated/disabled; no seeded component matches its name",
+    "steps": "Temporarily enable only unique UAT vendor; GET real export using lifecycle:read permission",
+    "expected": "Tenant lifecycle reader can export enabled synthetic catalog entry",
+    "actual": {
+      "status": 200,
+      "containsUatVendor": true,
+      "request_id": "6036219345df"
+    },
+    "api": 200,
+    "status": "PASS",
+    "defect": null,
+    "time": "2026-10-19T18:07:02.247763+00:00"
+  },
+  {
+    "id": "UAT-VENDOR-DISABLED-EXCLUDED",
+    "module": "Vendor records and configuration",
+    "role": "admin/platform",
+    "preconditions": "Only globally scoped UAT vendor record is created/updated/disabled; no seeded component matches its name",
+    "steps": "Disable only owned UAT record; compare administration list and actual authorized tenant export",
+    "expected": "Disabled synthetic record is retained for administration and excluded from active provider export",
+    "actual": {
+      "status": 200,
+      "matchingRecords": [
+        {
+          "id": 1,
+          "vendor_name": "UAT-Vendor-1792433181690579000",
+          "product_name": "UAT-Vendor-1792433181690579000-Product",
+          "product_aliases": [],
+          "ecosystem": "generic",
+          "version_pattern": null,
+          "version_start": null,
+          "version_end": null,
+          "lifecycle_status": "Supported",
+          "maintenance_status": null,
+          "eol_date": null,
+          "eos_date": null,
+          "eof_date": null,
+          "deprecated": false,
+          "unsupported": false,
+          "latest_supported_version": null,
+          "recommended_version": "1.0.1",
+          "evidence_url": null,
+          "evidence": {
+            "purpose": "Synthetic UAT record only"
+          },
+          "confidence": "High",
+          "enabled": false,
+          "created_at": "2026-10-19T18:06:30+00:00",
+          "updated_at": "2026-10-19T18:07:02+00:00"
+        }
+      ],
+      "exportStatus": 200,
+      "excludedFromActiveExport": true
+    },
+    "api": 200,
+    "status": "PASS",
+    "defect": null,
+    "time": "2026-10-19T18:07:02.412067+00:00"
+  }
+]

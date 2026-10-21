@@ -1,0 +1,205 @@
+[
+  {
+    "evidence": "api-round3-vex.json",
+    "counts": {
+      "PASS": 14
+    },
+    "checks": 14
+  },
+  {
+    "evidence": "browser-protection-vex.json",
+    "counts": {
+      "PASS": 5
+    },
+    "checks": 5
+  },
+  {
+    "evidence": "browser-protection-vex-readback.json",
+    "counts": {
+      "PASS": 1
+    },
+    "checks": 1
+  },
+  {
+    "evidence": "browser-protection-vex-analyst.json",
+    "counts": {
+      "PASS": 2
+    },
+    "checks": 2
+  },
+  {
+    "evidence": "browser-dashboard-current.json",
+    "counts": {
+      "PASS": 10
+    },
+    "checks": 10
+  },
+  {
+    "evidence": "browser-scope-extra-settled.json",
+    "counts": {
+      "PASS": 3
+    },
+    "checks": 3
+  },
+  {
+    "evidence": "browser-six-roles-accepted.json",
+    "counts": {
+      "PASS": 36
+    },
+    "checks": 36
+  },
+  {
+    "evidence": "browser-owned-platform-accepted.json",
+    "counts": {
+      "PASS": 8
+    },
+    "checks": 8
+  },
+  {
+    "evidence": "governance-browser-accepted.json",
+    "counts": {
+      "PASS": 21
+    },
+    "checks": 21
+  },
+  {
+    "evidence": "ai-local.json",
+    "counts": {
+      "PASS": 14
+    },
+    "checks": 14
+  },
+  {
+    "evidence": "secret-lifecycle.json",
+    "counts": {
+      "PASS": 11
+    },
+    "checks": 11
+  },
+  {
+    "evidence": "active-policies-accepted.json",
+    "counts": {
+      "PASS": 15
+    },
+    "checks": 15
+  },
+  {
+    "evidence": "repair-after.json",
+    "counts": {
+      "PASS": 22
+    },
+    "checks": 22
+  },
+  {
+    "evidence": "cron-accepted.json",
+    "counts": {
+      "PASS": 13
+    },
+    "checks": 13
+  },
+  {
+    "evidence": "scope-exports.json",
+    "counts": {
+      "PASS": 23
+    },
+    "checks": 23
+  },
+  {
+    "evidence": "artifact-content-validation.json",
+    "counts": {
+      "UNCLASSIFIED": 5
+    },
+    "checks": 5
+  },
+  {
+    "evidence": "report-mailpit-accepted.json",
+    "counts": {
+      "PASS": 1
+    },
+    "checks": 1
+  },
+  {
+    "evidence": "conversion-accepted.json",
+    "counts": {
+      "PASS": 7
+    },
+    "checks": 7
+  },
+  {
+    "evidence": "signature-schema-accepted.json",
+    "counts": {
+      "PASS": 1
+    },
+    "checks": 1
+  },
+  {
+    "evidence": "large-manual-accepted.json",
+    "counts": {
+      "PASS": 9
+    },
+    "checks": 9
+  },
+  {
+    "evidence": "browser-session-retry-accepted.json",
+    "counts": {
+      "PASS": 3
+    },
+    "checks": 3
+  },
+  {
+    "evidence": "browser-sbom-followup.json",
+    "counts": {
+      "PASS": 4
+    },
+    "checks": 4
+  },
+  {
+    "evidence": "browser-after-round3.json",
+    "counts": {
+      "PASS": 16
+    },
+    "checks": 16
+  },
+  {
+    "evidence": "browser-membership-round3.json",
+    "counts": {
+      "PASS": 6
+    },
+    "checks": 6
+  },
+  {
+    "evidence": "api-kev-round3.json",
+    "counts": {
+      "PASS": 7
+    },
+    "checks": 7
+  },
+  {
+    "evidence": "browser-kev-round3-accepted.json",
+    "counts": {
+      "PASS": 7
+    },
+    "checks": 7
+  },
+  {
+    "evidence": "browser-repair-final.json",
+    "counts": {
+      "PASS": 10
+    },
+    "checks": 10
+  },
+  {
+    "evidence": "legacy-analysis-after.json",
+    "counts": {
+      "PASS": 7
+    },
+    "checks": 7
+  },
+  {
+    "evidence": "browser-stability-serial.json",
+    "counts": {
+      "PASS": 18
+    },
+    "checks": 18
+  }
+]

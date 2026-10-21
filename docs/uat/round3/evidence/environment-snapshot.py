@@ -1,0 +1,5 @@
+from pathlib import Path
+import subprocess,json,sys,datetime
+D=Path(__file__).resolve().parent;tag=sys.argv[1];p=Path('/Users/ferozebasha/.sbom-greenfield-uuid/frontend.log');text=p.read_text(errors='replace')
+result={'time':datetime.datetime.now(datetime.timezone.utc).isoformat(),'processes':subprocess.run(['ps','-p','80916,80918,'+subprocess.check_output(['/usr/sbin/lsof','-tiTCP:18000','-sTCP:LISTEN'],text=True).split()[0],'-o','pid=,ppid=,rss=,pcpu=,etime=,comm='],capture_output=True,text=True).stdout,'vm_stat':subprocess.run(['vm_stat'],capture_output=True,text=True).stdout,'swap':subprocess.run(['sysctl','vm.swapusage'],capture_output=True,text=True).stdout,'frontendLogBytes':p.stat().st_size,'frontendMemoryRestartWarnings':text.count('approaching the used memory threshold'),'frontendEmptyResponseMentions':text.count('ERR_EMPTY_RESPONSE'),'note':'Process RSS in KiB; CPU instantaneous snapshot. Whole private logs are not exported. No OS memory settings changed.'}
+(D/('environment-'+tag+'.json')).write_text(json.dumps(result,indent=2));print('environment snapshot',tag)

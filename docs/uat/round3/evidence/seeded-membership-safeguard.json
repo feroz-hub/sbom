@@ -1,0 +1,42 @@
+{
+  "status": 200,
+  "memberCount": 4,
+  "seededOlympus": [
+    {
+      "email": "admin@olympus.example.test",
+      "roles": [
+        "TENANT_ADMIN"
+      ],
+      "membershipStatus": "ACTIVE",
+      "accountStatus": "ACTIVE",
+      "verified": true
+    },
+    {
+      "email": "analyst@olympus.example.test",
+      "roles": [
+        "SECURITY_ANALYST"
+      ],
+      "membershipStatus": "ACTIVE",
+      "accountStatus": "ACTIVE",
+      "verified": true
+    },
+    {
+      "email": "developer@olympus.example.test",
+      "roles": [
+        "DEVELOPER"
+      ],
+      "membershipStatus": "ACTIVE",
+      "accountStatus": "ACTIVE",
+      "verified": true
+    },
+    {
+      "email": "viewer@olympus.example.test",
+      "roles": [
+        "VIEWER"
+      ],
+      "membershipStatus": "ACTIVE",
+      "accountStatus": "ACTIVE",
+      "verified": true
+    }
+  ]
+}

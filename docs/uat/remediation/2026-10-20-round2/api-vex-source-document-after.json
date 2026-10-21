@@ -1,0 +1,52 @@
+[
+  {
+    "role": "admin",
+    "path": "/api/sboms/92f64b52-3e57-45fa-a317-0e6515252e06/vex",
+    "expectedStatus": 200,
+    "actual": {
+      "status": 200,
+      "data": {
+        "document_id": 1,
+        "sbom_id": "92f64b52-3e57-45fa-a317-0e6515252e06",
+        "statements_imported": 1,
+        "matched_statements": 1,
+        "unmatched_statements": 0,
+        "format": "CSAF VEX",
+        "validation_status": "accepted",
+        "already_imported": false,
+        "source_hash": "f9c486d9e64816bfc1aa49bd24cf57788def8f33aa17e6e11363b2e2b20771bd",
+        "source_document_id": "UAT-R2-CSAF-fdc027a8-99e0-4e09-8814-315e05b20f6a",
+        "source_document_version": "1",
+        "superseded_document_ids": []
+      },
+      "request_id": "f3198e661d8c"
+    },
+    "result": "PASS"
+  },
+  {
+    "role": "foreign",
+    "path": "/api/sboms/92f64b52-3e57-45fa-a317-0e6515252e06/vex",
+    "expectedStatus": 404,
+    "actual": {
+      "status": 404,
+      "data": {
+        "detail": "Resource not found"
+      },
+      "request_id": "5c2204e09c5f"
+    },
+    "result": "PASS"
+  },
+  {
+    "role": "admin",
+    "path": "/api/sboms/1/vex",
+    "expectedStatus": 422,
+    "actual": {
+      "status": 422,
+      "data": {
+        "detail": "Resource identifier must be a UUIDv4"
+      },
+      "request_id": "3b017afb2307"
+    },
+    "result": "PASS"
+  }
+]

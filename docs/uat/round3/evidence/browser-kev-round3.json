@@ -1,0 +1,25 @@
+[
+  {
+    "id": "R2-KEV-UI-admin",
+    "role": "admin",
+    "preconditions": "Clean Chrome context; real Native BFF authentication fixture; TLS validation enabled",
+    "steps": "R2-KEV-UI-admin",
+    "expected": "Tenant roles can read KEV but cannot invoke global sync",
+    "actual": {
+      "disabled": true,
+      "explanation": 0
+    },
+    "result": "PASS"
+  },
+  {
+    "id": "R2-BROWSER-EXECUTION",
+    "role": "admin",
+    "preconditions": "Clean Chrome context; real Native BFF authentication fixture; TLS validation enabled",
+    "steps": "R2-BROWSER-EXECUTION",
+    "expected": "Complete actual browser acceptance",
+    "actual": {
+      "message": "page.waitForResponse: Timeout 30000ms exceeded while waiting for event \"response\""
+    },
+    "result": "FAIL"
+  }
+]

@@ -1,0 +1,7 @@
+{
+  "database": "sbom_greenfield_uuid",
+  "revision": "100_greenfield_uuid_final",
+  "expectedRevision": "100_greenfield_uuid_final",
+  "readOnly": true,
+  "result": "PASS"
+}

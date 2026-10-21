@@ -1,0 +1,52 @@
+[
+  {
+    "id": "R3-LEGACY-ANONYMOUS-nvd",
+    "role": "anonymous",
+    "stepsExecuted": "POST /analyze-sbom-nvd without Authorization",
+    "expected": "401 before UUID resolution or provider execution",
+    "actual": {
+      "status": 401
+    },
+    "result": "PASS"
+  },
+  {
+    "id": "R3-LEGACY-ANONYMOUS-github",
+    "role": "anonymous",
+    "stepsExecuted": "POST /analyze-sbom-github without Authorization",
+    "expected": "401 before UUID resolution or provider execution",
+    "actual": {
+      "status": 401
+    },
+    "result": "PASS"
+  },
+  {
+    "id": "R3-LEGACY-ANONYMOUS-osv",
+    "role": "anonymous",
+    "stepsExecuted": "POST /analyze-sbom-osv without Authorization",
+    "expected": "401 before UUID resolution or provider execution",
+    "actual": {
+      "status": 401
+    },
+    "result": "PASS"
+  },
+  {
+    "id": "R3-LEGACY-ANONYMOUS-vulndb",
+    "role": "anonymous",
+    "stepsExecuted": "POST /analyze-sbom-vulndb without Authorization",
+    "expected": "401 before UUID resolution or provider execution",
+    "actual": {
+      "status": 401
+    },
+    "result": "PASS"
+  },
+  {
+    "id": "R3-LEGACY-ANONYMOUS-consolidated",
+    "role": "anonymous",
+    "stepsExecuted": "POST /analyze-sbom-consolidated without Authorization",
+    "expected": "401 before UUID resolution or provider execution",
+    "actual": {
+      "status": 401
+    },
+    "result": "PASS"
+  }
+]

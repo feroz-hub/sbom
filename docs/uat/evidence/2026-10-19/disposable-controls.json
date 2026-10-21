@@ -1,0 +1,563 @@
+[
+  {
+    "id": "UAT-PRODUCT-DELETE-DENY",
+    "module": "Products",
+    "role": "viewer",
+    "preconditions": "Only resources created in this script are modified; seeded accounts and existing configuration unchanged",
+    "steps": "DELETE only UAT-owned empty product",
+    "expected": "Viewer cannot delete even an empty product",
+    "actual": {
+      "status": 403,
+      "data": {
+        "detail": "Insufficient permission"
+      },
+      "request_id": "d078a298249b"
+    },
+    "api": 403,
+    "status": "PASS",
+    "defect": null,
+    "time": "2026-10-19T17:57:36.209187+00:00"
+  },
+  {
+    "id": "UAT-PRODUCT-DELETE",
+    "module": "Products",
+    "role": "admin",
+    "preconditions": "Only resources created in this script are modified; seeded accounts and existing configuration unchanged",
+    "steps": "DELETE fresh empty product",
+    "expected": "Empty disposable product can be deleted",
+    "actual": {
+      "status": 200,
+      "data": {
+        "status": "deleted",
+        "product_id": "f798ea9b-a4fb-4593-9e88-1d411e0713ee"
+      },
+      "request_id": "528348cd617e"
+    },
+    "api": 200,
+    "status": "PASS",
+    "defect": null,
+    "time": "2026-10-19T17:57:36.270519+00:00"
+  },
+  {
+    "id": "UAT-PRODUCT-DELETED-READ",
+    "module": "Products",
+    "role": "admin",
+    "preconditions": "Only resources created in this script are modified; seeded accounts and existing configuration unchanged",
+    "steps": "Read soft-deleted UAT product",
+    "expected": "Deleted product is concealed from normal lookup",
+    "actual": {
+      "status": 404,
+      "data": {
+        "detail": "Product not found"
+      },
+      "request_id": "815dcc4d279d"
+    },
+    "api": 404,
+    "status": "PASS",
+    "defect": null,
+    "time": "2026-10-19T17:57:36.293023+00:00"
+  },
+  {
+    "id": "UAT-PROJECT-DELETE-IMPACT",
+    "module": "Projects",
+    "role": "admin",
+    "preconditions": "Only resources created in this script are modified; seeded accounts and existing configuration unchanged",
+    "steps": "GET fresh UAT project deletion impact",
+    "expected": "Preview excludes unrelated seeded business resources",
+    "actual": {
+      "status": 200,
+      "data": {
+        "project_id": "4ceab717-79d5-4cf8-af1c-70c40f34d650",
+        "project_name": "UAT Recovery 1792432655278762000",
+        "sboms": 0,
+        "components": 0,
+        "runs": 0,
+        "findings": 0,
+        "schedules": 0
+      },
+      "request_id": "5f0c7b1c7f7d"
+    },
+    "api": 200,
+    "status": "PASS",
+    "defect": null,
+    "time": "2026-10-19T17:57:36.358101+00:00"
+  },
+  {
+    "id": "UAT-PROJECT-DELETE-DENY",
+    "module": "Projects",
+    "role": "viewer",
+    "preconditions": "Only resources created in this script are modified; seeded accounts and existing configuration unchanged",
+    "steps": "DELETE only UAT-owned empty project",
+    "expected": "Viewer cannot delete project",
+    "actual": {
+      "status": 403,
+      "data": {
+        "detail": "Insufficient permission"
+      },
+      "request_id": "f385f4dc6477"
+    },
+    "api": 403,
+    "status": "PASS",
+    "defect": null,
+    "time": "2026-10-19T17:57:36.376043+00:00"
+  },
+  {
+    "id": "UAT-PROJECT-DELETE-CONFIRM",
+    "module": "Projects",
+    "role": "admin",
+    "preconditions": "Only resources created in this script are modified; seeded accounts and existing configuration unchanged",
+    "steps": "DELETE own disposable project without confirm flag",
+    "expected": "Without explicit confirmation, return pending_confirmation and do not perform deletion (implemented response is HTTP 200)",
+    "actual": {
+      "status": 200,
+      "data": {
+        "status": "pending_confirmation",
+        "message": "This will delete the Project. Re-send with confirm=yes to proceed (and add permanent=true to bypass soft delete).",
+        "example": "/api/projects/4ceab717-79d5-4cf8-af1c-70c40f34d650?confirm=yes"
+      },
+      "request_id": "fb9aa18718ab",
+      "contract_note": "Semantic confirmation guard passed. Initial harness assumed 400/422; router explicitly documents pending_confirmation response."
+    },
+    "api": 200,
+    "status": "PASS",
+    "defect": null,
+    "time": "2026-10-19T17:57:36.401332+00:00"
+  },
+  {
+    "id": "UAT-PROJECT-SOFT-DELETE",
+    "module": "Projects",
+    "role": "admin",
+    "preconditions": "Only resources created in this script are modified; seeded accounts and existing configuration unchanged",
+    "steps": "Soft delete only fresh UAT project; no permanent deletion",
+    "expected": "Confirmed disposable project deletion remains recoverable",
+    "actual": {
+      "status": 200,
+      "data": {
+        "status": "deleted",
+        "permanent": false,
+        "cascaded_count": 1,
+        "message": "Project 4ceab717-79d5-4cf8-af1c-70c40f34d650 moved to deleted (recoverable)."
+      },
+      "request_id": "be7f8e43d6b7"
+    },
+    "api": 200,
+    "status": "PASS",
+    "defect": null,
+    "time": "2026-10-19T17:57:36.464105+00:00"
+  },
+  {
+    "id": "UAT-PROJECT-DELETED-READ",
+    "module": "Projects",
+    "role": "admin",
+    "preconditions": "Only resources created in this script are modified; seeded accounts and existing configuration unchanged",
+    "steps": "GET deleted UAT project",
+    "expected": "Normal lookup conceals deleted project",
+    "actual": {
+      "status": 404,
+      "data": {
+        "detail": "Project not found"
+      },
+      "request_id": "63f03f43e3b1"
+    },
+    "api": 404,
+    "status": "PASS",
+    "defect": null,
+    "time": "2026-10-19T17:57:36.484753+00:00"
+  },
+  {
+    "id": "UAT-PROJECT-RESTORE",
+    "module": "Projects",
+    "role": "admin",
+    "preconditions": "Only resources created in this script are modified; seeded accounts and existing configuration unchanged",
+    "steps": "POST restore on this script's deleted project",
+    "expected": "Supported recovery restores UAT project under original UUID",
+    "actual": {
+      "status": 200,
+      "data": {
+        "status": "restored",
+        "id": 20
+      },
+      "request_id": "eb84983d0f11"
+    },
+    "api": 200,
+    "status": "PASS",
+    "defect": null,
+    "time": "2026-10-19T17:57:36.516629+00:00"
+  },
+  {
+    "id": "UAT-PROJECT-RESTORE-READ",
+    "module": "Projects",
+    "role": "admin",
+    "preconditions": "Only resources created in this script are modified; seeded accounts and existing configuration unchanged",
+    "steps": "GET restored disposable UUID",
+    "expected": "Restored original project UUID can be read",
+    "actual": {
+      "status": 200,
+      "id": "4ceab717-79d5-4cf8-af1c-70c40f34d650"
+    },
+    "api": 200,
+    "status": "PASS",
+    "defect": null,
+    "time": "2026-10-19T17:57:36.552327+00:00"
+  },
+  {
+    "id": "UAT-PROJECT-CLEANUP",
+    "module": "Projects",
+    "role": "admin",
+    "preconditions": "Only resources created in this script are modified; seeded accounts and existing configuration unchanged",
+    "steps": "Archive disposable recovery-test project again",
+    "expected": "Leave only this script's project soft deleted",
+    "actual": {
+      "status": 200,
+      "data": {
+        "status": "deleted",
+        "permanent": false,
+        "cascaded_count": 1,
+        "message": "Project 4ceab717-79d5-4cf8-af1c-70c40f34d650 moved to deleted (recoverable)."
+      },
+      "request_id": "8c2450e1e9eb"
+    },
+    "api": 200,
+    "status": "PASS",
+    "defect": null,
+    "time": "2026-10-19T17:57:36.617878+00:00"
+  },
+  {
+    "id": "UAT-CONFIG-DENY-analyst-ai-read",
+    "module": "Settings authorization",
+    "role": "analyst",
+    "preconditions": "Only resources created in this script are modified; seeded accounts and existing configuration unchanged",
+    "steps": "GET protected configuration endpoint; writes expected to be denied before mutation; no credentials provided",
+    "expected": "Server rejects configuration or platform privilege outside current role",
+    "actual": {
+      "status": 403,
+      "data": {
+        "detail": "Insufficient permission"
+      },
+      "request_id": "86a9f6354209"
+    },
+    "api": 403,
+    "status": "PASS",
+    "defect": null,
+    "time": "2026-10-19T17:57:36.855715+00:00"
+  },
+  {
+    "id": "UAT-CONFIG-DENY-analyst-ai-write",
+    "module": "Settings authorization",
+    "role": "analyst",
+    "preconditions": "Only resources created in this script are modified; seeded accounts and existing configuration unchanged",
+    "steps": "POST protected configuration endpoint; writes expected to be denied before mutation; no credentials provided",
+    "expected": "Server rejects configuration or platform privilege outside current role",
+    "actual": {
+      "status": 403,
+      "data": {
+        "detail": "Insufficient permission"
+      },
+      "request_id": "a56cbe6cb4dc"
+    },
+    "api": 403,
+    "status": "PASS",
+    "defect": null,
+    "time": "2026-10-19T17:57:36.872079+00:00"
+  },
+  {
+    "id": "UAT-CONFIG-DENY-analyst-tenant-provider",
+    "module": "Settings authorization",
+    "role": "analyst",
+    "preconditions": "Only resources created in this script are modified; seeded accounts and existing configuration unchanged",
+    "steps": "PUT protected configuration endpoint; writes expected to be denied before mutation; no credentials provided",
+    "expected": "Server rejects configuration or platform privilege outside current role",
+    "actual": {
+      "status": 403,
+      "data": {
+        "detail": "Insufficient permission"
+      },
+      "request_id": "b56ec08e9eef"
+    },
+    "api": 403,
+    "status": "PASS",
+    "defect": null,
+    "time": "2026-10-19T17:57:36.887378+00:00"
+  },
+  {
+    "id": "UAT-CONFIG-DENY-analyst-platform-provider",
+    "module": "Settings authorization",
+    "role": "analyst",
+    "preconditions": "Only resources created in this script are modified; seeded accounts and existing configuration unchanged",
+    "steps": "PUT protected configuration endpoint; writes expected to be denied before mutation; no credentials provided",
+    "expected": "Server rejects configuration or platform privilege outside current role",
+    "actual": {
+      "status": 403,
+      "data": {
+        "detail": {
+          "code": "IAM_PLATFORM_PERMISSION_DENIED",
+          "message": "Platform permission is required for this action."
+        }
+      },
+      "request_id": "c1d787fe9270"
+    },
+    "api": 403,
+    "status": "PASS",
+    "defect": null,
+    "time": "2026-10-19T17:57:36.921235+00:00"
+  },
+  {
+    "id": "UAT-CONFIG-DENY-analyst-platform-grant",
+    "module": "Settings authorization",
+    "role": "analyst",
+    "preconditions": "Only resources created in this script are modified; seeded accounts and existing configuration unchanged",
+    "steps": "POST protected configuration endpoint; writes expected to be denied before mutation; no credentials provided",
+    "expected": "Server rejects configuration or platform privilege outside current role",
+    "actual": {
+      "status": 403,
+      "data": {
+        "detail": {
+          "code": "IAM_PLATFORM_PERMISSION_DENIED",
+          "message": "Platform permission is required for this action."
+        }
+      },
+      "request_id": "41506b48bc5b"
+    },
+    "api": 403,
+    "status": "PASS",
+    "defect": null,
+    "time": "2026-10-19T17:57:36.944776+00:00"
+  },
+  {
+    "id": "UAT-CONFIG-DENY-developer-ai-read",
+    "module": "Settings authorization",
+    "role": "developer",
+    "preconditions": "Only resources created in this script are modified; seeded accounts and existing configuration unchanged",
+    "steps": "GET protected configuration endpoint; writes expected to be denied before mutation; no credentials provided",
+    "expected": "Server rejects configuration or platform privilege outside current role",
+    "actual": {
+      "status": 403,
+      "data": {
+        "detail": "Insufficient permission"
+      },
+      "request_id": "ee5d22cfb16a"
+    },
+    "api": 403,
+    "status": "PASS",
+    "defect": null,
+    "time": "2026-10-19T17:57:37.175673+00:00"
+  },
+  {
+    "id": "UAT-CONFIG-DENY-developer-ai-write",
+    "module": "Settings authorization",
+    "role": "developer",
+    "preconditions": "Only resources created in this script are modified; seeded accounts and existing configuration unchanged",
+    "steps": "POST protected configuration endpoint; writes expected to be denied before mutation; no credentials provided",
+    "expected": "Server rejects configuration or platform privilege outside current role",
+    "actual": {
+      "status": 403,
+      "data": {
+        "detail": "Insufficient permission"
+      },
+      "request_id": "f001e2b3c212"
+    },
+    "api": 403,
+    "status": "PASS",
+    "defect": null,
+    "time": "2026-10-19T17:57:37.212806+00:00"
+  },
+  {
+    "id": "UAT-CONFIG-DENY-developer-tenant-provider",
+    "module": "Settings authorization",
+    "role": "developer",
+    "preconditions": "Only resources created in this script are modified; seeded accounts and existing configuration unchanged",
+    "steps": "PUT protected configuration endpoint; writes expected to be denied before mutation; no credentials provided",
+    "expected": "Server rejects configuration or platform privilege outside current role",
+    "actual": {
+      "status": 403,
+      "data": {
+        "detail": "Insufficient permission"
+      },
+      "request_id": "eb0de6af28d8"
+    },
+    "api": 403,
+    "status": "PASS",
+    "defect": null,
+    "time": "2026-10-19T17:57:37.231815+00:00"
+  },
+  {
+    "id": "UAT-CONFIG-DENY-developer-platform-provider",
+    "module": "Settings authorization",
+    "role": "developer",
+    "preconditions": "Only resources created in this script are modified; seeded accounts and existing configuration unchanged",
+    "steps": "PUT protected configuration endpoint; writes expected to be denied before mutation; no credentials provided",
+    "expected": "Server rejects configuration or platform privilege outside current role",
+    "actual": {
+      "status": 403,
+      "data": {
+        "detail": {
+          "code": "IAM_PLATFORM_PERMISSION_DENIED",
+          "message": "Platform permission is required for this action."
+        }
+      },
+      "request_id": "4cbbed695263"
+    },
+    "api": 403,
+    "status": "PASS",
+    "defect": null,
+    "time": "2026-10-19T17:57:37.249792+00:00"
+  },
+  {
+    "id": "UAT-CONFIG-DENY-developer-platform-grant",
+    "module": "Settings authorization",
+    "role": "developer",
+    "preconditions": "Only resources created in this script are modified; seeded accounts and existing configuration unchanged",
+    "steps": "POST protected configuration endpoint; writes expected to be denied before mutation; no credentials provided",
+    "expected": "Server rejects configuration or platform privilege outside current role",
+    "actual": {
+      "status": 403,
+      "data": {
+        "detail": {
+          "code": "IAM_PLATFORM_PERMISSION_DENIED",
+          "message": "Platform permission is required for this action."
+        }
+      },
+      "request_id": "2047ecc2e19d"
+    },
+    "api": 403,
+    "status": "PASS",
+    "defect": null,
+    "time": "2026-10-19T17:57:37.266498+00:00"
+  },
+  {
+    "id": "UAT-CONFIG-DENY-viewer-ai-read",
+    "module": "Settings authorization",
+    "role": "viewer",
+    "preconditions": "Only resources created in this script are modified; seeded accounts and existing configuration unchanged",
+    "steps": "GET protected configuration endpoint; writes expected to be denied before mutation; no credentials provided",
+    "expected": "Server rejects configuration or platform privilege outside current role",
+    "actual": {
+      "status": 403,
+      "data": {
+        "detail": "Insufficient permission"
+      },
+      "request_id": "fa6f69355c55"
+    },
+    "api": 403,
+    "status": "PASS",
+    "defect": null,
+    "time": "2026-10-19T17:57:37.283836+00:00"
+  },
+  {
+    "id": "UAT-CONFIG-DENY-viewer-ai-write",
+    "module": "Settings authorization",
+    "role": "viewer",
+    "preconditions": "Only resources created in this script are modified; seeded accounts and existing configuration unchanged",
+    "steps": "POST protected configuration endpoint; writes expected to be denied before mutation; no credentials provided",
+    "expected": "Server rejects configuration or platform privilege outside current role",
+    "actual": {
+      "status": 403,
+      "data": {
+        "detail": "Insufficient permission"
+      },
+      "request_id": "ebb54a98b483"
+    },
+    "api": 403,
+    "status": "PASS",
+    "defect": null,
+    "time": "2026-10-19T17:57:37.300739+00:00"
+  },
+  {
+    "id": "UAT-CONFIG-DENY-viewer-tenant-provider",
+    "module": "Settings authorization",
+    "role": "viewer",
+    "preconditions": "Only resources created in this script are modified; seeded accounts and existing configuration unchanged",
+    "steps": "PUT protected configuration endpoint; writes expected to be denied before mutation; no credentials provided",
+    "expected": "Server rejects configuration or platform privilege outside current role",
+    "actual": {
+      "status": 403,
+      "data": {
+        "detail": "Insufficient permission"
+      },
+      "request_id": "37e4f682c954"
+    },
+    "api": 403,
+    "status": "PASS",
+    "defect": null,
+    "time": "2026-10-19T17:57:37.318155+00:00"
+  },
+  {
+    "id": "UAT-CONFIG-DENY-viewer-platform-provider",
+    "module": "Settings authorization",
+    "role": "viewer",
+    "preconditions": "Only resources created in this script are modified; seeded accounts and existing configuration unchanged",
+    "steps": "PUT protected configuration endpoint; writes expected to be denied before mutation; no credentials provided",
+    "expected": "Server rejects configuration or platform privilege outside current role",
+    "actual": {
+      "status": 403,
+      "data": {
+        "detail": {
+          "code": "IAM_PLATFORM_PERMISSION_DENIED",
+          "message": "Platform permission is required for this action."
+        }
+      },
+      "request_id": "0ac8a073f9d1"
+    },
+    "api": 403,
+    "status": "PASS",
+    "defect": null,
+    "time": "2026-10-19T17:57:37.336727+00:00"
+  },
+  {
+    "id": "UAT-CONFIG-DENY-viewer-platform-grant",
+    "module": "Settings authorization",
+    "role": "viewer",
+    "preconditions": "Only resources created in this script are modified; seeded accounts and existing configuration unchanged",
+    "steps": "POST protected configuration endpoint; writes expected to be denied before mutation; no credentials provided",
+    "expected": "Server rejects configuration or platform privilege outside current role",
+    "actual": {
+      "status": 403,
+      "data": {
+        "detail": {
+          "code": "IAM_PLATFORM_PERMISSION_DENIED",
+          "message": "Platform permission is required for this action."
+        }
+      },
+      "request_id": "0a4e199db673"
+    },
+    "api": 403,
+    "status": "PASS",
+    "defect": null,
+    "time": "2026-10-19T17:57:37.374564+00:00"
+  },
+  {
+    "id": "UAT-AI-INVALID-PROVIDER",
+    "module": "AI configuration and providers",
+    "role": "admin",
+    "preconditions": "Only resources created in this script are modified; seeded accounts and existing configuration unchanged",
+    "steps": "POST disabled unknown provider without credentials",
+    "expected": "Unknown provider configuration fails validation without persistence or outbound call",
+    "actual": {
+      "status": 400,
+      "data": {
+        "detail": "unknown provider: 'unknown-uat-provider'"
+      },
+      "request_id": "1e0efd7a4e99"
+    },
+    "api": 400,
+    "status": "PASS",
+    "defect": null,
+    "time": "2026-10-19T17:57:37.396394+00:00"
+  },
+  {
+    "id": "UAT-AI-INVALID-NO-PERSIST",
+    "module": "AI configuration and providers",
+    "role": "admin",
+    "preconditions": "Only resources created in this script are modified; seeded accounts and existing configuration unchanged",
+    "steps": "Read real credential list after rejected provider create; values withheld",
+    "expected": "Rejected provider configuration does not create a credential",
+    "actual": {
+      "status": 200,
+      "count": 0
+    },
+    "api": 200,
+    "status": "PASS",
+    "defect": null,
+    "time": "2026-10-19T17:57:37.420191+00:00"
+  }
+]

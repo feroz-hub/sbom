@@ -1,0 +1,14 @@
+{
+  "protectedEvidenceFiles": 99,
+  "protectedEvidenceChanged": [],
+  "originalMasterIsUnchangedPrefix": true,
+  "originalCaseCount": 485,
+  "preexistingFilesRemoved": [],
+  "preexistingChangesOutsideRound2Scope": [],
+  "round1VexSourceUnchanged": true,
+  "round1DashboardParserUnchanged": true,
+  "discoveryPolicySourceUnchanged": true,
+  "secretMatches": [],
+  "whitespaceExit": 0,
+  "result": "PASS"
+}

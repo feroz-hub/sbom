@@ -1,0 +1,19 @@
+[
+  {
+    "id": "R3-MEMBERSHIP-OWNED-TENANT-CLEANUP",
+    "role": "admin",
+    "preconditions": "Verified isolated Greenfield UUID; task-owned fixtures; credentials kept in memory",
+    "stepsExecuted": "Disable only newly created fixture tenant",
+    "expected": "200",
+    "actual": {
+      "status": 200,
+      "data": {
+        "tenant_id": "63607b51-fd23-44b5-98c8-5a17d04008db",
+        "status": "DISABLED"
+      },
+      "request_id": "c3306d4b0667"
+    },
+    "result": "PASS",
+    "time": "2026-10-20T10:28:46.401041+00:00"
+  }
+]

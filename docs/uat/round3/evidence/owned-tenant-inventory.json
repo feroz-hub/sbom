@@ -1,0 +1,60 @@
+{
+  "status": 200,
+  "tenants": [
+    {
+      "id": "2a08cacf-9a5f-4d08-8407-a30025540517",
+      "name": "UAT R3 1792486266340662000",
+      "slug": "uat-r3-1792486266340662000",
+      "status": "DISABLED"
+    },
+    {
+      "id": "2b8cf03c-4497-4e3a-a93c-330ed4cea7ab",
+      "name": "UAT R3 1792486874680260000",
+      "slug": "uat-r3-1792486874680260000",
+      "status": "DISABLED"
+    },
+    {
+      "id": "f833bf14-2431-43d4-99e9-e84ae34d9512",
+      "name": "UAT R3 1792487199757756000",
+      "slug": "uat-r3-1792487199757756000",
+      "status": "DISABLED"
+    },
+    {
+      "id": "8185dd19-fdf8-463e-9244-af19ed8367dd",
+      "name": "UAT R3 1792487518341079000",
+      "slug": "uat-r3-1792487518341079000",
+      "status": "DISABLED"
+    },
+    {
+      "id": "5879ab3a-858b-4058-b220-832f070b3564",
+      "name": "UAT R3 1792488257314175000",
+      "slug": "uat-r3-1792488257314175000",
+      "status": "DISABLED"
+    },
+    {
+      "id": "364f8808-b6e7-4c3a-a37b-4e43182911f1",
+      "name": "UAT R3 1792488618156640000",
+      "slug": "uat-r3-1792488618156640000",
+      "status": "DISABLED"
+    },
+    {
+      "id": "8dd329e3-d481-4d4d-8c64-7fb94bc51982",
+      "name": "UAT R3 1792488816710826000",
+      "slug": "uat-r3-1792488816710826000",
+      "status": "DISABLED"
+    },
+    {
+      "id": "3b75aa38-4421-4c83-bc38-7ec788677c62",
+      "name": "UAT R3 1792489099861793000",
+      "slug": "uat-r3-1792489099861793000",
+      "status": "DISABLED"
+    },
+    {
+      "id": "63607b51-fd23-44b5-98c8-5a17d04008db",
+      "name": "UAT R3 1792492054849268000",
+      "slug": "uat-r3-1792492054849268000",
+      "status": "DISABLED"
+    }
+  ],
+  "note": "Read-only snapshot; task-owned evidence records retained; credentials omitted"
+}

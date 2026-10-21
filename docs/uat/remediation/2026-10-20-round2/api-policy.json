@@ -1,0 +1,587 @@
+[
+  {
+    "id": "R2-POLICY-EMPTY-trust",
+    "module": "Advisor policy history",
+    "role": "disposable tenant admin / platform",
+    "preconditions": "New Round 2 tenant; six seeds unchanged; local Mailpit only",
+    "steps": "R2-POLICY-EMPTY-trust",
+    "expected": "200 empty history",
+    "actual": {
+      "status": 200,
+      "data": {
+        "total": 0,
+        "items": []
+      },
+      "request_id": "e0d445d13c92"
+    },
+    "result": "PASS"
+  },
+  {
+    "id": "R2-POLICY-PUBLISH-trust",
+    "module": "Advisor policy history",
+    "role": "disposable tenant admin / platform",
+    "preconditions": "New Round 2 tenant; six seeds unchanged; local Mailpit only",
+    "steps": "R2-POLICY-PUBLISH-trust",
+    "expected": "201 numeric policy version",
+    "actual": {
+      "status": 201,
+      "data": {
+        "version": {
+          "id": 7,
+          "policy_id": 4,
+          "kind": "TRUST",
+          "version": 1,
+          "status": "DISABLED",
+          "scope": "TENANT",
+          "rules": {},
+          "created_at": "2026-10-20T04:47:41.255804+00:00"
+        },
+        "kind": "TRUST",
+        "configured": false,
+        "effective": null,
+        "tenant_override": {
+          "id": 7,
+          "policy_id": 4,
+          "kind": "TRUST",
+          "version": 1,
+          "status": "DISABLED",
+          "scope": "TENANT",
+          "rules": {},
+          "created_at": "2026-10-20T04:47:41.255804+00:00"
+        },
+        "platform_default": null,
+        "row_version": 1
+      },
+      "request_id": "fd2639e07bdd"
+    },
+    "result": "PASS"
+  },
+  {
+    "id": "R2-POLICY-BEFORE-trust",
+    "module": "Advisor policy history",
+    "role": "disposable tenant admin / platform",
+    "preconditions": "New Round 2 tenant; six seeds unchanged; local Mailpit only",
+    "steps": "R2-POLICY-BEFORE-trust",
+    "expected": "Reproduced baseline 500 before API reload",
+    "actual": {
+      "status": 500,
+      "data": {
+        "detail": "Unresolvable public resource reference"
+      },
+      "request_id": "61b3242f09e1"
+    },
+    "result": "PASS"
+  },
+  {
+    "id": "R2-POLICY-EMPTY-accepted-risk",
+    "module": "Advisor policy history",
+    "role": "disposable tenant admin / platform",
+    "preconditions": "New Round 2 tenant; six seeds unchanged; local Mailpit only",
+    "steps": "R2-POLICY-EMPTY-accepted-risk",
+    "expected": "200 empty history",
+    "actual": {
+      "status": 200,
+      "data": {
+        "total": 0,
+        "items": []
+      },
+      "request_id": "52560f55d675"
+    },
+    "result": "PASS"
+  },
+  {
+    "id": "R2-POLICY-PUBLISH-accepted-risk",
+    "module": "Advisor policy history",
+    "role": "disposable tenant admin / platform",
+    "preconditions": "New Round 2 tenant; six seeds unchanged; local Mailpit only",
+    "steps": "R2-POLICY-PUBLISH-accepted-risk",
+    "expected": "201 numeric policy version",
+    "actual": {
+      "status": 201,
+      "data": {
+        "version": {
+          "id": 8,
+          "policy_id": 5,
+          "kind": "ACCEPTED_RISK",
+          "version": 1,
+          "status": "DISABLED",
+          "scope": "TENANT",
+          "rules": {},
+          "created_at": "2026-10-20T04:47:41.340289+00:00"
+        },
+        "kind": "ACCEPTED_RISK",
+        "configured": false,
+        "effective": null,
+        "tenant_override": {
+          "id": 8,
+          "policy_id": 5,
+          "kind": "ACCEPTED_RISK",
+          "version": 1,
+          "status": "DISABLED",
+          "scope": "TENANT",
+          "rules": {},
+          "created_at": "2026-10-20T04:47:41.340289+00:00"
+        },
+        "platform_default": null,
+        "row_version": 1
+      },
+      "request_id": "36f80904aad9"
+    },
+    "result": "PASS"
+  },
+  {
+    "id": "R2-POLICY-BEFORE-accepted-risk",
+    "module": "Advisor policy history",
+    "role": "disposable tenant admin / platform",
+    "preconditions": "New Round 2 tenant; six seeds unchanged; local Mailpit only",
+    "steps": "R2-POLICY-BEFORE-accepted-risk",
+    "expected": "Reproduced baseline 500 before API reload",
+    "actual": {
+      "status": 500,
+      "data": {
+        "detail": "Unresolvable public resource reference"
+      },
+      "request_id": "3a82452434d1"
+    },
+    "result": "PASS"
+  },
+  {
+    "id": "R2-POLICY-EMPTY-scoring",
+    "module": "Advisor policy history",
+    "role": "disposable tenant admin / platform",
+    "preconditions": "New Round 2 tenant; six seeds unchanged; local Mailpit only",
+    "steps": "R2-POLICY-EMPTY-scoring",
+    "expected": "200 empty history",
+    "actual": {
+      "status": 200,
+      "data": {
+        "total": 0,
+        "items": []
+      },
+      "request_id": "bb7e98c31800"
+    },
+    "result": "PASS"
+  },
+  {
+    "id": "R2-POLICY-PUBLISH-scoring",
+    "module": "Advisor policy history",
+    "role": "disposable tenant admin / platform",
+    "preconditions": "New Round 2 tenant; six seeds unchanged; local Mailpit only",
+    "steps": "R2-POLICY-PUBLISH-scoring",
+    "expected": "201 numeric policy version",
+    "actual": {
+      "status": 201,
+      "data": {
+        "version": {
+          "id": 9,
+          "policy_id": 6,
+          "kind": "SCORING",
+          "version": 1,
+          "status": "DISABLED",
+          "scope": "TENANT",
+          "rules": {},
+          "created_at": "2026-10-20T04:47:41.410250+00:00"
+        },
+        "kind": "SCORING",
+        "configured": false,
+        "effective": null,
+        "tenant_override": {
+          "id": 9,
+          "policy_id": 6,
+          "kind": "SCORING",
+          "version": 1,
+          "status": "DISABLED",
+          "scope": "TENANT",
+          "rules": {},
+          "created_at": "2026-10-20T04:47:41.410250+00:00"
+        },
+        "platform_default": null,
+        "row_version": 1
+      },
+      "request_id": "b77d12925886"
+    },
+    "result": "PASS"
+  },
+  {
+    "id": "R2-POLICY-BEFORE-scoring",
+    "module": "Advisor policy history",
+    "role": "disposable tenant admin / platform",
+    "preconditions": "New Round 2 tenant; six seeds unchanged; local Mailpit only",
+    "steps": "R2-POLICY-BEFORE-scoring",
+    "expected": "Reproduced baseline 500 before API reload",
+    "actual": {
+      "status": 500,
+      "data": {
+        "detail": "Unresolvable public resource reference"
+      },
+      "request_id": "b4f3539222e5"
+    },
+    "result": "PASS"
+  },
+  {
+    "id": "UAT-POLICY-HISTORY-trust",
+    "module": "Advisor policy history",
+    "role": "disposable tenant admin / platform",
+    "preconditions": "New Round 2 tenant; six seeds unchanged; local Mailpit only",
+    "steps": "UAT-POLICY-HISTORY-trust",
+    "expected": "200 exact published version; integer ID",
+    "actual": {
+      "status": 200,
+      "data": {
+        "total": 1,
+        "items": [
+          {
+            "id": 7,
+            "policy_id": 4,
+            "kind": "TRUST",
+            "version": 1,
+            "status": "DISABLED",
+            "scope": "TENANT",
+            "rules": {},
+            "created_at": "2026-10-20T04:47:41.255804+00:00",
+            "reason": "Round 2 isolated regression",
+            "created_by": "uat-r2-1792471657856543000@example.test"
+          }
+        ]
+      },
+      "request_id": "bb33331a51b0"
+    },
+    "result": "PASS"
+  },
+  {
+    "id": "R2-POLICY-CONFLICT-trust",
+    "module": "Advisor policy history",
+    "role": "disposable tenant admin / platform",
+    "preconditions": "New Round 2 tenant; six seeds unchanged; local Mailpit only",
+    "steps": "R2-POLICY-CONFLICT-trust",
+    "expected": "409; no second version",
+    "actual": {
+      "status": 409,
+      "data": {
+        "detail": {
+          "code": "POLICY_CONFLICT",
+          "message": "Policy changed since it was read",
+          "row_version": 1
+        }
+      },
+      "request_id": "055bf7c7921b"
+    },
+    "result": "PASS"
+  },
+  {
+    "id": "R2-POLICY-ISOLATION-trust",
+    "module": "Advisor policy history",
+    "role": "disposable tenant admin / platform",
+    "preconditions": "New Round 2 tenant; six seeds unchanged; local Mailpit only",
+    "steps": "R2-POLICY-ISOLATION-trust",
+    "expected": "Foreign own-tenant history empty",
+    "actual": {
+      "status": 200,
+      "data": {
+        "total": 0,
+        "items": []
+      },
+      "request_id": "86d769df8f19"
+    },
+    "result": "PASS"
+  },
+  {
+    "id": "R2-POLICY-PLATFORM-trust",
+    "module": "Advisor policy history",
+    "role": "disposable tenant admin / platform",
+    "preconditions": "New Round 2 tenant; six seeds unchanged; local Mailpit only",
+    "steps": "R2-POLICY-PLATFORM-trust",
+    "expected": "Platform history scope remains separate",
+    "actual": {
+      "status": 200,
+      "data": {
+        "total": 0,
+        "items": []
+      },
+      "request_id": "d487226f03b6"
+    },
+    "result": "PASS"
+  },
+  {
+    "id": "UAT-POLICY-HISTORY-accepted-risk",
+    "module": "Advisor policy history",
+    "role": "disposable tenant admin / platform",
+    "preconditions": "New Round 2 tenant; six seeds unchanged; local Mailpit only",
+    "steps": "UAT-POLICY-HISTORY-accepted-risk",
+    "expected": "200 exact published version; integer ID",
+    "actual": {
+      "status": 200,
+      "data": {
+        "total": 1,
+        "items": [
+          {
+            "id": 8,
+            "policy_id": 5,
+            "kind": "ACCEPTED_RISK",
+            "version": 1,
+            "status": "DISABLED",
+            "scope": "TENANT",
+            "rules": {},
+            "created_at": "2026-10-20T04:47:41.340289+00:00",
+            "reason": "Round 2 isolated regression",
+            "created_by": "uat-r2-1792471657856543000@example.test"
+          }
+        ]
+      },
+      "request_id": "e99fceb125e1"
+    },
+    "result": "PASS"
+  },
+  {
+    "id": "R2-POLICY-CONFLICT-accepted-risk",
+    "module": "Advisor policy history",
+    "role": "disposable tenant admin / platform",
+    "preconditions": "New Round 2 tenant; six seeds unchanged; local Mailpit only",
+    "steps": "R2-POLICY-CONFLICT-accepted-risk",
+    "expected": "409; no second version",
+    "actual": {
+      "status": 409,
+      "data": {
+        "detail": {
+          "code": "POLICY_CONFLICT",
+          "message": "Policy changed since it was read",
+          "row_version": 1
+        }
+      },
+      "request_id": "06e0a0c05922"
+    },
+    "result": "PASS"
+  },
+  {
+    "id": "R2-POLICY-ISOLATION-accepted-risk",
+    "module": "Advisor policy history",
+    "role": "disposable tenant admin / platform",
+    "preconditions": "New Round 2 tenant; six seeds unchanged; local Mailpit only",
+    "steps": "R2-POLICY-ISOLATION-accepted-risk",
+    "expected": "Foreign own-tenant history empty",
+    "actual": {
+      "status": 200,
+      "data": {
+        "total": 0,
+        "items": []
+      },
+      "request_id": "cc439c27719a"
+    },
+    "result": "PASS"
+  },
+  {
+    "id": "R2-POLICY-PLATFORM-accepted-risk",
+    "module": "Advisor policy history",
+    "role": "disposable tenant admin / platform",
+    "preconditions": "New Round 2 tenant; six seeds unchanged; local Mailpit only",
+    "steps": "R2-POLICY-PLATFORM-accepted-risk",
+    "expected": "Platform history scope remains separate",
+    "actual": {
+      "status": 200,
+      "data": {
+        "total": 0,
+        "items": []
+      },
+      "request_id": "939c50e1794a"
+    },
+    "result": "PASS"
+  },
+  {
+    "id": "UAT-POLICY-HISTORY-scoring",
+    "module": "Advisor policy history",
+    "role": "disposable tenant admin / platform",
+    "preconditions": "New Round 2 tenant; six seeds unchanged; local Mailpit only",
+    "steps": "UAT-POLICY-HISTORY-scoring",
+    "expected": "200 exact published version; integer ID",
+    "actual": {
+      "status": 200,
+      "data": {
+        "total": 1,
+        "items": [
+          {
+            "id": 9,
+            "policy_id": 6,
+            "kind": "SCORING",
+            "version": 1,
+            "status": "DISABLED",
+            "scope": "TENANT",
+            "rules": {},
+            "created_at": "2026-10-20T04:47:41.410250+00:00",
+            "reason": "Round 2 isolated regression",
+            "created_by": "uat-r2-1792471657856543000@example.test"
+          }
+        ]
+      },
+      "request_id": "8be72d0b28b6"
+    },
+    "result": "PASS"
+  },
+  {
+    "id": "R2-POLICY-CONFLICT-scoring",
+    "module": "Advisor policy history",
+    "role": "disposable tenant admin / platform",
+    "preconditions": "New Round 2 tenant; six seeds unchanged; local Mailpit only",
+    "steps": "R2-POLICY-CONFLICT-scoring",
+    "expected": "409; no second version",
+    "actual": {
+      "status": 409,
+      "data": {
+        "detail": {
+          "code": "POLICY_CONFLICT",
+          "message": "Policy changed since it was read",
+          "row_version": 1
+        }
+      },
+      "request_id": "56343c6d1157"
+    },
+    "result": "PASS"
+  },
+  {
+    "id": "R2-POLICY-ISOLATION-scoring",
+    "module": "Advisor policy history",
+    "role": "disposable tenant admin / platform",
+    "preconditions": "New Round 2 tenant; six seeds unchanged; local Mailpit only",
+    "steps": "R2-POLICY-ISOLATION-scoring",
+    "expected": "Foreign own-tenant history empty",
+    "actual": {
+      "status": 200,
+      "data": {
+        "total": 0,
+        "items": []
+      },
+      "request_id": "00adc8d95d7d"
+    },
+    "result": "PASS"
+  },
+  {
+    "id": "R2-POLICY-PLATFORM-scoring",
+    "module": "Advisor policy history",
+    "role": "disposable tenant admin / platform",
+    "preconditions": "New Round 2 tenant; six seeds unchanged; local Mailpit only",
+    "steps": "R2-POLICY-PLATFORM-scoring",
+    "expected": "Platform history scope remains separate",
+    "actual": {
+      "status": 200,
+      "data": {
+        "total": 0,
+        "items": []
+      },
+      "request_id": "6f696272a0f7"
+    },
+    "result": "PASS"
+  },
+  {
+    "id": "R2-POLICY-ROLE-analyst",
+    "module": "Advisor policy history",
+    "role": "disposable tenant admin / platform",
+    "preconditions": "New Round 2 tenant; six seeds unchanged; local Mailpit only",
+    "steps": "R2-POLICY-ROLE-analyst",
+    "expected": "200 per existing read policy",
+    "actual": {
+      "status": 200,
+      "data": {
+        "total": 0,
+        "items": []
+      },
+      "request_id": "1d8cb00401f4"
+    },
+    "result": "PASS"
+  },
+  {
+    "id": "R2-POLICY-WRITE-DENY-analyst",
+    "module": "Advisor policy history",
+    "role": "disposable tenant admin / platform",
+    "preconditions": "New Round 2 tenant; six seeds unchanged; local Mailpit only",
+    "steps": "R2-POLICY-WRITE-DENY-analyst",
+    "expected": "403 mutation denied",
+    "actual": {
+      "status": 403,
+      "data": {
+        "detail": "Insufficient permission"
+      },
+      "request_id": "ff475390531e"
+    },
+    "result": "PASS"
+  },
+  {
+    "id": "R2-POLICY-ROLE-developer",
+    "module": "Advisor policy history",
+    "role": "disposable tenant admin / platform",
+    "preconditions": "New Round 2 tenant; six seeds unchanged; local Mailpit only",
+    "steps": "R2-POLICY-ROLE-developer",
+    "expected": "403 per existing read policy",
+    "actual": {
+      "status": 403,
+      "data": {
+        "detail": "Insufficient permission"
+      },
+      "request_id": "7f1a74078ad9"
+    },
+    "result": "PASS"
+  },
+  {
+    "id": "R2-POLICY-WRITE-DENY-developer",
+    "module": "Advisor policy history",
+    "role": "disposable tenant admin / platform",
+    "preconditions": "New Round 2 tenant; six seeds unchanged; local Mailpit only",
+    "steps": "R2-POLICY-WRITE-DENY-developer",
+    "expected": "403 mutation denied",
+    "actual": {
+      "status": 403,
+      "data": {
+        "detail": "Insufficient permission"
+      },
+      "request_id": "7842b049ca20"
+    },
+    "result": "PASS"
+  },
+  {
+    "id": "R2-POLICY-ROLE-viewer",
+    "module": "Advisor policy history",
+    "role": "disposable tenant admin / platform",
+    "preconditions": "New Round 2 tenant; six seeds unchanged; local Mailpit only",
+    "steps": "R2-POLICY-ROLE-viewer",
+    "expected": "403 per existing read policy",
+    "actual": {
+      "status": 403,
+      "data": {
+        "detail": "Insufficient permission"
+      },
+      "request_id": "0e46d350006d"
+    },
+    "result": "PASS"
+  },
+  {
+    "id": "R2-POLICY-WRITE-DENY-viewer",
+    "module": "Advisor policy history",
+    "role": "disposable tenant admin / platform",
+    "preconditions": "New Round 2 tenant; six seeds unchanged; local Mailpit only",
+    "steps": "R2-POLICY-WRITE-DENY-viewer",
+    "expected": "403 mutation denied",
+    "actual": {
+      "status": 403,
+      "data": {
+        "detail": "Insufficient permission"
+      },
+      "request_id": "f35fe6f45e95"
+    },
+    "result": "PASS"
+  },
+  {
+    "id": "R2-POLICY-CLEANUP",
+    "module": "Advisor policy history",
+    "role": "disposable tenant admin / platform",
+    "preconditions": "New Round 2 tenant; six seeds unchanged; local Mailpit only",
+    "steps": "R2-POLICY-CLEANUP",
+    "expected": "Only Round 2 tenant disabled",
+    "actual": {
+      "status": 200,
+      "data": {
+        "tenant_id": "67e81596-72ad-4567-a7a4-87d18b7978ba",
+        "status": "DISABLED"
+      },
+      "request_id": "09a53d8a1bfa"
+    },
+    "result": "PASS"
+  }
+]

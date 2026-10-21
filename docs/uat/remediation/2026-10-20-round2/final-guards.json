@@ -1,0 +1,160 @@
+[
+  {
+    "id": "R2-FINAL-IDENTITY-admin",
+    "role": "admin",
+    "expected": "Seeded credentials, role and tenant context unchanged",
+    "actual": {
+      "status": 200,
+      "email": "admin@olympus.example.test",
+      "roles": [
+        "TENANT_ADMIN"
+      ],
+      "tenant_id": "3a900179-36bf-4b5f-b2e1-2a4a9d06e6af",
+      "is_platform_admin": false
+    },
+    "result": "PASS"
+  },
+  {
+    "id": "R2-FINAL-IDENTITY-analyst",
+    "role": "analyst",
+    "expected": "Seeded credentials, role and tenant context unchanged",
+    "actual": {
+      "status": 200,
+      "email": "analyst@olympus.example.test",
+      "roles": [
+        "SECURITY_ANALYST"
+      ],
+      "tenant_id": "3a900179-36bf-4b5f-b2e1-2a4a9d06e6af",
+      "is_platform_admin": false
+    },
+    "result": "PASS"
+  },
+  {
+    "id": "R2-FINAL-IDENTITY-developer",
+    "role": "developer",
+    "expected": "Seeded credentials, role and tenant context unchanged",
+    "actual": {
+      "status": 200,
+      "email": "developer@olympus.example.test",
+      "roles": [
+        "DEVELOPER"
+      ],
+      "tenant_id": "3a900179-36bf-4b5f-b2e1-2a4a9d06e6af",
+      "is_platform_admin": false
+    },
+    "result": "PASS"
+  },
+  {
+    "id": "R2-FINAL-IDENTITY-viewer",
+    "role": "viewer",
+    "expected": "Seeded credentials, role and tenant context unchanged",
+    "actual": {
+      "status": 200,
+      "email": "viewer@olympus.example.test",
+      "roles": [
+        "VIEWER"
+      ],
+      "tenant_id": "3a900179-36bf-4b5f-b2e1-2a4a9d06e6af",
+      "is_platform_admin": false
+    },
+    "result": "PASS"
+  },
+  {
+    "id": "R2-FINAL-IDENTITY-foreign",
+    "role": "foreign",
+    "expected": "Seeded credentials, role and tenant context unchanged",
+    "actual": {
+      "status": 200,
+      "email": "foreign@olympus.example.test",
+      "roles": [
+        "TENANT_ADMIN"
+      ],
+      "tenant_id": "a803c17f-7e7d-439c-8664-c5406d391fd1",
+      "is_platform_admin": false
+    },
+    "result": "PASS"
+  },
+  {
+    "id": "R2-FINAL-IDENTITY-platform",
+    "role": "platform",
+    "expected": "Seeded credentials, role and tenant context unchanged",
+    "actual": {
+      "status": 200,
+      "email": "platform@olympus.example.test",
+      "roles": [
+        "PLATFORM_ADMIN"
+      ],
+      "tenant_id": null,
+      "is_platform_admin": true
+    },
+    "result": "PASS"
+  },
+  {
+    "id": "R2-FINAL-OLYMPUS",
+    "expected": "Exactly original four active verified members with original roles",
+    "actual": {
+      "status": 200,
+      "members": [
+        {
+          "email": "admin@olympus.example.test",
+          "role": "TENANT_ADMIN",
+          "roles": [
+            "TENANT_ADMIN"
+          ],
+          "status": "ACTIVE",
+          "user_status": "ACTIVE",
+          "email_verified": true
+        },
+        {
+          "email": "analyst@olympus.example.test",
+          "role": "SECURITY_ANALYST",
+          "roles": [
+            "SECURITY_ANALYST"
+          ],
+          "status": "ACTIVE",
+          "user_status": "ACTIVE",
+          "email_verified": true
+        },
+        {
+          "email": "developer@olympus.example.test",
+          "role": "DEVELOPER",
+          "roles": [
+            "DEVELOPER"
+          ],
+          "status": "ACTIVE",
+          "user_status": "ACTIVE",
+          "email_verified": true
+        },
+        {
+          "email": "viewer@olympus.example.test",
+          "role": "VIEWER",
+          "roles": [
+            "VIEWER"
+          ],
+          "status": "ACTIVE",
+          "user_status": "ACTIVE",
+          "email_verified": true
+        }
+      ]
+    },
+    "result": "PASS"
+  },
+  {
+    "id": "R2-FINAL-VEX-ASSIGNMENT",
+    "expected": "No retained disposable assignment",
+    "actual": {
+      "status": 200,
+      "assigned_to": null
+    },
+    "result": "PASS"
+  },
+  {
+    "id": "R2-FINAL-DISPOSABLE-TENANT",
+    "expected": "Round 2 policy tenant left disabled",
+    "actual": {
+      "status": 200,
+      "tenantStatus": "DISABLED"
+    },
+    "result": "PASS"
+  }
+]

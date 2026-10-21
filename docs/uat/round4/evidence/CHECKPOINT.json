@@ -1,0 +1,21 @@
+{
+  "status": "ROUND4_BACKEND_REGRESSION_COMPLETED",
+  "frozenRunStatus": "FINISHED",
+  "frozenRunOutcomes": {
+    "PASS": 4385,
+    "SKIP": 7,
+    "FAIL": 0,
+    "ERROR": 0,
+    "XFAIL": 0,
+    "XPASS": 0,
+    "NOT RUN": 0
+  },
+  "original228FocusedPASS": 228,
+  "remaining346PASS": 346,
+  "protectedEvidenceChanges": [],
+  "nextActions": [
+    "Review optional/external and target-environment limitations with owners",
+    "Review existing SBO-54/SBO-55 drafts; no automatic issue status changes",
+    "No commit, push, deployment or full application UAT sign-off authorized"
+  ]
+}

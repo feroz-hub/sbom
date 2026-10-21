@@ -1,0 +1,300 @@
+[
+  {
+    "id": "R3-SPDX-UPLOAD",
+    "role": "admin",
+    "preconditions": "Verified isolated Greenfield UUID; task-owned fixtures; credentials kept in memory",
+    "stepsExecuted": "Upload supported synthetic SPDX 2.3",
+    "expected": "202",
+    "actual": {
+      "status": 202,
+      "data": {
+        "status": "valid",
+        "workspace_id": "f1f45d6f-24ed-44ac-bc00-33d6dbf56fe7",
+        "validation_session_id": "f1f45d6f-24ed-44ac-bc00-33d6dbf56fe7",
+        "repair_workspace_url": "/repair/f1f45d6f-24ed-44ac-bc00-33d6dbf56fe7",
+        "sbom_id": "696733d7-f87d-447a-9510-ffc9419344e9",
+        "logical_sbom_id": "291b8015-3b0a-4767-8e7f-7ae48b14c7fc",
+        "sbom_name": "UAT R3 SPDX conversion",
+        "sbom_version": null,
+        "product_version": null,
+        "project_id": "93a61279-9e4f-4d5a-8680-4cd0f6eef88f",
+        "product_id": "9fbdf75b-39f5-4a6c-a5c1-60cdf654ea17",
+        "product_name": "Legacy / Unassigned Product",
+        "is_current": false,
+        "project_name": "UAT R3 conversion d5573574-21b8-4fc3-92df-8516a9a73e69",
+        "spec": "spdx",
+        "spec_version": "SPDX-2.3",
+        "detected_format": "spdx_json",
+        "detected_spec_version": "SPDX-2.3",
+        "detection_confidence": 0.99,
+        "detection_evidence": {
+          "evidence": [
+            "spdxVersion present",
+            "SPDXID present",
+            "packages present"
+          ],
+          "warnings": []
+        },
+        "file_size_bytes": 842,
+        "total_lines": 1,
+        "sha256": "59fd395387700447d0ef9a65dcd9b3d8d1bc6049cb87a76582eb36d59baf729d",
+        "is_large_file": false,
+        "full_editor_allowed": true,
+        "components": 1,
+        "validation_errors": [],
+        "validation_warnings": [],
+        "warnings": [],
+        "info": [],
+        "enrichment_status": "pending",
+        "validation_status": "valid",
+        "message": "SBOM uploaded successfully. Enrichment is running in background."
+      },
+      "request_id": "c5dfebc26594"
+    },
+    "result": "PASS",
+    "time": "2026-10-20T09:17:22.631411+00:00"
+  },
+  {
+    "id": "R3-SPDX-CONVERT",
+    "role": "admin",
+    "preconditions": "Verified isolated Greenfield UUID; task-owned fixtures; credentials kept in memory",
+    "stepsExecuted": "Convert native SPDX through supported application endpoint",
+    "expected": "200 source-linked CycloneDX UUID",
+    "actual": {
+      "status": 200,
+      "data": {
+        "source_sbom_id": "696733d7-f87d-447a-9510-ffc9419344e9",
+        "converted_sbom_id": "c0373127-c275-48ec-86be-12e073f08f1e",
+        "source_format": "SPDX",
+        "target_format": "CycloneDX",
+        "status": "completed",
+        "conversion_status": "completed",
+        "enrichment_status": "pending",
+        "message": "Converted to CycloneDX. Lifecycle enrichment is running in background.",
+        "warnings": [],
+        "errors": [],
+        "conversion_report": {
+          "source_format": "SPDX",
+          "target_format": "CycloneDX",
+          "source_sbom_id": "696733d7-f87d-447a-9510-ffc9419344e9",
+          "package_count": 1,
+          "component_count": 2,
+          "mapped_relationships": 1,
+          "unmapped_relationships": 0,
+          "warnings": [],
+          "errors": [],
+          "unmapped_fields": [],
+          "component_mapping": {
+            "SPDXRef-Package-foo": "SPDXRef-Package-foo"
+          },
+          "relationship_mapping": [
+            {
+              "spdx_relationship_type": "DESCRIBES",
+              "source": "SPDXRef-DOCUMENT",
+              "target": "SPDXRef-Package-foo",
+              "mapped_to": "dependency"
+            }
+          ],
+          "converted_at": "2026-10-20T09:17:22+00:00",
+          "conversion_tool": "SBOM Analyzer"
+        }
+      },
+      "request_id": "09287e3230eb"
+    },
+    "result": "PASS",
+    "time": "2026-10-20T09:17:22.739423+00:00"
+  },
+  {
+    "id": "R3-CONVERSION-REFERENCES",
+    "role": "admin",
+    "preconditions": "Verified isolated Greenfield UUID; task-owned fixtures; credentials kept in memory",
+    "stepsExecuted": "Download converted artifact; inspect identity/dependency references",
+    "expected": "200 valid CycloneDX 1.6 and no dangling references",
+    "actual": {
+      "status": 200,
+      "format": "CycloneDX",
+      "specVersion": "1.6",
+      "componentCount": 1,
+      "dependencyCount": 1,
+      "referencesValid": true
+    },
+    "result": "PASS",
+    "time": "2026-10-20T09:17:22.780935+00:00"
+  },
+  {
+    "id": "R3-CONVERSION-ORIGINAL-PRESERVED",
+    "role": "admin",
+    "preconditions": "Verified isolated Greenfield UUID; task-owned fixtures; credentials kept in memory",
+    "stepsExecuted": "Download original before/after conversion",
+    "expected": "Byte-identical original SPDX",
+    "actual": {
+      "beforeSha256": "92c6658b52d4939c1c76830d56e43d702bc473a6b62b45dfdcaa44cc1d47142f",
+      "afterSha256": "92c6658b52d4939c1c76830d56e43d702bc473a6b62b45dfdcaa44cc1d47142f",
+      "sourceSha256": "59fd395387700447d0ef9a65dcd9b3d8d1bc6049cb87a76582eb36d59baf729d"
+    },
+    "result": "FAIL",
+    "time": "2026-10-20T09:17:22.812161+00:00"
+  },
+  {
+    "id": "R3-CONVERSION-WRONG-FORMAT",
+    "role": "admin",
+    "preconditions": "Verified isolated Greenfield UUID; task-owned fixtures; credentials kept in memory",
+    "stepsExecuted": "Attempt SPDX-only conversion on CycloneDX record",
+    "expected": "400",
+    "actual": {
+      "status": 400,
+      "data": {
+        "detail": "SBOM format is 'cyclonedx'; only SPDX SBOMs can be converted to CycloneDX."
+      },
+      "request_id": "f4acb84f346c"
+    },
+    "result": "PASS",
+    "time": "2026-10-20T09:17:22.844380+00:00"
+  },
+  {
+    "id": "R3-CONVERSION-VIEWER",
+    "role": "admin",
+    "preconditions": "Verified isolated Greenfield UUID; task-owned fixtures; credentials kept in memory",
+    "stepsExecuted": "Viewer attempts conversion",
+    "expected": "403",
+    "actual": {
+      "status": 403,
+      "data": {
+        "detail": "Insufficient permission"
+      },
+      "request_id": "8ec4a958d75b"
+    },
+    "result": "PASS",
+    "time": "2026-10-20T09:17:23.082558+00:00"
+  },
+  {
+    "id": "R3-CONVERSION-FOREIGN",
+    "role": "admin",
+    "preconditions": "Verified isolated Greenfield UUID; task-owned fixtures; credentials kept in memory",
+    "stepsExecuted": "Foreign tenant attempts known UUID conversion",
+    "expected": "404",
+    "actual": {
+      "status": 404,
+      "data": {
+        "detail": "Resource not found"
+      },
+      "request_id": "9869e342f340"
+    },
+    "result": "PASS",
+    "time": "2026-10-20T09:17:23.322807+00:00"
+  },
+  {
+    "id": "R3-SIGNATURE-IMPLEMENTATION-CONTRACT",
+    "role": "admin",
+    "preconditions": "Verified isolated Greenfield UUID; task-owned fixtures; credentials kept in memory",
+    "stepsExecuted": "Validate synthetic signature with explicit verify_signature=true; no global flag change",
+    "expected": "Actual stable E110 unimplemented contract; no successful cryptographic verification claim",
+    "actual": {
+      "status": 200,
+      "data": {
+        "id": "f035d3eb-045d-4283-96e0-c547fff712ec",
+        "workspace_id": "f035d3eb-045d-4283-96e0-c547fff712ec",
+        "validation_session_id": "f035d3eb-045d-4283-96e0-c547fff712ec",
+        "project_id": "93a61279-9e4f-4d5a-8680-4cd0f6eef88f",
+        "user_id": "admin@olympus.example.test",
+        "original_filename": "signed.cdx.json",
+        "sbom_name": "UAT R3 signature contract",
+        "sbom_type": null,
+        "content_type": "application/json",
+        "file_size_bytes": 214,
+        "sha256": "40a6793171a9917609c1f878952127a81750f85f42953fe6bcbb4de6904dc408",
+        "original_size_bytes": 214,
+        "original_sha256": "40a6793171a9917609c1f878952127a81750f85f42953fe6bcbb4de6904dc408",
+        "stored_size_bytes": 214,
+        "stored_sha256": "020e68e95488abe48e9c0bf84ca5b086be9a18b88c91f4ded005748dc04574b5",
+        "storage_backend": "db",
+        "detected_format": "cyclonedx_json",
+        "detected_version": "1.6",
+        "detected_spec_version": "1.6",
+        "detection_confidence": 0.99,
+        "detection_evidence": {
+          "evidence": [
+            "bomFormat=CycloneDX",
+            "components present"
+          ],
+          "warnings": []
+        },
+        "current_content": "{\"bomFormat\": \"CycloneDX\", \"specVersion\": \"1.6\", \"version\": 1, \"signature\": {\"algorithm\": \"RS256\", \"value\": \"AA\"}, \"components\": [{\"type\": \"library\", \"bom-ref\": \"a\", \"name\": \"synthetic-signature\", \"version\": \"1\"}]}",
+        "content_inline_truncated": false,
+        "validation_status": "failed",
+        "latest_error_report": {
+          "entries": [
+            {
+              "code": "SBOM_VAL_E025_SCHEMA_VIOLATION",
+              "severity": "error",
+              "stage": "schema",
+              "path": "",
+              "message": "Internal validator error in stage 'schema'.",
+              "remediation": "This is a bug in the validator, not your SBOM. Please re-upload; if the problem persists, contact support.",
+              "spec_reference": null,
+              "stage_number": 3,
+              "can_ai_fix": true
+            }
+          ],
+          "truncated": false,
+          "failed_stage": "schema",
+          "error_count": 1,
+          "warning_count": 0,
+          "info_count": 0,
+          "http_status": 422,
+          "status": "failed"
+        },
+        "validation_errors": [
+          {
+            "code": "SBOM_VAL_E025_SCHEMA_VIOLATION",
+            "severity": "error",
+            "stage": "schema",
+            "path": "",
+            "message": "Internal validator error in stage 'schema'.",
+            "remediation": "This is a bug in the validator, not your SBOM. Please re-upload; if the problem persists, contact support.",
+            "spec_reference": null,
+            "stage_number": 3,
+            "can_ai_fix": true
+          }
+        ],
+        "validation_warnings": [],
+        "stage_results": {
+          "entries": [
+            {
+              "code": "SBOM_VAL_E025_SCHEMA_VIOLATION",
+              "severity": "error",
+              "stage": "schema",
+              "path": "",
+              "message": "Internal validator error in stage 'schema'.",
+              "remediation": "This is a bug in the validator, not your SBOM. Please re-upload; if the problem persists, contact support.",
+              "spec_reference": null,
+              "stage_number": 3,
+              "can_ai_fix": true
+            }
+          ],
+          "truncated": false,
+          "failed_stage": "schema",
+          "error_count": 1,
+          "warning_count": 0,
+          "info_count": 0,
+          "http_status": 422,
+          "status": "failed"
+        },
+        "total_lines": 1,
+        "is_large_file": false,
+        "full_editor_allowed": true,
+        "can_edit": true,
+        "can_ai_fix": true,
+        "security_blocked_reason": null,
+        "created_at": "2026-10-20T09:17:23+00:00",
+        "updated_at": "2026-10-20T09:17:23+00:00",
+        "expires_at": "2026-10-27T09:17:23+00:00",
+        "imported_sbom_id": null,
+        "repair_workspace_url": "/repair/f035d3eb-045d-4283-96e0-c547fff712ec"
+      },
+      "request_id": "3f17523af0a4"
+    },
+    "result": "FAIL",
+    "time": "2026-10-20T09:17:23.461841+00:00"
+  }
+]

@@ -1,0 +1,32 @@
+[
+  {
+    "id": "R2-BROWSER-TLS",
+    "role": "admin",
+    "preconditions": "Clean Chrome context; real Native BFF authentication fixture; TLS validation enabled",
+    "steps": "R2-BROWSER-TLS",
+    "expected": "Actual trusted HTTPS handshake; no TLS bypass",
+    "actual": {
+      "https": "https:",
+      "certificate": {
+        "issuer": "mkcert ferozebasha@Ferozes-MacBook-Air.local",
+        "protocol": "TLS 1.3",
+        "subjectName": "",
+        "validFrom": 1792421098,
+        "validTo": 1863528298
+      },
+      "ignoreHTTPSErrors": false
+    },
+    "result": "PASS"
+  },
+  {
+    "id": "R2-DASHBOARD-EXECUTION",
+    "role": "admin",
+    "preconditions": "Clean Chrome context; real Native BFF authentication fixture; TLS validation enabled",
+    "steps": "R2-DASHBOARD-EXECUTION",
+    "expected": "Complete browser dashboard acceptance",
+    "actual": {
+      "message": "locator.click: Timeout 60000ms exceeded.\nCall log:\n\u001b[2m  - waiting for getByRole('region', { name: 'Dashboard filters' }).getByRole('button', { name: /^Project: / })\u001b[22m\n\u001b[2m    - waiting for \"https://localhost:13000/api/auth/login?returnTo=%2F\" navigation to finish...\u001b[22m\n\u001b[2m    - navigated to \"https://localhost:13000/native-sign-in\"\u001b[22m\n"
+    },
+    "result": "FAIL"
+  }
+]

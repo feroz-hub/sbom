@@ -1,0 +1,22 @@
+[
+  {
+    "id": "R1-DASHBOARD-UI-ERROR",
+    "role": "admin",
+    "expected": "Complete dependent dashboard browser scenarios",
+    "actual": {
+      "error": "page.waitForResponse: Timeout 40000ms exceeded while waiting for event \"response\""
+    },
+    "result": "FAIL",
+    "time": "2026-10-20T05:09:03.561Z"
+  },
+  {
+    "id": "R1-BROWSER-EXECUTION",
+    "role": "admin",
+    "expected": "Complete browser scenario",
+    "actual": {
+      "error": "page.waitForResponse: Timeout 40000ms exceeded while waiting for event \"response\""
+    },
+    "result": "FAIL",
+    "time": "2026-10-20T05:09:11.922Z"
+  }
+]

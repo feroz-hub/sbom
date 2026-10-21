@@ -1,0 +1,24 @@
+[
+  {
+    "id": "R3-UI-REPAIR-QUARANTINE-reject",
+    "role": "admin",
+    "stepsExecuted": "Prepare task-owned malformed fixture through authenticated live API",
+    "expected": "422; no accepted source",
+    "actual": {
+      "status": 422,
+      "session_id": "57f7ba74-606d-4ffa-9acf-ed18d74bfdec"
+    },
+    "result": "PASS"
+  },
+  {
+    "id": "R3-UI-REPAIR-EXECUTION",
+    "role": "admin",
+    "stepsExecuted": "Execute actual proposal/review/decision UI",
+    "expected": "Complete workflow",
+    "actual": {
+      "error": "page.goto: Timeout 60000ms exceeded.\nCall log:\n\u001b[2m  - navigating to \"https://localhost:13000/repair/57f7ba74-606d-4ffa-9acf-ed18d74bfdec\", waiting until \"domcontentloaded\"\u001b[22m\n",
+      "path": "/"
+    },
+    "result": "FAIL"
+  }
+]

@@ -1,0 +1,521 @@
+[
+  {
+    "id": "R3-REPORT-ANALYSIS",
+    "role": "disposable tenant admin",
+    "preconditions": "Verified isolated Greenfield UUID; task-owned fixtures; credentials kept in memory",
+    "stepsExecuted": "Analyze new owned scope with real OSV",
+    "expected": "200 terminal completion",
+    "actual": {
+      "status": 200,
+      "terminalComplete": true
+    },
+    "result": "PASS",
+    "time": "2026-10-20T09:12:07.624587+00:00"
+  },
+  {
+    "id": "R3-REPORT-SCHEDULE-CREATE",
+    "role": "disposable tenant admin",
+    "preconditions": "Verified isolated Greenfield UUID; task-owned fixtures; credentials kept in memory",
+    "stepsExecuted": "Create bounded owned enabled recurring daily report",
+    "expected": "201",
+    "actual": {
+      "status": 201,
+      "data": {
+        "scope": "SBOM",
+        "project_id": null,
+        "product_id": null,
+        "sbom_id": "81375cbe-7862-4815-ac14-105ea619ed82",
+        "cadence": "DAILY",
+        "parts": [
+          "A",
+          "B"
+        ],
+        "formats": [
+          "PDF",
+          "XLSX"
+        ],
+        "severity_floor": "ALL",
+        "baseline_mode": "FIRST_RUN_OF_SBOM",
+        "cross_version_target": "PARENT",
+        "timezone": "UTC",
+        "suppress_when_unchanged": false,
+        "enabled": true,
+        "id": 10,
+        "tenant_id": "8185dd19-fdf8-463e-9244-af19ed8367dd",
+        "iam_user_id": 14,
+        "created_on": "2026-10-20T09:12:07.659278+00:00",
+        "modified_on": null,
+        "last_delivered_at": null
+      },
+      "request_id": "4d28b27ec87e"
+    },
+    "result": "PASS",
+    "time": "2026-10-20T09:12:07.682242+00:00"
+  },
+  {
+    "id": "R3-REPORT-RETRY-PENDING",
+    "role": "disposable tenant admin",
+    "preconditions": "Verified isolated Greenfield UUID; task-owned fixtures; credentials kept in memory",
+    "stepsExecuted": "Observe controlled first-send failure and durable delayed retry",
+    "expected": "PENDING with SMTP_UNAVAILABLE; no email yet",
+    "actual": {
+      "id": 7,
+      "subscription_id": 10,
+      "cycle_start": "2026-10-20T09:12:07.659278+00:00",
+      "cycle_end": "2026-10-21T00:00:00+00:00",
+      "status": "PENDING",
+      "error_code": "SMTP_UNAVAILABLE",
+      "attempt_count": 1,
+      "sbom_count": 1,
+      "run_count": 1,
+      "sent_at": null,
+      "created_on": "2026-10-20T09:12:15.179392+00:00",
+      "artifacts": [
+        {
+          "id": 13,
+          "filename": "sbom-security-digest.pdf",
+          "kind": "PDF",
+          "size_bytes": 6217,
+          "expires_at": "2027-01-18T09:12:15.351592+00:00"
+        },
+        {
+          "id": 14,
+          "filename": "sbom-security-digest.xlsx",
+          "kind": "XLSX",
+          "size_bytes": 9080,
+          "expires_at": "2027-01-18T09:12:15.355479+00:00"
+        },
+        {
+          "id": 15,
+          "filename": "sbom-security-digest.json",
+          "kind": "JSON",
+          "size_bytes": 8844,
+          "expires_at": "2027-01-18T09:12:15.356493+00:00"
+        }
+      ]
+    },
+    "result": "PASS",
+    "time": "2026-10-20T09:12:16.188023+00:00"
+  },
+  {
+    "id": "UAT-REPORT-SCHEDULED-TRIGGER",
+    "role": "disposable tenant admin",
+    "preconditions": "Verified isolated Greenfield UUID; task-owned fixtures; credentials kept in memory",
+    "stepsExecuted": "Actual owned Beat dispatch \u2192 worker \u2192 controlled first failure \u2192 real Mailpit retry",
+    "expected": "SENT after two attempts and observed retry",
+    "actual": {
+      "delivery": {
+        "id": 7,
+        "subscription_id": 10,
+        "cycle_start": "2026-10-20T09:12:07.659278+00:00",
+        "cycle_end": "2026-10-21T00:00:00+00:00",
+        "status": "SENT",
+        "error_code": null,
+        "attempt_count": 2,
+        "sbom_count": 1,
+        "run_count": 1,
+        "sent_at": "2026-10-20T09:14:20.565572+00:00",
+        "created_on": "2026-10-20T09:12:15.179392+00:00",
+        "artifacts": [
+          {
+            "id": 13,
+            "filename": "sbom-security-digest.pdf",
+            "kind": "PDF",
+            "size_bytes": 6217,
+            "expires_at": "2027-01-18T09:12:15.351592+00:00"
+          },
+          {
+            "id": 14,
+            "filename": "sbom-security-digest.xlsx",
+            "kind": "XLSX",
+            "size_bytes": 9080,
+            "expires_at": "2027-01-18T09:12:15.355479+00:00"
+          },
+          {
+            "id": 15,
+            "filename": "sbom-security-digest.json",
+            "kind": "JSON",
+            "size_bytes": 8844,
+            "expires_at": "2027-01-18T09:12:15.356493+00:00"
+          },
+          {
+            "id": 16,
+            "filename": "sbom-security-digest.pdf",
+            "kind": "PDF",
+            "size_bytes": 6220,
+            "expires_at": "2027-01-18T09:14:20.273982+00:00"
+          },
+          {
+            "id": 17,
+            "filename": "sbom-security-digest.xlsx",
+            "kind": "XLSX",
+            "size_bytes": 9082,
+            "expires_at": "2027-01-18T09:14:20.276805+00:00"
+          },
+          {
+            "id": 18,
+            "filename": "sbom-security-digest.json",
+            "kind": "JSON",
+            "size_bytes": 8844,
+            "expires_at": "2027-01-18T09:14:20.278664+00:00"
+          }
+        ]
+      },
+      "elapsedSeconds": 133.56,
+      "controlledTickClock": true,
+      "controlledFirstSendFailure": true
+    },
+    "result": "PASS",
+    "time": "2026-10-20T09:14:21.388881+00:00"
+  },
+  {
+    "id": "R3-REPORT-CYCLE-DEDUP",
+    "role": "disposable tenant admin",
+    "preconditions": "Verified isolated Greenfield UUID; task-owned fixtures; credentials kept in memory",
+    "stepsExecuted": "Allow another Beat tick after completed cycle",
+    "expected": "Exactly one cycle and two attempts, one successful SMTP delivery",
+    "actual": {
+      "deliveries": [
+        {
+          "id": 7,
+          "subscription_id": 10,
+          "cycle_start": "2026-10-20T09:12:07.659278+00:00",
+          "cycle_end": "2026-10-21T00:00:00+00:00",
+          "status": "SENT",
+          "error_code": null,
+          "attempt_count": 2,
+          "sbom_count": 1,
+          "run_count": 1,
+          "sent_at": "2026-10-20T09:14:20.565572+00:00",
+          "created_on": "2026-10-20T09:12:15.179392+00:00",
+          "artifacts": [
+            {
+              "id": 13,
+              "filename": "sbom-security-digest.pdf",
+              "kind": "PDF",
+              "size_bytes": 6217,
+              "expires_at": "2027-01-18T09:12:15.351592+00:00"
+            },
+            {
+              "id": 14,
+              "filename": "sbom-security-digest.xlsx",
+              "kind": "XLSX",
+              "size_bytes": 9080,
+              "expires_at": "2027-01-18T09:12:15.355479+00:00"
+            },
+            {
+              "id": 15,
+              "filename": "sbom-security-digest.json",
+              "kind": "JSON",
+              "size_bytes": 8844,
+              "expires_at": "2027-01-18T09:12:15.356493+00:00"
+            },
+            {
+              "id": 16,
+              "filename": "sbom-security-digest.pdf",
+              "kind": "PDF",
+              "size_bytes": 6220,
+              "expires_at": "2027-01-18T09:14:20.273982+00:00"
+            },
+            {
+              "id": 17,
+              "filename": "sbom-security-digest.xlsx",
+              "kind": "XLSX",
+              "size_bytes": 9082,
+              "expires_at": "2027-01-18T09:14:20.276805+00:00"
+            },
+            {
+              "id": 18,
+              "filename": "sbom-security-digest.json",
+              "kind": "JSON",
+              "size_bytes": 8844,
+              "expires_at": "2027-01-18T09:14:20.278664+00:00"
+            }
+          ]
+        }
+      ]
+    },
+    "result": "PASS",
+    "time": "2026-10-20T09:14:27.458491+00:00"
+  },
+  {
+    "id": "R3-REPORT-MAILPIT",
+    "role": "disposable tenant admin",
+    "preconditions": "Verified isolated Greenfield UUID; task-owned fixtures; credentials kept in memory",
+    "stepsExecuted": "Read Mailpit metadata for unique owned recipient",
+    "expected": "Exactly one report message",
+    "actual": {
+      "matchingReportMessages": 0,
+      "subjects": []
+    },
+    "result": "FAIL",
+    "time": "2026-10-20T09:14:27.467911+00:00"
+  },
+  {
+    "id": "R3-REPORT-ARTIFACT-PDF",
+    "role": "disposable tenant admin",
+    "preconditions": "Verified isolated Greenfield UUID; task-owned fixtures; credentials kept in memory",
+    "stepsExecuted": "Download actual generated retained report",
+    "expected": "200 valid PDF artifact",
+    "actual": {
+      "status": 200,
+      "format": "PDF",
+      "bytes": 6217,
+      "sha256": "daf9480364ba2463d485d23d2364122044077da2eadae1714bd26308e1413cb6",
+      "file": "scheduled-artifact-13.pdf"
+    },
+    "result": "PASS",
+    "time": "2026-10-20T09:14:27.529085+00:00"
+  },
+  {
+    "id": "R3-REPORT-ARTIFACT-FOREIGN-PDF",
+    "role": "disposable tenant admin",
+    "preconditions": "Verified isolated Greenfield UUID; task-owned fixtures; credentials kept in memory",
+    "stepsExecuted": "Foreign tenant requests known owned artifact",
+    "expected": "404",
+    "actual": {
+      "status": 404,
+      "data": {
+        "detail": {
+          "code": "REPORT_ARTIFACT_NOT_FOUND",
+          "message": "Artifact not found."
+        }
+      },
+      "request_id": "e9d8186375de"
+    },
+    "result": "PASS",
+    "time": "2026-10-20T09:14:27.887459+00:00"
+  },
+  {
+    "id": "R3-REPORT-ARTIFACT-XLSX",
+    "role": "disposable tenant admin",
+    "preconditions": "Verified isolated Greenfield UUID; task-owned fixtures; credentials kept in memory",
+    "stepsExecuted": "Download actual generated retained report",
+    "expected": "200 valid XLSX artifact",
+    "actual": {
+      "status": 200,
+      "format": "XLSX",
+      "bytes": 9080,
+      "sha256": "3abe865f43baec51bf8c841ff812147dd8ef7f86aa750cc31b26b89b0cbb1aab",
+      "file": "scheduled-artifact-14.xlsx"
+    },
+    "result": "PASS",
+    "time": "2026-10-20T09:14:27.978689+00:00"
+  },
+  {
+    "id": "R3-REPORT-ARTIFACT-FOREIGN-XLSX",
+    "role": "disposable tenant admin",
+    "preconditions": "Verified isolated Greenfield UUID; task-owned fixtures; credentials kept in memory",
+    "stepsExecuted": "Foreign tenant requests known owned artifact",
+    "expected": "404",
+    "actual": {
+      "status": 404,
+      "data": {
+        "detail": {
+          "code": "REPORT_ARTIFACT_NOT_FOUND",
+          "message": "Artifact not found."
+        }
+      },
+      "request_id": "19a4b6a581e3"
+    },
+    "result": "PASS",
+    "time": "2026-10-20T09:14:28.016717+00:00"
+  },
+  {
+    "id": "R3-REPORT-ARTIFACT-JSON",
+    "role": "disposable tenant admin",
+    "preconditions": "Verified isolated Greenfield UUID; task-owned fixtures; credentials kept in memory",
+    "stepsExecuted": "Download actual generated retained report",
+    "expected": "200 valid JSON artifact",
+    "actual": {
+      "status": 200,
+      "format": "JSON",
+      "bytes": 8844,
+      "sha256": "c407300684279a529cf6a079b542eb2cea6bf7c6387df4a866fb8b6da3ec9693",
+      "file": "scheduled-artifact-15.json"
+    },
+    "result": "PASS",
+    "time": "2026-10-20T09:14:28.104772+00:00"
+  },
+  {
+    "id": "R3-REPORT-ARTIFACT-FOREIGN-JSON",
+    "role": "disposable tenant admin",
+    "preconditions": "Verified isolated Greenfield UUID; task-owned fixtures; credentials kept in memory",
+    "stepsExecuted": "Foreign tenant requests known owned artifact",
+    "expected": "404",
+    "actual": {
+      "status": 404,
+      "data": {
+        "detail": {
+          "code": "REPORT_ARTIFACT_NOT_FOUND",
+          "message": "Artifact not found."
+        }
+      },
+      "request_id": "7c88cb699aad"
+    },
+    "result": "PASS",
+    "time": "2026-10-20T09:14:28.129553+00:00"
+  },
+  {
+    "id": "R3-REPORT-ARTIFACT-PDF",
+    "role": "disposable tenant admin",
+    "preconditions": "Verified isolated Greenfield UUID; task-owned fixtures; credentials kept in memory",
+    "stepsExecuted": "Download actual generated retained report",
+    "expected": "200 valid PDF artifact",
+    "actual": {
+      "status": 200,
+      "format": "PDF",
+      "bytes": 6220,
+      "sha256": "74e6ffd6fb7f814c7899a8a717e963938aa757f4076f4ae827ebe5639fe455d3",
+      "file": "scheduled-artifact-16.pdf"
+    },
+    "result": "PASS",
+    "time": "2026-10-20T09:14:28.200819+00:00"
+  },
+  {
+    "id": "R3-REPORT-ARTIFACT-FOREIGN-PDF",
+    "role": "disposable tenant admin",
+    "preconditions": "Verified isolated Greenfield UUID; task-owned fixtures; credentials kept in memory",
+    "stepsExecuted": "Foreign tenant requests known owned artifact",
+    "expected": "404",
+    "actual": {
+      "status": 404,
+      "data": {
+        "detail": {
+          "code": "REPORT_ARTIFACT_NOT_FOUND",
+          "message": "Artifact not found."
+        }
+      },
+      "request_id": "0e165b9eeb9f"
+    },
+    "result": "PASS",
+    "time": "2026-10-20T09:14:28.240529+00:00"
+  },
+  {
+    "id": "R3-REPORT-ARTIFACT-XLSX",
+    "role": "disposable tenant admin",
+    "preconditions": "Verified isolated Greenfield UUID; task-owned fixtures; credentials kept in memory",
+    "stepsExecuted": "Download actual generated retained report",
+    "expected": "200 valid XLSX artifact",
+    "actual": {
+      "status": 200,
+      "format": "XLSX",
+      "bytes": 9082,
+      "sha256": "79551afcd940c01289ba4665ac83d4169d7bc96aa77c4db5dcd768e53c136a0a",
+      "file": "scheduled-artifact-17.xlsx"
+    },
+    "result": "PASS",
+    "time": "2026-10-20T09:14:28.282940+00:00"
+  },
+  {
+    "id": "R3-REPORT-ARTIFACT-FOREIGN-XLSX",
+    "role": "disposable tenant admin",
+    "preconditions": "Verified isolated Greenfield UUID; task-owned fixtures; credentials kept in memory",
+    "stepsExecuted": "Foreign tenant requests known owned artifact",
+    "expected": "404",
+    "actual": {
+      "status": 404,
+      "data": {
+        "detail": {
+          "code": "REPORT_ARTIFACT_NOT_FOUND",
+          "message": "Artifact not found."
+        }
+      },
+      "request_id": "99528502943d"
+    },
+    "result": "PASS",
+    "time": "2026-10-20T09:14:28.306386+00:00"
+  },
+  {
+    "id": "R3-REPORT-ARTIFACT-JSON",
+    "role": "disposable tenant admin",
+    "preconditions": "Verified isolated Greenfield UUID; task-owned fixtures; credentials kept in memory",
+    "stepsExecuted": "Download actual generated retained report",
+    "expected": "200 valid JSON artifact",
+    "actual": {
+      "status": 200,
+      "format": "JSON",
+      "bytes": 8844,
+      "sha256": "d32a1f1875f71add996105dcca220f7055cb5f1e91783fdf7a0d0a489363974b",
+      "file": "scheduled-artifact-18.json"
+    },
+    "result": "PASS",
+    "time": "2026-10-20T09:14:28.349300+00:00"
+  },
+  {
+    "id": "R3-REPORT-ARTIFACT-FOREIGN-JSON",
+    "role": "disposable tenant admin",
+    "preconditions": "Verified isolated Greenfield UUID; task-owned fixtures; credentials kept in memory",
+    "stepsExecuted": "Foreign tenant requests known owned artifact",
+    "expected": "404",
+    "actual": {
+      "status": 404,
+      "data": {
+        "detail": {
+          "code": "REPORT_ARTIFACT_NOT_FOUND",
+          "message": "Artifact not found."
+        }
+      },
+      "request_id": "c8f9f0189022"
+    },
+    "result": "PASS",
+    "time": "2026-10-20T09:14:28.372068+00:00"
+  },
+  {
+    "id": "R3-REPORT-PAUSE",
+    "role": "disposable tenant admin",
+    "preconditions": "Verified isolated Greenfield UUID; task-owned fixtures; credentials kept in memory",
+    "stepsExecuted": "Pause owned schedule before stopping control worker",
+    "expected": "200 disabled",
+    "actual": {
+      "status": 200,
+      "data": {
+        "scope": "SBOM",
+        "project_id": null,
+        "product_id": null,
+        "sbom_id": "81375cbe-7862-4815-ac14-105ea619ed82",
+        "cadence": "DAILY",
+        "parts": [
+          "A",
+          "B"
+        ],
+        "formats": [
+          "PDF",
+          "XLSX"
+        ],
+        "severity_floor": "ALL",
+        "baseline_mode": "FIRST_RUN_OF_SBOM",
+        "cross_version_target": "PARENT",
+        "timezone": "UTC",
+        "suppress_when_unchanged": false,
+        "enabled": false,
+        "id": 10,
+        "tenant_id": "8185dd19-fdf8-463e-9244-af19ed8367dd",
+        "iam_user_id": 14,
+        "created_on": "2026-10-20T09:12:07.659278+00:00",
+        "modified_on": "2026-10-20T09:14:28.397812+00:00",
+        "last_delivered_at": "2026-10-21T00:00:00+00:00"
+      },
+      "request_id": "0ecc1c0d6a09"
+    },
+    "result": "PASS",
+    "time": "2026-10-20T09:14:28.412433+00:00"
+  },
+  {
+    "id": "R3-REPORT-CLEANUP",
+    "role": "disposable tenant admin",
+    "preconditions": "Verified isolated Greenfield UUID; task-owned fixtures; credentials kept in memory",
+    "stepsExecuted": "Stop only owned worker/Beat, remove owned subscription, disable owned tenant",
+    "expected": "200 cleanup",
+    "actual": {
+      "status": 200,
+      "data": {
+        "tenant_id": "8185dd19-fdf8-463e-9244-af19ed8367dd",
+        "status": "DISABLED"
+      },
+      "request_id": "d9a3c1222ab5"
+    },
+    "result": "PASS",
+    "time": "2026-10-20T09:14:30.004379+00:00"
+  }
+]

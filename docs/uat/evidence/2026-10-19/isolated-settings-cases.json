@@ -1,0 +1,680 @@
+[
+  {
+    "id": "UAT-RESET-NO-ENUMERATION",
+    "module": "Native password recovery",
+    "role": "disposable tenant administrator / platform",
+    "preconditions": "Only tenant and initial administrator created by this UAT are changed; local Mailpit; six seeded accounts untouched",
+    "steps": "Request reset only for disposable account and guaranteed-unique nonexistent test address",
+    "expected": "Existing and unknown email return same generic reset response",
+    "actual": {
+      "status": 200,
+      "unknownStatus": 200,
+      "sameBody": true
+    },
+    "api": 200,
+    "status": "PASS",
+    "defect": null,
+    "time": "2026-10-19T18:09:20.367858+00:00"
+  },
+  {
+    "id": "UAT-RESET-CONSUME",
+    "module": "Native password recovery",
+    "role": "disposable tenant administrator / platform",
+    "preconditions": "Only tenant and initial administrator created by this UAT are changed; local Mailpit; six seeded accounts untouched",
+    "steps": "Consume reset token and generated password in memory; never record activation/reset URLs",
+    "expected": "Local Mailpit reset changes only disposable account password",
+    "actual": {
+      "status": 200,
+      "result": {
+        "success": true
+      },
+      "mailRecipient": "uat-tenant-admin-1792424703421@example.test"
+    },
+    "api": 200,
+    "status": "PASS",
+    "defect": null,
+    "time": "2026-10-19T18:09:24.662626+00:00"
+  },
+  {
+    "id": "UAT-RESET-SINGLE-USE",
+    "module": "Native password recovery",
+    "role": "disposable tenant administrator / platform",
+    "preconditions": "Only tenant and initial administrator created by this UAT are changed; local Mailpit; six seeded accounts untouched",
+    "steps": "Replay only consumed UAT reset token; assert server-side rejection",
+    "expected": "Consumed reset token cannot be reused",
+    "actual": {
+      "status": 400,
+      "data": {
+        "detail": "Reset link is invalid or unavailable"
+      },
+      "request_id": "13709e6c0ea1"
+    },
+    "api": 400,
+    "status": "PASS",
+    "defect": null,
+    "time": "2026-10-19T18:09:24.694318+00:00"
+  },
+  {
+    "id": "UAT-RESET-LOGIN",
+    "module": "Native password recovery",
+    "role": "disposable tenant administrator / platform",
+    "preconditions": "Only tenant and initial administrator created by this UAT are changed; local Mailpit; six seeded accounts untouched",
+    "steps": "Native Login with generated reset password; retain token only in memory",
+    "expected": "Disposable account authenticates using reset password",
+    "actual": {
+      "status": 200,
+      "tokenIssued": true
+    },
+    "api": 200,
+    "status": "PASS",
+    "defect": null,
+    "time": "2026-10-19T18:09:24.977306+00:00"
+  },
+  {
+    "id": "UAT-POLICY-PUBLISH-trust",
+    "module": "Advisor policy configuration",
+    "role": "disposable tenant administrator / platform",
+    "preconditions": "Only tenant and initial administrator created by this UAT are changed; local Mailpit; six seeded accounts untouched",
+    "steps": "Publish only in this UAT-created tenant; platform/Olympus policies remain unchanged",
+    "expected": "UAT administrator can publish a disabled isolated tenant policy version",
+    "actual": {
+      "status": 201,
+      "data": {
+        "version": {
+          "id": 1,
+          "policy_id": 1,
+          "kind": "TRUST",
+          "version": 1,
+          "status": "DISABLED",
+          "scope": "TENANT",
+          "rules": {},
+          "created_at": "2026-10-19T18:09:25.041282+00:00"
+        },
+        "kind": "TRUST",
+        "configured": false,
+        "effective": null,
+        "tenant_override": {
+          "id": 1,
+          "policy_id": 1,
+          "kind": "TRUST",
+          "version": 1,
+          "status": "DISABLED",
+          "scope": "TENANT",
+          "rules": {},
+          "created_at": "2026-10-19T18:09:25.041282+00:00"
+        },
+        "platform_default": null,
+        "row_version": 1
+      },
+      "request_id": "535be8ee996c"
+    },
+    "api": 201,
+    "status": "PASS",
+    "defect": null,
+    "time": "2026-10-19T18:09:25.114370+00:00"
+  },
+  {
+    "id": "UAT-POLICY-CONFLICT-trust",
+    "module": "Advisor policy configuration",
+    "role": "disposable tenant administrator / platform",
+    "preconditions": "Only tenant and initial administrator created by this UAT are changed; local Mailpit; six seeded accounts untouched",
+    "steps": "Retry original optimistic version after successful publication",
+    "expected": "Stale policy version is rejected HTTP 409",
+    "actual": {
+      "status": 409,
+      "data": {
+        "detail": {
+          "code": "POLICY_CONFLICT",
+          "message": "Policy changed since it was read",
+          "row_version": 1
+        }
+      },
+      "request_id": "0e6ef0486d59"
+    },
+    "api": 409,
+    "status": "PASS",
+    "defect": null,
+    "time": "2026-10-19T18:09:25.139108+00:00"
+  },
+  {
+    "id": "UAT-POLICY-HISTORY-trust",
+    "module": "Advisor policy configuration",
+    "role": "disposable tenant administrator / platform",
+    "preconditions": "Only tenant and initial administrator created by this UAT are changed; local Mailpit; six seeded accounts untouched",
+    "steps": "Read actual version history in UAT tenant",
+    "expected": "Append-only policy history contains actual published version",
+    "actual": {
+      "status": 500,
+      "data": {
+        "detail": "Unresolvable public resource reference"
+      },
+      "request_id": "8f7ac6766b8e"
+    },
+    "api": 500,
+    "status": "FAIL",
+    "defect": "UAT-DEF-007",
+    "time": "2026-10-19T18:09:25.161196+00:00"
+  },
+  {
+    "id": "UAT-POLICY-INHERIT-trust",
+    "module": "Advisor policy configuration",
+    "role": "disposable tenant administrator / platform",
+    "preconditions": "Only tenant and initial administrator created by this UAT are changed; local Mailpit; six seeded accounts untouched",
+    "steps": "Append INHERIT version only to UAT tenant; preserve immutable audit history; latest override version is retained with INHERIT while effective policy follows platform",
+    "expected": "UAT tenant can return to inherited policy configuration",
+    "actual": {
+      "status": 201,
+      "data": {
+        "version": {
+          "id": 2,
+          "policy_id": 1,
+          "kind": "TRUST",
+          "version": 2,
+          "status": "INHERIT",
+          "scope": "TENANT",
+          "rules": {},
+          "created_at": "2026-10-19T18:09:25.202705+00:00"
+        },
+        "kind": "TRUST",
+        "configured": false,
+        "effective": null,
+        "tenant_override": {
+          "id": 2,
+          "policy_id": 1,
+          "kind": "TRUST",
+          "version": 2,
+          "status": "INHERIT",
+          "scope": "TENANT",
+          "rules": {},
+          "created_at": "2026-10-19T18:09:25.202705+00:00"
+        },
+        "platform_default": null,
+        "row_version": 2
+      },
+      "request_id": "b4cd2f06859c"
+    },
+    "api": 201,
+    "status": "PASS",
+    "defect": null,
+    "time": "2026-10-19T18:09:25.230203+00:00"
+  },
+  {
+    "id": "UAT-POLICY-PUBLISH-accepted-risk",
+    "module": "Advisor policy configuration",
+    "role": "disposable tenant administrator / platform",
+    "preconditions": "Only tenant and initial administrator created by this UAT are changed; local Mailpit; six seeded accounts untouched",
+    "steps": "Publish only in this UAT-created tenant; platform/Olympus policies remain unchanged",
+    "expected": "UAT administrator can publish a disabled isolated tenant policy version",
+    "actual": {
+      "status": 201,
+      "data": {
+        "version": {
+          "id": 3,
+          "policy_id": 2,
+          "kind": "ACCEPTED_RISK",
+          "version": 1,
+          "status": "DISABLED",
+          "scope": "TENANT",
+          "rules": {},
+          "created_at": "2026-10-19T18:09:25.264202+00:00"
+        },
+        "kind": "ACCEPTED_RISK",
+        "configured": false,
+        "effective": null,
+        "tenant_override": {
+          "id": 3,
+          "policy_id": 2,
+          "kind": "ACCEPTED_RISK",
+          "version": 1,
+          "status": "DISABLED",
+          "scope": "TENANT",
+          "rules": {},
+          "created_at": "2026-10-19T18:09:25.264202+00:00"
+        },
+        "platform_default": null,
+        "row_version": 1
+      },
+      "request_id": "24f5af41dfa8"
+    },
+    "api": 201,
+    "status": "PASS",
+    "defect": null,
+    "time": "2026-10-19T18:09:25.288857+00:00"
+  },
+  {
+    "id": "UAT-POLICY-CONFLICT-accepted-risk",
+    "module": "Advisor policy configuration",
+    "role": "disposable tenant administrator / platform",
+    "preconditions": "Only tenant and initial administrator created by this UAT are changed; local Mailpit; six seeded accounts untouched",
+    "steps": "Retry original optimistic version after successful publication",
+    "expected": "Stale policy version is rejected HTTP 409",
+    "actual": {
+      "status": 409,
+      "data": {
+        "detail": {
+          "code": "POLICY_CONFLICT",
+          "message": "Policy changed since it was read",
+          "row_version": 1
+        }
+      },
+      "request_id": "73cab2d62ed8"
+    },
+    "api": 409,
+    "status": "PASS",
+    "defect": null,
+    "time": "2026-10-19T18:09:25.310554+00:00"
+  },
+  {
+    "id": "UAT-POLICY-HISTORY-accepted-risk",
+    "module": "Advisor policy configuration",
+    "role": "disposable tenant administrator / platform",
+    "preconditions": "Only tenant and initial administrator created by this UAT are changed; local Mailpit; six seeded accounts untouched",
+    "steps": "Read actual version history in UAT tenant",
+    "expected": "Append-only policy history contains actual published version",
+    "actual": {
+      "status": 500,
+      "data": {
+        "detail": "Unresolvable public resource reference"
+      },
+      "request_id": "8c98bc6cca5b"
+    },
+    "api": 500,
+    "status": "FAIL",
+    "defect": "UAT-DEF-007",
+    "time": "2026-10-19T18:09:25.330889+00:00"
+  },
+  {
+    "id": "UAT-POLICY-INHERIT-accepted-risk",
+    "module": "Advisor policy configuration",
+    "role": "disposable tenant administrator / platform",
+    "preconditions": "Only tenant and initial administrator created by this UAT are changed; local Mailpit; six seeded accounts untouched",
+    "steps": "Append INHERIT version only to UAT tenant; preserve immutable audit history; latest override version is retained with INHERIT while effective policy follows platform",
+    "expected": "UAT tenant can return to inherited policy configuration",
+    "actual": {
+      "status": 201,
+      "data": {
+        "version": {
+          "id": 4,
+          "policy_id": 2,
+          "kind": "ACCEPTED_RISK",
+          "version": 2,
+          "status": "INHERIT",
+          "scope": "TENANT",
+          "rules": {},
+          "created_at": "2026-10-19T18:09:25.369748+00:00"
+        },
+        "kind": "ACCEPTED_RISK",
+        "configured": false,
+        "effective": null,
+        "tenant_override": {
+          "id": 4,
+          "policy_id": 2,
+          "kind": "ACCEPTED_RISK",
+          "version": 2,
+          "status": "INHERIT",
+          "scope": "TENANT",
+          "rules": {},
+          "created_at": "2026-10-19T18:09:25.369748+00:00"
+        },
+        "platform_default": null,
+        "row_version": 2
+      },
+      "request_id": "1de4eb31f9f3"
+    },
+    "api": 201,
+    "status": "PASS",
+    "defect": null,
+    "time": "2026-10-19T18:09:25.401620+00:00"
+  },
+  {
+    "id": "UAT-POLICY-PUBLISH-scoring",
+    "module": "Advisor policy configuration",
+    "role": "disposable tenant administrator / platform",
+    "preconditions": "Only tenant and initial administrator created by this UAT are changed; local Mailpit; six seeded accounts untouched",
+    "steps": "Publish only in this UAT-created tenant; platform/Olympus policies remain unchanged",
+    "expected": "UAT administrator can publish a disabled isolated tenant policy version",
+    "actual": {
+      "status": 201,
+      "data": {
+        "version": {
+          "id": 5,
+          "policy_id": 3,
+          "kind": "SCORING",
+          "version": 1,
+          "status": "DISABLED",
+          "scope": "TENANT",
+          "rules": {},
+          "created_at": "2026-10-19T18:09:25.440283+00:00"
+        },
+        "kind": "SCORING",
+        "configured": false,
+        "effective": null,
+        "tenant_override": {
+          "id": 5,
+          "policy_id": 3,
+          "kind": "SCORING",
+          "version": 1,
+          "status": "DISABLED",
+          "scope": "TENANT",
+          "rules": {},
+          "created_at": "2026-10-19T18:09:25.440283+00:00"
+        },
+        "platform_default": null,
+        "row_version": 1
+      },
+      "request_id": "da8f42cbe601"
+    },
+    "api": 201,
+    "status": "PASS",
+    "defect": null,
+    "time": "2026-10-19T18:09:25.464830+00:00"
+  },
+  {
+    "id": "UAT-POLICY-CONFLICT-scoring",
+    "module": "Advisor policy configuration",
+    "role": "disposable tenant administrator / platform",
+    "preconditions": "Only tenant and initial administrator created by this UAT are changed; local Mailpit; six seeded accounts untouched",
+    "steps": "Retry original optimistic version after successful publication",
+    "expected": "Stale policy version is rejected HTTP 409",
+    "actual": {
+      "status": 409,
+      "data": {
+        "detail": {
+          "code": "POLICY_CONFLICT",
+          "message": "Policy changed since it was read",
+          "row_version": 1
+        }
+      },
+      "request_id": "3f492bf1e175"
+    },
+    "api": 409,
+    "status": "PASS",
+    "defect": null,
+    "time": "2026-10-19T18:09:25.489094+00:00"
+  },
+  {
+    "id": "UAT-POLICY-HISTORY-scoring",
+    "module": "Advisor policy configuration",
+    "role": "disposable tenant administrator / platform",
+    "preconditions": "Only tenant and initial administrator created by this UAT are changed; local Mailpit; six seeded accounts untouched",
+    "steps": "Read actual version history in UAT tenant",
+    "expected": "Append-only policy history contains actual published version",
+    "actual": {
+      "status": 500,
+      "data": {
+        "detail": "Unresolvable public resource reference"
+      },
+      "request_id": "4ffa41c1be7c"
+    },
+    "api": 500,
+    "status": "FAIL",
+    "defect": "UAT-DEF-007",
+    "time": "2026-10-19T18:09:25.513189+00:00"
+  },
+  {
+    "id": "UAT-POLICY-INHERIT-scoring",
+    "module": "Advisor policy configuration",
+    "role": "disposable tenant administrator / platform",
+    "preconditions": "Only tenant and initial administrator created by this UAT are changed; local Mailpit; six seeded accounts untouched",
+    "steps": "Append INHERIT version only to UAT tenant; preserve immutable audit history; latest override version is retained with INHERIT while effective policy follows platform",
+    "expected": "UAT tenant can return to inherited policy configuration",
+    "actual": {
+      "status": 201,
+      "data": {
+        "version": {
+          "id": 6,
+          "policy_id": 3,
+          "kind": "SCORING",
+          "version": 2,
+          "status": "INHERIT",
+          "scope": "TENANT",
+          "rules": {},
+          "created_at": "2026-10-19T18:09:25.553062+00:00"
+        },
+        "kind": "SCORING",
+        "configured": false,
+        "effective": null,
+        "tenant_override": {
+          "id": 6,
+          "policy_id": 3,
+          "kind": "SCORING",
+          "version": 2,
+          "status": "INHERIT",
+          "scope": "TENANT",
+          "rules": {},
+          "created_at": "2026-10-19T18:09:25.553062+00:00"
+        },
+        "platform_default": null,
+        "row_version": 2
+      },
+      "request_id": "91a21d6f1d9c"
+    },
+    "api": 201,
+    "status": "PASS",
+    "defect": null,
+    "time": "2026-10-19T18:09:25.569360+00:00"
+  },
+  {
+    "id": "UAT-LIFECYCLE-CONFIG-OVERRIDE",
+    "module": "Lifecycle provider configuration",
+    "role": "disposable tenant administrator / platform",
+    "preconditions": "Only tenant and initial administrator created by this UAT are changed; local Mailpit; six seeded accounts untouched",
+    "steps": "Save UAT tenant override without credentials or external provider invocation",
+    "expected": "Isolated tenant override disables only its provider configuration",
+    "actual": {
+      "provider_key": "endoflife_date",
+      "enabled": false,
+      "source": "TENANT_OVERRIDE",
+      "override_enabled": true,
+      "priority": 30,
+      "status": 200
+    },
+    "api": 200,
+    "status": "PASS",
+    "defect": null,
+    "time": "2026-10-19T18:09:25.736373+00:00"
+  },
+  {
+    "id": "UAT-LIFECYCLE-CONFIG-VALIDATION",
+    "module": "Lifecycle provider configuration",
+    "role": "disposable tenant administrator / platform",
+    "preconditions": "Only tenant and initial administrator created by this UAT are changed; local Mailpit; six seeded accounts untouched",
+    "steps": "Submit invalid timeout only in UAT tenant",
+    "expected": "Out-of-range provider timeout rejected HTTP 422",
+    "actual": {
+      "status": 422,
+      "data": {
+        "detail": [
+          {
+            "type": "greater_than_equal",
+            "loc": [
+              "body",
+              "timeout_seconds"
+            ],
+            "msg": "Input should be greater than or equal to 1",
+            "input": 0,
+            "ctx": {
+              "ge": 1
+            }
+          }
+        ]
+      },
+      "request_id": "b752ad386492"
+    },
+    "api": 422,
+    "status": "PASS",
+    "defect": null,
+    "time": "2026-10-19T18:09:25.754622+00:00"
+  },
+  {
+    "id": "UAT-LIFECYCLE-CONFIG-RESET",
+    "module": "Lifecycle provider configuration",
+    "role": "disposable tenant administrator / platform",
+    "preconditions": "Only tenant and initial administrator created by this UAT are changed; local Mailpit; six seeded accounts untouched",
+    "steps": "Reset newly created override to inherited provider settings",
+    "expected": "Remove only UAT-created override HTTP 204",
+    "actual": {
+      "status": 204,
+      "data": null,
+      "request_id": "46f9ae01d782"
+    },
+    "api": 204,
+    "status": "PASS",
+    "defect": null,
+    "time": "2026-10-19T18:09:25.794854+00:00"
+  },
+  {
+    "id": "UAT-LIFECYCLE-CONFIG-INHERITED",
+    "module": "Lifecycle provider configuration",
+    "role": "disposable tenant administrator / platform",
+    "preconditions": "Only tenant and initial administrator created by this UAT are changed; local Mailpit; six seeded accounts untouched",
+    "steps": "Re-read real provider configuration after UAT override removal",
+    "expected": "Reset recovers inherited source and original enabled setting",
+    "actual": {
+      "status": 200,
+      "source": "PLATFORM_DEFAULT",
+      "enabled": true
+    },
+    "api": 200,
+    "status": "PASS",
+    "defect": null,
+    "time": "2026-10-19T18:09:25.876745+00:00"
+  },
+  {
+    "id": "UAT-AI-SETTINGS-OVERRIDE",
+    "module": "AI configuration and providers",
+    "role": "disposable tenant administrator / platform",
+    "preconditions": "Only tenant and initial administrator created by this UAT are changed; local Mailpit; six seeded accounts untouched",
+    "steps": "Create isolated UAT AI settings only; no provider credential or inference",
+    "expected": "UAT tenant stores disabled-feature settings with valid budget order",
+    "actual": {
+      "status": 200,
+      "data": {
+        "feature_enabled": false,
+        "kill_switch_active": false,
+        "budget_per_request_usd": 0.01,
+        "budget_per_scan_usd": 1.0,
+        "budget_daily_usd": 2.0,
+        "updated_at": "2026-10-19T18:09:25.928864+00:00",
+        "updated_by_user_id": null,
+        "source": "db"
+      },
+      "request_id": "5dc133ae4fd6"
+    },
+    "api": 200,
+    "status": "PASS",
+    "defect": null,
+    "time": "2026-10-19T18:09:25.968111+00:00"
+  },
+  {
+    "id": "UAT-AI-BUDGET-VALIDATION",
+    "module": "AI configuration and providers",
+    "role": "disposable tenant administrator / platform",
+    "preconditions": "Only tenant and initial administrator created by this UAT are changed; local Mailpit; six seeded accounts untouched",
+    "steps": "Submit per-request greater than per-scan in UAT settings",
+    "expected": "Invalid budget hierarchy is rejected HTTP 400",
+    "actual": {
+      "status": 400,
+      "data": {
+        "detail": "Budget caps must satisfy per_request \u2264 per_scan \u2264 daily."
+      },
+      "request_id": "1952dcb6a3af"
+    },
+    "api": 400,
+    "status": "PASS",
+    "defect": null,
+    "time": "2026-10-19T18:09:25.985787+00:00"
+  },
+  {
+    "id": "UAT-AI-BUDGET-ROLLBACK",
+    "module": "AI configuration and providers",
+    "role": "disposable tenant administrator / platform",
+    "preconditions": "Only tenant and initial administrator created by this UAT are changed; local Mailpit; six seeded accounts untouched",
+    "steps": "Re-read settings after rejected mutation",
+    "expected": "Rejected budget update leaves previous valid settings intact",
+    "actual": {
+      "status": 200,
+      "data": {
+        "feature_enabled": false,
+        "kill_switch_active": false,
+        "budget_per_request_usd": 0.01,
+        "budget_per_scan_usd": 1.0,
+        "budget_daily_usd": 2.0,
+        "updated_at": "2026-10-19T18:09:25.928864+00:00",
+        "updated_by_user_id": null,
+        "source": "db"
+      },
+      "request_id": "5c23c13da32e"
+    },
+    "api": 200,
+    "status": "PASS",
+    "defect": null,
+    "time": "2026-10-19T18:09:26.004283+00:00"
+  },
+  {
+    "id": "UAT-AI-SETTINGS-RESET",
+    "module": "AI configuration and providers",
+    "role": "disposable tenant administrator / platform",
+    "preconditions": "Only tenant and initial administrator created by this UAT are changed; local Mailpit; six seeded accounts untouched",
+    "steps": "Reset isolated test tenant to inherited AI configuration",
+    "expected": "Remove only UAT-created AI override HTTP 204",
+    "actual": {
+      "status": 204,
+      "data": null,
+      "request_id": "e0a61a9d61d5"
+    },
+    "api": 204,
+    "status": "PASS",
+    "defect": null,
+    "time": "2026-10-19T18:09:26.033024+00:00"
+  },
+  {
+    "id": "UAT-AI-SETTINGS-INHERITED",
+    "module": "AI configuration and providers",
+    "role": "disposable tenant administrator / platform",
+    "preconditions": "Only tenant and initial administrator created by this UAT are changed; local Mailpit; six seeded accounts untouched",
+    "steps": "Read effective source after override reset",
+    "expected": "UAT tenant returns to inherited platform configuration",
+    "actual": {
+      "status": 200,
+      "source": "PLATFORM_DEFAULT",
+      "override_enabled": false
+    },
+    "api": 200,
+    "status": "PASS",
+    "defect": null,
+    "time": "2026-10-19T18:09:26.063965+00:00"
+  },
+  {
+    "id": "UAT-SETTINGS-TENANT-CLEANUP",
+    "module": "UAT cleanup",
+    "role": "disposable tenant administrator / platform",
+    "preconditions": "Only tenant and initial administrator created by this UAT are changed; local Mailpit; six seeded accounts untouched",
+    "steps": "Disable UAT tenant after isolated configuration testing even on test error",
+    "expected": "Leave only UAT-created tenant disabled",
+    "actual": {
+      "status": 200,
+      "tenantStatus": "DISABLED"
+    },
+    "api": 200,
+    "status": "PASS",
+    "defect": null,
+    "time": "2026-10-19T18:09:26.095912+00:00"
+  },
+  {
+    "id": "UAT-SETTINGS-OLYMPUS-UNCHANGED",
+    "module": "Tenant isolation",
+    "role": "disposable tenant administrator / platform",
+    "preconditions": "Only tenant and initial administrator created by this UAT are changed; local Mailpit; six seeded accounts untouched",
+    "steps": "Compare effective Olympus response before and after all UAT tenant setting mutations; secret values are never returned or recorded",
+    "expected": "Olympus effective AI configuration is unaffected by another tenant's overrides",
+    "actual": {
+      "status": 200,
+      "unchanged": true
+    },
+    "api": 200,
+    "status": "PASS",
+    "defect": null,
+    "time": "2026-10-19T18:09:26.147288+00:00"
+  }
+]

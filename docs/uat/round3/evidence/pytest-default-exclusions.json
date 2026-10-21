@@ -1,0 +1,359 @@
+[
+  {
+    "nodeid": "tests/ai/test_batch_load.py::test_batch_handles_1000_findings",
+    "markers": [
+      "asyncio",
+      "integration"
+    ],
+    "fixtures": [
+      "event_loop_policy",
+      "app",
+      "_tmp_database_path",
+      "_reset_postgres_database_before_test",
+      "_reset_settings_and_base_env_after_test",
+      "selected_ai_test_tenant",
+      "client",
+      "monkeypatch"
+    ],
+    "category": "AI/provider",
+    "defaultExcluded": true,
+    "defaultExclusionReason": "Repository default addopts excludes integration and bench",
+    "databaseFixture": true,
+    "environmentOrExternalHint": false
+  },
+  {
+    "nodeid": "tests/ai/test_batch_load.py::test_warm_cache_second_run_zero_llm_calls",
+    "markers": [
+      "asyncio",
+      "integration"
+    ],
+    "fixtures": [
+      "event_loop_policy",
+      "app",
+      "_tmp_database_path",
+      "_reset_postgres_database_before_test",
+      "_reset_settings_and_base_env_after_test",
+      "selected_ai_test_tenant",
+      "client",
+      "monkeypatch"
+    ],
+    "category": "AI/provider",
+    "defaultExcluded": true,
+    "defaultExclusionReason": "Repository default addopts excludes integration and bench",
+    "databaseFixture": true,
+    "environmentOrExternalHint": false
+  },
+  {
+    "nodeid": "tests/test_component_advisor_bench.py::test_T44_component_advisor_benchmark__NFR_SCA_005",
+    "markers": [
+      "bench"
+    ],
+    "fixtures": [
+      "event_loop_policy",
+      "app",
+      "_tmp_database_path",
+      "_reset_postgres_database_before_test",
+      "_reset_settings_and_base_env_after_test",
+      "client",
+      "monkeypatch"
+    ],
+    "category": "Advisor/policies",
+    "defaultExcluded": true,
+    "defaultExclusionReason": "Repository default addopts excludes integration and bench",
+    "databaseFixture": true,
+    "environmentOrExternalHint": false
+  },
+  {
+    "nodeid": "tests/test_lifecycle_provider_live.py::test_live_lifecycle_provider_persistence_and_report",
+    "markers": [
+      "integration",
+      "skipif"
+    ],
+    "fixtures": [
+      "event_loop_policy",
+      "app",
+      "_tmp_database_path",
+      "_reset_postgres_database_before_test",
+      "_reset_settings_and_base_env_after_test",
+      "client",
+      "monkeypatch"
+    ],
+    "category": "AI/provider",
+    "defaultExcluded": true,
+    "defaultExclusionReason": "Repository default addopts excludes integration and bench",
+    "databaseFixture": true,
+    "environmentOrExternalHint": false
+  },
+  {
+    "nodeid": "tests/validation/test_integration_corpus.py::test_corpus_fixture_matches_expected[valid/spdx_2_3_minimal.json]",
+    "markers": [
+      "integration",
+      "parametrize"
+    ],
+    "fixtures": [
+      "event_loop_policy",
+      "_reset_postgres_database_before_test",
+      "_reset_settings_and_base_env_after_test",
+      "rel_path"
+    ],
+    "category": "Ingestion/validation",
+    "defaultExcluded": true,
+    "defaultExclusionReason": "Repository default addopts excludes integration and bench",
+    "databaseFixture": true,
+    "environmentOrExternalHint": false
+  },
+  {
+    "nodeid": "tests/validation/test_integration_corpus.py::test_corpus_fixture_matches_expected[valid/spdx_2_3_realistic.json]",
+    "markers": [
+      "integration",
+      "parametrize"
+    ],
+    "fixtures": [
+      "event_loop_policy",
+      "_reset_postgres_database_before_test",
+      "_reset_settings_and_base_env_after_test",
+      "rel_path"
+    ],
+    "category": "Ingestion/validation",
+    "defaultExcluded": true,
+    "defaultExclusionReason": "Repository default addopts excludes integration and bench",
+    "databaseFixture": true,
+    "environmentOrExternalHint": false
+  },
+  {
+    "nodeid": "tests/validation/test_integration_corpus.py::test_corpus_fixture_matches_expected[valid/cyclonedx_1_5_minimal.json]",
+    "markers": [
+      "integration",
+      "parametrize"
+    ],
+    "fixtures": [
+      "event_loop_policy",
+      "_reset_postgres_database_before_test",
+      "_reset_settings_and_base_env_after_test",
+      "rel_path"
+    ],
+    "category": "Ingestion/validation",
+    "defaultExcluded": true,
+    "defaultExclusionReason": "Repository default addopts excludes integration and bench",
+    "databaseFixture": true,
+    "environmentOrExternalHint": false
+  },
+  {
+    "nodeid": "tests/validation/test_integration_corpus.py::test_corpus_fixture_matches_expected[valid/cyclonedx_1_6_realistic.xml]",
+    "markers": [
+      "integration",
+      "parametrize"
+    ],
+    "fixtures": [
+      "event_loop_policy",
+      "_reset_postgres_database_before_test",
+      "_reset_settings_and_base_env_after_test",
+      "rel_path"
+    ],
+    "category": "Ingestion/validation",
+    "defaultExcluded": true,
+    "defaultExclusionReason": "Repository default addopts excludes integration and bench",
+    "databaseFixture": true,
+    "environmentOrExternalHint": false
+  },
+  {
+    "nodeid": "tests/validation/test_integration_corpus.py::test_corpus_fixture_matches_expected[invalid/spdx_missing_data_license.json]",
+    "markers": [
+      "integration",
+      "parametrize"
+    ],
+    "fixtures": [
+      "event_loop_policy",
+      "_reset_postgres_database_before_test",
+      "_reset_settings_and_base_env_after_test",
+      "rel_path"
+    ],
+    "category": "Ingestion/validation",
+    "defaultExcluded": true,
+    "defaultExclusionReason": "Repository default addopts excludes integration and bench",
+    "databaseFixture": true,
+    "environmentOrExternalHint": false
+  },
+  {
+    "nodeid": "tests/validation/test_integration_corpus.py::test_corpus_fixture_matches_expected[invalid/spdx_bad_spdxid_format.json]",
+    "markers": [
+      "integration",
+      "parametrize"
+    ],
+    "fixtures": [
+      "event_loop_policy",
+      "_reset_postgres_database_before_test",
+      "_reset_settings_and_base_env_after_test",
+      "rel_path"
+    ],
+    "category": "Ingestion/validation",
+    "defaultExcluded": true,
+    "defaultExclusionReason": "Repository default addopts excludes integration and bench",
+    "databaseFixture": true,
+    "environmentOrExternalHint": false
+  },
+  {
+    "nodeid": "tests/validation/test_integration_corpus.py::test_corpus_fixture_matches_expected[invalid/cyclonedx_dangling_dep_ref.json]",
+    "markers": [
+      "integration",
+      "parametrize"
+    ],
+    "fixtures": [
+      "event_loop_policy",
+      "_reset_postgres_database_before_test",
+      "_reset_settings_and_base_env_after_test",
+      "rel_path"
+    ],
+    "category": "Ingestion/validation",
+    "defaultExcluded": true,
+    "defaultExclusionReason": "Repository default addopts excludes integration and bench",
+    "databaseFixture": true,
+    "environmentOrExternalHint": false
+  },
+  {
+    "nodeid": "tests/validation/test_integration_corpus.py::test_corpus_fixture_matches_expected[invalid/cyclonedx_duplicate_bom_ref.json]",
+    "markers": [
+      "integration",
+      "parametrize"
+    ],
+    "fixtures": [
+      "event_loop_policy",
+      "_reset_postgres_database_before_test",
+      "_reset_settings_and_base_env_after_test",
+      "rel_path"
+    ],
+    "category": "Ingestion/validation",
+    "defaultExcluded": true,
+    "defaultExclusionReason": "Repository default addopts excludes integration and bench",
+    "databaseFixture": true,
+    "environmentOrExternalHint": false
+  },
+  {
+    "nodeid": "tests/validation/test_integration_corpus.py::test_corpus_fixture_matches_expected[invalid/cyclonedx_bad_purl.json]",
+    "markers": [
+      "integration",
+      "parametrize"
+    ],
+    "fixtures": [
+      "event_loop_policy",
+      "_reset_postgres_database_before_test",
+      "_reset_settings_and_base_env_after_test",
+      "rel_path"
+    ],
+    "category": "Ingestion/validation",
+    "defaultExcluded": true,
+    "defaultExclusionReason": "Repository default addopts excludes integration and bench",
+    "databaseFixture": true,
+    "environmentOrExternalHint": false
+  },
+  {
+    "nodeid": "tests/validation/test_integration_corpus.py::test_corpus_fixture_matches_expected[edge/cyclonedx_with_cycle.json]",
+    "markers": [
+      "integration",
+      "parametrize"
+    ],
+    "fixtures": [
+      "event_loop_policy",
+      "_reset_postgres_database_before_test",
+      "_reset_settings_and_base_env_after_test",
+      "rel_path"
+    ],
+    "category": "Ingestion/validation",
+    "defaultExcluded": true,
+    "defaultExclusionReason": "Repository default addopts excludes integration and bench",
+    "databaseFixture": true,
+    "environmentOrExternalHint": false
+  },
+  {
+    "nodeid": "tests/validation/test_integration_corpus.py::test_corpus_fixture_matches_expected[edge/spdx_with_external_doc_ref.json]",
+    "markers": [
+      "integration",
+      "parametrize"
+    ],
+    "fixtures": [
+      "event_loop_policy",
+      "_reset_postgres_database_before_test",
+      "_reset_settings_and_base_env_after_test",
+      "rel_path"
+    ],
+    "category": "Ingestion/validation",
+    "defaultExcluded": true,
+    "defaultExclusionReason": "Repository default addopts excludes integration and bench",
+    "databaseFixture": true,
+    "environmentOrExternalHint": true
+  },
+  {
+    "nodeid": "tests/validation/test_integration_corpus.py::test_corpus_fixture_matches_expected[edge/utf8_bom_prefix.json]",
+    "markers": [
+      "integration",
+      "parametrize"
+    ],
+    "fixtures": [
+      "event_loop_policy",
+      "_reset_postgres_database_before_test",
+      "_reset_settings_and_base_env_after_test",
+      "rel_path"
+    ],
+    "category": "Ingestion/validation",
+    "defaultExcluded": true,
+    "defaultExclusionReason": "Repository default addopts excludes integration and bench",
+    "databaseFixture": true,
+    "environmentOrExternalHint": false
+  },
+  {
+    "nodeid": "tests/validation/test_integration_corpus.py::test_wild_corpus_runs_without_500",
+    "markers": [
+      "integration"
+    ],
+    "fixtures": [
+      "event_loop_policy",
+      "_reset_postgres_database_before_test",
+      "_reset_settings_and_base_env_after_test"
+    ],
+    "category": "Ingestion/validation",
+    "defaultExcluded": true,
+    "defaultExclusionReason": "Repository default addopts excludes integration and bench",
+    "databaseFixture": true,
+    "environmentOrExternalHint": false
+  },
+  {
+    "nodeid": "tests/validation/test_perf.py::test_benchmark[spdx_2_3_realistic.json]",
+    "markers": [
+      "bench",
+      "parametrize"
+    ],
+    "fixtures": [
+      "event_loop_policy",
+      "_reset_postgres_database_before_test",
+      "_reset_settings_and_base_env_after_test",
+      "benchmark",
+      "request",
+      "fixture_name"
+    ],
+    "category": "Ingestion/validation",
+    "defaultExcluded": true,
+    "defaultExclusionReason": "Repository default addopts excludes integration and bench",
+    "databaseFixture": true,
+    "environmentOrExternalHint": false
+  },
+  {
+    "nodeid": "tests/validation/test_perf.py::test_benchmark[cyclonedx_1_6_realistic.xml]",
+    "markers": [
+      "bench",
+      "parametrize"
+    ],
+    "fixtures": [
+      "event_loop_policy",
+      "_reset_postgres_database_before_test",
+      "_reset_settings_and_base_env_after_test",
+      "benchmark",
+      "request",
+      "fixture_name"
+    ],
+    "category": "Ingestion/validation",
+    "defaultExcluded": true,
+    "defaultExclusionReason": "Repository default addopts excludes integration and bench",
+    "databaseFixture": true,
+    "environmentOrExternalHint": false
+  }
+]

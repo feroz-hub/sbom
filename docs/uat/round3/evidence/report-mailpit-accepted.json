@@ -1,0 +1,19 @@
+[
+  {
+    "id": "R3-REPORT-MAILPIT-ACCEPTED",
+    "role": "disposable tenant administrator",
+    "stepsExecuted": "Read actual unique recipient digest subject and attachment metadata; distinguish the earlier activation mail",
+    "expected": "Exactly one real digest with PDF/XLSX attachments",
+    "actual": {
+      "matchingMessages": 1,
+      "messages": [
+        {
+          "id": "4kPZN7XfQm24exB2xwiYU0",
+          "subject": "SBOM security digest \u00b7 SBOM \u00b7 2026-10-21",
+          "attachments": 2
+        }
+      ]
+    },
+    "result": "PASS"
+  }
+]

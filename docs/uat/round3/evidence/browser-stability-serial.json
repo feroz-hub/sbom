@@ -1,0 +1,206 @@
+[
+  {
+    "id": "R3-STABILITY-NAV-0-/",
+    "role": "admin/viewer",
+    "expected": "Protected module navigation reaches expected heading without empty response",
+    "actual": {
+      "path": "/",
+      "status": 200,
+      "elapsedMs": 1060
+    },
+    "result": "PASS"
+  },
+  {
+    "id": "R3-STABILITY-NAV-0-/projects",
+    "role": "admin/viewer",
+    "expected": "Protected module navigation reaches expected heading without empty response",
+    "actual": {
+      "path": "/projects",
+      "status": 200,
+      "elapsedMs": 27392
+    },
+    "result": "PASS"
+  },
+  {
+    "id": "R3-STABILITY-NAV-0-/sboms",
+    "role": "admin/viewer",
+    "expected": "Protected module navigation reaches expected heading without empty response",
+    "actual": {
+      "path": "/sboms",
+      "status": 200,
+      "elapsedMs": 17617
+    },
+    "result": "PASS"
+  },
+  {
+    "id": "R3-STABILITY-NAV-0-/kev",
+    "role": "admin/viewer",
+    "expected": "Protected module navigation reaches expected heading without empty response",
+    "actual": {
+      "path": "/kev",
+      "status": 200,
+      "elapsedMs": 7378
+    },
+    "result": "PASS"
+  },
+  {
+    "id": "R3-STABILITY-NAV-0-/schedules",
+    "role": "admin/viewer",
+    "expected": "Protected module navigation reaches expected heading without empty response",
+    "actual": {
+      "path": "/schedules",
+      "status": 200,
+      "elapsedMs": 17659
+    },
+    "result": "PASS"
+  },
+  {
+    "id": "R3-STABILITY-NAV-0-/vex-investigation",
+    "role": "admin/viewer",
+    "expected": "Protected module navigation reaches expected heading without empty response",
+    "actual": {
+      "path": "/vex-investigation",
+      "status": 200,
+      "elapsedMs": 23672
+    },
+    "result": "PASS"
+  },
+  {
+    "id": "R3-STABILITY-NAV-0-/component-advisor",
+    "role": "admin/viewer",
+    "expected": "Protected module navigation reaches expected heading without empty response",
+    "actual": {
+      "path": "/component-advisor",
+      "status": 200,
+      "elapsedMs": 21347
+    },
+    "result": "PASS"
+  },
+  {
+    "id": "R3-STABILITY-NAV-0-/settings/users",
+    "role": "admin/viewer",
+    "expected": "Protected module navigation reaches expected heading without empty response",
+    "actual": {
+      "path": "/settings/users",
+      "status": 200,
+      "elapsedMs": 24307
+    },
+    "result": "PASS"
+  },
+  {
+    "id": "R3-STABILITY-NAV-1-/",
+    "role": "admin/viewer",
+    "expected": "Protected module navigation reaches expected heading without empty response",
+    "actual": {
+      "path": "/",
+      "status": 200,
+      "elapsedMs": 19213
+    },
+    "result": "PASS"
+  },
+  {
+    "id": "R3-STABILITY-NAV-1-/projects",
+    "role": "admin/viewer",
+    "expected": "Protected module navigation reaches expected heading without empty response",
+    "actual": {
+      "path": "/projects",
+      "status": 200,
+      "elapsedMs": 7284
+    },
+    "result": "PASS"
+  },
+  {
+    "id": "R3-STABILITY-NAV-1-/sboms",
+    "role": "admin/viewer",
+    "expected": "Protected module navigation reaches expected heading without empty response",
+    "actual": {
+      "path": "/sboms",
+      "status": 200,
+      "elapsedMs": 17896
+    },
+    "result": "PASS"
+  },
+  {
+    "id": "R3-STABILITY-NAV-1-/kev",
+    "role": "admin/viewer",
+    "expected": "Protected module navigation reaches expected heading without empty response",
+    "actual": {
+      "path": "/kev",
+      "status": 200,
+      "elapsedMs": 8935
+    },
+    "result": "PASS"
+  },
+  {
+    "id": "R3-STABILITY-NAV-1-/schedules",
+    "role": "admin/viewer",
+    "expected": "Protected module navigation reaches expected heading without empty response",
+    "actual": {
+      "path": "/schedules",
+      "status": 200,
+      "elapsedMs": 15142
+    },
+    "result": "PASS"
+  },
+  {
+    "id": "R3-STABILITY-NAV-1-/vex-investigation",
+    "role": "admin/viewer",
+    "expected": "Protected module navigation reaches expected heading without empty response",
+    "actual": {
+      "path": "/vex-investigation",
+      "status": 200,
+      "elapsedMs": 8649
+    },
+    "result": "PASS"
+  },
+  {
+    "id": "R3-STABILITY-NAV-1-/component-advisor",
+    "role": "admin/viewer",
+    "expected": "Protected module navigation reaches expected heading without empty response",
+    "actual": {
+      "path": "/component-advisor",
+      "status": 200,
+      "elapsedMs": 3932
+    },
+    "result": "PASS"
+  },
+  {
+    "id": "R3-STABILITY-NAV-1-/settings/users",
+    "role": "admin/viewer",
+    "expected": "Protected module navigation reaches expected heading without empty response",
+    "actual": {
+      "path": "/settings/users",
+      "status": 200,
+      "elapsedMs": 6319
+    },
+    "result": "PASS"
+  },
+  {
+    "id": "R3-STABILITY-NORMAL-CONCURRENCY",
+    "role": "admin/viewer",
+    "expected": "Two independent ordinary session reads succeed",
+    "actual": {
+      "elapsedMs": 3196,
+      "sessions": [
+        {
+          "status": 200,
+          "authenticated": true
+        },
+        {
+          "status": 200,
+          "authenticated": true
+        }
+      ]
+    },
+    "result": "PASS"
+  },
+  {
+    "id": "R3-STABILITY-NETWORK",
+    "role": "admin/viewer",
+    "expected": "No non-navigation-abort browser network failures during bounded sequence",
+    "actual": {
+      "errors": []
+    },
+    "result": "PASS"
+  }
+]

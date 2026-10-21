@@ -1,0 +1,11 @@
+{
+  "diagnostic": "Actual route_entity code evaluated without database mutation",
+  "paths": {
+    "/api/component-advisor/policies/trust/versions": "sbom_source",
+    "/api/component-advisor/policies/accepted-risk/versions": "sbom_source",
+    "/api/component-advisor/policies/scoring/versions": "sbom_source"
+  },
+  "expected": "Advisor policy versions retain separate policy identity, not SBOM source identity",
+  "cause": "CONTEXT[versions] maps to sbom_source; generic items inherit inferred route entity; policy version ids are looked up as tenant-scoped SBOM source ids",
+  "correlated_log_lines": 3
+}

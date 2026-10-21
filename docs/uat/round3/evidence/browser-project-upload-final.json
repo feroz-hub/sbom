@@ -1,0 +1,32 @@
+[
+  {
+    "id": "R3-UI-PROJECT-CREATE",
+    "role": "admin",
+    "stepsExecuted": "Native Admin; Projects > New Project; complete form; Create Project",
+    "expected": "201 UUID and visible project",
+    "actual": {
+      "status": 201,
+      "id": "d31deac7-046e-4944-b375-d1e87d946fa2"
+    },
+    "result": "PASS"
+  },
+  {
+    "id": "R3-UI-PROJECT-UPLOAD-EXECUTION",
+    "role": "admin",
+    "stepsExecuted": "Execute actual UI creation/upload workflow",
+    "expected": "Complete workflow",
+    "actual": {
+      "error": "locator.click: Timeout 20000ms exceeded.\nCall log:\n\u001b[2m  - waiting for getByRole('button', { name: 'Select project UAT R3 Browser 1792490289701', exact: true })\u001b[22m\n",
+      "path": "/projects",
+      "headings": [
+        "Overview",
+        "Inventory",
+        "Security Operations",
+        "Administration",
+        "Projects",
+        "Applications"
+      ]
+    },
+    "result": "FAIL"
+  }
+]

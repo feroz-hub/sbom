@@ -1,0 +1,12 @@
+{
+  "testDatabase": "sbom_greenfield_uuid_round3_fix_test_20261020",
+  "tablesInspected": 68,
+  "existingFullCleanupSeconds": 0.15722687498782761,
+  "separateExactChecksSeconds": 0.044956958008697256,
+  "batchedExactChecksSeconds": 0.024939041992183775,
+  "identicalExactTableSet": true,
+  "noApproximateStatistics": true,
+  "transactionalFullCleanupSeconds": 2.0077355410030577,
+  "transactionalCleanupEmpty": true,
+  "transactionalCodeChanges": "Same exact cleanup and guards; use one committed transaction instead of per-statement autocommit"
+}

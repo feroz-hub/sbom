@@ -1,0 +1,21 @@
+{
+  "headings": [
+    "Overview",
+    "Inventory",
+    "Security Operations",
+    "Administration",
+    "Projects"
+  ],
+  "buttons": [
+    "OlympusActive tenant",
+    "Analysis",
+    "Settings",
+    "Collapse",
+    "Search",
+    "SOSynthetic Olympus admin",
+    "",
+    "New Project",
+    ""
+  ],
+  "inputs": []
+}

@@ -1,0 +1,8 @@
+Round 2 policy history request IDs: 61b3242f09e1, 3a82452434d1, b4f3539222e5
+
+[INFO    ] 2026-10-20 04:47:41  uvicorn.access  127.0.0.1:63328 - "GET /api/component-advisor/policies/trust/versions HTTP/1.1" 500 {"request_id": "61b3242f09e1"}
+[ERROR   ] 2026-10-20 04:47:41  sbom.access  http_request_completed {"request_id": "61b3242f09e1", "method": "GET", "path": "/api/component-advisor/policies/trust/versions", "status_code": 500, "request_scope": "tenant", "exception_category": "HTTPError", "duration_ms": 21.276, "tenant_id": 9, "user_id": 10, "event": "http_request_completed"}
+[INFO    ] 2026-10-20 04:47:41  uvicorn.access  127.0.0.1:63331 - "GET /api/component-advisor/policies/accepted-risk/versions HTTP/1.1" 500 {"request_id": "3a82452434d1"}
+[ERROR   ] 2026-10-20 04:47:41  sbom.access  http_request_completed {"request_id": "3a82452434d1", "method": "GET", "path": "/api/component-advisor/policies/accepted-risk/versions", "status_code": 500, "request_scope": "tenant", "exception_category": "HTTPError", "duration_ms": 19.73, "tenant_id": 9, "user_id": 10, "event": "http_request_completed"}
+[INFO    ] 2026-10-20 04:47:41  uvicorn.access  127.0.0.1:63334 - "GET /api/component-advisor/policies/scoring/versions HTTP/1.1" 500 {"request_id": "b4f3539222e5"}
+[ERROR   ] 2026-10-20 04:47:41  sbom.access  http_request_completed {"request_id": "b4f3539222e5", "method": "GET", "path": "/api/component-advisor/policies/scoring/versions", "status_code": 500, "request_scope": "tenant", "exception_category": "HTTPError", "duration_ms": 18.552, "tenant_id": 9, "user_id": 10, "event": "http_request_completed"}

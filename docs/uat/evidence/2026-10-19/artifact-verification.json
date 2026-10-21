@@ -1,0 +1,17 @@
+{
+  "artifactTextFilesScanned": 52,
+  "secretFindingCount": 0,
+  "syntaxCheckedFiles": 15,
+  "missingLocalEvidenceLinks": 0,
+  "uniqueCaseIds": 485,
+  "recordedCases": 485,
+  "statusCounts": {
+    "PASS": 454,
+    "FAIL": 12,
+    "BLOCKED": 11,
+    "NOT RUN": 8
+  },
+  "noDuplicateCaseIds": true,
+  "reportSignoffWithheld": true,
+  "applicationSourceModifiedByUat": false
+}

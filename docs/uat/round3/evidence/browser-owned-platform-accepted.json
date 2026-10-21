@@ -1,0 +1,93 @@
+[
+  {
+    "id": "R3-OWNED-PLATFORM-LANDING",
+    "role": "disposable authorized platform admin with own active membership",
+    "stepsExecuted": "R3-OWNED-PLATFORM-LANDING",
+    "expected": "Native form login defaults to platform without inheriting its tenant membership",
+    "actual": {
+      "loginStatus": 200,
+      "contextStatus": 200,
+      "tenant_id": null
+    },
+    "result": "PASS"
+  },
+  {
+    "id": "R3-OWNED-SWITCHER-BOUNDARY",
+    "role": "disposable authorized platform admin with own active membership",
+    "stepsExecuted": "R3-OWNED-SWITCHER-BOUNDARY",
+    "expected": "Switcher contains platform plus only own explicit membership",
+    "actual": {
+      "options": [
+        "PlatformPlatform administration · no tenant",
+        "UAT R3 1792488816710826000Tenant Admin · ACTIVE"
+      ],
+      "ownName": "UAT R3 1792488816710826000"
+    },
+    "result": "PASS"
+  },
+  {
+    "id": "UAT-PLATFORM-TENANT-WORKING-CONTEXT",
+    "role": "disposable authorized platform admin with own active membership",
+    "stepsExecuted": "UAT-PLATFORM-TENANT-WORKING-CONTEXT",
+    "expected": "Supported membership switcher enters only authorized tenant",
+    "actual": {
+      "status": 200,
+      "tenant_id": "8dd329e3-d481-4d4d-8c64-7fb94bc51982",
+      "roles": [
+        "TENANT_ADMIN"
+      ]
+    },
+    "result": "PASS"
+  },
+  {
+    "id": "R3-OWNED-TENANT-REFRESH",
+    "role": "disposable authorized platform admin with own active membership",
+    "stepsExecuted": "R3-OWNED-TENANT-REFRESH",
+    "expected": "Page refresh retains only explicitly selected owned tenant",
+    "actual": {
+      "switcherLabel": "UAT R3 1792488816710826000\nActive tenant"
+    },
+    "result": "PASS"
+  },
+  {
+    "id": "R3-OWNED-TENANT-OPERATIONS",
+    "role": "disposable authorized platform admin with own active membership",
+    "stepsExecuted": "R3-OWNED-TENANT-OPERATIONS",
+    "expected": "Selected membership authorizes tenant-scoped read",
+    "actual": {
+      "status": 200
+    },
+    "result": "PASS"
+  },
+  {
+    "id": "R3-OWNED-PLATFORM-FORGED",
+    "role": "disposable authorized platform admin with own active membership",
+    "stepsExecuted": "R3-OWNED-PLATFORM-FORGED",
+    "expected": "Known Olympus header without membership remains rejected",
+    "actual": {
+      "status": 403
+    },
+    "result": "PASS"
+  },
+  {
+    "id": "R3-OWNED-RETURN-PLATFORM",
+    "role": "disposable authorized platform admin with own active membership",
+    "stepsExecuted": "R3-OWNED-RETURN-PLATFORM",
+    "expected": "Explicitly return to platform context",
+    "actual": {
+      "status": 200,
+      "tenant_id": null
+    },
+    "result": "PASS"
+  },
+  {
+    "id": "R3-OWNED-PLATFORM-LOGOUT",
+    "role": "disposable authorized platform admin with own active membership",
+    "stepsExecuted": "R3-OWNED-PLATFORM-LOGOUT",
+    "expected": "UI logout invalidates owned platform BFF session",
+    "actual": {
+      "authenticated": false
+    },
+    "result": "PASS"
+  }
+]

@@ -1,0 +1,5 @@
+{
+  "database": "sbom_greenfield_uuid",
+  "revision": "100_greenfield_uuid_final",
+  "operation": "Read-only SELECT; no migration/reset/truncation"
+}

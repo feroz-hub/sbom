@@ -1,0 +1,85 @@
+[
+  {
+    "originalNode": "tests/test_validation_repair_workspace.py::test_sbom_detail_marks_legacy_record_without_original_content_unavailable",
+    "initialResult": "FAIL",
+    "classification": "Obsolete public UUID/internal ORM-key test fixture",
+    "diagnostic": ".venv/lib/python3.12/site-packages/sqlalchemy/engine/base.py:1969: in _exec_single_context\n    self.dialect.do_execute(\n.venv/lib/python3.12/site-packages/sqlalchemy/engine/default.py:952: in do_execute\n    cursor.execute(statement, parameters)\n.venv/lib/python3.12/site-packages/psycopg/cursor.py:117: in execute\n    raise ex.with_traceback(None)\nE   psycopg.errors.InvalidTextRepresentation: invalid input syntax for type integer: \"441213e9-8127-4101-8273-697733cc866d\"\nE   CONTEXT:  unnamed portal parameter $1 = '...'\n\nThe above exception was the direct cause of the following exception:\ntests/test_validation_repair_workspace.py:380: in test_sbom_detail_marks_legacy_record_without_original_content_unavailable\n    sbom = db.get(SBOMSource, sbom_id)\n           ^^^^^^^^^^^^^^^^^^^^^^^^^^^\n.venv/lib/python3.12/site-packages/sqlalchemy/orm/session.py:3702: in get\n    return self._get_impl(\napp/db.py:171: in _get_impl\n    row = super()._get_impl(entity, primary_key_identity, db_load_fn, **kwargs)\n          ^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^\n.venv/lib/python3.12/site-packages/sqlalchemy/orm/session.py:3881: in _get_impl\n    return db_load_fn(\n.venv/lib/python3.12/site-packages/sqlalchemy/orm/loading.py:695: in load_on_pk_identity\n    session.execute(\n.venv/lib/python3.12/site-packages/sqlalchemy/orm/session.py:2373: in execute\n    return self._execute_internal(\n.venv/lib/python3.12/site-packages/sqlalchemy/orm/session.py:2271: in _execute_internal\n    result: Result[Any] = compile_state_cls.orm_execute_statement(\n.venv/lib/python3.12/site-packages/s",
+    "correction": "Use public_row(db, model, UUIDv4) for scoped ORM assertions; preserve internal integer service keys. Foreign API fixtures use persisted foreign UUID, never integer URL.",
+    "finalResult": "PASS",
+    "evidence": "pytest-repair-conversion-uuid.xml",
+    "correctedRerunResult": "PASS"
+  },
+  {
+    "originalNode": "tests/test_validation_repair_workspace.py::test_cross_tenant_workspace_backfill_denied",
+    "initialResult": "FAIL",
+    "classification": "Obsolete public UUID/internal ORM-key test fixture",
+    "diagnostic": "tests/test_validation_repair_workspace.py:472: in test_cross_tenant_workspace_backfill_denied\n    assert denied.status_code == 404\nE   assert 422 == 404\nE    +  where 422 = <Response [422 Unprocessable Entity]>.status_code",
+    "correction": "Use public_row(db, model, UUIDv4) for scoped ORM assertions; preserve internal integer service keys. Foreign API fixtures use persisted foreign UUID, never integer URL.",
+    "finalResult": "PASS",
+    "evidence": "pytest-repair-conversion-uuid.xml",
+    "correctedRerunResult": "PASS"
+  },
+  {
+    "originalNode": "tests/test_validation_repair_workspace.py::test_valid_repaired_draft_revalidates_then_imports_trusted_sbom",
+    "initialResult": "FAIL",
+    "classification": "Obsolete public UUID/internal ORM-key test fixture",
+    "diagnostic": ".venv/lib/python3.12/site-packages/sqlalchemy/engine/base.py:1969: in _exec_single_context\n    self.dialect.do_execute(\n.venv/lib/python3.12/site-packages/sqlalchemy/engine/default.py:952: in do_execute\n    cursor.execute(statement, parameters)\n.venv/lib/python3.12/site-packages/psycopg/cursor.py:117: in execute\n    raise ex.with_traceback(None)\nE   psycopg.errors.InvalidTextRepresentation: invalid input syntax for type integer: \"54e93472-bdac-4d40-b64a-74d678956064\"\nE   CONTEXT:  unnamed portal parameter $1 = '...'\n\nThe above exception was the direct cause of the following exception:\ntests/test_validation_repair_workspace.py:571: in test_valid_repaired_draft_revalidates_then_imports_trusted_sbom\n    trusted = db.get(SBOMSource, sbom_id)\n              ^^^^^^^^^^^^^^^^^^^^^^^^^^^\n.venv/lib/python3.12/site-packages/sqlalchemy/orm/session.py:3702: in get\n    return self._get_impl(\napp/db.py:171: in _get_impl\n    row = super()._get_impl(entity, primary_key_identity, db_load_fn, **kwargs)\n          ^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^\n.venv/lib/python3.12/site-packages/sqlalchemy/orm/session.py:3881: in _get_impl\n    return db_load_fn(\n.venv/lib/python3.12/site-packages/sqlalchemy/orm/loading.py:695: in load_on_pk_identity\n    session.execute(\n.venv/lib/python3.12/site-packages/sqlalchemy/orm/session.py:2373: in execute\n    return self._execute_internal(\n.venv/lib/python3.12/site-packages/sqlalchemy/orm/session.py:2271: in _execute_internal\n    result: Result[Any] = compile_state_cls.orm_execute_statement(\n.venv/lib/python3.12/site-packages/sqlal",
+    "correction": "Use public_row(db, model, UUIDv4) for scoped ORM assertions; preserve internal integer service keys. Foreign API fixtures use persisted foreign UUID, never integer URL.",
+    "finalResult": "PASS",
+    "evidence": "pytest-repair-conversion-uuid.xml",
+    "correctedRerunResult": "PASS"
+  },
+  {
+    "originalNode": "tests/test_validation_repair_workspace.py::test_lazy_session_creation_and_inplace_import",
+    "initialResult": "FAIL",
+    "classification": "Obsolete public UUID/internal ORM-key test fixture",
+    "diagnostic": ".venv/lib/python3.12/site-packages/sqlalchemy/engine/base.py:1969: in _exec_single_context\n    self.dialect.do_execute(\n.venv/lib/python3.12/site-packages/sqlalchemy/engine/default.py:952: in do_execute\n    cursor.execute(statement, parameters)\n.venv/lib/python3.12/site-packages/psycopg/cursor.py:117: in execute\n    raise ex.with_traceback(None)\nE   psycopg.errors.InvalidTextRepresentation: invalid input syntax for type integer: \"6dcf7d2b-52ac-4624-86ea-59b08f2d9878\"\nE   CONTEXT:  unnamed portal parameter $1 = '...'\n\nThe above exception was the direct cause of the following exception:\ntests/test_validation_repair_workspace.py:923: in test_lazy_session_creation_and_inplace_import\n    sbom = db.get(SBOMSource, sbom_id)\n           ^^^^^^^^^^^^^^^^^^^^^^^^^^^\n.venv/lib/python3.12/site-packages/sqlalchemy/orm/session.py:3702: in get\n    return self._get_impl(\napp/db.py:171: in _get_impl\n    row = super()._get_impl(entity, primary_key_identity, db_load_fn, **kwargs)\n          ^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^\n.venv/lib/python3.12/site-packages/sqlalchemy/orm/session.py:3881: in _get_impl\n    return db_load_fn(\n.venv/lib/python3.12/site-packages/sqlalchemy/orm/loading.py:695: in load_on_pk_identity\n    session.execute(\n.venv/lib/python3.12/site-packages/sqlalchemy/orm/session.py:2373: in execute\n    return self._execute_internal(\n.venv/lib/python3.12/site-packages/sqlalchemy/orm/session.py:2271: in _execute_internal\n    result: Result[Any] = compile_state_cls.orm_execute_statement(\n.venv/lib/python3.12/site-packages/sqlalchemy/orm/context.py:306",
+    "correction": "Use public_row(db, model, UUIDv4) for scoped ORM assertions; preserve internal integer service keys. Foreign API fixtures use persisted foreign UUID, never integer URL.",
+    "finalResult": "PASS",
+    "evidence": "pytest-repair-conversion-uuid.xml",
+    "correctedRerunResult": "PASS"
+  },
+  {
+    "originalNode": "tests/test_sbom_spdx_cyclonedx_conversion.py::TestSpdxToCyclonedxConversionApi::test_export_enriched_cyclonedx_includes_lifecycle_properties",
+    "initialResult": "FAIL",
+    "classification": "Obsolete public UUID/internal ORM-key test fixture",
+    "diagnostic": ".venv/lib/python3.12/site-packages/sqlalchemy/engine/base.py:1969: in _exec_single_context\n    self.dialect.do_execute(\n.venv/lib/python3.12/site-packages/sqlalchemy/engine/default.py:952: in do_execute\n    cursor.execute(statement, parameters)\n.venv/lib/python3.12/site-packages/psycopg/cursor.py:117: in execute\n    raise ex.with_traceback(None)\nE   psycopg.errors.UndefinedFunction: operator does not exist: integer = character varying\nE   LINE 3: WHERE sbom_component.sbom_id = $1::VARCHAR AND sbom_componen...\nE                                        ^\nE   HINT:  No operator matches the given name and argument types. You might need to add explicit type casts.\n\nThe above exception was the direct cause of the following exception:\ntests/test_sbom_spdx_cyclonedx_conversion.py:238: in test_export_enriched_cyclonedx_includes_lifecycle_properties\n    component = db.execute(\n.venv/lib/python3.12/site-packages/sqlalchemy/orm/session.py:2373: in execute\n    return self._execute_internal(\n.venv/lib/python3.12/site-packages/sqlalchemy/orm/session.py:2271: in _execute_internal\n    result: Result[Any] = compile_state_cls.orm_execute_statement(\n.venv/lib/python3.12/site-packages/sqlalchemy/orm/context.py:306: in orm_execute_statement\n    result = conn.execute(\n.venv/lib/python3.12/site-packages/sqlalchemy/engine/base.py:1421: in execute\n    return meth(\n.venv/lib/python3.12/site-packages/sqlalchemy/sql/elements.py:526: in _execute_on_connection\n    return connection._execute_clauseelement(\n.venv/lib/python3.12/site-packages/sqlalchemy/engine/base.py:1643: in _execute_clauseelement\n    ret ",
+    "correction": "Use public_row(db, model, UUIDv4) for scoped ORM assertions; preserve internal integer service keys. Foreign API fixtures use persisted foreign UUID, never integer URL.",
+    "finalResult": "PASS",
+    "evidence": "pytest-repair-conversion-uuid.xml",
+    "correctedRerunResult": "FAIL",
+    "remainingDiagnostic": "Intermediate module import correction occurred after test collection; final current-source single-node rerun1PASS.",
+    "remainingCause": "Rerun collected the module before its added model import was corrected; final single-node rerun pending.",
+    "finalEvidence": "pytest-conversion-final.xml"
+  },
+  {
+    "originalNode": "tests/test_sbom_auto_repair.py::test_api_approval_imports_only_candidate_and_keeps_original",
+    "initialResult": "FAIL",
+    "classification": "Obsolete public UUID/internal ORM-key test fixture",
+    "diagnostic": ".venv/lib/python3.12/site-packages/sqlalchemy/engine/base.py:1969: in _exec_single_context\n    self.dialect.do_execute(\n.venv/lib/python3.12/site-packages/sqlalchemy/engine/default.py:952: in do_execute\n    cursor.execute(statement, parameters)\n.venv/lib/python3.12/site-packages/psycopg/cursor.py:117: in execute\n    raise ex.with_traceback(None)\nE   psycopg.errors.InvalidTextRepresentation: invalid input syntax for type integer: \"6529f192-84cb-4b90-9bb3-f3f0b00bbd4e\"\nE   CONTEXT:  unnamed portal parameter $1 = '...'\n\nThe above exception was the direct cause of the following exception:\ntests/test_sbom_auto_repair.py:231: in test_api_approval_imports_only_candidate_and_keeps_original\n    assert db.get(SBOMSource, approved.json()[\"imported_sbom_id\"]).sbom_data == candidate\n           ^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^\n.venv/lib/python3.12/site-packages/sqlalchemy/orm/session.py:3702: in get\n    return self._get_impl(\napp/db.py:171: in _get_impl\n    row = super()._get_impl(entity, primary_key_identity, db_load_fn, **kwargs)\n          ^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^\n.venv/lib/python3.12/site-packages/sqlalchemy/orm/session.py:3881: in _get_impl\n    return db_load_fn(\n.venv/lib/python3.12/site-packages/sqlalchemy/orm/loading.py:695: in load_on_pk_identity\n    session.execute(\n.venv/lib/python3.12/site-packages/sqlalchemy/orm/session.py:2373: in execute\n    return self._execute_internal(\n.venv/lib/python3.12/site-packages/sqlalchemy/orm/session.py:2271: in _execute_internal\n    result: Result[Any] = compile_state_cls.orm_e",
+    "correction": "Use public_row(db, model, UUIDv4) for scoped ORM assertions; preserve internal integer service keys. Foreign API fixtures use persisted foreign UUID, never integer URL.",
+    "finalResult": "PASS",
+    "evidence": "pytest-repair-conversion-uuid.xml",
+    "correctedRerunResult": "PASS"
+  },
+  {
+    "originalNode": "tests/test_sbom_auto_repair.py::test_existing_accepted_artifact_is_preserved_on_approval",
+    "initialResult": "FAIL",
+    "classification": "Obsolete public UUID/internal ORM-key test fixture",
+    "diagnostic": ".venv/lib/python3.12/site-packages/sqlalchemy/engine/base.py:1969: in _exec_single_context\n    self.dialect.do_execute(\n.venv/lib/python3.12/site-packages/sqlalchemy/engine/default.py:952: in do_execute\n    cursor.execute(statement, parameters)\n.venv/lib/python3.12/site-packages/psycopg/cursor.py:117: in execute\n    raise ex.with_traceback(None)\nE   psycopg.errors.InvalidTextRepresentation: invalid input syntax for type integer: \"8d3620d2-799e-47a2-abb8-740553245c31\"\nE   CONTEXT:  unnamed portal parameter $1 = '...'\n\nThe above exception was the direct cause of the following exception:\ntests/test_sbom_auto_repair.py:431: in test_existing_accepted_artifact_is_preserved_on_approval\n    assert json.loads(db.get(SBOMSource, source_id).sbom_data) == document()\n                      ^^^^^^^^^^^^^^^^^^^^^^^^^^^^^\n.venv/lib/python3.12/site-packages/sqlalchemy/orm/session.py:3702: in get\n    return self._get_impl(\napp/db.py:171: in _get_impl\n    row = super()._get_impl(entity, primary_key_identity, db_load_fn, **kwargs)\n          ^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^\n.venv/lib/python3.12/site-packages/sqlalchemy/orm/session.py:3881: in _get_impl\n    return db_load_fn(\n.venv/lib/python3.12/site-packages/sqlalchemy/orm/loading.py:695: in load_on_pk_identity\n    session.execute(\n.venv/lib/python3.12/site-packages/sqlalchemy/orm/session.py:2373: in execute\n    return self._execute_internal(\n.venv/lib/python3.12/site-packages/sqlalchemy/orm/session.py:2271: in _execute_internal\n    result: Result[Any] = compile_state_cls.orm_execute_statement(\n.venv/lib/pyt",
+    "correction": "Use public_row(db, model, UUIDv4) for scoped ORM assertions; preserve internal integer service keys. Foreign API fixtures use persisted foreign UUID, never integer URL.",
+    "finalResult": "PASS",
+    "evidence": "pytest-repair-conversion-uuid.xml",
+    "correctedRerunResult": "PASS"
+  },
+  {
+    "originalNode": "tests/test_sbom_auto_repair.py::test_permanent_delete_handles_new_repair_job_foreign_keys",
+    "initialResult": "FAIL",
+    "classification": "Obsolete public UUID/internal ORM-key test fixture",
+    "diagnostic": ".venv/lib/python3.12/site-packages/sqlalchemy/engine/base.py:1969: in _exec_single_context\n    self.dialect.do_execute(\n.venv/lib/python3.12/site-packages/sqlalchemy/engine/default.py:952: in do_execute\n    cursor.execute(statement, parameters)\n.venv/lib/python3.12/site-packages/psycopg/cursor.py:117: in execute\n    raise ex.with_traceback(None)\nE   psycopg.errors.UndefinedFunction: operator does not exist: integer = character varying\nE   LINE 3: WHERE sbom_source.id = $1::VARCHAR AND sbom_source.tenant_id...\nE                                ^\nE   HINT:  No operator matches the given name and argument types. You might need to add explicit type casts.\n\nThe above exception was the direct cause of the following exception:\ntests/test_sbom_auto_repair.py:506: in test_permanent_delete_handles_new_repair_job_foreign_keys\n    impact = service.get_delete_impact(approved[\"imported_sbom_id\"])\n             ^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^\napp/services/sbom_delete_service.py:126: in get_delete_impact\n    sbom = self.get_sbom(sbom_id)\n           ^^^^^^^^^^^^^^^^^^^^^^\napp/services/sbom_delete_service.py:120: in get_sbom\n    row = self.db.execute(query.execution_options(include_deleted=True)).scalar_one_or_none()\n          ^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^\n.venv/lib/python3.12/site-packages/sqlalchemy/orm/session.py:2373: in execute\n    return self._execute_internal(\n.venv/lib/python3.12/site-packages/sqlalchemy/orm/session.py:2271: in _execute_internal\n    result: Result[Any] = compile_state_cls.orm_execute_statement(\n.venv/lib/python3.",
+    "correction": "Use public_row(db, model, UUIDv4) for scoped ORM assertions; preserve internal integer service keys. Foreign API fixtures use persisted foreign UUID, never integer URL.",
+    "finalResult": "PASS",
+    "evidence": "pytest-repair-conversion-uuid.xml",
+    "correctedRerunResult": "PASS"
+  }
+]

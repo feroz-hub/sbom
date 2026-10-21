@@ -1,0 +1,14 @@
+[
+  {
+    "id": "UAT-DASHBOARD-FILTER-UI",
+    "role": "admin",
+    "expected": "Project UUID selection is retained",
+    "actual": {
+      "url": "https://localhost:13000/?project=3b481333-d56a-4730-9427-7fc5c332309a",
+      "selected": "",
+      "expected": "3b481333-d56a-4730-9427-7fc5c332309a"
+    },
+    "result": "FAIL",
+    "time": "2026-10-20T03:15:15.938Z"
+  }
+]

@@ -1,0 +1,167 @@
+[
+  {
+    "id": "UAT-DASHBOARD-DEPENDENT-FILTERS",
+    "module": "Dashboard",
+    "role": "admin / relevant tenant roles",
+    "preconditions": "Required prerequisite or scenario coverage is explicitly stated below; no unsupported execution claim",
+    "steps": "No positive execution of this scenario. See actual result for related executed evidence and prerequisite.",
+    "expected": "Complete project \u2192 product \u2192 SBOM browser selection and drill-down with refresh/deep links",
+    "actual": {
+      "limitation": "The executed Project UUID selection resets because the shared numeric URL parser rejects UUIDs; dependent hierarchy acceptance is blocked."
+    },
+    "api": null,
+    "status": "BLOCKED",
+    "defect": "UAT-DEF-006",
+    "time": "2026-10-19T18:11:45.360212+00:00"
+  },
+  {
+    "id": "UAT-VEX-DECISION-UI",
+    "module": "VEX Investigation",
+    "role": "admin / analyst / assigned developer",
+    "preconditions": "Required prerequisite or scenario coverage is explicitly stated below; no unsupported execution claim",
+    "steps": "No positive execution of this scenario. See actual result for related executed evidence and prerequisite.",
+    "expected": "Open detail, assign, save a justified decision and verify refreshed state through UI",
+    "actual": {
+      "limitation": "Executed detail GET returns 500; the same serializer also breaks mutation and stale conflict responses. Lower-role/foreign rejection was independently executed."
+    },
+    "api": null,
+    "status": "BLOCKED",
+    "defect": "UAT-DEF-003",
+    "time": "2026-10-19T18:11:45.360607+00:00"
+  },
+  {
+    "id": "UAT-PLATFORM-TENANT-WORKING-CONTEXT",
+    "module": "Platform",
+    "role": "platform",
+    "preconditions": "Required prerequisite or scenario coverage is explicitly stated below; no unsupported execution claim",
+    "steps": "No positive execution of this scenario. See actual result for related executed evidence and prerequisite.",
+    "expected": "Enter an authorized working tenant using the supported membership-based switcher",
+    "actual": {
+      "limitation": "Seeded Platform user has no tenant membership; supported switcher requires one. No seeded membership was added. Platform administration endpoints and forged-header denial were executed."
+    },
+    "api": null,
+    "status": "BLOCKED",
+    "defect": null,
+    "time": "2026-10-19T18:11:45.360610+00:00"
+  },
+  {
+    "id": "UAT-ACTIVE-POLICY-RULES",
+    "module": "Advisor policy configuration",
+    "role": "isolated tenant administrator",
+    "preconditions": "Required prerequisite or scenario coverage is explicitly stated below; no unsupported execution claim",
+    "steps": "No positive execution of this scenario. See actual result for related executed evidence and prerequisite.",
+    "expected": "Publish ACTIVE trust/risk/scoring rules and validate downstream classification and historical explanations",
+    "actual": {
+      "limitation": "Disabled-version publication, INHERIT, conflicts and settings boundaries were executed. ACTIVE rule combinations and their downstream classification were not executed."
+    },
+    "api": null,
+    "status": "NOT RUN",
+    "defect": null,
+    "time": "2026-10-19T18:11:45.360613+00:00"
+  },
+  {
+    "id": "UAT-REPAIR-AUTOMATIC-APPROVAL",
+    "module": "Validation repair",
+    "role": "admin / analyst",
+    "preconditions": "Required prerequisite or scenario coverage is explicitly stated below; no unsupported execution claim",
+    "steps": "No positive execution of this scenario. See actual result for related executed evidence and prerequisite.",
+    "expected": "Create a deterministically repairable semantic-error fixture; review candidate diff; approve/reject; verify retry hash and import lineage",
+    "actual": {
+      "limitation": "Malformed JSON manual-review analysis and manual draft/import were executed; positive deterministic candidate approval/rejection was not executed."
+    },
+    "api": null,
+    "status": "NOT RUN",
+    "defect": null,
+    "time": "2026-10-19T18:11:45.360614+00:00"
+  },
+  {
+    "id": "UAT-REPORT-OTHER-FORMATS",
+    "module": "Reports",
+    "role": "permitted export roles",
+    "preconditions": "Required prerequisite or scenario coverage is explicitly stated below; no unsupported execution claim",
+    "steps": "No positive execution of this scenario. See actual result for related executed evidence and prerequisite.",
+    "expected": "Validate PDF, FDA 510(k), other configured output formats and corresponding role denials",
+    "actual": {
+      "limitation": "Vulnerability XLSX workbook contents, lifecycle/VEX ZIP exports and local report-notification delivery were executed; other output formats were not executed."
+    },
+    "api": null,
+    "status": "NOT RUN",
+    "defect": null,
+    "time": "2026-10-19T18:11:45.360616+00:00"
+  },
+  {
+    "id": "UAT-SBOM-SIGNATURE-CONVERSION",
+    "module": "SBOM upload and validation",
+    "role": "permitted upload roles",
+    "preconditions": "Required prerequisite or scenario coverage is explicitly stated below; no unsupported execution claim",
+    "steps": "No positive execution of this scenario. See actual result for related executed evidence and prerequisite.",
+    "expected": "Verify signed/tampered SBOMs, SPDX conversion, and large-file streaming repair",
+    "actual": {
+      "limitation": "CycloneDX upload, malformed JSON rejection, component reads, repair import and version lineage were executed. Signature, conversion and large-file variants were not executed."
+    },
+    "api": null,
+    "status": "NOT RUN",
+    "defect": null,
+    "time": "2026-10-19T18:11:45.360617+00:00"
+  },
+  {
+    "id": "UAT-REPORT-SCHEDULED-TRIGGER",
+    "module": "Reports and notifications",
+    "role": "admin",
+    "preconditions": "Required prerequisite or scenario coverage is explicitly stated below; no unsupported execution claim",
+    "steps": "No positive execution of this scenario. See actual result for related executed evidence and prerequisite.",
+    "expected": "Observe recurring enabled schedule firing and report notification retry/dedup behavior",
+    "actual": {
+      "limitation": "Disabled preset schedule resolution, cleanup, authorization and real local immediate report delivery were executed; no enabled recurring job or forced SMTP outage was created."
+    },
+    "api": null,
+    "status": "NOT RUN",
+    "defect": null,
+    "time": "2026-10-19T18:11:45.360618+00:00"
+  },
+  {
+    "id": "UAT-PROVIDER-SECRET-ROTATION",
+    "module": "Integration configuration",
+    "role": "platform / isolated tenant administrator",
+    "preconditions": "Required prerequisite or scenario coverage is explicitly stated below; no unsupported execution claim",
+    "steps": "No positive execution of this scenario. See actual result for related executed evidence and prerequisite.",
+    "expected": "Verify credential creation/rotation/revocation and successful authenticated upstream provider calls",
+    "actual": {
+      "limitation": "Provider configuration reads, isolated lifecycle override/reset and invalid provider/timeout tests were executed. No real upstream credentials were supplied or fabricated; secret rotation was not executed."
+    },
+    "api": null,
+    "status": "NOT RUN",
+    "defect": null,
+    "time": "2026-10-19T18:11:45.360620+00:00"
+  },
+  {
+    "id": "UAT-SESSION-EXPIRY-CONCURRENCY",
+    "module": "Session security",
+    "role": "all six roles",
+    "preconditions": "Required prerequisite or scenario coverage is explicitly stated below; no unsupported execution claim",
+    "steps": "No positive execution of this scenario. See actual result for related executed evidence and prerequisite.",
+    "expected": "Observe idle/absolute session expiry, concurrent session revocation and long-lived refresh under role/tenant changes",
+    "actual": {
+      "limitation": "Isolated login, refresh context, cookie flags/storage, cross-origin denial, logout and old-cookie replay were executed. Long-duration expiry and concurrency were not executed."
+    },
+    "api": null,
+    "status": "NOT RUN",
+    "defect": null,
+    "time": "2026-10-19T18:11:45.360621+00:00"
+  },
+  {
+    "id": "UAT-PLATFORM-GRANT-REVOKE",
+    "module": "Platform Administrators",
+    "role": "platform",
+    "preconditions": "Required prerequisite or scenario coverage is explicitly stated below; no unsupported execution claim",
+    "steps": "No positive execution of this scenario. See actual result for related executed evidence and prerequisite.",
+    "expected": "Grant/revoke platform authority on an eligible disposable user and verify live privilege refresh",
+    "actual": {
+      "limitation": "Platform administrator directory and lower-role grant rejection were executed. Positive grant/revoke and last-administrator guard were not executed; seeded platform role was preserved."
+    },
+    "api": null,
+    "status": "NOT RUN",
+    "defect": null,
+    "time": "2026-10-19T18:11:45.360624+00:00"
+  }
+]

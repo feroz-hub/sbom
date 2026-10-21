@@ -1,0 +1,186 @@
+[
+  {
+    "id": "R3-SPDX-UPLOAD",
+    "role": "admin",
+    "preconditions": "Verified isolated Greenfield UUID; task-owned fixtures; credentials kept in memory",
+    "stepsExecuted": "Upload supported synthetic SPDX 2.3",
+    "expected": "202",
+    "actual": {
+      "status": 202,
+      "data": {
+        "status": "valid",
+        "workspace_id": "b5837aa3-acd2-477c-95e2-9e3dcd01221b",
+        "validation_session_id": "b5837aa3-acd2-477c-95e2-9e3dcd01221b",
+        "repair_workspace_url": "/repair/b5837aa3-acd2-477c-95e2-9e3dcd01221b",
+        "sbom_id": "1c2a9ec4-69f6-461b-a6bd-8fcd00ebf326",
+        "logical_sbom_id": "3d9bd526-4b3e-44cb-8f42-c69ac922b8c9",
+        "sbom_name": "UAT R3 SPDX conversion",
+        "sbom_version": null,
+        "product_version": null,
+        "project_id": "6b629a0f-522b-4a76-b156-b411d33a905c",
+        "product_id": "7f84598b-2d9d-466d-8a20-0f69be6c0070",
+        "product_name": "Legacy / Unassigned Product",
+        "is_current": false,
+        "project_name": "UAT R3 conversion cbfe51b9-df16-4a62-bdb3-88c82854df99",
+        "spec": "spdx",
+        "spec_version": "SPDX-2.3",
+        "detected_format": "spdx_json",
+        "detected_spec_version": "SPDX-2.3",
+        "detection_confidence": 0.99,
+        "detection_evidence": {
+          "evidence": [
+            "spdxVersion present",
+            "SPDXID present",
+            "packages present"
+          ],
+          "warnings": []
+        },
+        "file_size_bytes": 842,
+        "total_lines": 1,
+        "sha256": "f424425bfb3d86132e73942aad55084cc3d62f18e6f9a3983583c2ad95d88fc0",
+        "is_large_file": false,
+        "full_editor_allowed": true,
+        "components": 1,
+        "validation_errors": [],
+        "validation_warnings": [],
+        "warnings": [],
+        "info": [],
+        "enrichment_status": "pending",
+        "validation_status": "valid",
+        "message": "SBOM uploaded successfully. Enrichment is running in background."
+      },
+      "request_id": "a4bb356d4a76"
+    },
+    "result": "PASS",
+    "time": "2026-10-20T09:47:42.003779+00:00"
+  },
+  {
+    "id": "R3-SPDX-CONVERT",
+    "role": "admin",
+    "preconditions": "Verified isolated Greenfield UUID; task-owned fixtures; credentials kept in memory",
+    "stepsExecuted": "Convert native SPDX through supported application endpoint",
+    "expected": "200 source-linked CycloneDX UUID",
+    "actual": {
+      "status": 200,
+      "data": {
+        "source_sbom_id": "1c2a9ec4-69f6-461b-a6bd-8fcd00ebf326",
+        "converted_sbom_id": "6ae23dc6-5b4f-47aa-98f0-37e9423806ba",
+        "source_format": "SPDX",
+        "target_format": "CycloneDX",
+        "status": "completed",
+        "conversion_status": "completed",
+        "enrichment_status": "pending",
+        "message": "Converted to CycloneDX. Lifecycle enrichment is running in background.",
+        "warnings": [],
+        "errors": [],
+        "conversion_report": {
+          "source_format": "SPDX",
+          "target_format": "CycloneDX",
+          "source_sbom_id": "1c2a9ec4-69f6-461b-a6bd-8fcd00ebf326",
+          "package_count": 1,
+          "component_count": 2,
+          "mapped_relationships": 1,
+          "unmapped_relationships": 0,
+          "warnings": [],
+          "errors": [],
+          "unmapped_fields": [],
+          "component_mapping": {
+            "SPDXRef-Package-foo": "SPDXRef-Package-foo"
+          },
+          "relationship_mapping": [
+            {
+              "spdx_relationship_type": "DESCRIBES",
+              "source": "SPDXRef-DOCUMENT",
+              "target": "SPDXRef-Package-foo",
+              "mapped_to": "dependency"
+            }
+          ],
+          "converted_at": "2026-10-20T09:47:44+00:00",
+          "conversion_tool": "SBOM Analyzer"
+        }
+      },
+      "request_id": "e426fd79a2bb"
+    },
+    "result": "PASS",
+    "time": "2026-10-20T09:47:44.610805+00:00"
+  },
+  {
+    "id": "R3-CONVERSION-REFERENCES",
+    "role": "admin",
+    "preconditions": "Verified isolated Greenfield UUID; task-owned fixtures; credentials kept in memory",
+    "stepsExecuted": "Download converted artifact; inspect identity/dependency references",
+    "expected": "200 valid CycloneDX 1.6 and no dangling references",
+    "actual": {
+      "status": 200,
+      "format": "CycloneDX",
+      "specVersion": "1.6",
+      "componentCount": 1,
+      "dependencyCount": 1,
+      "referencesValid": true
+    },
+    "result": "PASS",
+    "time": "2026-10-20T09:47:45.331570+00:00"
+  },
+  {
+    "id": "R3-CONVERSION-ORIGINAL-PRESERVED",
+    "role": "admin",
+    "preconditions": "Verified isolated Greenfield UUID; task-owned fixtures; credentials kept in memory",
+    "stepsExecuted": "Download original before/after conversion",
+    "expected": "Native export semantic equality and identical before/after bytes; immutable stored native document",
+    "actual": {
+      "beforeSha256": "3370b8e1addb575c7b349414e7b0b1eabfe6fa6ee3bae50edc506e5ba48e89c5",
+      "afterSha256": "3370b8e1addb575c7b349414e7b0b1eabfe6fa6ee3bae50edc506e5ba48e89c5",
+      "sourceSha256": "f424425bfb3d86132e73942aad55084cc3d62f18e6f9a3983583c2ad95d88fc0"
+    },
+    "result": "PASS",
+    "time": "2026-10-20T09:47:45.961368+00:00"
+  },
+  {
+    "id": "R3-CONVERSION-WRONG-FORMAT",
+    "role": "admin",
+    "preconditions": "Verified isolated Greenfield UUID; task-owned fixtures; credentials kept in memory",
+    "stepsExecuted": "Attempt SPDX-only conversion on CycloneDX record",
+    "expected": "400",
+    "actual": {
+      "status": 400,
+      "data": {
+        "detail": "SBOM format is 'cyclonedx'; only SPDX SBOMs can be converted to CycloneDX."
+      },
+      "request_id": "adc40537c7d2"
+    },
+    "result": "PASS",
+    "time": "2026-10-20T09:47:46.107799+00:00"
+  },
+  {
+    "id": "R3-CONVERSION-VIEWER",
+    "role": "admin",
+    "preconditions": "Verified isolated Greenfield UUID; task-owned fixtures; credentials kept in memory",
+    "stepsExecuted": "Viewer attempts conversion",
+    "expected": "403",
+    "actual": {
+      "status": 403,
+      "data": {
+        "detail": "Insufficient permission"
+      },
+      "request_id": "5a5b3ae2e783"
+    },
+    "result": "PASS",
+    "time": "2026-10-20T09:47:46.962267+00:00"
+  },
+  {
+    "id": "R3-CONVERSION-FOREIGN",
+    "role": "admin",
+    "preconditions": "Verified isolated Greenfield UUID; task-owned fixtures; credentials kept in memory",
+    "stepsExecuted": "Foreign tenant attempts known UUID conversion",
+    "expected": "404",
+    "actual": {
+      "status": 404,
+      "data": {
+        "detail": "Resource not found"
+      },
+      "request_id": "677b15d07399"
+    },
+    "result": "PASS",
+    "time": "2026-10-20T09:47:47.715572+00:00"
+  }
+]

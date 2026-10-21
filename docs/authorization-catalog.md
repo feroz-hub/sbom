@@ -38,7 +38,8 @@ python scripts/bootstrap_fresh_database.py \
 
 The command refuses non-PostgreSQL databases, mismatched confirmation, and any
 target containing public tables. It restores the frozen revision-047 schema,
-records that baseline, upgrades through revision 048, and verifies the head.
+records that baseline, applies all subsequent revisions, and verifies the current
+head (`079_lifecycle_provider_verification`).
 Secrets belong in a secret manager or process environment; do not put real
 credentials in repository files or shell history.
 

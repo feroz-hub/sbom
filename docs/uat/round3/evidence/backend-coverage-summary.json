@@ -1,0 +1,12 @@
+{
+  "currentCollectedInventory": 4368,
+  "everExecutedCurrentNode": 4022,
+  "noExecutionEvidenceForCurrentNode": 346,
+  "lastRecordedOutcomes": {
+    "PASS": 3785,
+    "SKIP": 9,
+    "FAIL": 228,
+    "NOT RUN": 346
+  },
+  "note": "Deduplicated node inventory only; diagnostic and targeted source qualifications retained. Not a current-source repository-green summary."
+}

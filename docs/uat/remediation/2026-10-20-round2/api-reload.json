@@ -1,0 +1,9 @@
+{
+  "time": "2026-10-20T04:48:06.757116+00:00",
+  "oldApiPid": 74226,
+  "newApiPid": 74562,
+  "verifiedDatabase": "sbom_greenfield_uuid",
+  "healthStatus": 200,
+  "onlyApiRestarted": true,
+  "bootstrapOrMigrationRun": false
+}

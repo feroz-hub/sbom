@@ -1,0 +1,475 @@
+ M README.md
+ M app/core/security.py
+ M app/db.py
+ M app/main.py
+ M app/models.py
+ M app/routers/projects.py
+ M app/routers/sboms_crud.py
+ M app/routers/tenants.py
+ M app/routers/vex_investigations.py
+ M app/schemas_identity.py
+ M app/services/auth_context_service.py
+ M app/services/fda_510k_excel_report_service.py
+ M app/services/report_composer.py
+ M app/services/sbom_delete_service.py
+ M app/workers/report_notifications.py
+ M docs/DATABASE_BOOTSTRAP_AND_UPGRADE.md
+ M docs/authorization-catalog.md
+ M docs/hierarchical-analysis-scheduler.md
+ M docs/native-iam-greenfield-setup.md
+ M docs/plans/vex-implementation-plan.md
+ M docs/runbook-report-notifications.md
+ M docs/sbom-quality-scoring.md
+ M frontend/src/app/__tests__/dashboard-drilldown.integration.test.tsx
+ M frontend/src/app/analysis/page.tsx
+ M frontend/src/app/component-advisor/components/[key]/page.tsx
+ M frontend/src/app/component-advisor/page.tsx
+ M frontend/src/app/platform/data-sync.integration.test.tsx
+ M frontend/src/app/products/[id]/page.test.tsx
+ M frontend/src/app/products/[id]/page.tsx
+ M frontend/src/app/projects/page.test.tsx
+ M frontend/src/app/projects/page.tsx
+ M frontend/src/app/sboms/[id]/page.tsx
+ M frontend/src/app/sboms/logical/[id]/page.tsx
+ M frontend/src/app/sboms/page.tsx
+ M frontend/src/app/schedules/page.tsx
+ M frontend/src/app/settings/platform/tenants/[tenantId]/page.test.tsx
+ M frontend/src/app/settings/platform/tenants/[tenantId]/page.tsx
+ M frontend/src/app/settings/platform/tenants/page.tsx
+ M frontend/src/app/settings/tenant/page.test.tsx
+ M frontend/src/app/settings/users/audit/page.test.tsx
+ M frontend/src/app/settings/users/audit/page.tsx
+ M frontend/src/app/settings/users/page.tsx
+ M frontend/src/app/vex-investigation/page.test.tsx
+ M frontend/src/app/vex-investigation/page.tsx
+ M frontend/src/components/admin/MemberActionMenu.tsx
+ M frontend/src/components/admin/NativeUserInviteForm.test.tsx
+ M frontend/src/components/admin/NativeUserInviteForm.tsx
+ M frontend/src/components/admin/PlatformTenantOverview.tsx
+ M frontend/src/components/admin/ScopedAdvisorPolicies.tsx
+ M frontend/src/components/admin/TenantAuditHistory.tsx
+ M frontend/src/components/admin/TenantContextHeader.test.tsx
+ M frontend/src/components/admin/TenantContextHeader.tsx
+ M frontend/src/components/admin/TenantMembersTable.tsx
+ M frontend/src/components/admin/TenantUsersAccess.tsx
+ M frontend/src/components/admin/UserLifecycle.tsx
+ M frontend/src/components/admin/UserSearchCombobox.tsx
+ M frontend/src/components/admin/__tests__/MemberActionMenu.test.tsx
+ M frontend/src/components/admin/advisor-policies/PolicyEditor.tsx
+ M frontend/src/components/admin/advisor-policies/PolicyHistory.tsx
+ M frontend/src/components/analysis/ConsolidatedAnalysisPanel.tsx
+ M frontend/src/components/analysis/FindingsTable.tsx
+ M frontend/src/components/analysis/SbomPreflightChecklist.tsx
+ M frontend/src/components/analysis/VulnerabilitiesByScope.tsx
+ M frontend/src/components/compare/PostureHero/PostureHero.tsx
+ M frontend/src/components/compare/Sparkline/Sparkline.tsx
+ M frontend/src/components/dashboard/DashboardFilters.test.tsx
+ M frontend/src/components/dashboard/DashboardFilters.tsx
+ M frontend/src/components/dashboard/TrendExplorer.tsx
+ M frontend/src/components/projects/ProjectApplications.tsx
+ M frontend/src/components/projects/ProjectsTable.tsx
+ M frontend/src/components/reports/NotifyMeLink.tsx
+ M frontend/src/components/reports/ReportNotificationsPage.tsx
+ M frontend/src/components/sboms/AnalysisStatusBadge.tsx
+ M frontend/src/components/sboms/ComponentVexManager.tsx
+ M frontend/src/components/sboms/Fda510kReportDialog.tsx
+ M frontend/src/components/sboms/LogicalSbomHistory.tsx
+ M frontend/src/components/sboms/SbomConversionCard.tsx
+ M frontend/src/components/sboms/SbomDetail.lifecycle.test.tsx
+ M frontend/src/components/sboms/SbomDetail.tsx
+ M frontend/src/components/sboms/SbomQualityPanel.tsx
+ M frontend/src/components/sboms/SbomRawViewer.tsx
+ M frontend/src/components/sboms/SbomStatusBadge.tsx
+ M frontend/src/components/sboms/SbomUploadModal.repair.test.tsx
+ M frontend/src/components/sboms/SbomUploadModal.tsx
+ M frontend/src/components/sboms/SbomsTable.tsx
+ M frontend/src/components/sboms/ValidationRepairWorkspace.tsx
+ M frontend/src/components/schedules/ScheduleCard.tsx
+ M frontend/src/components/schedules/ScheduleEditor.tsx
+ M frontend/src/components/ui/Dialog.tsx
+ M frontend/src/components/ui/PinButton.tsx
+ M frontend/src/components/vex/VexDecisionEditor.tsx
+ M frontend/src/components/vex/VexInvestigationPanel.tsx
+ M frontend/src/components/vex/VexRunHistoryPanel.tsx
+ M frontend/src/components/vex/VexVersionComparisonPanel.tsx
+ M frontend/src/components/vulnerabilities/CveDetailDialog/CveDetailDialog.tsx
+ M frontend/src/components/vulnerabilities/CveDetailDialog/hooks.ts
+ M frontend/src/components/vulnerabilities/CveDetailDialog/queryKey.ts
+ M frontend/src/hooks/analysis-stream-sync.test.tsx
+ M frontend/src/hooks/useAnalysisStream.test.tsx
+ M frontend/src/hooks/useAnalysisStream.ts
+ M frontend/src/hooks/useAnalysisTerminal.ts
+ M frontend/src/hooks/useAuth.test.tsx
+ M frontend/src/hooks/useAuth.tsx
+ M frontend/src/hooks/useBackgroundAnalysis.ts
+ M frontend/src/hooks/useReportNotifications.ts
+ M frontend/src/hooks/useSbomMutations.ts
+ M frontend/src/lib/advisorPolicyApi.ts
+ M frontend/src/lib/analysisSync.ts
+ M frontend/src/lib/api.tenantHeader.test.ts
+ M frontend/src/lib/api.ts
+ M frontend/src/lib/auth.tenantCookie.test.ts
+ M frontend/src/lib/auth.ts
+ M frontend/src/lib/auth/tenantHeader.test.ts
+ M frontend/src/lib/auth/tenantHeader.ts
+ M frontend/src/lib/dashboardScopeUrl.test.ts
+ M frontend/src/lib/dashboardScopeUrl.ts
+ M frontend/src/lib/pendingAnalysis.ts
+ M frontend/src/lib/pinned.ts
+ M frontend/src/lib/queryInvalidation.ts
+ M frontend/src/lib/reportApi.ts
+ M frontend/src/lib/topVulnerableRuns.ts
+ M frontend/src/types/compare.ts
+ M frontend/src/types/componentAdvisor.ts
+ M frontend/src/types/dashboardAdvanced.ts
+ M frontend/src/types/index.ts
+ M frontend/src/types/reports.ts
+ M frontend/src/types/sbomAutoRepair.ts
+ M scripts/dev.py
+ M tests/report_load_probe.py
+ M tests/test_dashboard_scope.py
+ M tests/test_fda_510k_excel_report.py
+ M tests/test_hierarchical_scheduler_migration.py
+ M tests/test_lifecycle_engine_v2.py
+ M tests/test_native_backup_acceptance.py
+ M tests/test_native_iam_foundation.py
+ M tests/test_native_iam_phase2.py
+ M tests/test_native_iam_phase5.py
+ M tests/test_product_hierarchy.py
+ M tests/test_report_migrations.py
+ M tests/test_report_notifications.py
+ M tests/test_sbom_repair_migration.py
+ M tests/test_sbom_selection_policy.py
+ M tests/test_vex_investigations_api.py
+?? Makefile
+?? alembic/versions/100_greenfield_uuid_final.py
+?? app/greenfield_schema.py
+?? app/public_api.py
+?? app/public_identity.py
+?? docs/uat/SBOM_ANALYZER_FULL_UAT_REPORT.md
+?? docs/uat/clean-test-sessions.py
+?? docs/uat/diagnose-vex-detail.py
+?? docs/uat/evidence/2026-10-19/UAT-ROLE-UI-dialog.png
+?? docs/uat/evidence/2026-10-19/UAT-USER-001-admin-directory.png
+?? docs/uat/evidence/2026-10-19/UAT-USER-014-cancel-overlap.png
+?? docs/uat/evidence/2026-10-19/UAT-dashboard-filter-incomplete.png
+?? docs/uat/evidence/2026-10-19/UAT-kev-admin-sync-denied.png
+?? docs/uat/evidence/2026-10-19/UAT-native-membership-confirmation.png
+?? docs/uat/evidence/2026-10-19/UAT-repair-admin.png
+?? docs/uat/evidence/2026-10-19/UAT-repair-developer.png
+?? docs/uat/evidence/2026-10-19/UAT-repair-viewer.png
+?? docs/uat/evidence/2026-10-19/UAT-users-mobile.png
+?? docs/uat/evidence/2026-10-19/artifact-verification.json
+?? docs/uat/evidence/2026-10-19/authorization-matrix.json
+?? docs/uat/evidence/2026-10-19/business-api-cases.json
+?? docs/uat/evidence/2026-10-19/business-fixtures.json
+?? docs/uat/evidence/2026-10-19/cases.json
+?? docs/uat/evidence/2026-10-19/direct-api-cases.json
+?? docs/uat/evidence/2026-10-19/disposable-controls.json
+?? docs/uat/evidence/2026-10-19/extended-cases.json
+?? docs/uat/evidence/2026-10-19/final-state-cases.json
+?? docs/uat/evidence/2026-10-19/fixture-identifiers.json
+?? docs/uat/evidence/2026-10-19/frontend-memory-restart.txt
+?? docs/uat/evidence/2026-10-19/http-admin-only.json
+?? docs/uat/evidence/2026-10-19/http-business.json
+?? docs/uat/evidence/2026-10-19/http-extended.json
+?? docs/uat/evidence/2026-10-19/http-final-browser.json
+?? docs/uat/evidence/2026-10-19/http-invitations.json
+?? docs/uat/evidence/2026-10-19/http-metadata.json
+?? docs/uat/evidence/2026-10-19/http-pages.json
+?? docs/uat/evidence/2026-10-19/http-roles.json
+?? docs/uat/evidence/2026-10-19/http-security.json
+?? docs/uat/evidence/2026-10-19/http-undefined.json
+?? docs/uat/evidence/2026-10-19/http-user-ui.json
+?? docs/uat/evidence/2026-10-19/http-users.json
+?? docs/uat/evidence/2026-10-19/invite-controls.json
+?? docs/uat/evidence/2026-10-19/isolated-settings-cases.json
+?? docs/uat/evidence/2026-10-19/isolation-targets.json
+?? docs/uat/evidence/2026-10-19/osv-provider-log.txt
+?? docs/uat/evidence/2026-10-19/outstanding-cases.json
+?? docs/uat/evidence/2026-10-19/policy-history-correlated-log.txt
+?? docs/uat/evidence/2026-10-19/policy-history-diagnosis.json
+?? docs/uat/evidence/2026-10-19/session-cleanup.json
+?? docs/uat/evidence/2026-10-19/temporary-user.json
+?? docs/uat/evidence/2026-10-19/uat.cdx.json
+?? docs/uat/evidence/2026-10-19/users-admin.png
+?? docs/uat/evidence/2026-10-19/users-analyst.png
+?? docs/uat/evidence/2026-10-19/users-developer.png
+?? docs/uat/evidence/2026-10-19/users-foreign.png
+?? docs/uat/evidence/2026-10-19/users-platform.png
+?? docs/uat/evidence/2026-10-19/users-viewer.png
+?? docs/uat/evidence/2026-10-19/vendor-cases.json
+?? docs/uat/evidence/2026-10-19/vex-correlated-log.txt
+?? docs/uat/evidence/2026-10-19/vex-detail-validation.json
+?? docs/uat/evidence/2026-10-19/workflow-cases.json
+?? docs/uat/finish-tenant-uat.py
+?? docs/uat/remediation/2026-10-20-round1/LINEAR_RESULTS.md
+?? docs/uat/remediation/2026-10-20-round1/RESULTS.md
+?? docs/uat/remediation/2026-10-20-round1/api-after-initial.json
+?? docs/uat/remediation/2026-10-20-round1/api-after.json
+?? docs/uat/remediation/2026-10-20-round1/api-before.json
+?? docs/uat/remediation/2026-10-20-round1/api-dashboard.json
+?? docs/uat/remediation/2026-10-20-round1/api-reload.json
+?? docs/uat/remediation/2026-10-20-round1/api-safeguards.json
+?? docs/uat/remediation/2026-10-20-round1/api-vex-roles.json
+?? docs/uat/remediation/2026-10-20-round1/before/app/routers/vex_investigations.py
+?? docs/uat/remediation/2026-10-20-round1/before/app/schemas_vex.py
+?? docs/uat/remediation/2026-10-20-round1/before/docs/plans/vex-implementation-plan.md
+?? docs/uat/remediation/2026-10-20-round1/before/docs/uat/SBOM_ANALYZER_FULL_UAT_REPORT.md
+?? docs/uat/remediation/2026-10-20-round1/before/frontend/src/lib/dashboardScopeUrl.test.ts
+?? docs/uat/remediation/2026-10-20-round1/before/frontend/src/lib/dashboardScopeUrl.ts
+?? docs/uat/remediation/2026-10-20-round1/browser-dashboard-after.json
+?? docs/uat/remediation/2026-10-20-round1/browser-dashboard-before.json
+?? docs/uat/remediation/2026-10-20-round1/browser-dashboard-foreign.json
+?? docs/uat/remediation/2026-10-20-round1/browser-dashboard-intelligence-refresh.json
+?? docs/uat/remediation/2026-10-20-round1/browser-dashboard-transient-comparison.json
+?? docs/uat/remediation/2026-10-20-round1/browser-round1.cjs
+?? docs/uat/remediation/2026-10-20-round1/browser-vex-before-settled-wait.json
+?? docs/uat/remediation/2026-10-20-round1/browser-vex-readback.json
+?? docs/uat/remediation/2026-10-20-round1/browser-vex.json
+?? docs/uat/remediation/2026-10-20-round1/dashboard-acceptance.json
+?? docs/uat/remediation/2026-10-20-round1/dashboard-after.png
+?? docs/uat/remediation/2026-10-20-round1/dashboard-api.py
+?? docs/uat/remediation/2026-10-20-round1/dashboard-before.png
+?? docs/uat/remediation/2026-10-20-round1/dashboard-foreign-denied.png
+?? docs/uat/remediation/2026-10-20-round1/final-safeguards.py
+?? docs/uat/remediation/2026-10-20-round1/final-verification.json
+?? docs/uat/remediation/2026-10-20-round1/fixtures.json
+?? docs/uat/remediation/2026-10-20-round1/foreign-browser.cjs
+?? docs/uat/remediation/2026-10-20-round1/git-status-before.txt
+?? docs/uat/remediation/2026-10-20-round1/live-api.py
+?? docs/uat/remediation/2026-10-20-round1/reload-local-api.py
+?? docs/uat/remediation/2026-10-20-round1/run-regressions.py
+?? docs/uat/remediation/2026-10-20-round1/runtime-dashboard-parser-before.sha256
+?? docs/uat/remediation/2026-10-20-round1/source.patch
+?? docs/uat/remediation/2026-10-20-round1/uat-baseline-sha256.json
+?? docs/uat/remediation/2026-10-20-round1/vex-admin.png
+?? docs/uat/remediation/2026-10-20-round1/vex-developer.png
+?? docs/uat/remediation/2026-10-20-round1/vex-persisted-readback.png
+?? docs/uat/remediation/2026-10-20-round1/vex-persistence-readonly.json
+?? docs/uat/remediation/2026-10-20-round1/workspace-before-sha256.json
+?? docs/uat/remediation/2026-10-20-round1/write-results.py
+?? docs/uat/run-config-gates.py
+?? docs/uat/run-disposable-controls.py
+?? docs/uat/run-extended-uat.cjs
+?? docs/uat/run-final-api.py
+?? docs/uat/run-isolated-settings.py
+?? docs/uat/run-role-uat.cjs
+?? docs/uat/run-session-replay.cjs
+?? docs/uat/run-vendor-uat.py
+?? docs/uat/run-workflow-browser.cjs
+?? docs/uat/run-workflow-uat.py
+?? docs/uat/update-report.py
+?? docs/uat/verify-final-state.py
+?? docs/uuid-migration/GREENFIELD_HTTPS_CERTIFICATE_FIX.md
+?? docs/uuid-migration/GREENFIELD_LOGIN_DIAGNOSTIC.md
+?? docs/uuid-migration/GREENFIELD_UUID_ACCEPTANCE.md
+?? docs/uuid-migration/MIGRATION_MASTER_TRACKER.md
+?? docs/uuid-migration/phase1/01-baseline.md
+?? docs/uuid-migration/phase1/02-primary-keys.md
+?? docs/uuid-migration/phase1/03-relationships.md
+?? docs/uuid-migration/phase1/04-postgresql.md
+?? docs/uuid-migration/phase1/05-api-exposure.md
+?? docs/uuid-migration/phase1/06-frontend.md
+?? docs/uuid-migration/phase1/07-background-integrations.md
+?? docs/uuid-migration/phase1/08-security-performance.md
+?? docs/uuid-migration/phase1/09-final-audit.md
+?? docs/uuid-migration/phase1/09-impact-matrix.csv
+?? docs/uuid-migration/phase2/00-deployment-target-readiness.md
+?? docs/uuid-migration/phase2/01-core-public-uuid-contract.md
+?? docs/uuid-migration/phase2/02-w1-additive-schema-design.md
+?? docs/uuid-migration/phase2/03-disposable-target-preparation.md
+?? docs/uuid-migration/phase2/04-d-isolation-preflight.md
+?? docs/uuid-migration/phase2/05-d-config-validation.md
+?? docs/uuid-migration/phase2/06-existing-env-integrity-review.md
+?? docs/uuid-migration/phase2/07-d-provisioning-acceptance.md
+?? docs/uuid-migration/phase2/08-d-port-publication-diagnosis.md
+?? docs/uuid-migration/phase2/09-w1-six-table-expand-implementation.md
+?? docs/uuid-migration/phase2/10-w1-expand-transaction-refactor.md
+?? docs/uuid-migration/phase2/11-w1-unique-index-backfill-implementation.md
+?? docs/uuid-migration/phase2/12-w1-isolated-expand-runner.md
+?? docs/uuid-migration/phase2/13-d-network-correction-acceptance.md
+?? docs/uuid-migration/phase2/14-d-readonly-acceptance-diagnosis.md
+?? docs/uuid-migration/phase2/15-d-readonly-acceptance-final.md
+?? docs/uuid-migration/phase2/16-w1-b-schema-baseline-restore.md
+?? docs/uuid-migration/phase2/17-w15r-restricted-owner-role.md
+?? docs/uuid-migration/phase2/18-w15b-revision-079-establishment.md
+?? docs/uuid-migration/phase2/19-w16d-first-uuid-expand-execution.md
+?? docs/uuid-migration/phase2/20-w16e-projects-uuid-expand.md
+?? docs/uuid-migration/phase2/21-w16f-products-uuid-expand.md
+?? docs/uuid-migration/phase2/22-w16g-logical-sbom-uuid-expand.md
+?? docs/uuid-migration/phase2/23-w16h-sbom-source-uuid-expand.md
+?? docs/uuid-migration/phase2/24-w16i-sbom-component-uuid-expand.md
+?? docs/uuid-migration/phase2/25-w17a-uuid-integrity-test-implementation.md
+?? docs/uuid-migration/phase2/26-w17b-e-provisioning-baseline-acceptance.md
+?? docs/uuid-migration/phase2/27-w20-fresh-db-bootstrap-plan.md
+?? docs/uuid-migration/phase2/28-w21-fresh-bootstrap-implementation.md
+?? docs/uuid-migration/phase2/29-w22-fresh-uuid-final-schema.md
+?? docs/uuid-migration/phase2/30-w23-fresh-bootstrap-coordinator.md
+?? docs/uuid-migration/phase2/31-w24a-f-activation-preparation.md
+?? docs/uuid-migration/phase2/32-w24b-query-budget-reconciliation.md
+?? docs/uuid-migration/phase2/33-w24c-transaction-compatibility.md
+?? docs/uuid-migration/phase2/34-w24d-f-infrastructure-provisioning.md
+?? docs/uuid-migration/phase2/35-w24e-f-readonly-identity-freshness.md
+?? docs/uuid-migration/phase2/36-w24e1-readonly-acceptance-correction.md
+?? docs/uuid-migration/phase2/37-w25-frozen047-execution-readiness.md
+?? docs/uuid-migration/phase2/38-w251-driver-bypass-analysis.md
+?? frontend/e2e/greenfield-login.config.ts
+?? frontend/e2e/greenfield-login.spec.ts
+?? frontend/e2e/greenfield.config.ts
+?? frontend/e2e/greenfield.spec.ts
+?? frontend/src/components/admin/TenantMembersTable.test.tsx
+?? frontend/src/lib/publicId.ts
+?? infra/greenfield-uuid/compose.yml
+?? infra/uuid-migration/docker-compose.uuid-w1.yml
+?? infra/uuid-migration/docker-compose.uuid-w17-e.yml
+?? infra/uuid-migration/f-activation/README.md
+?? infra/uuid-migration/f-activation/activation.py
+?? infra/uuid-migration/f-activation/approval.pending.json
+?? infra/uuid-migration/f-activation/binding.py
+?? infra/uuid-migration/f-activation/catalog.py
+?? infra/uuid-migration/f-activation/compose.f.proposed.yml
+?? infra/uuid-migration/f-activation/journal.py
+?? infra/uuid-migration/f-activation/resources.py
+?? infra/uuid-migration/f-activation/reviewed.py
+?? infra/uuid-migration/f-activation/runtime-checklist.md
+?? infra/uuid-migration/f-activation/security.py
+?? infra/uuid-migration/f-activation/test_activation_offline.py
+?? infra/uuid-migration/f-activation/transport.py
+?? infra/uuid-migration/f-budget-reconciliation/README.md
+?? infra/uuid-migration/f-budget-reconciliation/accounting.py
+?? infra/uuid-migration/f-budget-reconciliation/approval.pending.json
+?? infra/uuid-migration/f-budget-reconciliation/budget-reference.schema.json
+?? infra/uuid-migration/f-budget-reconciliation/budget_policy.py
+?? infra/uuid-migration/f-budget-reconciliation/driver-initialization-review.v1.json
+?? infra/uuid-migration/f-budget-reconciliation/integration.v2.proposed.diff
+?? infra/uuid-migration/f-budget-reconciliation/observation-plan.v2.json
+?? infra/uuid-migration/f-budget-reconciliation/prior-sources.v1.json
+?? infra/uuid-migration/f-budget-reconciliation/proposed-execution-sources.v2.json
+?? infra/uuid-migration/f-budget-reconciliation/query-accounting.v2.csv
+?? infra/uuid-migration/f-budget-reconciliation/query-budgets.v2.proposed.json
+?? infra/uuid-migration/f-budget-reconciliation/review_inputs.py
+?? infra/uuid-migration/f-budget-reconciliation/scoped_meter.py
+?? infra/uuid-migration/f-budget-reconciliation/source-lock.v3.proposed.json
+?? infra/uuid-migration/f-budget-reconciliation/test_budget_offline.py
+?? infra/uuid-migration/f-readonly-acceptance/README.md
+?? infra/uuid-migration/f-readonly-acceptance/acceptance-matrix.json
+?? infra/uuid-migration/f-readonly-acceptance/catalog.py
+?? infra/uuid-migration/f-readonly-acceptance/dependency-lock.json
+?? infra/uuid-migration/f-readonly-acceptance/entry.py
+?? infra/uuid-migration/f-readonly-acceptance/probe.py
+?? infra/uuid-migration/f-readonly-acceptance/runtime.py
+?? infra/uuid-migration/f-readonly-acceptance/schema-privilege-review.md
+?? infra/uuid-migration/f-readonly-acceptance/security.py
+?? infra/uuid-migration/f-readonly-acceptance/sql-review.json
+?? infra/uuid-migration/f-readonly-acceptance/test_correction_offline.py
+?? infra/uuid-migration/f-readonly-acceptance/test_readonly_offline.py
+?? infra/uuid-migration/f-transaction-correction/README.md
+?? infra/uuid-migration/f-transaction-correction/approval.pending.json
+?? infra/uuid-migration/f-transaction-correction/connection.py
+?? infra/uuid-migration/f-transaction-correction/dependency-review.v1.json
+?? infra/uuid-migration/f-transaction-correction/dialect.py
+?? infra/uuid-migration/f-transaction-correction/execution-transition.v3.proposed.diff
+?? infra/uuid-migration/f-transaction-correction/execution-transition.v3.proposed.json
+?? infra/uuid-migration/f-transaction-correction/kernel.py
+?? infra/uuid-migration/f-transaction-correction/lifecycle.py
+?? infra/uuid-migration/f-transaction-correction/metering.py
+?? infra/uuid-migration/f-transaction-correction/recipe.py
+?? infra/uuid-migration/f-transaction-correction/review.py
+?? infra/uuid-migration/f-transaction-correction/source-lock.v4.proposed.json
+?? infra/uuid-migration/f-transaction-correction/test_transaction_offline.py
+?? infra/uuid-migration/f-transaction-correction/transport.py
+?? infra/uuid-migration/finalization-tests/test_finalization_offline.py
+?? infra/uuid-migration/fresh-bootstrap/047-execution.proposed.sql
+?? infra/uuid-migration/fresh-bootstrap/047-transformation.diff
+?? infra/uuid-migration/fresh-bootstrap/README.md
+?? infra/uuid-migration/fresh-bootstrap/approval.pending.json
+?? infra/uuid-migration/fresh-bootstrap/approval.schema.json
+?? infra/uuid-migration/fresh-bootstrap/fresh_bootstrap.py
+?? infra/uuid-migration/fresh-bootstrap/fresh_catalog.py
+?? infra/uuid-migration/fresh-bootstrap/frozen_047.py
+?? infra/uuid-migration/fresh-bootstrap/pg_lex.py
+?? infra/uuid-migration/fresh-bootstrap/source-lock.json
+?? infra/uuid-migration/fresh-bootstrap/test_fresh_bootstrap.py
+?? infra/uuid-migration/fresh-coordinator/README.md
+?? infra/uuid-migration/fresh-coordinator/approval.pending.json
+?? infra/uuid-migration/fresh-coordinator/approval.schema.json
+?? infra/uuid-migration/fresh-coordinator/authority.py
+?? infra/uuid-migration/fresh-coordinator/coordinator.py
+?? infra/uuid-migration/fresh-coordinator/isolated_loader.py
+?? infra/uuid-migration/fresh-coordinator/observations.py
+?? infra/uuid-migration/fresh-coordinator/source-lock.v2.json
+?? infra/uuid-migration/fresh-coordinator/source_registry.py
+?? infra/uuid-migration/fresh-coordinator/test_coordinator_offline.py
+?? infra/uuid-migration/fresh-coordinator/unit-budgets.v1.json
+?? infra/uuid-migration/frozen047-driver-correction/README.md
+?? infra/uuid-migration/frozen047-driver-correction/source-lock.w251.v1.json
+?? infra/uuid-migration/frozen047-driver-correction/test_w251_offline.py
+?? infra/uuid-migration/frozen047-driver-correction/w251_driver.py
+?? infra/uuid-migration/frozen047-driver-correction/w251_entry.py
+?? infra/uuid-migration/frozen047-driver-correction/w251_integration.py
+?? infra/uuid-migration/frozen047-execution/README.md
+?? infra/uuid-migration/frozen047-execution/approval.pending.json
+?? infra/uuid-migration/frozen047-execution/dependencies.w25.json
+?? infra/uuid-migration/frozen047-execution/expected-schema.w25.json
+?? infra/uuid-migration/frozen047-execution/observation-budget.w25.json
+?? infra/uuid-migration/frozen047-execution/retained-inputs.v1.json
+?? infra/uuid-migration/frozen047-execution/runtime-acceptance-checklist.md
+?? infra/uuid-migration/frozen047-execution/setting-source-review.v2.md
+?? infra/uuid-migration/frozen047-execution/source-lock.w25.json
+?? infra/uuid-migration/frozen047-execution/source-lock.w25.v2.json
+?? infra/uuid-migration/frozen047-execution/sql-allowlist.w25.json
+?? infra/uuid-migration/frozen047-execution/test_w25_offline.py
+?? infra/uuid-migration/frozen047-execution/test_w25_settings_offline.py
+?? infra/uuid-migration/frozen047-execution/w25_catalog.py
+?? infra/uuid-migration/frozen047-execution/w25_contract.py
+?? infra/uuid-migration/frozen047-execution/w25_coordinator.py
+?? infra/uuid-migration/frozen047-execution/w25_entry.py
+?? infra/uuid-migration/frozen047-execution/w25_inputs.py
+?? infra/uuid-migration/frozen047-execution/w25_runtime.py
+?? infra/uuid-migration/frozen047-execution/w25_schema.py
+?? infra/uuid-migration/frozen047-execution/w25_test_support.py
+?? infra/uuid-migration/staged-alembic/080_uuid_public_id_expand.py
+?? infra/uuid-migration/staged-alembic/081_uuid_projects_expand.py
+?? infra/uuid-migration/staged-alembic/082_uuid_products_expand.py
+?? infra/uuid-migration/staged-alembic/083_uuid_logical_sbom_expand.py
+?? infra/uuid-migration/staged-alembic/084_uuid_sbom_source_expand.py
+?? infra/uuid-migration/staged-alembic/085_uuid_sbom_component_expand.py
+?? infra/uuid-migration/staged-alembic/archive/080_uuid_public_id_expand.w1_6a.py.txt
+?? infra/uuid-migration/staged-finalization/086_uuid_tenants_finalize.py
+?? infra/uuid-migration/staged-finalization/087_uuid_projects_finalize.py
+?? infra/uuid-migration/staged-finalization/088_uuid_products_finalize.py
+?? infra/uuid-migration/staged-finalization/089_uuid_logical_sbom_finalize.py
+?? infra/uuid-migration/staged-finalization/090_uuid_sbom_source_finalize.py
+?? infra/uuid-migration/staged-finalization/091_uuid_sbom_component_finalize.py
+?? infra/uuid-migration/staged-finalization/README.md
+?? infra/uuid-migration/staged-runner/backfill_public_ids.py
+?? infra/uuid-migration/staged-runner/create_unique_indexes.py
+?? infra/uuid-migration/staged-runner/d-approval.example.json
+?? infra/uuid-migration/staged-runner/expand_one_step.py
+?? infra/uuid-migration/staged-runner/test_expand_one_step.py
+?? infra/uuid-migration/staged-runner/test_uuid_integrity_connection_offline.py
+?? infra/uuid-migration/staged-runner/test_uuid_integrity_mount_offline.py
+?? infra/uuid-migration/staged-runner/test_uuid_integrity_offline.py
+?? infra/uuid-migration/staged-runner/test_w17b5_e_readonly.py
+?? infra/uuid-migration/staged-runner/uuid_integrity_control.py
+?? infra/uuid-migration/staged-runner/uuid_integrity_fixture_catalog.json
+?? infra/uuid-migration/staged-runner/uuid_integrity_fixtures.py
+?? infra/uuid-migration/staged-runner/uuid_integrity_suite.py
+?? infra/uuid-migration/staged-runner/uuid_w1_common.py
+?? infra/uuid-migration/staged-runner/verify_offline.py
+?? infra/uuid-migration/staged-runner/w17b5_e_readonly.py
+?? scripts/dev_greenfield.py
+?? scripts/greenfield_acceptance.py
+?? scripts/greenfield_https.py
+?? scripts/greenfield_integrity.py
+?? scripts/greenfield_references.py
+?? scripts/greenfield_regression.py
+?? scripts/greenfield_schema_check.py
+?? scripts/greenfield_seed.py
+?? scripts/greenfield_uuid.py
+?? scripts/greenfield_worker.py
+?? scripts/test_greenfield_setup.py
+?? tests/test_dev_greenfield.py
+?? tests/test_greenfield_https.py
+?? tests/test_vex_confidence_serialization.py

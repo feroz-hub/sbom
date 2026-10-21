@@ -1,0 +1,364 @@
+[
+  {
+    "id": "UAT-AI-LIVE-PROVIDER",
+    "module": "AI configuration and providers",
+    "role": "admin",
+    "preconditions": "Fresh isolated Chrome context; Native Login; TLS validation enabled; greenfield development stack",
+    "steps": "Inspected live credential metadata; live AI completion requires configured provider",
+    "expected": "Configured real AI provider can be called",
+    "actual": "No AI credentials configured; no credential fabricated or borrowed",
+    "api": null,
+    "status": "BLOCKED",
+    "defect": null,
+    "time": "2026-10-19T15:38:38.087Z",
+    "source": "docs/uat/evidence/2026-10-19/business-api-cases.json"
+  },
+  {
+    "id": "UAT-VEX-ASSIGNED-DEVELOPER",
+    "module": "VEX Investigation",
+    "role": "developer",
+    "preconditions": "Independent Native bearer authentication per role; direct loopback API; greenfield development stack; no browser session reused",
+    "steps": "Observe list/detail boundary before attempting supported assignment workflow",
+    "expected": "Assigned Developer can open and update owned investigation",
+    "actual": "Blocked by UAT-DEF-003: detail serialization fails. Positive assignment/edit UI cannot be accepted; non-owner rejection was executed separately.",
+    "api": 500,
+    "status": "BLOCKED",
+    "defect": "UAT-DEF-003",
+    "time": "2026-10-19T15:44:52.846Z",
+    "source": "docs/uat/evidence/2026-10-19/extended-cases.json"
+  },
+  {
+    "id": "UAT-SCHEDULE-VALIDATION",
+    "module": "Schedules",
+    "role": "admin",
+    "preconditions": "Independent Native bearer authentication per role; direct loopback API; greenfield development stack; no browser session reused",
+    "steps": "POST invalid disabled cron configuration on UAT product",
+    "expected": "Invalid cron receives 400/422",
+    "actual": {
+      "status": 422,
+      "data": {
+        "detail": "CUSTOM cadence needs the 'croniter' package; pip install croniter"
+      },
+      "requestId": "adacb4de6ca7",
+      "limitation": "The optional croniter parser is missing. Rejection did not establish invalid-cron syntax validation."
+    },
+    "api": 422,
+    "status": "BLOCKED",
+    "defect": "ENV-002",
+    "time": "2026-10-19T15:44:53.279Z",
+    "source": "docs/uat/evidence/2026-10-19/extended-cases.json"
+  },
+  {
+    "id": "UAT-ENV-FRONTEND-RESTART",
+    "module": "Environment stability",
+    "role": "browser all roles",
+    "preconditions": "Next development server; one sequential Chrome account at a time; TLS validation enabled",
+    "steps": "Navigate module pages; correlate ERR_EMPTY_RESPONSE/timeouts with frontend log; probe HTTPS afterward",
+    "expected": "Frontend remains available across module navigation",
+    "actual": {
+      "log": [
+        "\u26a0 Server is approaching the used memory threshold, restarting..."
+      ],
+      "observed": "net::ERR_EMPTY_RESPONSE during vendor-record page; subsequent HTTPS probe returned 200 after server self-restart",
+      "hostSwapMB": 9045,
+      "cause_limit": "Next explicitly reported its memory restart threshold; underlying host pressure and exact allocation cause were not profiled."
+    },
+    "api": null,
+    "status": "BLOCKED",
+    "defect": "ENV-001",
+    "time": "2026-10-19T15:47:46.596432+00:00",
+    "source": "docs/uat/evidence/2026-10-19/extended-cases.json"
+  },
+  {
+    "id": "UAT-SCHEDULE-CUSTOM",
+    "module": "Schedules",
+    "role": "admin",
+    "preconditions": "Live greenfield stack; private credentials in memory; only UAT-created records mutated",
+    "steps": "Submit valid disabled cron; inspect current optional parser prerequisite",
+    "expected": "Valid custom cron can be stored without enabling execution",
+    "actual": {
+      "status": 422,
+      "data": {
+        "detail": "CUSTOM cadence needs the 'croniter' package; pip install croniter"
+      },
+      "request_id": "8dc965547435"
+    },
+    "api": 422,
+    "status": "BLOCKED",
+    "defect": "ENV-002",
+    "time": "2026-10-19T15:54:32.849516+00:00",
+    "source": "docs/uat/evidence/2026-10-19/extended-cases.json"
+  },
+  {
+    "id": "UAT-DASHBOARD-DEPENDENT-FILTERS",
+    "module": "Dashboard",
+    "role": "admin / relevant tenant roles",
+    "preconditions": "Required prerequisite or scenario coverage is explicitly stated below; no unsupported execution claim",
+    "steps": "No positive execution of this scenario. See actual result for related executed evidence and prerequisite.",
+    "expected": "Complete project \u2192 product \u2192 SBOM browser selection and drill-down with refresh/deep links",
+    "actual": {
+      "limitation": "The executed Project UUID selection resets because the shared numeric URL parser rejects UUIDs; dependent hierarchy acceptance is blocked."
+    },
+    "api": null,
+    "status": "BLOCKED",
+    "defect": "UAT-DEF-006",
+    "time": "2026-10-19T18:11:45.360212+00:00",
+    "source": "docs/uat/evidence/2026-10-19/outstanding-cases.json"
+  },
+  {
+    "id": "UAT-VEX-DECISION-UI",
+    "module": "VEX Investigation",
+    "role": "admin / analyst / assigned developer",
+    "preconditions": "Required prerequisite or scenario coverage is explicitly stated below; no unsupported execution claim",
+    "steps": "No positive execution of this scenario. See actual result for related executed evidence and prerequisite.",
+    "expected": "Open detail, assign, save a justified decision and verify refreshed state through UI",
+    "actual": {
+      "limitation": "Executed detail GET returns 500; the same serializer also breaks mutation and stale conflict responses. Lower-role/foreign rejection was independently executed."
+    },
+    "api": null,
+    "status": "BLOCKED",
+    "defect": "UAT-DEF-003",
+    "time": "2026-10-19T18:11:45.360607+00:00",
+    "source": "docs/uat/evidence/2026-10-19/outstanding-cases.json"
+  },
+  {
+    "id": "UAT-PLATFORM-TENANT-WORKING-CONTEXT",
+    "module": "Platform",
+    "role": "platform",
+    "preconditions": "Required prerequisite or scenario coverage is explicitly stated below; no unsupported execution claim",
+    "steps": "No positive execution of this scenario. See actual result for related executed evidence and prerequisite.",
+    "expected": "Enter an authorized working tenant using the supported membership-based switcher",
+    "actual": {
+      "limitation": "Seeded Platform user has no tenant membership; supported switcher requires one. No seeded membership was added. Platform administration endpoints and forged-header denial were executed."
+    },
+    "api": null,
+    "status": "BLOCKED",
+    "defect": null,
+    "time": "2026-10-19T18:11:45.360610+00:00",
+    "source": "docs/uat/evidence/2026-10-19/outstanding-cases.json"
+  },
+  {
+    "id": "UAT-ACTIVE-POLICY-RULES",
+    "module": "Advisor policy configuration",
+    "role": "isolated tenant administrator",
+    "preconditions": "Required prerequisite or scenario coverage is explicitly stated below; no unsupported execution claim",
+    "steps": "No positive execution of this scenario. See actual result for related executed evidence and prerequisite.",
+    "expected": "Publish ACTIVE trust/risk/scoring rules and validate downstream classification and historical explanations",
+    "actual": {
+      "limitation": "Disabled-version publication, INHERIT, conflicts and settings boundaries were executed. ACTIVE rule combinations and their downstream classification were not executed."
+    },
+    "api": null,
+    "status": "NOT RUN",
+    "defect": null,
+    "time": "2026-10-19T18:11:45.360613+00:00",
+    "source": "docs/uat/evidence/2026-10-19/outstanding-cases.json"
+  },
+  {
+    "id": "UAT-REPAIR-AUTOMATIC-APPROVAL",
+    "module": "Validation repair",
+    "role": "admin / analyst",
+    "preconditions": "Required prerequisite or scenario coverage is explicitly stated below; no unsupported execution claim",
+    "steps": "No positive execution of this scenario. See actual result for related executed evidence and prerequisite.",
+    "expected": "Create a deterministically repairable semantic-error fixture; review candidate diff; approve/reject; verify retry hash and import lineage",
+    "actual": {
+      "limitation": "Malformed JSON manual-review analysis and manual draft/import were executed; positive deterministic candidate approval/rejection was not executed."
+    },
+    "api": null,
+    "status": "NOT RUN",
+    "defect": null,
+    "time": "2026-10-19T18:11:45.360614+00:00",
+    "source": "docs/uat/evidence/2026-10-19/outstanding-cases.json"
+  },
+  {
+    "id": "UAT-REPORT-OTHER-FORMATS",
+    "module": "Reports",
+    "role": "permitted export roles",
+    "preconditions": "Required prerequisite or scenario coverage is explicitly stated below; no unsupported execution claim",
+    "steps": "No positive execution of this scenario. See actual result for related executed evidence and prerequisite.",
+    "expected": "Validate PDF, FDA 510(k), other configured output formats and corresponding role denials",
+    "actual": {
+      "limitation": "Vulnerability XLSX workbook contents, lifecycle/VEX ZIP exports and local report-notification delivery were executed; other output formats were not executed."
+    },
+    "api": null,
+    "status": "NOT RUN",
+    "defect": null,
+    "time": "2026-10-19T18:11:45.360616+00:00",
+    "source": "docs/uat/evidence/2026-10-19/outstanding-cases.json"
+  },
+  {
+    "id": "UAT-SBOM-SIGNATURE-CONVERSION",
+    "module": "SBOM upload and validation",
+    "role": "permitted upload roles",
+    "preconditions": "Required prerequisite or scenario coverage is explicitly stated below; no unsupported execution claim",
+    "steps": "No positive execution of this scenario. See actual result for related executed evidence and prerequisite.",
+    "expected": "Verify signed/tampered SBOMs, SPDX conversion, and large-file streaming repair",
+    "actual": {
+      "limitation": "CycloneDX upload, malformed JSON rejection, component reads, repair import and version lineage were executed. Signature, conversion and large-file variants were not executed."
+    },
+    "api": null,
+    "status": "NOT RUN",
+    "defect": null,
+    "time": "2026-10-19T18:11:45.360617+00:00",
+    "source": "docs/uat/evidence/2026-10-19/outstanding-cases.json"
+  },
+  {
+    "id": "UAT-REPORT-SCHEDULED-TRIGGER",
+    "module": "Reports and notifications",
+    "role": "admin",
+    "preconditions": "Required prerequisite or scenario coverage is explicitly stated below; no unsupported execution claim",
+    "steps": "No positive execution of this scenario. See actual result for related executed evidence and prerequisite.",
+    "expected": "Observe recurring enabled schedule firing and report notification retry/dedup behavior",
+    "actual": {
+      "limitation": "Disabled preset schedule resolution, cleanup, authorization and real local immediate report delivery were executed; no enabled recurring job or forced SMTP outage was created."
+    },
+    "api": null,
+    "status": "NOT RUN",
+    "defect": null,
+    "time": "2026-10-19T18:11:45.360618+00:00",
+    "source": "docs/uat/evidence/2026-10-19/outstanding-cases.json"
+  },
+  {
+    "id": "UAT-PROVIDER-SECRET-ROTATION",
+    "module": "Integration configuration",
+    "role": "platform / isolated tenant administrator",
+    "preconditions": "Required prerequisite or scenario coverage is explicitly stated below; no unsupported execution claim",
+    "steps": "No positive execution of this scenario. See actual result for related executed evidence and prerequisite.",
+    "expected": "Verify credential creation/rotation/revocation and successful authenticated upstream provider calls",
+    "actual": {
+      "limitation": "Provider configuration reads, isolated lifecycle override/reset and invalid provider/timeout tests were executed. No real upstream credentials were supplied or fabricated; secret rotation was not executed."
+    },
+    "api": null,
+    "status": "NOT RUN",
+    "defect": null,
+    "time": "2026-10-19T18:11:45.360620+00:00",
+    "source": "docs/uat/evidence/2026-10-19/outstanding-cases.json"
+  },
+  {
+    "id": "UAT-SESSION-EXPIRY-CONCURRENCY",
+    "module": "Session security",
+    "role": "all six roles",
+    "preconditions": "Required prerequisite or scenario coverage is explicitly stated below; no unsupported execution claim",
+    "steps": "No positive execution of this scenario. See actual result for related executed evidence and prerequisite.",
+    "expected": "Observe idle/absolute session expiry, concurrent session revocation and long-lived refresh under role/tenant changes",
+    "actual": {
+      "limitation": "Isolated login, refresh context, cookie flags/storage, cross-origin denial, logout and old-cookie replay were executed. Long-duration expiry and concurrency were not executed."
+    },
+    "api": null,
+    "status": "NOT RUN",
+    "defect": null,
+    "time": "2026-10-19T18:11:45.360621+00:00",
+    "source": "docs/uat/evidence/2026-10-19/outstanding-cases.json"
+  },
+  {
+    "id": "UAT-PLATFORM-GRANT-REVOKE",
+    "module": "Platform Administrators",
+    "role": "platform",
+    "preconditions": "Required prerequisite or scenario coverage is explicitly stated below; no unsupported execution claim",
+    "steps": "No positive execution of this scenario. See actual result for related executed evidence and prerequisite.",
+    "expected": "Grant/revoke platform authority on an eligible disposable user and verify live privilege refresh",
+    "actual": {
+      "limitation": "Platform administrator directory and lower-role grant rejection were executed. Positive grant/revoke and last-administrator guard were not executed; seeded platform role was preserved."
+    },
+    "api": null,
+    "status": "NOT RUN",
+    "defect": null,
+    "time": "2026-10-19T18:11:45.360624+00:00",
+    "source": "docs/uat/evidence/2026-10-19/outstanding-cases.json"
+  },
+  {
+    "id": "UAT-ACCOUNT-SUSPENDED",
+    "module": "Authorization",
+    "role": "platform/disposable user",
+    "preconditions": "Fresh isolated Chrome context; Native Login; TLS validation enabled; greenfield development stack",
+    "steps": "Platform changes disposable account status; direct Native Login probe; restore Active at end",
+    "expected": "Exercise SUSPENDED account behavior only after an authorized disposable-account state transition",
+    "actual": {
+      "change": {
+        "status": 403,
+        "count": 0,
+        "keys": [
+          "detail"
+        ],
+        "error": {
+          "detail": {
+            "code": "IAM_PLATFORM_PERMISSION_DENIED",
+            "message": "Platform permission is required for this action."
+          }
+        },
+        "requestId": "3b918df5b954"
+      },
+      "nativeLoginStatus": 200,
+      "blocker": "Live Platform Admin permission list lacks platform:user:manage_status. State change was correctly rejected with 403, so suspended/disabled behavior was not executed.",
+      "harness_note": "Initial expectation assumed a broader platform privilege. Corrected against the live authorization catalogue; no account status was changed."
+    },
+    "api": 200,
+    "status": "BLOCKED",
+    "defect": null,
+    "time": "2026-10-19T15:34:00.838Z",
+    "source": "docs/uat/evidence/2026-10-19/cases.json"
+  },
+  {
+    "id": "UAT-ACCOUNT-DISABLED",
+    "module": "Authorization",
+    "role": "platform/disposable user",
+    "preconditions": "Fresh isolated Chrome context; Native Login; TLS validation enabled; greenfield development stack",
+    "steps": "Platform changes disposable account status; direct Native Login probe; restore Active at end",
+    "expected": "Exercise DISABLED account behavior only after an authorized disposable-account state transition",
+    "actual": {
+      "change": {
+        "status": 403,
+        "count": 0,
+        "keys": [
+          "detail"
+        ],
+        "error": {
+          "detail": {
+            "code": "IAM_PLATFORM_PERMISSION_DENIED",
+            "message": "Platform permission is required for this action."
+          }
+        },
+        "requestId": "3f079f68cc73"
+      },
+      "nativeLoginStatus": 200,
+      "blocker": "Live Platform Admin permission list lacks platform:user:manage_status. State change was correctly rejected with 403, so suspended/disabled behavior was not executed.",
+      "harness_note": "Initial expectation assumed a broader platform privilege. Corrected against the live authorization catalogue; no account status was changed."
+    },
+    "api": 200,
+    "status": "BLOCKED",
+    "defect": null,
+    "time": "2026-10-19T15:34:01.232Z",
+    "source": "docs/uat/evidence/2026-10-19/cases.json"
+  },
+  {
+    "id": "UAT-ACCOUNT-ACTIVE",
+    "module": "Authorization",
+    "role": "platform/disposable user",
+    "preconditions": "Fresh isolated Chrome context; Native Login; TLS validation enabled; greenfield development stack",
+    "steps": "Platform changes disposable account status; direct Native Login probe; restore Active at end",
+    "expected": "Exercise ACTIVE account behavior only after an authorized disposable-account state transition",
+    "actual": {
+      "change": {
+        "status": 403,
+        "count": 0,
+        "keys": [
+          "detail"
+        ],
+        "error": {
+          "detail": {
+            "code": "IAM_PLATFORM_PERMISSION_DENIED",
+            "message": "Platform permission is required for this action."
+          }
+        },
+        "requestId": "f8f3cad8eee6"
+      },
+      "nativeLoginStatus": 200,
+      "blocker": "Live Platform Admin permission list lacks platform:user:manage_status. State change was correctly rejected with 403, so suspended/disabled behavior was not executed.",
+      "harness_note": "Initial expectation assumed a broader platform privilege. Corrected against the live authorization catalogue; no account status was changed."
+    },
+    "api": 200,
+    "status": "BLOCKED",
+    "defect": null,
+    "time": "2026-10-19T15:34:01.581Z",
+    "source": "docs/uat/evidence/2026-10-19/cases.json"
+  }
+]

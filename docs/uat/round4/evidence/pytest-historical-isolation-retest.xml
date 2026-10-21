@@ -1,0 +1,236 @@
+<?xml version="1.0" encoding="utf-8"?><testsuites name="pytest tests"><testsuite name="pytest" errors="0" failures="10" skipped="0" tests="13" time="52.894" timestamp="2026-10-20T20:21:22.070639+05:30" hostname="Ferozes-MacBook-Air.local"><testcase classname="tests.test_entra_migration" name="test_upgrade_preserves_existing_providers_and_downgrade_protects_entra" time="5.192"><failure message="RuntimeError: Logical SBOM history requires a reviewed rollback; tenant-wide name/version uniqueness may no longer hold.">tests/test_entra_migration.py:35: in test_upgrade_preserves_existing_providers_and_downgrade_protects_entra
+    command.downgrade(config, "062_native_platform_bootstrap")
+.venv/lib/python3.12/site-packages/alembic/command.py:537: in downgrade
+    script.run_env()
+.venv/lib/python3.12/site-packages/alembic/script/base.py:556: in run_env
+    util.load_python_file(self.dir, "env.py")
+.venv/lib/python3.12/site-packages/alembic/util/pyfiles.py:116: in load_python_file
+    module = load_module_py(module_id, path)
+             ^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^
+.venv/lib/python3.12/site-packages/alembic/util/pyfiles.py:136: in load_module_py
+    spec.loader.exec_module(module)  # type: ignore
+    ^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^
+&lt;frozen importlib._bootstrap_external&gt;:995: in exec_module
+    ???
+&lt;frozen importlib._bootstrap&gt;:488: in _call_with_frames_removed
+    ???
+/private/var/folders/jt/b6xntmf16g33k6l4tglmlk0w0000gn/T/pytest-of-ferozebasha/pytest-23/test_upgrade_preserves_existin0/historical-alembic/env.py:71: in &lt;module&gt;
+    run_migrations_online()
+/private/var/folders/jt/b6xntmf16g33k6l4tglmlk0w0000gn/T/pytest-of-ferozebasha/pytest-23/test_upgrade_preserves_existin0/historical-alembic/env.py:65: in run_migrations_online
+    context.run_migrations()
+&lt;string&gt;:8: in run_migrations
+    ???
+.venv/lib/python3.12/site-packages/alembic/runtime/environment.py:969: in run_migrations
+    self.get_context().run_migrations(**kw)
+.venv/lib/python3.12/site-packages/alembic/runtime/migration.py:626: in run_migrations
+    step.migration_fn(**kw)
+alembic/versions/076_logical_sbom_versions.py:142: in downgrade
+    raise RuntimeError(
+E   RuntimeError: Logical SBOM history requires a reviewed rollback; tenant-wide name/version uniqueness may no longer hold.</failure></testcase><testcase classname="tests.test_entra_migration" name="test_downgrade_preserves_suspended_accounts" time="2.936"><failure message="AssertionError: Regex pattern did not match.&#10;  Expected regex: 'Cannot downgrade'&#10;  Actual message: 'Logical SBOM history requires a reviewed rollback; tenant-wide name/version uniqueness may no longer hold.'">tests/test_entra_migration.py:56: in test_downgrade_preserves_suspended_accounts
+    with pytest.raises(RuntimeError, match="Cannot downgrade"):
+         ^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^
+E   AssertionError: Regex pattern did not match.
+E     Expected regex: 'Cannot downgrade'
+E     Actual message: 'Logical SBOM history requires a reviewed rollback; tenant-wide name/version uniqueness may no longer hold.'</failure></testcase><testcase classname="tests.test_native_identity_migration" name="test_compatibility_migration_preserves_duplicates_pending_and_membership" time="2.697"><failure message="RuntimeError: Logical SBOM history requires a reviewed rollback; tenant-wide name/version uniqueness may no longer hold.">tests/test_native_identity_migration.py:22: in test_compatibility_migration_preserves_duplicates_pending_and_membership
+    command.downgrade(config, PREVIOUS)
+.venv/lib/python3.12/site-packages/alembic/command.py:537: in downgrade
+    script.run_env()
+.venv/lib/python3.12/site-packages/alembic/script/base.py:556: in run_env
+    util.load_python_file(self.dir, "env.py")
+.venv/lib/python3.12/site-packages/alembic/util/pyfiles.py:116: in load_python_file
+    module = load_module_py(module_id, path)
+             ^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^
+.venv/lib/python3.12/site-packages/alembic/util/pyfiles.py:136: in load_module_py
+    spec.loader.exec_module(module)  # type: ignore
+    ^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^
+&lt;frozen importlib._bootstrap_external&gt;:995: in exec_module
+    ???
+&lt;frozen importlib._bootstrap&gt;:488: in _call_with_frames_removed
+    ???
+/private/var/folders/jt/b6xntmf16g33k6l4tglmlk0w0000gn/T/pytest-of-ferozebasha/pytest-23/test_compatibility_migration_p0/historical-alembic/env.py:71: in &lt;module&gt;
+    run_migrations_online()
+/private/var/folders/jt/b6xntmf16g33k6l4tglmlk0w0000gn/T/pytest-of-ferozebasha/pytest-23/test_compatibility_migration_p0/historical-alembic/env.py:65: in run_migrations_online
+    context.run_migrations()
+&lt;string&gt;:8: in run_migrations
+    ???
+.venv/lib/python3.12/site-packages/alembic/runtime/environment.py:969: in run_migrations
+    self.get_context().run_migrations(**kw)
+.venv/lib/python3.12/site-packages/alembic/runtime/migration.py:626: in run_migrations
+    step.migration_fn(**kw)
+alembic/versions/076_logical_sbom_versions.py:142: in downgrade
+    raise RuntimeError(
+E   RuntimeError: Logical SBOM history requires a reviewed rollback; tenant-wide name/version uniqueness may no longer hold.</failure></testcase><testcase classname="tests.test_native_identity_migration" name="test_downgrade_refuses_native_records_without_deleting_anything" time="2.712"><failure message="AssertionError: Regex pattern did not match.&#10;  Expected regex: 'Refusing downgrade'&#10;  Actual message: 'Logical SBOM history requires a reviewed rollback; tenant-wide name/version uniqueness may no longer hold.'">tests/test_native_identity_migration.py:73: in test_downgrade_refuses_native_records_without_deleting_anything
+    with pytest.raises(RuntimeError, match="Refusing downgrade"):
+         ^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^
+E   AssertionError: Regex pattern did not match.
+E     Expected regex: 'Refusing downgrade'
+E     Actual message: 'Logical SBOM history requires a reviewed rollback; tenant-wide name/version uniqueness may no longer hold.'</failure></testcase><testcase classname="tests.test_phase3_identity_migration" name="test_fresh_head_has_phase3_columns_indexes_and_unique_constraint" time="1.456" /><testcase classname="tests.test_phase3_identity_migration" name="test_upgrade_from_045_preserves_ids_access_and_audit_references" time="6.591"><failure message="RuntimeError: Logical SBOM history requires a reviewed rollback; tenant-wide name/version uniqueness may no longer hold.">tests/test_phase3_identity_migration.py:81: in test_upgrade_from_045_preserves_ids_access_and_audit_references
+    command.downgrade(_config(), PREVIOUS_REVISION)
+.venv/lib/python3.12/site-packages/alembic/command.py:537: in downgrade
+    script.run_env()
+.venv/lib/python3.12/site-packages/alembic/script/base.py:556: in run_env
+    util.load_python_file(self.dir, "env.py")
+.venv/lib/python3.12/site-packages/alembic/util/pyfiles.py:116: in load_python_file
+    module = load_module_py(module_id, path)
+             ^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^
+.venv/lib/python3.12/site-packages/alembic/util/pyfiles.py:136: in load_module_py
+    spec.loader.exec_module(module)  # type: ignore
+    ^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^
+&lt;frozen importlib._bootstrap_external&gt;:995: in exec_module
+    ???
+&lt;frozen importlib._bootstrap&gt;:488: in _call_with_frames_removed
+    ???
+/private/var/folders/jt/b6xntmf16g33k6l4tglmlk0w0000gn/T/pytest-of-ferozebasha/pytest-23/test_upgrade_from_045_preserve0/historical-alembic/env.py:71: in &lt;module&gt;
+    run_migrations_online()
+/private/var/folders/jt/b6xntmf16g33k6l4tglmlk0w0000gn/T/pytest-of-ferozebasha/pytest-23/test_upgrade_from_045_preserve0/historical-alembic/env.py:65: in run_migrations_online
+    context.run_migrations()
+&lt;string&gt;:8: in run_migrations
+    ???
+.venv/lib/python3.12/site-packages/alembic/runtime/environment.py:969: in run_migrations
+    self.get_context().run_migrations(**kw)
+.venv/lib/python3.12/site-packages/alembic/runtime/migration.py:626: in run_migrations
+    step.migration_fn(**kw)
+alembic/versions/076_logical_sbom_versions.py:142: in downgrade
+    raise RuntimeError(
+E   RuntimeError: Logical SBOM history requires a reviewed rollback; tenant-wide name/version uniqueness may no longer hold.</failure></testcase><testcase classname="tests.test_phase3_identity_migration" name="test_missing_issuer_fails_without_fabricating_identity" time="6.881"><failure message="RuntimeError: Logical SBOM history requires a reviewed rollback; tenant-wide name/version uniqueness may no longer hold.">tests/test_phase3_identity_migration.py:193: in test_missing_issuer_fails_without_fabricating_identity
+    command.downgrade(_config(), PREVIOUS_REVISION)
+.venv/lib/python3.12/site-packages/alembic/command.py:537: in downgrade
+    script.run_env()
+.venv/lib/python3.12/site-packages/alembic/script/base.py:556: in run_env
+    util.load_python_file(self.dir, "env.py")
+.venv/lib/python3.12/site-packages/alembic/util/pyfiles.py:116: in load_python_file
+    module = load_module_py(module_id, path)
+             ^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^
+.venv/lib/python3.12/site-packages/alembic/util/pyfiles.py:136: in load_module_py
+    spec.loader.exec_module(module)  # type: ignore
+    ^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^
+&lt;frozen importlib._bootstrap_external&gt;:995: in exec_module
+    ???
+&lt;frozen importlib._bootstrap&gt;:488: in _call_with_frames_removed
+    ???
+/private/var/folders/jt/b6xntmf16g33k6l4tglmlk0w0000gn/T/pytest-of-ferozebasha/pytest-23/test_missing_issuer_fails_with0/historical-alembic/env.py:71: in &lt;module&gt;
+    run_migrations_online()
+/private/var/folders/jt/b6xntmf16g33k6l4tglmlk0w0000gn/T/pytest-of-ferozebasha/pytest-23/test_missing_issuer_fails_with0/historical-alembic/env.py:65: in run_migrations_online
+    context.run_migrations()
+&lt;string&gt;:8: in run_migrations
+    ???
+.venv/lib/python3.12/site-packages/alembic/runtime/environment.py:969: in run_migrations
+    self.get_context().run_migrations(**kw)
+.venv/lib/python3.12/site-packages/alembic/runtime/migration.py:626: in run_migrations
+    step.migration_fn(**kw)
+alembic/versions/076_logical_sbom_versions.py:142: in downgrade
+    raise RuntimeError(
+E   RuntimeError: Logical SBOM history requires a reviewed rollback; tenant-wide name/version uniqueness may no longer hold.</failure></testcase><testcase classname="tests.test_phase3_identity_migration" name="test_duplicate_legacy_identity_aborts_without_merging" time="5.092"><failure message="RuntimeError: Logical SBOM history requires a reviewed rollback; tenant-wide name/version uniqueness may no longer hold.">tests/test_phase3_identity_migration.py:223: in test_duplicate_legacy_identity_aborts_without_merging
+    command.downgrade(_config(), PREVIOUS_REVISION)
+.venv/lib/python3.12/site-packages/alembic/command.py:537: in downgrade
+    script.run_env()
+.venv/lib/python3.12/site-packages/alembic/script/base.py:556: in run_env
+    util.load_python_file(self.dir, "env.py")
+.venv/lib/python3.12/site-packages/alembic/util/pyfiles.py:116: in load_python_file
+    module = load_module_py(module_id, path)
+             ^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^
+.venv/lib/python3.12/site-packages/alembic/util/pyfiles.py:136: in load_module_py
+    spec.loader.exec_module(module)  # type: ignore
+    ^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^
+&lt;frozen importlib._bootstrap_external&gt;:995: in exec_module
+    ???
+&lt;frozen importlib._bootstrap&gt;:488: in _call_with_frames_removed
+    ???
+/private/var/folders/jt/b6xntmf16g33k6l4tglmlk0w0000gn/T/pytest-of-ferozebasha/pytest-23/test_duplicate_legacy_identity0/historical-alembic/env.py:71: in &lt;module&gt;
+    run_migrations_online()
+/private/var/folders/jt/b6xntmf16g33k6l4tglmlk0w0000gn/T/pytest-of-ferozebasha/pytest-23/test_duplicate_legacy_identity0/historical-alembic/env.py:65: in run_migrations_online
+    context.run_migrations()
+&lt;string&gt;:8: in run_migrations
+    ???
+.venv/lib/python3.12/site-packages/alembic/runtime/environment.py:969: in run_migrations
+    self.get_context().run_migrations(**kw)
+.venv/lib/python3.12/site-packages/alembic/runtime/migration.py:626: in run_migrations
+    step.migration_fn(**kw)
+alembic/versions/076_logical_sbom_versions.py:142: in downgrade
+    raise RuntimeError(
+E   RuntimeError: Logical SBOM history requires a reviewed rollback; tenant-wide name/version uniqueness may no longer hold.</failure></testcase><testcase classname="tests.test_phase5_identity_migration" name="test_head_contains_token_table_constraints_indexes_and_foreign_key" time="1.658" /><testcase classname="tests.test_phase5_identity_migration" name="test_upgrade_preserves_users_memberships_grants_and_verification_state" time="3.943"><failure message="RuntimeError: Logical SBOM history requires a reviewed rollback; tenant-wide name/version uniqueness may no longer hold.">tests/test_phase5_identity_migration.py:98: in test_upgrade_preserves_users_memberships_grants_and_verification_state
+    command.downgrade(_config(), PREVIOUS_REVISION)
+.venv/lib/python3.12/site-packages/alembic/command.py:537: in downgrade
+    script.run_env()
+.venv/lib/python3.12/site-packages/alembic/script/base.py:556: in run_env
+    util.load_python_file(self.dir, "env.py")
+.venv/lib/python3.12/site-packages/alembic/util/pyfiles.py:116: in load_python_file
+    module = load_module_py(module_id, path)
+             ^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^
+.venv/lib/python3.12/site-packages/alembic/util/pyfiles.py:136: in load_module_py
+    spec.loader.exec_module(module)  # type: ignore
+    ^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^
+&lt;frozen importlib._bootstrap_external&gt;:995: in exec_module
+    ???
+&lt;frozen importlib._bootstrap&gt;:488: in _call_with_frames_removed
+    ???
+/private/var/folders/jt/b6xntmf16g33k6l4tglmlk0w0000gn/T/pytest-of-ferozebasha/pytest-23/test_upgrade_preserves_users_m0/historical-alembic/env.py:71: in &lt;module&gt;
+    run_migrations_online()
+/private/var/folders/jt/b6xntmf16g33k6l4tglmlk0w0000gn/T/pytest-of-ferozebasha/pytest-23/test_upgrade_preserves_users_m0/historical-alembic/env.py:65: in run_migrations_online
+    context.run_migrations()
+&lt;string&gt;:8: in run_migrations
+    ???
+.venv/lib/python3.12/site-packages/alembic/runtime/environment.py:969: in run_migrations
+    self.get_context().run_migrations(**kw)
+.venv/lib/python3.12/site-packages/alembic/runtime/migration.py:626: in run_migrations
+    step.migration_fn(**kw)
+alembic/versions/076_logical_sbom_versions.py:142: in downgrade
+    raise RuntimeError(
+E   RuntimeError: Logical SBOM history requires a reviewed rollback; tenant-wide name/version uniqueness may no longer hold.</failure></testcase><testcase classname="tests.test_phase5_identity_migration" name="test_hash_uniqueness_active_token_policy_and_cascade_delete" time="2.034" /><testcase classname="tests.test_phase5_identity_migration" name="test_downgrade_and_reupgrade_are_safe" time="4.849"><failure message="RuntimeError: Logical SBOM history requires a reviewed rollback; tenant-wide name/version uniqueness may no longer hold.">tests/test_phase5_identity_migration.py:228: in test_downgrade_and_reupgrade_are_safe
+    command.downgrade(_config(), PREVIOUS_REVISION)
+.venv/lib/python3.12/site-packages/alembic/command.py:537: in downgrade
+    script.run_env()
+.venv/lib/python3.12/site-packages/alembic/script/base.py:556: in run_env
+    util.load_python_file(self.dir, "env.py")
+.venv/lib/python3.12/site-packages/alembic/util/pyfiles.py:116: in load_python_file
+    module = load_module_py(module_id, path)
+             ^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^
+.venv/lib/python3.12/site-packages/alembic/util/pyfiles.py:136: in load_module_py
+    spec.loader.exec_module(module)  # type: ignore
+    ^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^
+&lt;frozen importlib._bootstrap_external&gt;:995: in exec_module
+    ???
+&lt;frozen importlib._bootstrap&gt;:488: in _call_with_frames_removed
+    ???
+/private/var/folders/jt/b6xntmf16g33k6l4tglmlk0w0000gn/T/pytest-of-ferozebasha/pytest-23/test_downgrade_and_reupgrade_a0/historical-alembic/env.py:71: in &lt;module&gt;
+    run_migrations_online()
+/private/var/folders/jt/b6xntmf16g33k6l4tglmlk0w0000gn/T/pytest-of-ferozebasha/pytest-23/test_downgrade_and_reupgrade_a0/historical-alembic/env.py:65: in run_migrations_online
+    context.run_migrations()
+&lt;string&gt;:8: in run_migrations
+    ???
+.venv/lib/python3.12/site-packages/alembic/runtime/environment.py:969: in run_migrations
+    self.get_context().run_migrations(**kw)
+.venv/lib/python3.12/site-packages/alembic/runtime/migration.py:626: in run_migrations
+    step.migration_fn(**kw)
+alembic/versions/076_logical_sbom_versions.py:142: in downgrade
+    raise RuntimeError(
+E   RuntimeError: Logical SBOM history requires a reviewed rollback; tenant-wide name/version uniqueness may no longer hold.</failure></testcase><testcase classname="tests.test_report_migrations" name="test_report_migrations_round_trip_preserves_inventory" time="3.858"><failure message="RuntimeError: Logical SBOM history requires a reviewed rollback; tenant-wide name/version uniqueness may no longer hold.">tests/test_report_migrations.py:20: in test_report_migrations_round_trip_preserves_inventory
+    assert "report_subscription" not in inspect(engine).get_table_names()
+    ^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^
+.venv/lib/python3.12/site-packages/alembic/command.py:537: in downgrade
+    script.run_env()
+.venv/lib/python3.12/site-packages/alembic/script/base.py:556: in run_env
+    util.load_python_file(self.dir, "env.py")
+.venv/lib/python3.12/site-packages/alembic/util/pyfiles.py:116: in load_python_file
+    module = load_module_py(module_id, path)
+             ^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^
+.venv/lib/python3.12/site-packages/alembic/util/pyfiles.py:136: in load_module_py
+    spec.loader.exec_module(module)  # type: ignore
+    ^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^
+&lt;frozen importlib._bootstrap_external&gt;:995: in exec_module
+    ???
+&lt;frozen importlib._bootstrap&gt;:488: in _call_with_frames_removed
+    ???
+/private/var/folders/jt/b6xntmf16g33k6l4tglmlk0w0000gn/T/pytest-of-ferozebasha/pytest-23/test_report_migrations_round_t0/historical-alembic/env.py:71: in &lt;module&gt;
+    run_migrations_online()
+/private/var/folders/jt/b6xntmf16g33k6l4tglmlk0w0000gn/T/pytest-of-ferozebasha/pytest-23/test_report_migrations_round_t0/historical-alembic/env.py:65: in run_migrations_online
+    context.run_migrations()
+&lt;string&gt;:8: in run_migrations
+    ???
+.venv/lib/python3.12/site-packages/alembic/runtime/environment.py:969: in run_migrations
+    self.get_context().run_migrations(**kw)
+.venv/lib/python3.12/site-packages/alembic/runtime/migration.py:626: in run_migrations
+    step.migration_fn(**kw)
+alembic/versions/076_logical_sbom_versions.py:142: in downgrade
+    raise RuntimeError(
+E   RuntimeError: Logical SBOM history requires a reviewed rollback; tenant-wide name/version uniqueness may no longer hold.</failure></testcase></testsuite></testsuites>

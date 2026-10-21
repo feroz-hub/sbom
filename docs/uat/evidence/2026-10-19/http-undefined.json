@@ -1,0 +1,802 @@
+[
+  {
+    "role": "admin",
+    "time": "2026-10-19T18:05:42.467Z",
+    "path": "/api/auth/session",
+    "method": "GET",
+    "status": 200,
+    "requestId": null
+  },
+  {
+    "role": "admin",
+    "time": "2026-10-19T18:05:42.495Z",
+    "path": "/api/auth/session",
+    "method": "GET",
+    "status": 200,
+    "requestId": null
+  },
+  {
+    "role": "admin",
+    "time": "2026-10-19T18:05:42.650Z",
+    "path": "/api/auth/entra",
+    "method": "GET",
+    "status": 200,
+    "requestId": null
+  },
+  {
+    "role": "admin",
+    "time": "2026-10-19T18:05:42.697Z",
+    "path": "/api/auth/entra",
+    "method": "GET",
+    "status": 200,
+    "requestId": null
+  },
+  {
+    "role": "admin",
+    "time": "2026-10-19T18:05:44.149Z",
+    "path": "/api/auth/native/login",
+    "method": "POST",
+    "status": 200,
+    "requestId": null
+  },
+  {
+    "role": "admin",
+    "time": "2026-10-19T18:05:47.468Z",
+    "path": "/api/auth/session",
+    "method": "GET",
+    "status": 200,
+    "requestId": null
+  },
+  {
+    "role": "admin",
+    "time": "2026-10-19T18:05:47.472Z",
+    "path": "/api/auth/session",
+    "method": "GET",
+    "status": 200,
+    "requestId": null
+  },
+  {
+    "role": "admin",
+    "time": "2026-10-19T18:05:48.768Z",
+    "path": "/api/backend/api/auth/me",
+    "method": "GET",
+    "status": 200,
+    "requestId": "5efbdd35b595"
+  },
+  {
+    "role": "admin",
+    "time": "2026-10-19T18:05:48.783Z",
+    "path": "/api/backend/api/auth/me",
+    "method": "GET",
+    "status": 200,
+    "requestId": "724161ef72cd"
+  },
+  {
+    "role": "admin",
+    "time": "2026-10-19T18:05:49.041Z",
+    "path": "/api/auth/session",
+    "method": "GET",
+    "status": 200,
+    "requestId": null
+  },
+  {
+    "role": "admin",
+    "time": "2026-10-19T18:05:49.144Z",
+    "path": "/api/backend/api/auth/me",
+    "method": "GET",
+    "status": 200,
+    "requestId": "c2a8836e8de2"
+  },
+  {
+    "role": "admin",
+    "time": "2026-10-19T18:05:49.730Z",
+    "path": "/api/backend/dashboard/recent-sboms",
+    "method": "GET",
+    "status": 200,
+    "requestId": "bd9b21ac5fb3"
+  },
+  {
+    "role": "admin",
+    "time": "2026-10-19T18:05:49.756Z",
+    "path": "/api/backend/health",
+    "method": "GET",
+    "status": 200,
+    "requestId": "2d1a2a9ee4ba"
+  },
+  {
+    "role": "admin",
+    "time": "2026-10-19T18:05:49.756Z",
+    "path": "/api/backend/api/runs",
+    "method": "GET",
+    "status": 200,
+    "requestId": "75478a4fbacd"
+  },
+  {
+    "role": "admin",
+    "time": "2026-10-19T18:05:50.052Z",
+    "path": "/api/backend/dashboard/filter-options/projects",
+    "method": "GET",
+    "status": 200,
+    "requestId": "81c9e13826f9"
+  },
+  {
+    "role": "admin",
+    "time": "2026-10-19T18:05:50.743Z",
+    "path": "/api/backend/api/analysis/config",
+    "method": "GET",
+    "status": 200,
+    "requestId": "4a5201d1c3f9"
+  },
+  {
+    "role": "admin",
+    "time": "2026-10-19T18:05:54.851Z",
+    "path": "/api/backend/dashboard/runs",
+    "method": "GET",
+    "status": 200,
+    "requestId": "b640157e37eb"
+  },
+  {
+    "role": "admin",
+    "time": "2026-10-19T18:05:54.917Z",
+    "path": "/api/backend/dashboard/priority-findings",
+    "method": "GET",
+    "status": 200,
+    "requestId": "b2a902cc5f1e"
+  },
+  {
+    "role": "admin",
+    "time": "2026-10-19T18:05:54.950Z",
+    "path": "/api/backend/dashboard/runs",
+    "method": "GET",
+    "status": 200,
+    "requestId": "2fc90d7a1175"
+  },
+  {
+    "role": "admin",
+    "time": "2026-10-19T18:05:55.161Z",
+    "path": "/api/backend/api/projects",
+    "method": "GET",
+    "status": 200,
+    "requestId": "67a58c165745"
+  },
+  {
+    "role": "admin",
+    "time": "2026-10-19T18:05:56.247Z",
+    "path": "/api/backend/dashboard/trend",
+    "method": "GET",
+    "status": 200,
+    "requestId": "a11f50a7b755"
+  },
+  {
+    "role": "admin",
+    "time": "2026-10-19T18:05:56.550Z",
+    "path": "/api/backend/dashboard/recent-sboms",
+    "method": "GET",
+    "status": 200,
+    "requestId": "fca1a0f20caf"
+  },
+  {
+    "role": "admin",
+    "time": "2026-10-19T18:05:56.579Z",
+    "path": "/api/backend/dashboard/runs",
+    "method": "GET",
+    "status": 200,
+    "requestId": "5f155f1ebef8"
+  },
+  {
+    "role": "admin",
+    "time": "2026-10-19T18:05:56.587Z",
+    "path": "/api/backend/api/auth/me",
+    "method": "GET",
+    "status": 200,
+    "requestId": "633aa538f7b1"
+  },
+  {
+    "role": "admin",
+    "time": "2026-10-19T18:06:02.146Z",
+    "path": "/api/backend/dashboard/summary",
+    "method": "GET",
+    "status": 200,
+    "requestId": "3ef9a109ce5b"
+  },
+  {
+    "role": "viewer",
+    "time": "2026-10-19T18:06:35.445Z",
+    "path": "/api/auth/session",
+    "method": "GET",
+    "status": 200,
+    "requestId": null
+  },
+  {
+    "role": "viewer",
+    "time": "2026-10-19T18:06:35.488Z",
+    "path": "/api/auth/session",
+    "method": "GET",
+    "status": 200,
+    "requestId": null
+  },
+  {
+    "role": "viewer",
+    "time": "2026-10-19T18:06:35.637Z",
+    "path": "/api/auth/entra",
+    "method": "GET",
+    "status": 200,
+    "requestId": null
+  },
+  {
+    "role": "viewer",
+    "time": "2026-10-19T18:06:35.673Z",
+    "path": "/api/auth/entra",
+    "method": "GET",
+    "status": 200,
+    "requestId": null
+  },
+  {
+    "role": "viewer",
+    "time": "2026-10-19T18:06:37.274Z",
+    "path": "/api/auth/native/login",
+    "method": "POST",
+    "status": 200,
+    "requestId": null
+  },
+  {
+    "role": "viewer",
+    "time": "2026-10-19T18:06:40.835Z",
+    "path": "/api/auth/session",
+    "method": "GET",
+    "status": 200,
+    "requestId": null
+  },
+  {
+    "role": "viewer",
+    "time": "2026-10-19T18:06:40.842Z",
+    "path": "/api/auth/session",
+    "method": "GET",
+    "status": 200,
+    "requestId": null
+  },
+  {
+    "role": "viewer",
+    "time": "2026-10-19T18:06:41.561Z",
+    "path": "/api/backend/api/auth/me",
+    "method": "GET",
+    "status": 200,
+    "requestId": "fb7ee0ed4374"
+  },
+  {
+    "role": "viewer",
+    "time": "2026-10-19T18:06:41.743Z",
+    "path": "/api/backend/api/auth/me",
+    "method": "GET",
+    "status": 200,
+    "requestId": "fd4c52166625"
+  },
+  {
+    "role": "viewer",
+    "time": "2026-10-19T18:06:43.622Z",
+    "path": "/api/backend/health",
+    "method": "GET",
+    "status": 200,
+    "requestId": "615642f2fb3c"
+  },
+  {
+    "role": "viewer",
+    "time": "2026-10-19T18:06:45.513Z",
+    "path": "/api/backend/dashboard/filter-options/projects",
+    "method": "GET",
+    "status": 200,
+    "requestId": "6cb45b784752"
+  },
+  {
+    "role": "viewer",
+    "time": "2026-10-19T18:06:45.514Z",
+    "path": "/api/backend/dashboard/recent-sboms",
+    "method": "GET",
+    "status": 200,
+    "requestId": "d1ba630ae300"
+  },
+  {
+    "role": "viewer",
+    "time": "2026-10-19T18:06:45.582Z",
+    "path": "/api/backend/api/runs",
+    "method": "GET",
+    "status": 200,
+    "requestId": "4278eb790c8a"
+  },
+  {
+    "role": "viewer",
+    "time": "2026-10-19T18:06:45.692Z",
+    "path": "/api/backend/api/analysis/config",
+    "method": "GET",
+    "status": 200,
+    "requestId": "029a616490ab"
+  },
+  {
+    "role": "viewer",
+    "time": "2026-10-19T18:06:47.145Z",
+    "path": "/api/backend/dashboard/priority-findings",
+    "method": "GET",
+    "status": 200,
+    "requestId": "571c5e1dd916"
+  },
+  {
+    "role": "viewer",
+    "time": "2026-10-19T18:06:56.405Z",
+    "path": "/api/backend/dashboard/runs",
+    "method": "GET",
+    "status": 200,
+    "requestId": "51e7fb069d55"
+  },
+  {
+    "role": "viewer",
+    "time": "2026-10-19T18:06:56.408Z",
+    "path": "/api/backend/dashboard/runs",
+    "method": "GET",
+    "status": 200,
+    "requestId": "766a33d1b02c"
+  },
+  {
+    "role": "viewer",
+    "time": "2026-10-19T18:06:56.410Z",
+    "path": "/api/backend/api/projects",
+    "method": "GET",
+    "status": 200,
+    "requestId": "165005340719"
+  },
+  {
+    "role": "viewer",
+    "time": "2026-10-19T18:06:56.445Z",
+    "path": "/api/backend/dashboard/trend",
+    "method": "GET",
+    "status": 200,
+    "requestId": "748b9f04a7e6"
+  },
+  {
+    "role": "viewer",
+    "time": "2026-10-19T18:06:57.018Z",
+    "path": "/api/backend/dashboard/recent-sboms",
+    "method": "GET",
+    "status": 200,
+    "requestId": "acd407963c6a"
+  },
+  {
+    "role": "viewer",
+    "time": "2026-10-19T18:06:57.432Z",
+    "path": "/api/backend/dashboard/runs",
+    "method": "GET",
+    "status": 200,
+    "requestId": "f5267dd269ed"
+  },
+  {
+    "role": "viewer",
+    "time": "2026-10-19T18:06:57.446Z",
+    "path": "/api/backend/api/auth/me",
+    "method": "GET",
+    "status": 200,
+    "requestId": "bb7017293ce4"
+  },
+  {
+    "role": "viewer",
+    "time": "2026-10-19T18:07:00.054Z",
+    "path": "/api/auth/session",
+    "method": "GET",
+    "status": 200,
+    "requestId": null
+  },
+  {
+    "role": "viewer",
+    "time": "2026-10-19T18:07:00.056Z",
+    "path": "/api/auth/session",
+    "method": "GET",
+    "status": 200,
+    "requestId": null
+  },
+  {
+    "role": "viewer",
+    "time": "2026-10-19T18:07:00.295Z",
+    "path": "/api/backend/api/auth/me",
+    "method": "GET",
+    "status": 200,
+    "requestId": "1be46adadee5"
+  },
+  {
+    "role": "viewer",
+    "time": "2026-10-19T18:07:00.329Z",
+    "path": "/api/backend/api/auth/me",
+    "method": "GET",
+    "status": 200,
+    "requestId": "205a89422a91"
+  },
+  {
+    "role": "viewer",
+    "time": "2026-10-19T18:07:00.693Z",
+    "path": "/api/backend/health",
+    "method": "GET",
+    "status": 200,
+    "requestId": "e531dd1ef674"
+  },
+  {
+    "role": "viewer",
+    "time": "2026-10-19T18:07:00.850Z",
+    "path": "/api/backend/dashboard/recent-sboms",
+    "method": "GET",
+    "status": 200,
+    "requestId": "881ed724c34a"
+  },
+  {
+    "role": "viewer",
+    "time": "2026-10-19T18:07:00.966Z",
+    "path": "/api/backend/api/runs",
+    "method": "GET",
+    "status": 200,
+    "requestId": "c6e60eba7508"
+  },
+  {
+    "role": "viewer",
+    "time": "2026-10-19T18:07:00.970Z",
+    "path": "/api/backend/api/sbom-validation-sessions/7fe433f4-20c0-4d87-a658-24a41231340f",
+    "method": "GET",
+    "status": 200,
+    "requestId": "2120b430947b"
+  },
+  {
+    "role": "viewer",
+    "time": "2026-10-19T18:07:01.050Z",
+    "path": "/api/backend/api/sbom-validation-sessions/7fe433f4-20c0-4d87-a658-24a41231340f/content",
+    "method": "GET",
+    "status": 200,
+    "requestId": "dfdd56afa543"
+  },
+  {
+    "role": "viewer",
+    "time": "2026-10-19T18:07:01.134Z",
+    "path": "/api/backend/api/sbom-validation-sessions/7fe433f4-20c0-4d87-a658-24a41231340f/history",
+    "method": "GET",
+    "status": 200,
+    "requestId": "84a8a498a538"
+  },
+  {
+    "role": "viewer",
+    "time": "2026-10-19T18:07:01.135Z",
+    "path": "/api/backend/api/projects",
+    "method": "GET",
+    "status": 200,
+    "requestId": "b38eb84c111b"
+  },
+  {
+    "role": "viewer",
+    "time": "2026-10-19T18:07:01.269Z",
+    "path": "/api/backend/api/projects/d4828e7c-e71c-40f7-bb6c-dde0f4d48d09",
+    "method": "GET",
+    "status": 200,
+    "requestId": "aad479aff0ac"
+  },
+  {
+    "role": "viewer",
+    "time": "2026-10-19T18:07:01.291Z",
+    "path": "/api/backend/api/sbom-validation-sessions/7fe433f4-20c0-4d87-a658-24a41231340f/repair",
+    "method": "GET",
+    "status": 200,
+    "requestId": "cbd79a5ecb08"
+  },
+  {
+    "role": "viewer",
+    "time": "2026-10-19T18:07:01.358Z",
+    "path": "/api/backend/api/sbom-validation-sessions/7fe433f4-20c0-4d87-a658-24a41231340f/repair/analyze",
+    "method": "POST",
+    "status": 200,
+    "requestId": "51489b0e7e10"
+  },
+  {
+    "role": "viewer",
+    "time": "2026-10-19T18:07:01.457Z",
+    "path": "/api/backend/api/sbom-validation-sessions/7fe433f4-20c0-4d87-a658-24a41231340f/quality",
+    "method": "GET",
+    "status": 200,
+    "requestId": "b815596800e1"
+  },
+  {
+    "role": "viewer",
+    "time": "2026-10-19T18:07:10.707Z",
+    "path": "/api/auth/logout",
+    "method": "POST",
+    "status": 200,
+    "requestId": null
+  },
+  {
+    "role": "developer",
+    "time": "2026-10-19T18:07:12.889Z",
+    "path": "/api/auth/session",
+    "method": "GET",
+    "status": 200,
+    "requestId": null
+  },
+  {
+    "role": "developer",
+    "time": "2026-10-19T18:07:13.081Z",
+    "path": "/api/auth/session",
+    "method": "GET",
+    "status": 200,
+    "requestId": null
+  },
+  {
+    "role": "developer",
+    "time": "2026-10-19T18:07:13.178Z",
+    "path": "/api/auth/entra",
+    "method": "GET",
+    "status": 200,
+    "requestId": null
+  },
+  {
+    "role": "developer",
+    "time": "2026-10-19T18:07:13.182Z",
+    "path": "/api/auth/entra",
+    "method": "GET",
+    "status": 200,
+    "requestId": null
+  },
+  {
+    "role": "developer",
+    "time": "2026-10-19T18:07:14.560Z",
+    "path": "/api/auth/native/login",
+    "method": "POST",
+    "status": 200,
+    "requestId": null
+  },
+  {
+    "role": "developer",
+    "time": "2026-10-19T18:07:16.053Z",
+    "path": "/api/auth/session",
+    "method": "GET",
+    "status": 200,
+    "requestId": null
+  },
+  {
+    "role": "developer",
+    "time": "2026-10-19T18:07:16.069Z",
+    "path": "/api/auth/session",
+    "method": "GET",
+    "status": 200,
+    "requestId": null
+  },
+  {
+    "role": "developer",
+    "time": "2026-10-19T18:07:16.272Z",
+    "path": "/api/backend/api/auth/me",
+    "method": "GET",
+    "status": 200,
+    "requestId": "007dbd85b22d"
+  },
+  {
+    "role": "developer",
+    "time": "2026-10-19T18:07:16.373Z",
+    "path": "/api/backend/api/auth/me",
+    "method": "GET",
+    "status": 200,
+    "requestId": "d9216dccb673"
+  },
+  {
+    "role": "developer",
+    "time": "2026-10-19T18:07:17.474Z",
+    "path": "/api/backend/health",
+    "method": "GET",
+    "status": 200,
+    "requestId": "8c2670cbe20f"
+  },
+  {
+    "role": "developer",
+    "time": "2026-10-19T18:07:18.664Z",
+    "path": "/api/backend/dashboard/recent-sboms",
+    "method": "GET",
+    "status": 200,
+    "requestId": "a2e896ad5b5f"
+  },
+  {
+    "role": "developer",
+    "time": "2026-10-19T18:07:18.767Z",
+    "path": "/api/backend/dashboard/filter-options/projects",
+    "method": "GET",
+    "status": 200,
+    "requestId": "36653a56e2d4"
+  },
+  {
+    "role": "developer",
+    "time": "2026-10-19T18:07:18.767Z",
+    "path": "/api/backend/api/runs",
+    "method": "GET",
+    "status": 200,
+    "requestId": "4092a285b99b"
+  },
+  {
+    "role": "developer",
+    "time": "2026-10-19T18:07:18.817Z",
+    "path": "/api/backend/api/analysis/config",
+    "method": "GET",
+    "status": 200,
+    "requestId": "2f021b6682c0"
+  },
+  {
+    "role": "developer",
+    "time": "2026-10-19T18:07:19.636Z",
+    "path": "/api/backend/dashboard/priority-findings",
+    "method": "GET",
+    "status": 200,
+    "requestId": "b2d4d9e988fe"
+  },
+  {
+    "role": "developer",
+    "time": "2026-10-19T18:07:20.877Z",
+    "path": "/api/backend/dashboard/runs",
+    "method": "GET",
+    "status": 200,
+    "requestId": "03d27359fff9"
+  },
+  {
+    "role": "developer",
+    "time": "2026-10-19T18:07:20.902Z",
+    "path": "/api/backend/api/projects",
+    "method": "GET",
+    "status": 200,
+    "requestId": "a8391229955d"
+  },
+  {
+    "role": "developer",
+    "time": "2026-10-19T18:07:20.906Z",
+    "path": "/api/backend/dashboard/runs",
+    "method": "GET",
+    "status": 200,
+    "requestId": "1e76a41bc278"
+  },
+  {
+    "role": "developer",
+    "time": "2026-10-19T18:07:20.941Z",
+    "path": "/api/backend/dashboard/trend",
+    "method": "GET",
+    "status": 200,
+    "requestId": "f5437aa7f9c0"
+  },
+  {
+    "role": "developer",
+    "time": "2026-10-19T18:07:23.267Z",
+    "path": "/api/backend/dashboard/recent-sboms",
+    "method": "GET",
+    "status": 200,
+    "requestId": "0ff192281c47"
+  },
+  {
+    "role": "developer",
+    "time": "2026-10-19T18:07:23.823Z",
+    "path": "/api/backend/dashboard/runs",
+    "method": "GET",
+    "status": 200,
+    "requestId": "91d653eedd06"
+  },
+  {
+    "role": "developer",
+    "time": "2026-10-19T18:07:23.884Z",
+    "path": "/api/backend/api/auth/me",
+    "method": "GET",
+    "status": 200,
+    "requestId": "09a99b6875da"
+  },
+  {
+    "role": "developer",
+    "time": "2026-10-19T18:07:24.961Z",
+    "path": "/api/auth/session",
+    "method": "GET",
+    "status": 200,
+    "requestId": null
+  },
+  {
+    "role": "developer",
+    "time": "2026-10-19T18:07:24.963Z",
+    "path": "/api/auth/session",
+    "method": "GET",
+    "status": 200,
+    "requestId": null
+  },
+  {
+    "role": "developer",
+    "time": "2026-10-19T18:07:25.162Z",
+    "path": "/api/backend/api/auth/me",
+    "method": "GET",
+    "status": 200,
+    "requestId": "40cc2c12f8d2"
+  },
+  {
+    "role": "developer",
+    "time": "2026-10-19T18:07:25.185Z",
+    "path": "/api/backend/api/auth/me",
+    "method": "GET",
+    "status": 200,
+    "requestId": "068b590bb284"
+  },
+  {
+    "role": "developer",
+    "time": "2026-10-19T18:07:27.099Z",
+    "path": "/api/backend/health",
+    "method": "GET",
+    "status": 200,
+    "requestId": "7c41264d310b"
+  },
+  {
+    "role": "developer",
+    "time": "2026-10-19T18:07:27.239Z",
+    "path": "/api/backend/dashboard/recent-sboms",
+    "method": "GET",
+    "status": 200,
+    "requestId": "e8b334acf659"
+  },
+  {
+    "role": "developer",
+    "time": "2026-10-19T18:07:27.249Z",
+    "path": "/api/backend/api/sbom-validation-sessions/7fe433f4-20c0-4d87-a658-24a41231340f/history",
+    "method": "GET",
+    "status": 200,
+    "requestId": "8d5d93033d02"
+  },
+  {
+    "role": "developer",
+    "time": "2026-10-19T18:07:27.305Z",
+    "path": "/api/backend/api/sbom-validation-sessions/7fe433f4-20c0-4d87-a658-24a41231340f",
+    "method": "GET",
+    "status": 200,
+    "requestId": "3b32353c724c"
+  },
+  {
+    "role": "developer",
+    "time": "2026-10-19T18:07:27.317Z",
+    "path": "/api/backend/api/runs",
+    "method": "GET",
+    "status": 200,
+    "requestId": "f4f08b44cafd"
+  },
+  {
+    "role": "developer",
+    "time": "2026-10-19T18:07:27.379Z",
+    "path": "/api/backend/api/sbom-validation-sessions/7fe433f4-20c0-4d87-a658-24a41231340f/content",
+    "method": "GET",
+    "status": 200,
+    "requestId": "42ab12ac0d67"
+  },
+  {
+    "role": "developer",
+    "time": "2026-10-19T18:07:27.666Z",
+    "path": "/api/backend/api/projects",
+    "method": "GET",
+    "status": 200,
+    "requestId": "407c805e9a1f"
+  },
+  {
+    "role": "developer",
+    "time": "2026-10-19T18:07:27.824Z",
+    "path": "/api/backend/api/projects/d4828e7c-e71c-40f7-bb6c-dde0f4d48d09",
+    "method": "GET",
+    "status": 200,
+    "requestId": "bebfcfbee8bb"
+  },
+  {
+    "role": "developer",
+    "time": "2026-10-19T18:07:27.894Z",
+    "path": "/api/backend/api/sbom-validation-sessions/7fe433f4-20c0-4d87-a658-24a41231340f/repair/analyze",
+    "method": "POST",
+    "status": 200,
+    "requestId": "2e1943d5759c"
+  },
+  {
+    "role": "developer",
+    "time": "2026-10-19T18:07:27.914Z",
+    "path": "/api/backend/api/sbom-validation-sessions/7fe433f4-20c0-4d87-a658-24a41231340f/repair",
+    "method": "GET",
+    "status": 200,
+    "requestId": "c437d9b55fe3"
+  },
+  {
+    "role": "developer",
+    "time": "2026-10-19T18:07:27.935Z",
+    "path": "/api/backend/api/sbom-validation-sessions/7fe433f4-20c0-4d87-a658-24a41231340f/quality",
+    "method": "GET",
+    "status": 200,
+    "requestId": "4a990524af08"
+  }
+]

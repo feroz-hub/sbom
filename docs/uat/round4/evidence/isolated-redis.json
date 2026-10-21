@@ -1,0 +1,8 @@
+{
+  "pid": 14046,
+  "loopbackPort": 56168,
+  "persistence": false,
+  "databaseInitiallyEmpty": true,
+  "ownership": "Round4 subprocess only",
+  "purpose": "AI_TEST_REDIS_URL fixed key1234; no shared Redis use"
+}

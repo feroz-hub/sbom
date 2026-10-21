@@ -1,0 +1,458 @@
+[
+  {
+    "role": "admin",
+    "time": "2026-10-19T15:48:20.976Z",
+    "path": "/api/auth/session",
+    "method": "GET",
+    "status": 200,
+    "requestId": null
+  },
+  {
+    "role": "admin",
+    "time": "2026-10-19T15:48:20.985Z",
+    "path": "/api/auth/session",
+    "method": "GET",
+    "status": 200,
+    "requestId": null
+  },
+  {
+    "role": "admin",
+    "time": "2026-10-19T15:48:20.996Z",
+    "path": "/api/auth/entra",
+    "method": "GET",
+    "status": 200,
+    "requestId": null
+  },
+  {
+    "role": "admin",
+    "time": "2026-10-19T15:48:20.998Z",
+    "path": "/api/auth/entra",
+    "method": "GET",
+    "status": 200,
+    "requestId": null
+  },
+  {
+    "role": "admin",
+    "time": "2026-10-19T15:48:22.069Z",
+    "path": "/api/auth/native/login",
+    "method": "POST",
+    "status": 200,
+    "requestId": null
+  },
+  {
+    "role": "admin",
+    "time": "2026-10-19T15:48:22.859Z",
+    "path": "/api/auth/session",
+    "method": "GET",
+    "status": 200,
+    "requestId": null
+  },
+  {
+    "role": "admin",
+    "time": "2026-10-19T15:48:22.863Z",
+    "path": "/api/auth/session",
+    "method": "GET",
+    "status": 200,
+    "requestId": null
+  },
+  {
+    "role": "admin",
+    "time": "2026-10-19T15:48:23.071Z",
+    "path": "/api/backend/api/auth/me",
+    "method": "GET",
+    "status": 200,
+    "requestId": "db964a269125"
+  },
+  {
+    "role": "admin",
+    "time": "2026-10-19T15:48:23.071Z",
+    "path": "/api/backend/api/auth/me",
+    "method": "GET",
+    "status": 200,
+    "requestId": "8b4f7c8a2d08"
+  },
+  {
+    "role": "admin",
+    "time": "2026-10-19T15:48:23.557Z",
+    "path": "/api/auth/session",
+    "method": "GET",
+    "status": 200,
+    "requestId": null
+  },
+  {
+    "role": "admin",
+    "time": "2026-10-19T15:48:23.865Z",
+    "path": "/api/backend/api/auth/me",
+    "method": "GET",
+    "status": 200,
+    "requestId": "7c5025e3eff7"
+  },
+  {
+    "role": "admin",
+    "time": "2026-10-19T15:48:24.523Z",
+    "path": "/api/backend/health",
+    "method": "GET",
+    "status": 200,
+    "requestId": "6c586f004d84"
+  },
+  {
+    "role": "admin",
+    "time": "2026-10-19T15:48:25.518Z",
+    "path": "/api/backend/dashboard/recent-sboms",
+    "method": "GET",
+    "status": 200,
+    "requestId": "93a003bb7537"
+  },
+  {
+    "role": "admin",
+    "time": "2026-10-19T15:48:25.519Z",
+    "path": "/api/backend/dashboard/filter-options/projects",
+    "method": "GET",
+    "status": 200,
+    "requestId": "d9daa5f843c4"
+  },
+  {
+    "role": "admin",
+    "time": "2026-10-19T15:48:25.644Z",
+    "path": "/api/backend/api/runs",
+    "method": "GET",
+    "status": 200,
+    "requestId": "b8e67be9b14b"
+  },
+  {
+    "role": "admin",
+    "time": "2026-10-19T15:48:25.739Z",
+    "path": "/api/backend/api/analysis/config",
+    "method": "GET",
+    "status": 200,
+    "requestId": "01375f6faff0"
+  },
+  {
+    "role": "admin",
+    "time": "2026-10-19T15:48:27.826Z",
+    "path": "/api/backend/dashboard/priority-findings",
+    "method": "GET",
+    "status": 200,
+    "requestId": "5cd98bb61b04"
+  },
+  {
+    "role": "admin",
+    "time": "2026-10-19T15:48:28.646Z",
+    "path": "/api/backend/dashboard/runs",
+    "method": "GET",
+    "status": 200,
+    "requestId": "3ebfcceb9390"
+  },
+  {
+    "role": "admin",
+    "time": "2026-10-19T15:48:29.331Z",
+    "path": "/api/backend/dashboard/runs",
+    "method": "GET",
+    "status": 200,
+    "requestId": "a56b06dd2193"
+  },
+  {
+    "role": "admin",
+    "time": "2026-10-19T15:48:29.426Z",
+    "path": "/api/backend/api/projects",
+    "method": "GET",
+    "status": 200,
+    "requestId": "6e9db979a1c4"
+  },
+  {
+    "role": "admin",
+    "time": "2026-10-19T15:48:29.474Z",
+    "path": "/api/backend/dashboard/trend",
+    "method": "GET",
+    "status": 200,
+    "requestId": "1df50da385f6"
+  },
+  {
+    "role": "admin",
+    "time": "2026-10-19T15:48:29.962Z",
+    "path": "/api/backend/dashboard/runs",
+    "method": "GET",
+    "status": 200,
+    "requestId": "49dba7753f58"
+  },
+  {
+    "role": "admin",
+    "time": "2026-10-19T15:48:29.964Z",
+    "path": "/api/backend/dashboard/recent-sboms",
+    "method": "GET",
+    "status": 200,
+    "requestId": "903abdc91799"
+  },
+  {
+    "role": "admin",
+    "time": "2026-10-19T15:48:29.970Z",
+    "path": "/api/backend/api/auth/me",
+    "method": "GET",
+    "status": 200,
+    "requestId": "c67fb599030a"
+  },
+  {
+    "role": "admin",
+    "time": "2026-10-19T15:48:31.882Z",
+    "path": "/api/backend/dashboard/summary",
+    "method": "GET",
+    "status": 200,
+    "requestId": "a87f61c1fee1"
+  },
+  {
+    "role": "admin",
+    "time": "2026-10-19T15:48:35.025Z",
+    "path": "/api/auth/session",
+    "method": "GET",
+    "status": 200,
+    "requestId": null
+  },
+  {
+    "role": "admin",
+    "time": "2026-10-19T15:48:35.029Z",
+    "path": "/api/auth/session",
+    "method": "GET",
+    "status": 200,
+    "requestId": null
+  },
+  {
+    "role": "admin",
+    "time": "2026-10-19T15:48:35.503Z",
+    "path": "/api/backend/api/auth/me",
+    "method": "GET",
+    "status": 200,
+    "requestId": "5725acea3125"
+  },
+  {
+    "role": "admin",
+    "time": "2026-10-19T15:48:35.504Z",
+    "path": "/api/backend/api/auth/me",
+    "method": "GET",
+    "status": 200,
+    "requestId": "d9b3fc9bdd77"
+  },
+  {
+    "role": "admin",
+    "time": "2026-10-19T15:48:35.858Z",
+    "path": "/api/backend/health",
+    "method": "GET",
+    "status": 200,
+    "requestId": "13c11e372875"
+  },
+  {
+    "role": "admin",
+    "time": "2026-10-19T15:48:35.859Z",
+    "path": "/api/backend/api/tenants/3a900179-36bf-4b5f-b2e1-2a4a9d06e6af/audit-history",
+    "method": "GET",
+    "status": 200,
+    "requestId": "f2bd2a019363"
+  },
+  {
+    "role": "admin",
+    "time": "2026-10-19T15:48:35.860Z",
+    "path": "/api/backend/api/tenant-roles",
+    "method": "GET",
+    "status": 200,
+    "requestId": "6e654b21931b"
+  },
+  {
+    "role": "admin",
+    "time": "2026-10-19T15:48:35.891Z",
+    "path": "/api/backend/api/tenants/3a900179-36bf-4b5f-b2e1-2a4a9d06e6af/users",
+    "method": "GET",
+    "status": 200,
+    "requestId": "34c7cf8d6d20"
+  },
+  {
+    "role": "admin",
+    "time": "2026-10-19T15:48:35.983Z",
+    "path": "/api/backend/dashboard/recent-sboms",
+    "method": "GET",
+    "status": 200,
+    "requestId": "5a924c18eab5"
+  },
+  {
+    "role": "admin",
+    "time": "2026-10-19T15:48:36.003Z",
+    "path": "/api/backend/api/runs",
+    "method": "GET",
+    "status": 200,
+    "requestId": "5b86695df6bc"
+  },
+  {
+    "role": "admin",
+    "time": "2026-10-19T15:48:36.016Z",
+    "path": "/api/backend/api/tenants/3a900179-36bf-4b5f-b2e1-2a4a9d06e6af/users",
+    "method": "GET",
+    "status": 200,
+    "requestId": "637fad8c4705"
+  },
+  {
+    "role": "admin",
+    "time": "2026-10-19T15:48:36.591Z",
+    "path": "/api/backend/api/tenants/3a900179-36bf-4b5f-b2e1-2a4a9d06e6af/users/7/roles",
+    "method": "PUT",
+    "status": 200,
+    "requestId": "a04aebc0741e"
+  },
+  {
+    "role": "admin",
+    "time": "2026-10-19T15:48:36.745Z",
+    "path": "/api/backend/api/tenant-roles",
+    "method": "GET",
+    "status": 200,
+    "requestId": "4fe9e6e4adba"
+  },
+  {
+    "role": "admin",
+    "time": "2026-10-19T15:48:36.761Z",
+    "path": "/api/backend/api/tenants/3a900179-36bf-4b5f-b2e1-2a4a9d06e6af/audit-history",
+    "method": "GET",
+    "status": 200,
+    "requestId": "490e98897ed0"
+  },
+  {
+    "role": "admin",
+    "time": "2026-10-19T15:48:36.766Z",
+    "path": "/api/backend/api/tenants/3a900179-36bf-4b5f-b2e1-2a4a9d06e6af/users",
+    "method": "GET",
+    "status": 200,
+    "requestId": "79ce058a09a6"
+  },
+  {
+    "role": "admin",
+    "time": "2026-10-19T15:48:36.852Z",
+    "path": "/api/backend/api/tenants/3a900179-36bf-4b5f-b2e1-2a4a9d06e6af/users",
+    "method": "GET",
+    "status": 200,
+    "requestId": "10678ad4d6a7"
+  },
+  {
+    "role": "admin",
+    "time": "2026-10-19T15:48:37.385Z",
+    "path": "/api/backend/api/tenants/3a900179-36bf-4b5f-b2e1-2a4a9d06e6af/users/10/deactivate",
+    "method": "POST",
+    "status": 200,
+    "requestId": "00d9263e9090"
+  },
+  {
+    "role": "admin",
+    "time": "2026-10-19T15:48:37.535Z",
+    "path": "/api/backend/api/tenant-roles",
+    "method": "GET",
+    "status": 200,
+    "requestId": "a5b6363e7f79"
+  },
+  {
+    "role": "admin",
+    "time": "2026-10-19T15:48:37.541Z",
+    "path": "/api/backend/api/tenants/3a900179-36bf-4b5f-b2e1-2a4a9d06e6af/audit-history",
+    "method": "GET",
+    "status": 200,
+    "requestId": "5c658457f4c6"
+  },
+  {
+    "role": "admin",
+    "time": "2026-10-19T15:48:37.556Z",
+    "path": "/api/backend/api/tenants/3a900179-36bf-4b5f-b2e1-2a4a9d06e6af/users",
+    "method": "GET",
+    "status": 200,
+    "requestId": "792cc771eca7"
+  },
+  {
+    "role": "admin",
+    "time": "2026-10-19T15:48:37.631Z",
+    "path": "/api/backend/api/tenants/3a900179-36bf-4b5f-b2e1-2a4a9d06e6af/users",
+    "method": "GET",
+    "status": 200,
+    "requestId": "4bbdf079fbaf"
+  },
+  {
+    "role": "admin",
+    "time": "2026-10-19T15:48:37.856Z",
+    "path": "/api/backend/api/tenants/3a900179-36bf-4b5f-b2e1-2a4a9d06e6af/users/10/activate",
+    "method": "POST",
+    "status": 200,
+    "requestId": "5b98e96ae1be"
+  },
+  {
+    "role": "admin",
+    "time": "2026-10-19T15:48:37.937Z",
+    "path": "/api/backend/api/tenant-roles",
+    "method": "GET",
+    "status": 200,
+    "requestId": "4ef31e0a746b"
+  },
+  {
+    "role": "admin",
+    "time": "2026-10-19T15:48:37.949Z",
+    "path": "/api/backend/api/tenants/3a900179-36bf-4b5f-b2e1-2a4a9d06e6af/audit-history",
+    "method": "GET",
+    "status": 200,
+    "requestId": "684655ae4992"
+  },
+  {
+    "role": "admin",
+    "time": "2026-10-19T15:48:37.951Z",
+    "path": "/api/backend/api/tenants/3a900179-36bf-4b5f-b2e1-2a4a9d06e6af/users",
+    "method": "GET",
+    "status": 200,
+    "requestId": "4dc28c31770f"
+  },
+  {
+    "role": "admin",
+    "time": "2026-10-19T15:48:38.015Z",
+    "path": "/api/backend/api/tenants/3a900179-36bf-4b5f-b2e1-2a4a9d06e6af/users",
+    "method": "GET",
+    "status": 200,
+    "requestId": "2185b9f0f55f"
+  },
+  {
+    "role": "admin",
+    "time": "2026-10-19T15:48:38.202Z",
+    "path": "/api/backend/api/tenants/3a900179-36bf-4b5f-b2e1-2a4a9d06e6af/native-users",
+    "method": "POST",
+    "status": 409,
+    "requestId": "22c9d9e67049"
+  },
+  {
+    "role": "admin",
+    "time": "2026-10-19T15:48:38.586Z",
+    "path": "/api/backend/api/tenants/3a900179-36bf-4b5f-b2e1-2a4a9d06e6af/audit-history",
+    "method": "GET",
+    "status": 422,
+    "requestId": "5a4ca2fc0be0"
+  },
+  {
+    "role": "admin",
+    "time": "2026-10-19T15:48:38.674Z",
+    "path": "/api/backend/api/tenants/3a900179-36bf-4b5f-b2e1-2a4a9d06e6af/audit-history",
+    "method": "GET",
+    "status": 200,
+    "requestId": "5f95b78d839e"
+  },
+  {
+    "role": "admin",
+    "time": "2026-10-19T15:48:42.998Z",
+    "path": "/api/auth/logout",
+    "method": "POST",
+    "status": 200,
+    "requestId": null
+  },
+  {
+    "role": "admin",
+    "time": "2026-10-19T15:48:44.208Z",
+    "path": "/api/auth/login",
+    "method": "GET",
+    "status": 307,
+    "requestId": null
+  },
+  {
+    "role": "admin",
+    "time": "2026-10-19T15:48:44.640Z",
+    "path": "/api/backend/api/projects",
+    "method": "GET",
+    "status": 401,
+    "requestId": null
+  }
+]

@@ -1,0 +1,7 @@
+{
+  "pid": 77969,
+  "health": 200,
+  "database": "sbom_greenfield_uuid",
+  "onlyStoppedIsolatedAPIStarted": true,
+  "bootstrapOrMigrations": false
+}

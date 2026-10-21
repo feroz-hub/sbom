@@ -1,0 +1,50 @@
+[
+  {
+    "check": "vitest-full-final",
+    "command": [
+      "/Users/ferozebasha/.cache/codex-runtimes/codex-primary-runtime/dependencies/node/bin/node",
+      "node_modules/vitest/vitest.mjs",
+      "run",
+      "--maxWorkers=1"
+    ],
+    "cwd": "/Users/ferozebasha/sbom/frontend",
+    "exitCode": 0,
+    "seconds": 432.47
+  },
+  {
+    "check": "typescript-final",
+    "command": [
+      "/Users/ferozebasha/.cache/codex-runtimes/codex-primary-runtime/dependencies/node/bin/node",
+      "node_modules/typescript/bin/tsc",
+      "--noEmit"
+    ],
+    "cwd": "/Users/ferozebasha/sbom/frontend",
+    "exitCode": 0,
+    "seconds": 14.82
+  },
+  {
+    "check": "eslint-full-final",
+    "command": [
+      "/Users/ferozebasha/.cache/codex-runtimes/codex-primary-runtime/dependencies/node/bin/node",
+      "node_modules/eslint/bin/eslint.js",
+      "src",
+      "--format",
+      "json"
+    ],
+    "cwd": "/Users/ferozebasha/sbom/frontend",
+    "exitCode": 0,
+    "seconds": 37.58
+  },
+  {
+    "check": "build-final",
+    "command": [
+      "/Users/ferozebasha/sbom/.venv/bin/python",
+      "-m",
+      "scripts.greenfield_uuid",
+      "build"
+    ],
+    "cwd": "/Users/ferozebasha/sbom",
+    "exitCode": 0,
+    "seconds": 37.18
+  }
+]

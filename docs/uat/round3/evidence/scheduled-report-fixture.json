@@ -1,0 +1,14 @@
+{
+  "tenant_uuid": "8185dd19-fdf8-463e-9244-af19ed8367dd",
+  "tenant_internal_id": 13,
+  "user_id": 14,
+  "email": "uat-r3-1792487518341079000@example.test",
+  "subscription_id": 10,
+  "worker_pid": 91065,
+  "project_id": "1d7a447f-9dde-499d-b532-eb60451971b4",
+  "product_id": "50ed7e53-559e-4b84-9111-217fdec22f56",
+  "sbom_id": "81375cbe-7862-4815-ac14-105ea619ed82",
+  "controlledClock": "Only tenant-local tick receives tomorrow UTC; generator/retry clock remains real",
+  "controlledFault": "First owned worker send returns SMTP_UNAVAILABLE; following attempt uses real Mailpit",
+  "boundedLeaseSeconds": 225
+}

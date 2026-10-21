@@ -1,0 +1,52 @@
+{
+  "byModule": {
+    "Advisor policy history": {
+      "PASS": 31
+    },
+    "KEV authorization": {
+      "PASS": 7
+    },
+    "KEV role presentation": {
+      "PASS": 6
+    },
+    "KEV browser global action": {
+      "PASS": 7
+    },
+    "Member candidate popup": {
+      "PASS": 16
+    },
+    "Membership confirmation/lifecycle": {
+      "PASS": 6
+    },
+    "Candidate popup geometry": {
+      "PASS": 2
+    },
+    "VEX native source document": {
+      "PASS": 3
+    },
+    "Round 1 VEX protection": {
+      "PASS": 14
+    },
+    "Round 1 dashboard protection": {
+      "PASS": 15
+    },
+    "Round 1 dashboard browser": {
+      "PASS": 10
+    },
+    "Round 1 VEX browser": {
+      "PASS": 6
+    },
+    "Identity/environment safeguards": {
+      "PASS": 9
+    }
+  },
+  "byExecutionKind": {
+    "acceptance": {
+      "PASS": 129
+    },
+    "baseline-defect-reproduction": {
+      "PASS": 3
+    }
+  },
+  "totalRecords": 132
+}

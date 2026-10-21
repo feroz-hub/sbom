@@ -1,0 +1,9 @@
+{
+  "testDatabase": "sbom_greenfield_uuid_round3_fix_test_20261020",
+  "tablesInspected": 68,
+  "existingFullCleanupSeconds": 0.15722687498782761,
+  "separateExactChecksSeconds": 0.044956958008697256,
+  "batchedExactChecksSeconds": 0.024939041992183775,
+  "identicalExactTableSet": true,
+  "noApproximateStatistics": true
+}

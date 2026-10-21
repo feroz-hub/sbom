@@ -1,0 +1,48 @@
+{
+  "time": "2026-10-20T18:23:04.344243+00:00",
+  "attempt": 2,
+  "status": "FINISHED",
+  "counts": {
+    "passed": 4385,
+    "skipped": 7
+  },
+  "lastNode": "tests/validation/test_stage_signature.py::test_flag_on_with_signature_emits_e110_until_implemented",
+  "failedNodes": [],
+  "exitCode": 0,
+  "runtimeSeconds": 6119.849,
+  "sourceUnchangedDuringRun": true,
+  "changedSourceFiles": [],
+  "validationStatus": "PASS",
+  "checks": [
+    {
+      "name": "vitest-full-final",
+      "outcome": "PASS",
+      "runtimeSeconds": 155.102
+    },
+    {
+      "name": "typescript-final",
+      "outcome": "PASS",
+      "runtimeSeconds": 2.209
+    },
+    {
+      "name": "ruff-final",
+      "outcome": "PASS",
+      "runtimeSeconds": 0.091
+    },
+    {
+      "name": "eslint-full-final",
+      "outcome": "PASS",
+      "runtimeSeconds": 16.419
+    },
+    {
+      "name": "build-final",
+      "outcome": "PASS",
+      "runtimeSeconds": 10.665
+    },
+    {
+      "name": "diff-whitespace-final",
+      "outcome": "PASS",
+      "runtimeSeconds": 0.074
+    }
+  ]
+}

@@ -1,0 +1,15 @@
+{
+  "historical": {
+    "total": 485,
+    "PASS": 454,
+    "FAIL": 12,
+    "BLOCKED": 11,
+    "NOT RUN": 8
+  },
+  "round3Original19": {
+    "BLOCKED": 5,
+    "PASS": 14
+  },
+  "total": 19,
+  "note": "Checkpoint; no full UAT acceptance; stability attempt failed its bounded navigation criterion"
+}
