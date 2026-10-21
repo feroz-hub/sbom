@@ -1063,6 +1063,8 @@ def start_application(args) -> None:
             dev_greenfield.start(args, ACTIVE_RUNTIME)
         except dev_greenfield.https.HttpsTrustError as error:
             raise SetupError(str(error)) from error
+        except dev_greenfield.migrations.SchemaUpgradeError as error:
+            raise SetupError(str(error)) from None
         return
     if not args.check:
         ensure_dependencies()

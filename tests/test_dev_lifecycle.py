@@ -122,6 +122,23 @@ def test_shutdown_reaps_exited_child_before_inspection(monkeypatch, tmp_path):
     assert not runtime.path.exists()
 
 
+def test_refresh_reaps_exited_child_before_macos_inspection(monkeypatch, tmp_path):
+    runtime = lifecycle.Runtime(tmp_path)
+    runtime.state = state(runtime, {"API": identity()})
+    reaped = []
+    runtime.processes[100] = SimpleNamespace(poll=lambda: reaped.append(True) or 1)
+
+    def inspect(pid):
+        if not reaped:
+            raise lifecycle.OwnershipError("Cannot inspect PID 100.")
+        return None
+
+    monkeypatch.setattr(lifecycle, "process_info", inspect)
+    runtime.refresh()
+    assert reaped == [True]
+    assert runtime.state["services"]["API"]["pid"] == 100
+
+
 def test_owned_surviving_member_allows_orphan_group_cleanup(monkeypatch, tmp_path):
     runtime = lifecycle.Runtime(tmp_path)
     child = identity(101, pgid=100, sid=100)

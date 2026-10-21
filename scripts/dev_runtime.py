@@ -264,6 +264,11 @@ class Runtime:
     def refresh(self) -> None:
         self.check_stop()
         for record in self.state["services"].values():
+            # An exited macOS child is not inspectable until its parent reaps
+            # it. Do this here as well as during shutdown so the caller can
+            # report the service's real exit instead of a libproc error.
+            if child := self.processes.get(record["pid"]):
+                child.poll()
             if matches(record, process_info(record["pid"])):
                 record["members"] = windows_children(record["pid"]) if sys.platform == "win32" else group_members(record["pid"])
         atomic_json(self.path, self.state)

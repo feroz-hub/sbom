@@ -15,6 +15,7 @@ def installed(monkeypatch, tmp_path):
         (tmp_path / name).write_text("synthetic")
     monkeypatch.setattr(launcher.stack, "STATE", tmp_path)
     monkeypatch.setattr(launcher.https, "ensure_certificate", Mock())
+    monkeypatch.setattr(launcher.migrations, "ensure_current", Mock())
     return tmp_path
 
 
@@ -70,7 +71,28 @@ def test_start_resumes_only_recorded_stopped_container(installed, monkeypatch):
         launcher.start(SimpleNamespace(check=False), runtime)
     command.assert_called_once_with(launcher.stack.DOCKER + ["start", "owned-pg"], check=True, capture_output=True)
     services.assert_called_once_with(runtime=runtime)
-    runtime.refresh.assert_called_once()
+    assert runtime.refresh.call_count == 1
+    launcher.migrations.ensure_current.assert_called_once_with()
+
+
+def test_schema_failure_prevents_all_application_startup(installed, monkeypatch):
+    monkeypatch.setattr(launcher, "inventory", lambda: [])
+    monkeypatch.setattr(
+        launcher.migrations,
+        "ensure_current",
+        Mock(side_effect=launcher.migrations.SchemaUpgradeError("Migration not approved")),
+    )
+    start = Mock(side_effect=AssertionError("Must not launch API/worker/frontend"))
+    monkeypatch.setattr(launcher.stack, "start_services", start)
+    with pytest.raises(launcher.migrations.SchemaUpgradeError, match="not approved"):
+        launcher.start(SimpleNamespace(check=False), Mock())
+    start.assert_not_called()
+
+
+def test_check_mode_never_connects_or_prompts(installed, monkeypatch):
+    monkeypatch.setattr(launcher, "inventory", lambda: [])
+    launcher.start(SimpleNamespace(check=True), None)
+    launcher.migrations.ensure_current.assert_not_called()
 
 
 def test_start_requires_ownership_registry(installed, monkeypatch):

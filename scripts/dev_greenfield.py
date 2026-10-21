@@ -1,7 +1,8 @@
 """Run an already installed UUID development stack through dev.py's owned lifecycle.
 
-Start resumes only verified existing containers. It never bootstraps, seeds, runs
-Alembic, or selects a database from .env.dev.local.
+Start resumes only verified existing containers, then checks the schema before
+launching applications. The sole reviewed 100->101 upgrade requires explicit
+interactive confirmation and a verified backup. Never bootstraps or seeds.
 """
 
 from __future__ import annotations
@@ -12,11 +13,13 @@ import time
 
 if __package__:
     from . import greenfield_https as https
+    from . import greenfield_migrations as migrations
     from . import greenfield_uuid as stack
 else:
     import greenfield_uuid as stack
 
     from scripts import greenfield_https as https
+    from scripts import greenfield_migrations as migrations
 
 
 def inventory():
@@ -60,6 +63,8 @@ def start(args, runtime):
         if time.monotonic() >= deadline:
             raise RuntimeError("Greenfield data services did not become healthy; resources retained")
         time.sleep(0.5)
+    migrations.ensure_current()
+    runtime.check_stop()
     processes = stack.start_services(runtime=runtime)
     print("Greenfield UUID ready. Logs: ~/.sbom-greenfield-uuid/*.log", flush=True)
     print("Press Ctrl+C to stop the application; data services remain running.", flush=True)
