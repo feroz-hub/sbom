@@ -26,7 +26,7 @@ it('queued acknowledgement retains tracking and does not report completion', asy
   state.request.mockResolvedValue({ run_status: 'PENDING', runId: 8 });
   const hook = renderHook(() => useBackgroundAnalysis(), { wrapper });
   await act(async () => { hook.result.current.triggerBackgroundAnalysis(5, 'SBOM'); });
-  expect(getStillPendingAnalyses('1:1')).toHaveLength(1); expect(state.update).not.toHaveBeenCalled(); hook.unmount(); qc.clear();
+  expect(getStillPendingAnalyses('1:00000000-0000-4000-8000-000000000001')).toHaveLength(1); expect(state.update).not.toHaveBeenCalled(); hook.unmount(); qc.clear();
 });
 it('network failure retains recovery and last known findings rather than writing a false terminal result', async () => {
   state.request.mockRejectedValue(new Error('network failed'));
@@ -34,7 +34,7 @@ it('network failure retains recovery and last known findings rather than writing
   qc.setQueryData(['findings-enriched', 7], ['previous findings']);
   const hook = renderHook(() => useBackgroundAnalysis(), { wrapper });
   await act(async () => { hook.result.current.triggerBackgroundAnalysis(5, 'SBOM'); });
-  expect(getStillPendingAnalyses('1:1')).toHaveLength(1);
+  expect(getStillPendingAnalyses('1:00000000-0000-4000-8000-000000000001')).toHaveLength(1);
   expect(qc.getQueryData<Array<{ latest_analysis: { finding_count: number } }>>(['sboms'])?.[0].latest_analysis.finding_count).toBe(81);
   expect(qc.getQueryState(['findings-enriched', 7])?.isInvalidated).toBe(false);
   expect(state.update.mock.calls[0][2]).toBe('error'); hook.unmount(); qc.clear();

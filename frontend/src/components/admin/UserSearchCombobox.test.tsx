@@ -16,7 +16,7 @@ vi.mock('@/lib/api', async () => {
 
 describe('UserSearchCombobox', () => {
   it('keeps results in layout flow and supports keyboard selection without submitting the dialog', async () => {
-    const candidate = { id: 31, email: 'keyboard@example.test', display_name: 'Keyboard Candidate', status: 'ACTIVE', email_verified: true, verification_required: false };
+    const candidate = { id: '00000000-0000-4000-8000-00000000001f', email: 'keyboard@example.test', display_name: 'Keyboard Candidate', status: 'ACTIVE', email_verified: true, verification_required: false };
     vi.mocked(api.searchTenantUserCandidates).mockResolvedValue([candidate]);
     const select = vi.fn();
     render(<UserSearchCombobox tenantId="cd9e3737-67fe-4d06-8e6c-8d185854e11b" onSelect={select} selectedUser={null} />);
@@ -66,7 +66,7 @@ describe('UserSearchCombobox', () => {
     expect(api.searchPlatformUsers).not.toHaveBeenCalled();
   });
   it('does not expose technical IDs or subjects in the tenant workflow', () => {
-    render(<UserSearchCombobox tenantId={1} onSelect={() => {}} selectedUser={{ id: 987654, display_name: 'Human Name', email: 'human@example.test', status: 'ACTIVE', email_verified: true, verification_required: false, external_subject: 'private-subject', external_issuer: 'private-issuer' }} />);
+    render(<UserSearchCombobox tenantId={1} onSelect={() => {}} selectedUser={{ id: '00000000-0000-4000-8000-0000000f1206', display_name: 'Human Name', email: 'human@example.test', status: 'ACTIVE', email_verified: true, verification_required: false, external_subject: 'private-subject', external_issuer: 'private-issuer' }} />);
     expect(screen.getByText('Human Name')).toBeInTheDocument();
     expect(screen.getByText('human@example.test')).toBeInTheDocument();
     expect(screen.queryByText('Show technical details')).not.toBeInTheDocument();
@@ -88,7 +88,7 @@ describe('UserSearchCombobox', () => {
   it('uses global platform search and renders a partial display-name match', async () => {
     vi.mocked(api.searchPlatformUsers).mockResolvedValue([
       {
-        id: 3,
+        id: '00000000-0000-4000-8000-000000000003',
         email: 'ferozebasha.s@hcltech.com',
         display_name: 'Feroze Basha',
         username: 'ferozebasha',
@@ -112,14 +112,14 @@ describe('UserSearchCombobox', () => {
 
     fireEvent.click(screen.getByText('Feroze Basha'));
     expect(onSelect).toHaveBeenCalledWith(
-      expect.objectContaining({ id: 3, email: 'ferozebasha.s@hcltech.com' })
+      expect.objectContaining({ id: '00000000-0000-4000-8000-000000000003', email: 'ferozebasha.s@hcltech.com' })
     );
   });
 
   it('displays Feroze for an exact email search', async () => {
     vi.mocked(api.searchPlatformUsers).mockResolvedValue([
       {
-        id: 3,
+        id: '00000000-0000-4000-8000-000000000003',
         email: 'ferozebasha.s@hcltech.com',
         display_name: 'Feroze Basha',
         username: 'ferozebasha',
@@ -154,7 +154,7 @@ describe('UserSearchCombobox', () => {
     const realApi = await vi.importActual<typeof import('@/lib/api')>('@/lib/api');
     const fetchMock = vi.fn().mockResolvedValue(new Response(JSON.stringify({
       items: [{
-        id: 3,
+        id: '00000000-0000-4000-8000-000000000003',
         email: 'ferozebasha.s@hcltech.com',
         display_name: 'Feroze Basha',
         username: 'ferozebasha',
@@ -174,7 +174,7 @@ describe('UserSearchCombobox', () => {
     expect(url).toMatch(/\/api\/platform\/users\/search\?q=Feroze\+Basha$/);
     expect(options.method ?? 'GET').toBe('GET');
     expect(items).toEqual([
-      expect.objectContaining({ id: 3, display_name: 'Feroze Basha' }),
+      expect.objectContaining({ id: '00000000-0000-4000-8000-000000000003', display_name: 'Feroze Basha' }),
     ]);
   });
 
@@ -204,7 +204,7 @@ describe('UserSearchCombobox', () => {
   it('prevents selecting an inactive or unverified initial administrator', async () => {
     vi.mocked(api.searchPlatformUsers).mockResolvedValue([
       {
-        id: 2,
+        id: '00000000-0000-4000-8000-000000000002',
         email: 'disabled@example.test',
         display_name: 'Disabled User',
         username: 'disabled',
@@ -234,14 +234,14 @@ describe('UserSearchCombobox', () => {
 });
 
 it('allows an approved directory identity without claiming mailbox verification', () => {
-  const candidate = { id: 123, email: 'directory@example.test', display_name: 'Directory member', status: 'ACTIVE', email_verified: false, verification_required: false, providers: ['MICROSOFT_ENTRA'] };
+  const candidate = { id: '00000000-0000-4000-8000-00000000007b', email: 'directory@example.test', display_name: 'Directory member', status: 'ACTIVE', email_verified: false, verification_required: false, providers: ['MICROSOFT_ENTRA'] };
   expect(isEligibleAdministrator(candidate)).toBe(true);
   expect(isEligibleAdministrator({ ...candidate, status: 'PENDING' })).toBe(false);
   expect(isEligibleAdministrator({ ...candidate, providers: ['HCL_CS'] })).toBe(false);
 });
 
 it('refreshes candidate eligibility after a local mutation revision without clearing search text', async () => {
-  const candidate = { id: 55, display_name: 'New member', email: 'member@example.test', status: 'ACTIVE', email_verified: true, verification_required: false };
+  const candidate = { id: '00000000-0000-4000-8000-000000000037', display_name: 'New member', email: 'member@example.test', status: 'ACTIVE', email_verified: true, verification_required: false };
   vi.mocked(api.searchTenantUserCandidates).mockResolvedValue([candidate]);
   const view = render(<UserSearchCombobox tenantId={7} revision={0} onSelect={() => {}} selectedUser={null} />);
   const input = screen.getByRole('combobox', { name: 'Search existing user' });

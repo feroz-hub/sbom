@@ -31,9 +31,9 @@ describe('user/membership cache integration', () => {
   });
   it('profile edits refresh cached shared identities and administrator names, without summary/count recalculation', async () => {
     const qc = client();
-    qc.setQueryData(['tenant-users', 8], [{ user_id: 42 }]); qc.setQueryData(['tenant-users', 9], [{ user_id: 43 }]);
+    qc.setQueryData(['tenant-users', 8], [{ user_id: '00000000-0000-4000-8000-00000000002a' }]); qc.setQueryData(['tenant-users', 9], [{ user_id: '00000000-0000-4000-8000-00000000002b' }]);
     qc.setQueryData(['platform-summary'], { total_memberships: 10 }); qc.setQueryData(['platform-administrators'], []);
-    await invalidateUserSurfaces(qc, { userId: 42, tenantIds: [7], accountChanged: true });
+    await invalidateUserSurfaces(qc, { userId: '00000000-0000-4000-8000-00000000002a', tenantIds: [7], accountChanged: true });
     expect(qc.getQueryState(['tenant-users', 8])?.isInvalidated).toBe(true);
     expect(qc.getQueryState(['tenant-users', 9])?.isInvalidated).toBe(false);
     expect(qc.getQueryState(['platform-administrators'])?.isInvalidated).toBe(true);

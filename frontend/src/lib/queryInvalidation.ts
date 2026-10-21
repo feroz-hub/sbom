@@ -41,14 +41,14 @@ export function invalidateTenantMembershipSurfaces(
 /** Profile/evidence-only changes refresh labels without changing metric values. */
 export function invalidateUserSurfaces(
   qc: QueryClient,
-  options: { tenantIds: (string | number)[]; userId?: number; affectsMetrics?: boolean; accountChanged?: boolean },
+  options: { tenantIds: (string | number)[]; userId?: string; affectsMetrics?: boolean; accountChanged?: boolean },
 ): Promise<void> {
   const keys: Array<readonly unknown[]> = [['platform-tenants']];
   const tenants = new Set(options.tenantIds);
   // Tenant profile editors only know their own membership. Include other cached
   // memberships for that same global identity without refetching unrelated details.
   if (options.userId != null && options.accountChanged) {
-    for (const [key, rows] of qc.getQueriesData<Array<{ user_id: number }>>({ queryKey: ['tenant-users'] })) {
+    for (const [key, rows] of qc.getQueriesData<Array<{ user_id: string }>>({ queryKey: ['tenant-users'] })) {
       if (Array.isArray(rows) && rows.some(row => row.user_id === options.userId)) tenants.add(key[1] as string | number);
     }
   }

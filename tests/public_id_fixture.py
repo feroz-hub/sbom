@@ -25,3 +25,35 @@ def public_row(db, model, identity):
     public_id = UUID(str(identity))
     assert public_id.version == 4, 'Public fixture identity must be UUIDv4'
     return db.execute(select(model).where(model.public_id == public_id)).scalar_one()
+
+
+def user_uuid(internal_id):
+    """Explicit HTTP User fixture identity; internal service assertions stay ints."""
+    from app.db import SessionLocal
+    from app.models import IAMUser
+    with SessionLocal() as db:
+        user = db.get(IAMUser, internal_id)
+        assert user is not None
+        assert user.public_id.version == 4
+        return str(user.public_id)
+
+
+def user_wire_payload(payload):
+    """Explicit fixture-only adaptation at HTTP calls, never service inputs.
+
+    Unknown positive fixture keys become fresh nonexistent UUIDs so existing
+    not-found tests exercise lookup rather than syntax. Dedicated boundary tests
+    deliberately send raw integer inputs and assert 422 without this helper.
+    """
+    from uuid import uuid4
+
+    from app.db import SessionLocal
+    from app.models import IAMUser
+    result = dict(payload)
+    for key in ('user_id', 'initial_admin_user_id'):
+        value = result.get(key)
+        if isinstance(value, int) and value > 0:
+            with SessionLocal() as db:
+                user = db.get(IAMUser, value)
+                result[key] = str(user.public_id) if user is not None else str(uuid4())
+    return result

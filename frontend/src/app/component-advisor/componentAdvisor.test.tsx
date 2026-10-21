@@ -49,7 +49,7 @@ api.ApiError = TestApiError;
 const navigation = vi.hoisted(() => ({ replace: vi.fn(), push: vi.fn(), search: '' }));
 const permissions = vi.hoisted(() => ({ granted: new Set<string>() }));
 vi.mock('@/lib/api', () => api);
-vi.mock('@/hooks/useAuth', () => ({ useAuth: () => ({ activeTenantId: '1', user: { userId: 1, roles: ['TENANT_ADMIN'] } }) }));
+vi.mock('@/hooks/useAuth', () => ({ useAuth: () => ({ activeTenantId: '1', user: { userId: '00000000-0000-4000-8000-000000000001', roles: ['TENANT_ADMIN'] } }) }));
 vi.mock('next/navigation', () => ({
   useRouter: () => ({ replace: navigation.replace, push: navigation.push }),
   useSearchParams: () => new URLSearchParams(navigation.search),

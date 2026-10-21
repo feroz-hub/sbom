@@ -1,3 +1,5 @@
+from tests.public_id_fixture import user_uuid
+
 """Control-plane authority never substitutes for explicit customer membership."""
 
 import pytest
@@ -77,7 +79,7 @@ def test_pure_platform_auth_responses_require_no_membership(app, client):
     ("method", "path", "payload"),
     [
         ("GET", "/api/tenants/1/users", None),
-        ("POST", "/api/tenants/1/users", {"user_id": 1, "roles": ["VIEWER"]}),
+        ("POST", "/api/tenants/1/users", {"user_id": "00000000-0000-4000-8000-000000000001", "roles": ["VIEWER"]}),
         ("PUT", "/api/tenants/1/users/1/roles", {"roles": ["VIEWER"]}),
         ("DELETE", "/api/tenants/1/users/1", None),
         ("GET", "/api/projects", None),
@@ -166,13 +168,13 @@ def test_dedicated_admin_recovery_keeps_actor_platform_only(app, client):
         db.commit()
     app.dependency_overrides[get_current_user] = lambda: claims
     try:
-        response = client.post(f"/api/platform/tenants/{tenant_uuid(1)}/recover-admin", json={"user_id": candidate_id})
+        response = client.post(f"/api/platform/tenants/{tenant_uuid(1)}/recover-admin", json={"user_id": user_uuid(candidate_id)})
         assert response.status_code == 200, response.text
         with SessionLocal() as db:
             member = db.query(TenantUser).filter_by(tenant_id=1, user_id=candidate_id).one()
             assert effective_role_codes(db, member) == {"TENANT_ADMIN"}
             assert db.query(TenantUser).filter_by(user_id=actor_id).count() == 0
-        assert client.post(f"/api/platform/tenants/{tenant_uuid(1)}/recover-admin", json={"user_id": candidate_id}).status_code == 200
+        assert client.post(f"/api/platform/tenants/{tenant_uuid(1)}/recover-admin", json={"user_id": user_uuid(candidate_id)}).status_code == 200
         assert client.get(f"/api/tenants/{tenant_uuid(1)}/users", headers={"X-Tenant-ID": tenant_uuid(1)}).status_code == 403
     finally:
         app.dependency_overrides.pop(get_current_user, None)
@@ -325,15 +327,15 @@ def test_existing_identity_memberships_are_independent(app, client):
     headers = {"X-Tenant-ID": tenant_uuid(1)}
     try:
         found = client.get(f"/api/tenants/{tenant_uuid(1)}/user-candidates?q=Independent", headers=headers).json()["items"]
-        assert len(found) == 1 and found[0]["id"] == candidate_id
+        assert len(found) == 1 and found[0]["id"] == user_uuid(candidate_id)
         assert not any(key in found[0] for key in ["memberships", "tenant_id", "roles", "external_subject"])
         created = client.post(
-            f"/api/tenants/{tenant_uuid(1)}/users", json={"user_id": candidate_id, "roles": ["DEVELOPER"]}, headers=headers
+            f"/api/tenants/{tenant_uuid(1)}/users", json={"user_id": user_uuid(candidate_id), "roles": ["DEVELOPER"]}, headers=headers
         )
         assert created.status_code == 201, created.text
         assert (
             client.post(
-                f"/api/tenants/{tenant_uuid(1)}/users", json={"user_id": candidate_id, "roles": ["VIEWER"]}, headers=headers
+                f"/api/tenants/{tenant_uuid(1)}/users", json={"user_id": user_uuid(candidate_id), "roles": ["VIEWER"]}, headers=headers
             ).status_code
             == 409
         )

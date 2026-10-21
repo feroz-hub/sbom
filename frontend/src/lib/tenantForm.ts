@@ -1,3 +1,4 @@
+import { publicId } from '@/lib/publicId';
 import type { CreateTenantRequest } from '@/lib/api';
 
 const SLUG_PATTERN = /^[a-z0-9]+(?:-[a-z0-9]+)*$/;
@@ -27,7 +28,7 @@ export function validateTenantForm(
     if (!profile.first_name.trim() || !profile.last_name.trim() || !/^[^\s@]+@[^\s@]+\.[^\s@]+$/.test(profile.email)) {
       errors.initial_admin_invitation = 'Enter the administrator’s first name, last name, and valid email.';
     }
-  } else if (!Number.isInteger(values.initial_admin_user_id) || (values.initial_admin_user_id ?? 0) < 1) {
+  } else if (!publicId(values.initial_admin_user_id)) {
     errors.initial_admin_user_id = 'Select an initial Tenant Administrator.';
   }
   return errors;

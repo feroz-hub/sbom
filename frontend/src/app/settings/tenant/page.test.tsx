@@ -13,7 +13,7 @@ let mockCanRead = true;
 let mockCanInvite = true;
 let mockCanUpdate = true;
 let mockTenantId = 1;
-let mockUserId = 999;
+let mockUserId = '00000000-0000-4000-8000-0000000003e7';
 const refreshSession = vi.fn();
 vi.mock('@/components/admin/NativeUserInviteForm', () => ({ default: ({ onCreated }: { onCreated: () => void }) => { const qc = useQueryClient(); return <button onClick={async () => { await invalidateTenantMembershipSurfaces(qc, 1); onCreated(); }}>Complete invitation</button>; } }));
 
@@ -66,7 +66,7 @@ import TenantUsersPage from '@/components/admin/TenantUsersAccess';
 
 const member = {
   membership_id: 9,
-  user_id: 12,
+  user_id: '00000000-0000-4000-8000-00000000000c',
   external_iam_user_id: 'subject-12',
   email: 'user@example.test',
   display_name: 'Example User',
@@ -92,7 +92,7 @@ describe('TenantUsersPage', () => {
     mockCanInvite = true;
     mockCanUpdate = true;
     mockTenantId = 1;
-    mockUserId = 999;
+    mockUserId = '00000000-0000-4000-8000-0000000003e7';
     mockReadOnly = false;
   mockPlatform = true;
     vi.clearAllMocks();
@@ -101,7 +101,7 @@ describe('TenantUsersPage', () => {
     api.addTenantMember.mockResolvedValue(member);
     api.replaceTenantMemberRoles.mockResolvedValue({
       membership_id: 9,
-      user_id: 12,
+      user_id: '00000000-0000-4000-8000-00000000000c',
       membership_status: 'ACTIVE',
       role_assignment_version: 2,
       primary_role: 'DEVELOPER',
@@ -150,9 +150,9 @@ describe('TenantUsersPage', () => {
     expect(screen.queryByRole('button', { name: 'Open actions for Example User' })).not.toBeInTheDocument();
   });
 
-  it.each(['New User', 'new.user@hcltech.com'])('allows tenant admins to search by name/email (%s) and submit an internal ID', async query => {
+  it.each(['New User', 'new.user@hcltech.com'])('allows tenant admins to search by name/email (%s) and submit a public User UUID', async query => {
     mockPlatform = false;
-    api.searchTenantUserCandidates.mockResolvedValue([{ id: 99, display_name: 'New User', email: 'new.user@hcltech.com', status: 'ACTIVE', email_verified: true, verification_required: false }]);
+    api.searchTenantUserCandidates.mockResolvedValue([{ id: '00000000-0000-4000-8000-000000000063', display_name: 'New User', email: 'new.user@hcltech.com', status: 'ACTIVE', email_verified: true, verification_required: false }]);
     const user = userEvent.setup();
     renderPage();
     await screen.findAllByText('Example User');
@@ -165,7 +165,7 @@ describe('TenantUsersPage', () => {
     await user.click(await screen.findByText('New User'));
     expect(screen.getByRole('group', { name: 'Initial roles' })).toBeInTheDocument();
     await user.click(screen.getByRole('button', { name: 'Add Member' }));
-    await waitFor(() => expect(api.addTenantMember).toHaveBeenCalledWith(1, { user_id: 99, roles: ['VIEWER'] }));
+    await waitFor(() => expect(api.addTenantMember).toHaveBeenCalledWith(1, { user_id: '00000000-0000-4000-8000-000000000063', roles: ['VIEWER'] }));
     expect(api.searchPlatformUsers).not.toHaveBeenCalled();
     expect(api.searchTenantUserCandidates).toHaveBeenCalledWith(1, query);
     expect(screen.queryByText(/User ID:/)).not.toBeInTheDocument();
@@ -175,7 +175,7 @@ describe('TenantUsersPage', () => {
     const user = userEvent.setup();
     api.searchTenantUserCandidates.mockResolvedValue([
       {
-        id: 99,
+        id: '00000000-0000-4000-8000-000000000063',
         email: 'new.user@hcltech.com',
         display_name: 'New User',
         status: 'ACTIVE',
@@ -196,7 +196,7 @@ describe('TenantUsersPage', () => {
     await user.click(screen.getByRole('checkbox', { name: /Security Analyst/ }));
     await user.click(screen.getByRole('button', { name: 'Add Member' }));
     await waitFor(() => expect(api.addTenantMember).toHaveBeenCalledWith(1, {
-      user_id: 99, roles: ['VIEWER', 'SECURITY_ANALYST'],
+      user_id: '00000000-0000-4000-8000-000000000063', roles: ['VIEWER', 'SECURITY_ANALYST'],
     }));
   });
 
@@ -219,7 +219,7 @@ describe('TenantUsersPage', () => {
 
     await waitFor(() => expect(api.replaceTenantMemberRoles).toHaveBeenCalledWith(
       1,
-      12,
+      '00000000-0000-4000-8000-00000000000c',
       ['VIEWER', 'DEVELOPER'],
       1,
     ));
@@ -287,7 +287,7 @@ describe('TenantUsersPage', () => {
   });
   it('filters only fetched members by display name or email, announces matches and clears search', async () => {
     const user = userEvent.setup();
-    api.getTenantMembers.mockResolvedValue([member, { ...member, membership_id: 10, user_id: 13, display_name: 'Another Person', email: 'second@example.test' }]);
+    api.getTenantMembers.mockResolvedValue([member, { ...member, membership_id: 10, user_id: '00000000-0000-4000-8000-00000000000d', display_name: 'Another Person', email: 'second@example.test' }]);
     renderPage();
     await screen.findAllByText('Another Person');
     const search = screen.getByRole('searchbox', { name: 'Search members' });
@@ -325,7 +325,7 @@ describe('TenantUsersPage', () => {
 
   it('cancels member addition, restores toolbar focus and resets selection on reopening', async () => {
     const user = userEvent.setup();
-    api.searchTenantUserCandidates.mockResolvedValue([{ id: 99, display_name: 'New User', email: 'new@example.test', status: 'ACTIVE', email_verified: true }]);
+    api.searchTenantUserCandidates.mockResolvedValue([{ id: '00000000-0000-4000-8000-000000000063', display_name: 'New User', email: 'new@example.test', status: 'ACTIVE', email_verified: true }]);
     renderPage();
     const open = screen.getByRole('button', { name: 'Add Existing Member' });
     await user.click(open);
@@ -349,7 +349,7 @@ describe('TenantUsersPage', () => {
     const user = userEvent.setup();
     let reject!: (reason: Error) => void;
     api.addTenantMember.mockReturnValueOnce(new Promise((_, fail) => { reject = fail; }));
-    api.searchTenantUserCandidates.mockResolvedValue([{ id: 99, display_name: 'New User', email: 'new@example.test', status: 'ACTIVE', email_verified: true }]);
+    api.searchTenantUserCandidates.mockResolvedValue([{ id: '00000000-0000-4000-8000-000000000063', display_name: 'New User', email: 'new@example.test', status: 'ACTIVE', email_verified: true }]);
     const { client } = renderPage();
     const invalidate = vi.spyOn(client, 'invalidateQueries');
     await user.click(screen.getByRole('button', { name: 'Add Existing Member' }));
@@ -375,7 +375,7 @@ describe('TenantUsersPage', () => {
   it('offers only returned assignable roles and never submits an unavailable default role', async () => {
     const user = userEvent.setup();
     api.getAssignableTenantRoles.mockResolvedValue({ roles: ['DEVELOPER'] });
-    api.searchTenantUserCandidates.mockResolvedValue([{ id: 99, display_name: 'New User', status: 'ACTIVE' }]);
+    api.searchTenantUserCandidates.mockResolvedValue([{ id: '00000000-0000-4000-8000-000000000063', display_name: 'New User', status: 'ACTIVE' }]);
     renderPage();
     await user.click(screen.getByRole('button', { name: 'Add Existing Member' }));
     await waitFor(() => expect(screen.getByRole('dialog', { name: 'Add Existing Member' })).toHaveFocus());
@@ -386,14 +386,14 @@ describe('TenantUsersPage', () => {
     expect(screen.getByRole('button', { name: 'Add Member' })).toBeDisabled();
     await user.click(screen.getByRole('checkbox', { name: /Developer/ }));
     await user.click(screen.getByRole('button', { name: 'Add Member' }));
-    await waitFor(() => expect(api.addTenantMember).toHaveBeenCalledWith(1, { user_id: 99, roles: ['DEVELOPER'] }));
+    await waitFor(() => expect(api.addTenantMember).toHaveBeenCalledWith(1, { user_id: '00000000-0000-4000-8000-000000000063', roles: ['DEVELOPER'] }));
   });
 
   it('resets search and open dialogs on tenant switching and ignores an old mutation completion', async () => {
     const user = userEvent.setup();
     let resolve!: (value: unknown) => void;
     api.addTenantMember.mockReturnValue(new Promise(done => { resolve = done; }));
-    api.searchTenantUserCandidates.mockResolvedValue([{ id: 99, display_name: 'New User', status: 'ACTIVE' }]);
+    api.searchTenantUserCandidates.mockResolvedValue([{ id: '00000000-0000-4000-8000-000000000063', display_name: 'New User', status: 'ACTIVE' }]);
     api.getTenantMembers.mockImplementation((id: number) => Promise.resolve(id === 1 ? [member] : [{ ...member, membership_id: 20, display_name: 'Second Tenant Member' }]));
     const { switchTenant, client } = renderPage();
     const invalidate = vi.spyOn(client, 'invalidateQueries');
@@ -453,7 +453,7 @@ describe('TenantUsersPage', () => {
 
   it('blocks addition while roles cannot load and lets the user retry the role query', async () => {
     api.getAssignableTenantRoles.mockRejectedValueOnce(new Error('offline'));
-    api.searchTenantUserCandidates.mockResolvedValue([{ id: 99, display_name: 'New User', status: 'ACTIVE' }]);
+    api.searchTenantUserCandidates.mockResolvedValue([{ id: '00000000-0000-4000-8000-000000000063', display_name: 'New User', status: 'ACTIVE' }]);
     const user = userEvent.setup();
     renderPage();
     await user.click(screen.getByRole('button', { name: 'Add Existing Member' }));
@@ -469,8 +469,8 @@ describe('TenantUsersPage', () => {
   });
 
   it('refreshes the session when adding the current account', async () => {
-    mockUserId = 99;
-    api.searchTenantUserCandidates.mockResolvedValue([{ id: 99, display_name: 'My Account', status: 'ACTIVE' }]);
+    mockUserId = '00000000-0000-4000-8000-000000000063';
+    api.searchTenantUserCandidates.mockResolvedValue([{ id: '00000000-0000-4000-8000-000000000063', display_name: 'My Account', status: 'ACTIVE' }]);
     const user = userEvent.setup();
     renderPage();
     await user.click(screen.getByRole('button', { name: 'Add Existing Member' }));
@@ -484,7 +484,7 @@ describe('TenantUsersPage', () => {
   it('keeps members without a name or email in the unfiltered directory', async () => {
     api.getTenantMembers.mockResolvedValue([{ ...member, display_name: null, email: null }]);
     renderPage();
-    expect(await screen.findAllByText('User #12')).toHaveLength(2);
+    expect(await screen.findAllByText('User #00000000-0000-4000-8000-00000000000c')).toHaveLength(2);
     expect(screen.getByLabelText('1 total members')).toBeInTheDocument();
   });
 

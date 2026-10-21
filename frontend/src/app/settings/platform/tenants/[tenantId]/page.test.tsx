@@ -7,14 +7,14 @@ import { beforeEach, expect, it, vi } from 'vitest';
 import Page from './page';
 
 const state = vi.hoisted(() => ({ allowed: true, get: vi.fn(), recover: vi.fn(), status: vi.fn(), candidate: { id: 8, email: 'admin@example.test', display_name: 'New Admin' } }));
-vi.mock('@/hooks/useAuth', () => ({ useAuth: () => ({ user: { userId: 1, permissions: [] }, isLoading: false, hasPermission: () => state.allowed }) }));
+vi.mock('@/hooks/useAuth', () => ({ useAuth: () => ({ user: { userId: '00000000-0000-4000-8000-000000000001', permissions: [] }, isLoading: false, hasPermission: () => state.allowed }) }));
 vi.mock('@/hooks/useNotifications', () => ({ useNotifications: () => ({ showSuccess: vi.fn(), showError: vi.fn() }) }));
 vi.mock('@/lib/api', () => ({ getPlatformTenant: (...args: unknown[]) => state.get(...args), recoverPlatformTenantAdmin: (...args: unknown[]) => state.recover(...args), updatePlatformTenantStatus: (...args: unknown[]) => state.status(...args) }));
 vi.mock('@/components/admin/UserSearchCombobox', () => ({ UserSearchCombobox: ({ onSelect }: { onSelect: (user: typeof state.candidate) => void }) => <button onClick={() => onSelect(state.candidate)}>Select New Admin</button> }));
 
 beforeEach(() => {
   vi.clearAllMocks(); state.allowed = true;
-  state.get.mockResolvedValue({ id: "00000000-0000-4000-8000-000000000007", name: 'Olympus', status: 'ACTIVE', member_count: 10, current_administrators: [{ user_id: 2, display_name: 'Current Admin', email: 'current@example.test' }] });
+  state.get.mockResolvedValue({ id: "00000000-0000-4000-8000-000000000007", name: 'Olympus', status: 'ACTIVE', member_count: 10, current_administrators: [{ user_id: '00000000-0000-4000-8000-000000000002', display_name: 'Current Admin', email: 'current@example.test' }] });
   state.recover.mockResolvedValue({}); state.status.mockResolvedValue({});
 });
 async function renderPage() {

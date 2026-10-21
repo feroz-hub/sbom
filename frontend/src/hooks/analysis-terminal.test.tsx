@@ -21,7 +21,7 @@ it.each(['OK', 'FINDINGS', 'PARTIAL', 'ERROR', 'INTERRUPTED', 'NO_DATA', 'CANCEL
   expect(await screen.findByText('Findings: 1')).toBeInTheDocument(); expect(isActiveAnalysis(status)).toBe(false); expect(isTerminalAnalysis(status)).toBe(true);
   expect(qc.getQueryState(['findings-enriched', 8, 'LOW'])?.isInvalidated).toBe(true);
   expect(qc.getQueryState(['findings-enriched', 99])?.isInvalidated).toBe(false); expect(qc.getQueryState(['vex-run-snapshot', 5, 8])?.isInvalidated).toBe(false);
-  expect(await reconcileAnalysisTerminal(qc, { scope: '1:1', runId: 8, sbomId: 5, status, isCurrent: () => true })).toBe(false); mounted.unmount(); qc.clear();
+  expect(await reconcileAnalysisTerminal(qc, { scope: '1:00000000-0000-4000-8000-000000000001', runId: 8, sbomId: 5, status, isCurrent: () => true })).toBe(false); mounted.unmount(); qc.clear();
 });
 it('already-terminal runs refresh cached findings on mount; obsolete principal events are ignored', async () => {
   qc.setQueryData(['findings-enriched', 8, 'HIGH'], []);

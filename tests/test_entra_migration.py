@@ -8,9 +8,34 @@ from alembic import command
 from alembic.config import Config
 from app.db import SessionLocal
 from app.models import UserIdentity
-from sqlalchemy import func, select
+from sqlalchemy import MetaData, Table, func, select
 
-from tests.phase6_helpers import now, seed_user
+from tests.phase6_helpers import now
+
+
+def seed_user(db, *, status="ACTIVE"):
+    """Use the actual pre-101 table, never today's ORM against revision 063."""
+    from types import SimpleNamespace
+    from uuid import uuid4
+
+    users = Table("iam_users", MetaData(), autoload_with=db.get_bind())
+    assert "public_id" not in users.c
+    suffix = uuid4().hex
+    values = {
+        "external_iam_user_id": "historical-" + suffix,
+        "external_issuer": "https://hcl-cs.test",
+        "external_subject": "subject-" + suffix,
+        "email": suffix + "@example.test",
+        "display_name": "Synthetic historical account",
+        "status": status,
+        "email_verified": True,
+        "email_verified_at": now(),
+        "verification_required": False,
+        "created_at": now(),
+        "updated_at": now(),
+    }
+    identity = db.execute(users.insert().values(**values).returning(users.c.id)).scalar_one()
+    return SimpleNamespace(id=identity, **values)
 
 
 @pytest.fixture(autouse=True)

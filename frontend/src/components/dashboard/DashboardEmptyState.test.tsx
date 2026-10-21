@@ -6,7 +6,7 @@ import { LifetimeStats } from './LifetimeStats/LifetimeStats';
 import { QuickActionsV2 } from './QuickActionsV2/QuickActionsV2';
 
 let permissions: string[] = [];
-vi.mock('@/hooks/useAuth', () => ({ useAuth: () => ({ user: { userId: 1, permissions: [] }, hasPermission: (p: string) => permissions.includes(p) }) }));
+vi.mock('@/hooks/useAuth', () => ({ useAuth: () => ({ user: { userId: '00000000-0000-4000-8000-000000000001', permissions: [] }, hasPermission: (p: string) => permissions.includes(p) }) }));
 beforeEach(() => { permissions = []; });
 describe('Tenant dashboard guidance', () => {
   it('offers an upload action only with active upload permission', () => {

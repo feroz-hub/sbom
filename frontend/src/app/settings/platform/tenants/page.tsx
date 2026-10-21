@@ -39,7 +39,7 @@ import { invalidatePlatformTenantSurfaces } from '@/lib/queryInvalidation';
 const EMPTY_FORM: CreateTenantRequest = {
   name: '',
   slug: '',
-  initial_admin_user_id: 0,
+  initial_admin_user_id: '',
 };
 
 function safeErrorMessage(error: unknown): string {
@@ -484,7 +484,7 @@ export default function PlatformTenantsPage() {
                                 ...current,
                                 initial_admin_user_id:
                                   mode === 'existing'
-                                    ? (selectedInitialAdmin?.id ?? 0)
+                                    ? (selectedInitialAdmin?.id ?? '')
                                     : undefined,
                                 initial_admin_invitation:
                                   mode === 'invite'
@@ -515,7 +515,7 @@ export default function PlatformTenantsPage() {
                           setSelectedInitialAdmin(user);
                           setForm((current) => ({
                             ...current,
-                            initial_admin_user_id: user?.id ?? 0,
+                            initial_admin_user_id: user?.id ?? '',
                           }));
                         }}
                         selectedUser={selectedInitialAdmin}

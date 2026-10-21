@@ -41,7 +41,7 @@ export default function PlatformAdministratorsPage() {
   });
 
   const grantAdmin = useMutation({
-    mutationFn: (userId: number) => grantPlatformAdministrator(userId),
+    mutationFn: (userId: string) => grantPlatformAdministrator(userId),
     onMutate: () => scope.capture(),
     onSuccess: async (_res, userId, isCurrent) => {
       if (!isCurrent?.()) return;

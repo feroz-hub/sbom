@@ -50,7 +50,7 @@ class Tenant(PublicIdentityMixin, Base):
     )
 
 
-class IAMUser(Base):
+class IAMUser(Base, PublicIdentityMixin):
     __tablename__ = "iam_users"
 
     id = Column(Integer, primary_key=True)

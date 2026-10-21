@@ -6,7 +6,7 @@ import { TenantMembersTable } from './TenantMembersTable';
 import type { TenantMember } from '@/lib/api';
 
 const member: TenantMember = {
-  membership_id: 1, user_id: 2, external_iam_user_id: 'example-subject', display_name: 'Example Member', email: 'member@example.test',
+  membership_id: 1, user_id: '00000000-0000-4000-8000-000000000002', external_iam_user_id: 'example-subject', display_name: 'Example Member', email: 'member@example.test',
   user_status: 'SUSPENDED', email_verified: true, verification_required: false,
   role: 'VIEWER', roles: ['VIEWER', 'DEVELOPER'], status: 'DISABLED', role_assignment_version: 1,
 };

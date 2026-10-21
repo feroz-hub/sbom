@@ -12,16 +12,29 @@ from uuid import RFC_4122, UUID
 
 from fastapi import Depends, HTTPException, Request
 from fastapi.dependencies.utils import get_dependant
+from fastapi.exceptions import RequestValidationError
 from fastapi.routing import APIRoute, iter_route_contexts
 from sqlalchemy import select
+from starlette._utils import is_async_callable
+from starlette.concurrency import run_in_threadpool
 from starlette.datastructures import QueryParams
 from starlette.routing import request_response
 
 from .core.context import get_bound_context
 from .db import SessionLocal, get_db
-from .models import LogicalSBOM, Product, Projects, SBOMComponent, SBOMSource, Tenant
+from .iam_public_api import (
+    IAM_SCHEMA_FIELDS,
+    USER_FIELDS,
+    USER_SCHEMAS,
+    iam_field,
+    iam_route,
+    missing_user,
+    user_lookup,
+)
+from .models import IAMUser, LogicalSBOM, Product, Projects, SBOMComponent, SBOMSource, Tenant
 
 MODELS = {
+    "iam_users": IAMUser,
     "tenants": Tenant,
     "projects": Projects,
     "products": Product,
@@ -130,6 +143,8 @@ def canonical(value):
 def schema_entity(schema):
     # Explicit DTO ownership: audit, users, findings, runs and SBOM types keep
     # their separate identities. Never infer identity from a name substring.
+    if schema.get("title") in USER_SCHEMAS:
+        return "iam_users"
     return {
         "CreatedTenantResponse": "tenants",
         "AvailableTenant": "tenants",
@@ -159,12 +174,16 @@ def route_entity(path):
 def field_entity(key, path):
     if key == "version_id" and path == "/api/sboms/{id}/restore/{version_id}":
         return "sbom_source"
-    return FIELDS.get(key)
+    return iam_field(key, path) or FIELDS.get(key)
 
 
 def scoped_table(db, entity, context):
     table = MODELS[entity].__table__
     statement = select(table.c.id, table.c.public_id)
+    if entity == "iam_users":
+        # Only IDs in the already authorized response projection reach here.
+        # Request selectors use user_lookup with explicit endpoint scoping.
+        return table, statement
     if entity != "tenants":
         if context is None or context.tenant_id is None:
             raise HTTPException(403, "Active tenant context required")
@@ -195,10 +214,18 @@ async def decode_request(request: Request, db=Depends(get_db)):
     with nullcontext(db):
 
         def resolve(entity, value):
+            # A 32-digit JSON integer can otherwise be parsed by UUID(str(value)).
+            # Public IAM selectors must be actual hyphenated UUID strings.
+            if entity == "iam_users" and (not isinstance(value, str) or len(value) != 36):
+                raise HTTPException(422, "User identifier must be a UUIDv4 string")
             public = canonical(value)
-            table, statement = scoped_table(db, entity, context)
+            table, statement = (
+                user_lookup(context, request) if entity == "iam_users" else scoped_table(db, entity, context)
+            )
             row = db.execute(statement.where(table.c.public_id == public)).first()
             if row is None:
+                if entity == "iam_users":
+                    missing_user(db, context, request)
                 raise HTTPException(404, "Resource not found")
             if not hasattr(request.state, "public_identity_cache"):
                 request.state.public_identity_cache = {}
@@ -314,7 +341,7 @@ def install_public_boundary(app):
             route.dependant.dependencies.insert(position, get_dependant(path=route.path_format, call=decode_request))
         else:
             # Tenant endpoints declare their own authorization dependencies.
-            if any(k in FIELDS for k in route.param_convertors) or route.body_field is not None:
+            if any(field_entity(k, route.path) for k in route.param_convertors) or route.body_field is not None:
                 route.dependant.dependencies.append(get_dependant(path=route.path_format, call=decode_request))
         if id(original) in wrapped:
             continue
@@ -335,6 +362,20 @@ def install_public_boundary(app):
                     from fastapi.exception_handlers import http_exception_handler
 
                     response = await http_exception_handler(request, exc)
+                except RequestValidationError as exc:
+                    if not iam_route(path):
+                        raise
+                    # Model-level errors can echo the already-decoded body.
+                    # Apply the same explicit User projection to error inputs.
+                    from fastapi.exception_handlers import request_validation_exception_handler
+
+                    validation_handler = request.app.exception_handlers.get(
+                        RequestValidationError, request_validation_exception_handler
+                    )
+                    if is_async_callable(validation_handler):
+                        response = await validation_handler(request, exc)
+                    else:
+                        response = await run_in_threadpool(validation_handler, request, exc)
                 if request.app is not app:
                     return response
                 # R3-DEF-001: this is the immutable source-native candidate,
@@ -383,9 +424,12 @@ def install_public_boundary(app):
                         if isinstance(value, dict):
                             result = {}
                             for key, item in value.items():
-                                target = FIELDS.get(key)
+                                target = field_entity(key, path)
                                 if key == "id":
                                     target = entity
+                                if iam_route(path) and key == "user" and isinstance(item, dict):
+                                    result[key] = walk(item, node.get("properties", {}).get(key, {}), "iam_users")
+                                    continue
                                 if key == "parent_id" and entity == "sbom_source":
                                     target = "sbom_source"
                                 batch = BATCH_FIELDS.get(key) or (entity if key == "ids" else None)
@@ -425,6 +469,15 @@ def install_public_boundary(app):
                         )
                         else None
                     )
+                    if path in (
+                        "/api/platform/users",
+                        "/api/platform/users/search",
+                        "/api/platform/tenant-admin-candidates",
+                        "/api/platform/users/{user_id}",
+                    ):
+                        root = "iam_users"
+                    if path.endswith("/user-candidates"):
+                        root = "iam_users"
                     if response.status_code >= 400:
                         root = None
                     if schema.get("title") and not schema_entity(schema):
@@ -458,9 +511,7 @@ def install_public_boundary(app):
                         and isinstance(data, dict)
                         and data.get("sbom_id")
                     ):
-                        response.headers["Link"] = (
-                            f'</api/sboms/{data["sbom_id"]}/analyze>; rel="successor-version"'
-                        )
+                        response.headers["Link"] = f'</api/sboms/{data["sbom_id"]}/analyze>; rel="successor-version"'
                     if path.rstrip("/") == "/api/sboms" and response.headers.get("X-Next-Cursor"):
                         response.headers["X-Next-Cursor"] = outward(
                             "sbom_source", int(response.headers["X-Next-Cursor"])
@@ -497,7 +548,12 @@ def install_public_openapi(app):
         for name, node in doc.get("components", {}).get("schemas", {}).items():
             entity = schema_entity({**node, "title": name})
             for field, value in list(node.get("properties", {}).items()):
-                if field in FIELDS or (field == "id" and entity) or (field == "parent_id" and entity == "sbom_source"):
+                if (
+                    field in FIELDS
+                    or (field in USER_FIELDS and (name in IAM_SCHEMA_FIELDS or entity == "iam_users"))
+                    or (field == "id" and entity)
+                    or (field == "parent_id" and entity == "sbom_source")
+                ):
                     node["properties"][field] = uuid_field(value)
                 elif field in BATCH_FIELDS:
                     value = dict(value)

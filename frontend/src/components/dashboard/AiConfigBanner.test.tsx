@@ -5,11 +5,11 @@ import { afterEach, beforeEach, describe, expect, it, vi } from 'vitest';
 import { AiConfigBanner } from './AiConfigBanner';
 import { getAnalysisConfig, type EffectiveAiStatus } from '@/lib/api';
 vi.mock('@/lib/api', () => ({ getAnalysisConfig: vi.fn() }));
-const auth = vi.hoisted(() => ({ activeTenantId: '1', isPlatformContext: false, isLoading: false, user: { userId: 8, permissions: ['tenant:ai:read', 'tenant:ai:update'] } }));
+const auth = vi.hoisted(() => ({ activeTenantId: '1', isPlatformContext: false, isLoading: false, user: { userId: '00000000-0000-4000-8000-000000000008', permissions: ['tenant:ai:read', 'tenant:ai:update'] } }));
 vi.mock('@/hooks/useAuth', () => ({ useAuth: () => auth }));
 const base: EffectiveAiStatus = { configured: true, source: 'PLATFORM', provider: 'gemini', model: 'test', verification_status: 'VERIFIED', feature_enabled: true, available_for_tenant: true, state: 'AVAILABLE', can_view_settings: true, can_configure: true, settings_scope: 'tenant' };
 let client: QueryClient;
-beforeEach(() => { auth.activeTenantId = '1'; auth.user = { userId: 8, permissions: ['tenant:ai:read', 'tenant:ai:update'] }; vi.clearAllMocks(); });
+beforeEach(() => { auth.activeTenantId = '1'; auth.user = { userId: '00000000-0000-4000-8000-000000000008', permissions: ['tenant:ai:read', 'tenant:ai:update'] }; vi.clearAllMocks(); });
 function show(changes: Partial<EffectiveAiStatus> = {}) {
   vi.mocked(getAnalysisConfig).mockResolvedValue({ github_configured: false, nvd_key_configured: false, max_concurrency: 10, ai_status: { ...base, ...changes } });
   client = new QueryClient({ defaultOptions: { queries: { retry: false } } });
@@ -64,7 +64,7 @@ it('explains empty tenant override to an administrator without suggesting anothe
 });
 
 it('shows inherited availability to an analyst with no management action', async () => {
-  auth.user = { userId: 2, permissions: [] };
+  auth.user = { userId: '00000000-0000-4000-8000-000000000002', permissions: [] };
   show({ can_configure: false, can_view_settings: false, can_invoke_ai: false });
   await screen.findByText('AI Fix Generation available');
   expect(screen.queryByRole('link')).not.toBeInTheDocument();
@@ -89,7 +89,7 @@ it.each([
 
 it('isolates cached management actions when the user changes in the same tenant', async () => {
   show(); await screen.findByRole('link', { name: 'View AI Settings' });
-  auth.user = { userId: 2, permissions: [] };
+  auth.user = { userId: '00000000-0000-4000-8000-000000000002', permissions: [] };
   vi.mocked(getAnalysisConfig).mockResolvedValue({ github_configured: false, nvd_key_configured: false, max_concurrency: 10, ai_status: { ...base, can_configure: false, can_view_settings: false } });
   cleanup(); render(<QueryClientProvider client={client}><AiConfigBanner /></QueryClientProvider>);
   await screen.findByText('AI Fix Generation available');

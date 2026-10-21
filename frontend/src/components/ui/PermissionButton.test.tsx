@@ -11,7 +11,7 @@ import catalogue from '@/test/permissionCatalogue.json';
 
 const state = vi.hoisted(() => ({ permissions: [] as string[], roles: ['VIEWER'], loading: false, tenantLoading: false, error: false, path: '/projects' }));
 vi.mock('@/hooks/useAuth', () => ({ useAuth: () => ({
-  user: { userId: 1, roles: state.roles, permissions: state.permissions },
+  user: { userId: '00000000-0000-4000-8000-000000000001', roles: state.roles, permissions: state.permissions },
   isLoading: state.loading, isTenantContextLoading: state.tenantLoading,
   bootstrapState: state.error ? 'error' : 'ready', bootstrapError: state.error ? 'Network failure' : null,
   hasPermission: (code: string) => state.permissions.includes(code),

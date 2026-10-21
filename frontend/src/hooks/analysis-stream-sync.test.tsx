@@ -20,9 +20,9 @@ it.each(['complete', 'error'] as const)('existing stream %s reconciles authorita
   state.get.mockResolvedValue({ id: 8, run_status: 'ERROR', sbom_id: 5 }); qc.setQueryData(['findings-enriched', 8], []);
   const hook = renderHook(() => useAnalysisStream(5), { wrapper });
   await act(async () => { await hook.result.current.startAnalysis(); });
-  await waitFor(() => expect(qc.getQueryData(['analysis-terminal-sync', '00000000-0000-4000-8000-000000000001:1', 8])).toBe(terminal === 'complete' ? 'PARTIAL' : 'ERROR'));
+  await waitFor(() => expect(qc.getQueryData(['analysis-terminal-sync', '00000000-0000-4000-8000-000000000001:00000000-0000-4000-8000-000000000001', 8])).toBe(terminal === 'complete' ? 'PARTIAL' : 'ERROR'));
   expect(qc.getQueryState(['findings-enriched', 8])?.isInvalidated).toBe(true);
-  expect(getStillPendingAnalyses('00000000-0000-4000-8000-000000000001:1')).toHaveLength(0); hook.unmount();
+  expect(getStillPendingAnalyses('00000000-0000-4000-8000-000000000001:00000000-0000-4000-8000-000000000001')).toHaveLength(0); hook.unmount();
 });
 it('late stream response cannot write into a different tenant context', async () => {
   let resolve!: (value: Response) => void; vi.stubGlobal('fetch', vi.fn(() => new Promise<Response>(done => { resolve = done; })));

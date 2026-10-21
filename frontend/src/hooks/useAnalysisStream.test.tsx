@@ -44,7 +44,7 @@ describe('useAnalysisStream', () => {
       if (url === '/api/auth/session') return Promise.resolve(json({ authenticated: true }));
       if (url.endsWith('/api/auth/me')) {
         const id = String((init?.headers as Record<string, string> | undefined)?.['X-Tenant-ID'] ?? '00000000-0000-4000-8000-000000000007');
-        return Promise.resolve(json({ authenticated: true, user_id: 3, tenant_id: id, roles: ['SECURITY_ANALYST'], permissions: ['analysis:run', 'sbom:read'], is_platform_admin: false,
+        return Promise.resolve(json({ authenticated: true, user_id: '00000000-0000-4000-8000-000000000003', tenant_id: id, roles: ['SECURITY_ANALYST'], permissions: ['analysis:run', 'sbom:read'], is_platform_admin: false,
           auth_context: { status: 'READY', user: { id: 3 }, tenant_context: { active_tenant: tenants.find(tenant => tenant.id === id), available_tenants: tenants } } }));
       }
       if (url === '/api/auth/logout') return Promise.resolve(json({ redirectUrl: '/logged-out' }));

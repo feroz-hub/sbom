@@ -268,6 +268,9 @@ def test_T34_decision_events_carry_actor_reason_state_and_correlation__FR_SCA_02
     events = client.get(f"{BASE}/recommendations/{item['id']}/events").json()["items"]
     event = next(e for e in events if e["action"] == "RECOMMENDED")
     assert event["actor"] == actor and event["actor_user_id"]
+    from uuid import UUID
+    assert UUID(event["actor_user_id"]).version == 4
+    assert type(event["id"]) is int and type(event["recommendation_id"]) is int
     assert event["reason"] == "lowest risk" and event["decision"] == "RECOMMEND"
     assert (event["old_status"], event["new_status"]) == ("REVIEW_REQUIRED", "RECOMMENDED")
     assert event["correlation_id"] == "sca-review-corr-1"

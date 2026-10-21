@@ -11,7 +11,7 @@ import { useCancelAiBatch, useCancelAiFixes, useTriggerScopedAiFixes, useAiBatch
 import { useGlobalAiBatchProgress } from './useGlobalAiBatchProgress';
 import { makeBatchProgress } from '../__tests__/test-utils';
 import type { AiBatchProgress } from '@/types/ai';
-const state = vi.hoisted(() => ({ tenant: '1', userId: 1, ready: true }));
+const state = vi.hoisted(() => ({ tenant: '1', userId: '00000000-0000-4000-8000-000000000001', ready: true }));
 const api = vi.hoisted(() => ({ getRunAiBatch: vi.fn(), getRunAiFixProgress: vi.fn(), cancelRunAiBatch: vi.fn(), cancelRunAiFixes: vi.fn(), triggerRunAiFixes: vi.fn() }));
 vi.mock('@/hooks/useAuth', () => ({ useAuth: () => ({ user: state.ready ? { userId: state.userId } : null, activeTenantId: state.tenant, isLoading: false, hasPermission: () => state.ready }) }));
 vi.mock('@/lib/auth', () => ({ getActiveTenantId: () => state.tenant }));
@@ -47,7 +47,7 @@ function Actions({ legacy = false }: { legacy?: boolean }) {
 }
 function wrap(ui: React.ReactNode) { return <QueryClientProvider client={qc}><ToastProvider>{ui}</ToastProvider></QueryClientProvider>; }
 beforeEach(() => {
-  state.tenant = '1'; state.userId = 1; state.ready = true; output = 0; FakeSource.all = []; vi.stubGlobal('EventSource', FakeSource);
+  state.tenant = '1'; state.userId = '00000000-0000-4000-8000-000000000001'; state.ready = true; output = 0; FakeSource.all = []; vi.stubGlobal('EventSource', FakeSource);
   p = makeBatchProgress({ run_id: 42, batch_id: 'batch-a', status: 'in_progress', generated: 0, from_cache: 0, failed: 0 });
   qc = new QueryClient({ defaultOptions: { queries: { staleTime: 300000, refetchOnWindowFocus: false, retry: false }, mutations: { retry: false } } });
   fetchers = keys.map(() => vi.fn(async () => ({ generated: output })));

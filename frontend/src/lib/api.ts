@@ -209,7 +209,7 @@ export type MembershipStatus = 'ACTIVE' | 'PENDING' | 'DISABLED';
 
 export interface TenantMember {
   membership_id: number;
-  user_id: number;
+  user_id: string;
   external_iam_user_id: string;
   email: string | null;
   display_name: string | null;
@@ -224,7 +224,7 @@ export interface TenantMember {
 
 export interface PlatformAdministrator {
   grant_id: number;
-  user_id: number;
+  user_id: string;
   email: string | null;
   display_name: string | null;
   local_status: string;
@@ -238,7 +238,7 @@ export interface PlatformAdministrator {
 
 export interface UserSearchResult {
   providers?: string[];
-  id: number;
+  id: string;
   email: string | null;
   display_name: string | null;
   username?: string | null;
@@ -277,12 +277,12 @@ export interface TenantSummary {
   updated_at?: string;
   member_count?: number;
   initial_administrator?: {
-    user_id: number;
+    user_id: string;
     display_name: string | null;
     email: string | null;
   } | null;
   current_administrators?: Array<{
-    user_id: number;
+    user_id: string;
     display_name: string | null;
     email: string | null;
   }>;
@@ -291,7 +291,7 @@ export interface TenantSummary {
 export interface CreateTenantRequest {
   name: string;
   slug: string;
-  initial_admin_user_id?: number;
+  initial_admin_user_id?: string;
   initial_admin_invitation?: { first_name: string; last_name: string; email: string; phone?: string };
 }
 
@@ -469,7 +469,7 @@ export async function getAssignableTenantRoles(tenantId?: (string | number)): Pr
 
 export function addTenantMember(
   tenantId: (string | number),
-  payload: { user_id: number; roles: TenantRole[]; status?: MembershipStatus },
+  payload: { user_id: string; roles: TenantRole[]; status?: MembershipStatus },
 ): Promise<TenantMember> {
   const roleCodes = payload.roles.map(getRoleCode);
   return request<TenantMember>(`/api/tenants/${tenantId}/users`, {
@@ -481,7 +481,7 @@ export function addTenantMember(
 
 export interface TenantRoleState {
   membership_id: number;
-  user_id: number;
+  user_id: string;
   membership_status: MembershipStatus;
   role_assignment_version: number;
   primary_role: string;
@@ -501,9 +501,9 @@ export interface TenantAuditEvent {
   id: number;
   action: string;
   outcome: string;
-  actor_user_id: number | null;
+  actor_user_id: string | null;
   actor_email: string | null;
-  target_user_id: number | null;
+  target_user_id: string | null;
   target_email: string | null;
   old_state: Record<string, unknown> | null;
   new_state: Record<string, unknown> | null;
@@ -544,13 +544,13 @@ export async function searchPlatformTenantAdminCandidates(query: string): Promis
   return result.items;
 }
 
-export function recoverPlatformTenantAdmin(tenantId: (string | number), userId: number) {
+export function recoverPlatformTenantAdmin(tenantId: (string | number), userId: string) {
   return request(`/api/platform/tenants/${tenantId}/recover-admin`, { ...adminRequestOptions, method: 'POST', body: JSON.stringify({ user_id: userId }) });
 }
 
 export function replaceTenantMemberRoles(
   tenantId: (string | number),
-  userId: number,
+  userId: string,
   roles: TenantRole[],
   expectedVersion: number,
 ): Promise<TenantRoleState> {
@@ -626,7 +626,7 @@ export async function getPlatformAdministrators(): Promise<PlatformAdministrator
   return Array.isArray(res) ? res : res?.items ?? [];
 }
 
-export function grantPlatformAdministrator(userId: number): Promise<PlatformAdministrator> {
+export function grantPlatformAdministrator(userId: string): Promise<PlatformAdministrator> {
   return request<PlatformAdministrator>('/api/platform/administrators', {
     ...adminRequestOptions,
     method: 'POST',
@@ -652,7 +652,7 @@ export function getPlatformTenant(tenantId: (string | number)): Promise<TenantSu
 }
 
 /** Reuse the existing platform activation endpoint; token issuance stays on the server. */
-export function resendPlatformTenantActivation(tenantId: (string | number), userId: number): Promise<{ delivery: { status: string } }> {
+export function resendPlatformTenantActivation(tenantId: (string | number), userId: string): Promise<{ delivery: { status: string } }> {
   return request(`/api/platform/tenants/${tenantId}/native-users/${userId}/resend-activation`, {
     ...adminRequestOptions,
     method: 'POST',

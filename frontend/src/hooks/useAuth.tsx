@@ -6,11 +6,12 @@ import {
   type AuthConfig, clearActiveTenantId, getActiveTenantId, resolveAuthConfig,
   safeReturnPath, setActiveTenantId,
 } from '@/lib/auth';
+import { publicId } from '@/lib/publicId';
 import type { IdentityMappingInfo } from '@/lib/identityMapping';
 import { followLogoutRedirect } from '@/lib/auth/logout-navigation';
 
 export interface AuthUser {
-  userId: number | null; externalUserId: string; email: string | null; displayName: string | null;
+  userId: string | null; externalUserId: string; email: string | null; displayName: string | null;
   tenantId: (string | number) | null; externalTenantId: string | null; roles: string[]; permissions: string[];
   isPlatformAdmin: boolean;
   localStatus?: string;
@@ -80,7 +81,7 @@ interface AuthContextValue {
 const AuthContext = createContext<AuthContextValue | null>(null);
 
 const DEV_USER: AuthUser = {
-  userId: 1, externalUserId: 'dev-user', email: 'dev@local', displayName: 'Dev User', tenantId: 1,
+  userId: null, externalUserId: 'dev-user', email: 'dev@local', displayName: 'Dev User', tenantId: 1,
   externalTenantId: 'local-default', roles: ['TENANT_ADMIN'],
   // Must stay consistent with what TENANT_ADMIN actually grants server-side
   // (app/core/permissions.py). A permission missing here makes the feature
@@ -242,6 +243,8 @@ export function AuthProvider({ children }: { children: ReactNode }) {
         setBootstrapState('loading-tenant-context');
         const status = body?.auth_context?.status ?? body?.status ?? null;
         const contextUser = body?.auth_context?.user ?? body?.user ?? {};
+        const userIdentity = publicId(body.user_id ?? body.userId ?? contextUser.id);
+        if (!userIdentity) throw new Error('Invalid public User identity in authentication context');
         let contextTenants: TenantInfo[] = Array.isArray(
           body?.auth_context?.tenant_context?.available_tenants,
         )
@@ -252,7 +255,7 @@ export function AuthProvider({ children }: { children: ReactNode }) {
 
         if (status === 'VERIFICATION_REQUIRED' || body?.verification_required === true) {
           setUser({
-            userId: body.user_id ?? body.userId ?? null,
+            userId: userIdentity,
             externalUserId: body.external_user_id ?? body.externalUserId ?? '',
             email: body.email ?? null,
             displayName: body.display_name ?? body.displayName ?? null,
@@ -266,7 +269,7 @@ export function AuthProvider({ children }: { children: ReactNode }) {
 
         if (status === 'ACCOUNT_DISABLED' || status === 'DISABLED' || status === 'BLOCKED' || status === 'USER_SUSPENDED') {
           setUser({
-            userId: body.user_id ?? body.userId ?? null,
+            userId: userIdentity,
             externalUserId: body.external_user_id ?? body.externalUserId ?? '',
             email: body.email ?? null,
             displayName: body.display_name ?? body.displayName ?? null,
@@ -280,7 +283,7 @@ export function AuthProvider({ children }: { children: ReactNode }) {
 
         if (['NO_TENANT', 'ACCESS_PENDING', 'USER_ACCESS_PENDING', 'ACCOUNT_PENDING_APPROVAL'].includes(status)) {
           setUser({
-            userId: body.user_id ?? body.userId ?? contextUser.id ?? null,
+            userId: userIdentity,
             externalUserId: body.external_user_id ?? body.externalUserId ?? '',
             email: body.email ?? contextUser.email ?? null,
             displayName: body.display_name ?? body.displayName ?? contextUser.display_name ?? null,
@@ -357,7 +360,7 @@ export function AuthProvider({ children }: { children: ReactNode }) {
           }
 
           setUser({
-            userId: body.user_id ?? body.userId ?? contextUser.id ?? null,
+            userId: userIdentity,
             externalUserId: body.external_user_id ?? body.externalUserId ?? '',
             email: body.email ?? contextUser.email ?? null,
             displayName: body.display_name ?? body.displayName ?? contextUser.display_name ?? null,
@@ -379,7 +382,7 @@ export function AuthProvider({ children }: { children: ReactNode }) {
           clearActiveTenantId();
           setActiveTenantIdState(null);
           setUser({
-            userId: body.user_id ?? body.userId ?? contextUser.id ?? null,
+            userId: userIdentity,
             externalUserId: body.external_user_id ?? body.externalUserId ?? '',
             email: body.email ?? contextUser.email ?? null,
             displayName: body.display_name ?? body.displayName ?? contextUser.display_name ?? null,
@@ -410,7 +413,7 @@ export function AuthProvider({ children }: { children: ReactNode }) {
           }
 
           setUser({
-            userId: body.user_id ?? body.userId ?? contextUser.id ?? null,
+            userId: userIdentity,
             externalUserId: body.external_user_id ?? body.externalUserId ?? '',
             email: body.email ?? contextUser.email ?? null,
             displayName: body.display_name ?? body.displayName ?? contextUser.display_name ?? null,
@@ -432,7 +435,7 @@ export function AuthProvider({ children }: { children: ReactNode }) {
           clearActiveTenantId();
           setActiveTenantIdState(null);
           setUser({
-            userId: body.user_id ?? body.userId ?? contextUser.id ?? null,
+            userId: userIdentity,
             externalUserId: body.external_user_id ?? body.externalUserId ?? '',
             email: body.email ?? contextUser.email ?? null,
             displayName: body.display_name ?? body.displayName ?? contextUser.display_name ?? null,
@@ -449,7 +452,7 @@ export function AuthProvider({ children }: { children: ReactNode }) {
         clearActiveTenantId();
         setActiveTenantIdState(null);
         setUser({
-          userId: body.user_id ?? body.userId ?? contextUser.id ?? null,
+          userId: userIdentity,
           externalUserId: body.external_user_id ?? body.externalUserId ?? '',
           email: body.email ?? contextUser.email ?? null,
           displayName: body.display_name ?? body.displayName ?? contextUser.display_name ?? null,
@@ -475,7 +478,7 @@ export function AuthProvider({ children }: { children: ReactNode }) {
         }
         if (code === 'USER_ACCESS_PENDING' || code === 'IAM_ACCOUNT_PENDING_APPROVAL' || code === 'IAM_NO_ACTIVE_MEMBERSHIP' || code === 'NO_TENANT_MEMBERSHIP' || code === 'ACCESS_PENDING' || body?.email || body?.display_name) {
           setUser({
-            userId: body?.user_id ?? body?.userId ?? null,
+            userId: publicId(body?.user_id ?? body?.userId),
             externalUserId: body?.external_user_id ?? body?.externalUserId ?? '',
             email: body?.email ?? null,
             displayName: body?.display_name ?? body?.displayName ?? null,

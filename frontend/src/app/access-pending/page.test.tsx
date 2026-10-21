@@ -16,7 +16,7 @@ const router = vi.hoisted(() => ({
 
 vi.mock('@/hooks/useAuth', () => ({
   useAuth: () => ({
-    user: { email: 'pending@example.test', userId: 9, localStatus: auth.localStatus },
+    user: { email: 'pending@example.test', userId: '00000000-0000-4000-8000-000000000009', localStatus: auth.localStatus },
     refreshSession: auth.refreshSession,
     logout: auth.logout,
   }),

@@ -38,7 +38,7 @@ const api = vi.hoisted(() => ({
 const navigation = vi.hoisted(() => ({ replace: vi.fn(), search: '' }));
 const permissions = vi.hoisted(() => ({ granted: new Set<string>() }));
 const auth = vi.hoisted(() => ({ roles: ['TENANT_ADMIN'] }));
-vi.mock('@/hooks/useAuth', () => ({ useAuth: () => ({ user: { userId: 1, roles: auth.roles }, activeTenantId: '1', activeTenant: { roles: auth.roles } }) }));
+vi.mock('@/hooks/useAuth', () => ({ useAuth: () => ({ user: { userId: '00000000-0000-4000-8000-000000000001', roles: auth.roles }, activeTenantId: '1', activeTenant: { roles: auth.roles } }) }));
 
 vi.mock('@/lib/api', () => api);
 vi.mock('next/navigation', () => ({

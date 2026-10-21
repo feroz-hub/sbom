@@ -8,6 +8,7 @@ from app.db import SessionLocal
 from app.models import Tenant, TenantUser
 
 from tests.phase6_helpers import identity_claims, now, seed_membership, seed_user
+from tests.public_id_fixture import user_uuid, user_wire_payload
 
 
 def _seed_tenant(db, name: str, slug: str) -> Tenant:
@@ -51,7 +52,7 @@ def test_tenant_admin_can_search_eligible_users_in_active_tenant(app, client):
     assert res.status_code == 200, res.text
     data = res.json()["items"]
     assert len(data) == 1
-    assert data[0]["id"] == candidate_id
+    assert data[0]["id"] == user_uuid(candidate_id)
     assert data[0]["email"] == "eligible.candidate@hcltech.com"
     assert set(data[0]) == {"id", "email", "display_name", "status", "email_verified", "verification_required", "providers"}
 
@@ -90,7 +91,7 @@ def test_external_issuer_serialization_and_subject_regression(app, client):
     items = res.json()["items"]
     assert len(items) == 1
     item = items[0]
-    assert item["id"] == aswini_id
+    assert item["id"] == user_uuid(aswini_id)
     assert item["email"] == "aswini.v@hcltech.com"
     assert item["display_name"] == "Aswini Venkatesh"
     assert "external_issuer" not in item
@@ -127,7 +128,7 @@ def test_account_in_another_tenant_is_addable_without_exposing_memberships(app, 
 
     assert res.status_code == 200, res.text
     items = res.json()["items"]
-    assert any(item["id"] == feroze_id for item in items)
+    assert any(item["id"] == user_uuid(feroze_id) for item in items)
     assert all("tenant_memberships" not in item for item in items)
 
 
@@ -153,7 +154,7 @@ def test_user_already_in_selected_tenant_is_excluded(app, client):
         )
         added = client.post(
             f"/api/tenants/{wellysis.public_id}/users",
-            json={"user_id": existing_id, "roles": ["VIEWER"]},
+            json=user_wire_payload({"user_id": existing_id, "roles": ["VIEWER"]}),
             headers={"X-Tenant-ID": str(wellysis.public_id)},
         )
     finally:
@@ -161,7 +162,7 @@ def test_user_already_in_selected_tenant_is_excluded(app, client):
 
     assert res.status_code == 200, res.text
     items = res.json()["items"]
-    assert not any(item["id"] == existing_id for item in items)
+    assert not any(item["id"] == user_uuid(existing_id) for item in items)
     assert added.status_code in (201, 409), added.text
     with SessionLocal() as db:
         assert db.query(TenantUser).filter_by(tenant_id=wellysis.id, user_id=existing_id).count() == 1
@@ -193,7 +194,7 @@ def test_disabled_membership_in_selected_tenant_is_excluded(app, client):
 
     assert res.status_code == 200, res.text
     items = res.json()["items"]
-    assert not any(item["id"] == disabled_id for item in items)
+    assert not any(item["id"] == user_uuid(disabled_id) for item in items)
 
 
 def test_active_verified_user_is_returned(app, client):
@@ -226,7 +227,7 @@ def test_active_verified_user_is_returned(app, client):
 
     assert res.status_code == 200, res.text
     items = res.json()["items"]
-    assert any(item["id"] == active_id for item in items)
+    assert any(item["id"] == user_uuid(active_id) for item in items)
 
 
 def test_unverified_user_is_excluded(app, client):
@@ -258,7 +259,7 @@ def test_unverified_user_is_excluded(app, client):
 
     assert res.status_code == 200, res.text
     items = res.json()["items"]
-    assert not any(item["id"] == unverified_id for item in items)
+    assert not any(item["id"] == user_uuid(unverified_id) for item in items)
 
 
 def test_verification_required_user_is_excluded(app, client):
@@ -291,7 +292,7 @@ def test_verification_required_user_is_excluded(app, client):
 
     assert res.status_code == 200, res.text
     items = res.json()["items"]
-    assert not any(item["id"] == req_id for item in items)
+    assert not any(item["id"] == user_uuid(req_id) for item in items)
 
 
 def test_disabled_user_is_excluded(app, client):
@@ -323,7 +324,7 @@ def test_disabled_user_is_excluded(app, client):
 
     assert res.status_code == 200, res.text
     items = res.json()["items"]
-    assert not any(item["id"] == disabled_id for item in items)
+    assert not any(item["id"] == user_uuid(disabled_id) for item in items)
 
 
 def test_search_matches_email(app, client):
@@ -349,7 +350,7 @@ def test_search_matches_email(app, client):
         _clear_override(app)
 
     assert res.status_code == 200
-    assert any(item["id"] == target_id for item in res.json()["items"])
+    assert any(item["id"] == user_uuid(target_id) for item in res.json()["items"])
 
 
 def test_search_matches_display_name(app, client):
@@ -375,7 +376,7 @@ def test_search_matches_display_name(app, client):
         _clear_override(app)
 
     assert res.status_code == 200
-    assert any(item["id"] == target_id for item in res.json()["items"])
+    assert any(item["id"] == user_uuid(target_id) for item in res.json()["items"])
 
 
 def test_external_username_is_not_a_search_field(app, client):
@@ -402,7 +403,7 @@ def test_external_username_is_not_a_search_field(app, client):
         _clear_override(app)
 
     assert res.status_code == 200
-    assert not any(item["id"] == target_id for item in res.json()["items"])
+    assert not any(item["id"] == user_uuid(target_id) for item in res.json()["items"])
 
 
 def test_unauthorized_user_receives_403(app, client):
@@ -527,7 +528,7 @@ def test_wildcard_characters_are_escaped_safely(app, client):
     assert res.status_code == 200
     items = res.json()["items"]
     assert len(items) == 1
-    assert items[0]["id"] == special_id
+    assert items[0]["id"] == user_uuid(special_id)
 
 
 def test_results_are_limited_and_deterministically_ordered(app, client):
@@ -580,12 +581,12 @@ def test_nonmember_first_last_name_and_email_search(app, client, query):
         response = client.get(f"/api/tenants/{tenant.public_id}/user-candidates", params={"q": query},
                               headers={"X-Tenant-ID": str(tenant.public_id)})
         assert response.status_code == 200, response.text
-        assert [item["id"] for item in response.json()["items"]] == [candidate_id]
+        assert [item["id"] for item in response.json()["items"]] == [user_uuid(candidate_id)]
         added = client.post(f"/api/tenants/{tenant.public_id}/users",
-                            json={"user_id": candidate_id, "roles": ["VIEWER"]},
+                            json=user_wire_payload({"user_id": candidate_id, "roles": ["VIEWER"]}),
                             headers={"X-Tenant-ID": str(tenant.public_id)})
         assert added.status_code == 201, added.text
-        assert added.json()["user_id"] == candidate_id
+        assert added.json()["user_id"] == user_uuid(candidate_id)
         response = client.get(f"/api/tenants/{tenant.public_id}/user-candidates", params={"q": query},
                               headers={"X-Tenant-ID": str(tenant.public_id)})
         assert response.json()["items"] == []

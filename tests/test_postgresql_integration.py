@@ -86,6 +86,38 @@ def clean_postgres(postgres_url: str):
     _clear_application_tables(postgres_url)
 
 
+
+@pytest.fixture()
+def migration_postgres_url(postgres_url):
+    """Copy acceptance owns a clean DB, independent of broker-test artifacts."""
+    from app.greenfield_schema import application_metadata
+    from app.iam_schema import apply_user_uuid_revision, revision100_metadata
+    from app.public_identity import install_guards
+
+    base = sa.engine.make_url(postgres_url)
+    assert "_test" in base.database
+    name = "sbom_iam_copy_test_" + uuid.uuid4().hex
+    admin = sa.create_engine(base.set(database="postgres"), isolation_level="AUTOCOMMIT", hide_parameters=True)
+    target = base.set(database=name).render_as_string(hide_password=False)
+    engine = sa.create_engine(target, hide_parameters=True)
+    with admin.connect() as c:
+        assert not c.scalar(sa.text("SELECT EXISTS(SELECT FROM pg_database WHERE datname=:name)"), {"name": name})
+        c.exec_driver_sql("CREATE DATABASE " + name)
+    try:
+        with engine.begin() as c:
+            revision100_metadata(application_metadata()).create_all(c)
+            install_guards(c)
+            c.exec_driver_sql("CREATE TABLE alembic_version(version_num varchar(128) PRIMARY KEY)")
+            c.exec_driver_sql("INSERT INTO alembic_version VALUES('100_greenfield_uuid_final')")
+            apply_user_uuid_revision(c)
+        yield target
+    finally:
+        engine.dispose()
+        with admin.connect() as c:
+            c.exec_driver_sql("DROP DATABASE " + name)
+        admin.dispose()
+
+
 def test_fresh_postgresql_alembic_upgrade_and_check(postgres_url: str) -> None:
     base_url = sa.engine.make_url(postgres_url)
     database_name = f"sbom_test_fresh_{uuid.uuid4().hex[:10]}"
@@ -96,20 +128,20 @@ def test_fresh_postgresql_alembic_upgrade_and_check(postgres_url: str) -> None:
         with admin.connect() as connection:
             connection.execute(sa.text(f"CREATE DATABASE {quoted}"))
         fresh_url = base_url.set(database=database_name).render_as_string(hide_password=False)
-        subprocess.run(
-            [
-                sys.executable,
-                "scripts/bootstrap_fresh_database.py",
-                "--database-url",
-                fresh_url,
-                "--confirm-empty-database",
-                database_name,
-            ],
-            cwd=ROOT,
-            check=True,
-        )
         env = os.environ.copy()
         env["DATABASE_URL"] = fresh_url
+        # Keep the credential-bearing URL out of OS argv and assertion reprs.
+        result = subprocess.run(
+            [sys.executable, "-B", "-c",
+             "import os,sys; from scripts.bootstrap_fresh_database import bootstrap; "
+             "bootstrap(os.environ['DATABASE_URL'], sys.argv[1])", database_name],
+            cwd=ROOT, env=env, capture_output=True, text=True,
+        )
+        if result.returncode:
+            import re
+            detail = result.stderr.replace(base_url.password or "NO_PASSWORD", "[REDACTED]")
+            detail = re.sub(r"postgres(?:ql)?(?:\+psycopg)?://[^\s]+", "[REDACTED_DATABASE_URL]", detail)
+            pytest.fail("Fresh bootstrap failed: " + detail[-2000:], pytrace=False)
         subprocess.run(
             [sys.executable, "-m", "alembic", "current", "--check-heads"],
             cwd=ROOT,
@@ -130,8 +162,7 @@ def test_fresh_postgresql_alembic_upgrade_and_check(postgres_url: str) -> None:
 
 
 def test_migration_script_copies_rows_and_resets_sequences(
-    postgres_url: str,
-    clean_postgres,
+    migration_postgres_url: str,
     tmp_path: Path,
 ) -> None:
     import app.nvd_mirror.db.models  # noqa: F401 -- register mirror tables on Base.metadata
@@ -202,35 +233,17 @@ def test_migration_script_copies_rows_and_resets_sequences(
         session.commit()
     source_engine.dispose()
 
-    assert (
-        main(
-            [
-                "--sqlite-url",
-                source_url,
-                "--postgres-url",
-                postgres_url,
-                "--dry-run",
-            ]
-        )
-        == 0
-    )
-    assert main(["--sqlite-url", source_url, "--postgres-url", postgres_url]) == 0
-    assert main(["--sqlite-url", source_url, "--postgres-url", postgres_url, "--verify-only"]) == 0
-    assert (
-        main(
-            [
-                "--sqlite-url",
-                source_url,
-                "--postgres-url",
-                postgres_url,
-                "--truncate-target",
-                "--confirm-truncate",
-            ]
-        )
-        == 0
-    )
+    def copy(*options):
+        # Assign first: pytest must never introspect a password-bearing call.
+        code = main(["--sqlite-url", source_url, "--postgres-url", migration_postgres_url, *options])
+        assert code == 0, "Legacy copy acceptance failed; inspect sanitized migration diagnostics"
 
-    target_engine = sa.create_engine(postgres_url)
+    copy("--dry-run")
+    copy()
+    copy("--verify-only")
+    copy("--truncate-target", "--confirm-truncate")
+
+    target_engine = sa.create_engine(migration_postgres_url, hide_parameters=True)
     with target_engine.begin() as connection:
         assert connection.scalar(sa.text("SELECT COUNT(*) FROM sbom_source")) == 2
         assert connection.scalar(sa.text("SELECT parent_id FROM sbom_source WHERE id = 21")) == 20

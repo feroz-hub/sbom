@@ -26,7 +26,7 @@ let canUpdate = true;
 vi.mock('@/lib/advisorPolicyApi', () => api);
 vi.mock('@/hooks/useAuth', () => ({
   useAuth: () => ({
-    user: { userId: 1, permissions: [] },
+    user: { userId: '00000000-0000-4000-8000-000000000001', permissions: [] },
     activeTenantId: tenantId,
     activeTenant: { name: `Tenant ${tenantId}` },
     hasPermission: (p: string) =>

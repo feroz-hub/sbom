@@ -68,7 +68,7 @@ function wrap(children: ReactNode, queryClient: QueryClient = makeQueryClient())
 }
 
 const identity = {
-  id: 3,
+  id: '00000000-0000-4000-8000-000000000003',
   email: 'ferozebasha.s@hcltech.com',
   display_name: 'Feroze Basha',
 };
@@ -80,7 +80,7 @@ function meBody(
 ) {
   return {
     authenticated: true,
-    user_id: 3,
+    user_id: '00000000-0000-4000-8000-000000000003',
     email: identity.email,
     display_name: identity.display_name,
     tenant_id: tenantId,
@@ -111,7 +111,7 @@ function platformAdminMeBody({
 } = {}) {
   return {
     authenticated: true,
-    user_id: 3,
+    user_id: '00000000-0000-4000-8000-000000000003',
     email: identity.email,
     display_name: identity.display_name,
     tenant_id: active ? active.id : null,
@@ -279,7 +279,7 @@ describe('AuthProvider membership-based tenant context', () => {
     const queryClient = makeQueryClient();
     queryClient.setQueryData(['sboms'], [{ id: '00000000-0000-4000-8000-000000000001' }]);
     queryClient.setQueryData(['platform-summary'], { total_tenants: 4 });
-    queryClient.setQueryData(['platform-administrators'], [{ user_id: 3 }]);
+    queryClient.setQueryData(['platform-administrators'], [{ user_id: '00000000-0000-4000-8000-000000000003' }]);
 
     const fetchMock = vi.spyOn(globalThis, 'fetch');
     fetchMock
@@ -333,7 +333,7 @@ describe('AuthProvider membership-based tenant context', () => {
   it('clears the active tenant on logout', async () => {
     const queryClient = makeQueryClient();
     queryClient.setQueryData(['platform-summary'], { total_tenants: 4 });
-    queryClient.setQueryData(['platform-administrators'], [{ user_id: 3 }]);
+    queryClient.setQueryData(['platform-administrators'], [{ user_id: '00000000-0000-4000-8000-000000000003' }]);
     const fetchMock = vi.spyOn(globalThis, 'fetch');
     fetchMock
       .mockResolvedValueOnce(jsonResponse({ authenticated: true }))

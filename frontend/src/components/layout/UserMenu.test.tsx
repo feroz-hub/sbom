@@ -55,7 +55,7 @@ beforeEach(() => {
   state.tenants = [tenant(1, 'Olympus')];
   state.activeTenantId = '1';
   state.user = {
-    userId: 1,
+    userId: '00000000-0000-4000-8000-000000000001',
     externalUserId: 'SECRET-SUBJECT',
     email: 'feroze@example.test',
     displayName: 'Feroze Basha',

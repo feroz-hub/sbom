@@ -20,7 +20,7 @@ const mockReloadAuth = vi.fn();
 const mockRefreshSession = vi.fn();
 
 let mockActiveTenant: { membershipStatus?: string } | null = null;
-const mockUser: { email?: string; userId?: number } | null = { email: 'user@hcltech.com', userId: 10 };
+const mockUser: { email?: string; userId?: string } | null = { email: 'user@hcltech.com', userId: '00000000-0000-4000-8000-00000000000a' };
 
 vi.mock('@/hooks/useAuth', () => ({
   useAuth: () => ({

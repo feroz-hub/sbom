@@ -239,6 +239,7 @@ def test_approval_suspension_and_resume_use_existing_admin_api(client, entra_set
     from app.services import audit_service
 
     from tests.phase6_helpers import seed_platform_grant
+    from tests.public_id_fixture import user_uuid
     claims, _ = entra_setup
     with SessionLocal() as db:
         admin = seed_user(db)
@@ -252,9 +253,9 @@ def test_approval_suspension_and_resume_use_existing_admin_api(client, entra_set
     try:
         directory = client.get('/api/platform/users?provider=MICROSOFT_ENTRA&local_status=PENDING')
         assert directory.status_code == 200
-        assert [u['id'] for u in directory.json()['items']] == [uid]
+        assert [u['id'] for u in directory.json()['items']] == [user_uuid(uid)]
         for status in ('ACTIVE', 'SUSPENDED', 'ACTIVE', 'DISABLED'):
-            response = client.patch(f'/api/platform/users/{uid}/status', json={'status': status})
+            response = client.patch(f'/api/platform/users/{user_uuid(uid)}/status', json={'status': status})
             assert response.status_code == 200, response.text
             with SessionLocal() as db:
                 assert db.get(IAMUser, uid).status == status
@@ -264,7 +265,7 @@ def test_approval_suspension_and_resume_use_existing_admin_api(client, entra_set
             assert {'PLATFORM_USER_ACTIVATED', 'USER_SUSPENDED', 'USER_DISABLED'}.issubset(events)
         monkeypatch.setattr(audit_service, 'write_authorization_audit', Mock(side_effect=RuntimeError('audit unavailable')))
         with pytest.raises(RuntimeError):
-            client.patch(f'/api/platform/users/{uid}/status', json={'status': 'ACTIVE'})
+            client.patch(f'/api/platform/users/{user_uuid(uid)}/status', json={'status': 'ACTIVE'})
         with SessionLocal() as db:
             assert db.get(IAMUser, uid).status == 'DISABLED'
     finally:

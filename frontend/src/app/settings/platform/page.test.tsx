@@ -38,7 +38,7 @@ import PlatformAdminsPage from './page';
 const adminItem = {
   grant_id: 1,
   assignment_id: 1,
-  user_id: 1,
+  user_id: '00000000-0000-4000-8000-000000000001',
   email: 'hclcs.admin@localhost.test',
   display_name: 'HCL.CS Administrator',
   role: 'PLATFORM_ADMIN' as const,

@@ -153,7 +153,7 @@ describe('PlatformTenantsPage', () => {
     });
     api.searchPlatformTenantAdminCandidates.mockResolvedValue([
       {
-        id: 3,
+        id: '00000000-0000-4000-8000-000000000003',
         display_name: 'Feroze Basha',
         email: 'ferozebasha.s@hcltech.com',
         username: 'ferozebasha',
@@ -255,7 +255,7 @@ describe('PlatformTenantsPage', () => {
         {
           name: 'Acme Security',
           slug: 'acme-security',
-          initial_admin_user_id: 3,
+          initial_admin_user_id: '00000000-0000-4000-8000-000000000003',
         },
         expect.anything(),
       ),

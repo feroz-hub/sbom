@@ -1,7 +1,7 @@
 
 from app.db import SessionLocal
 
-from tests.public_id_fixture import tenant_uuid
+from tests.public_id_fixture import tenant_uuid, user_uuid
 
 from .phase9_helpers import seed_role_membership
 
@@ -12,7 +12,7 @@ def test_role_assignment_api_grant_list_replace_and_revoke(client):
         target_id = target.id
 
     grant = client.post(
-        f"/api/tenants/{tenant_uuid(1)}/users/{target_id}/roles",
+        f"/api/tenants/{tenant_uuid(1)}/users/{user_uuid(target_id)}/roles",
         json={
             "role_code": "DEVELOPER",
             "expected_version": 1,
@@ -28,7 +28,7 @@ def test_role_assignment_api_grant_list_replace_and_revoke(client):
     }
 
     replace = client.put(
-        f"/api/tenants/{tenant_uuid(1)}/users/{target_id}/roles",
+        f"/api/tenants/{tenant_uuid(1)}/users/{user_uuid(target_id)}/roles",
         json={
             "role_codes": ["DEVELOPER", "SECURITY_ANALYST"],
             "primary_role_code": "SECURITY_ANALYST",
@@ -42,7 +42,7 @@ def test_role_assignment_api_grant_list_replace_and_revoke(client):
 
     revoke = client.request(
         "DELETE",
-        f"/api/tenants/{tenant_uuid(1)}/users/{target_id}/roles/DEVELOPER",
+        f"/api/tenants/{tenant_uuid(1)}/users/{user_uuid(target_id)}/roles/DEVELOPER",
         json={"expected_version": 3, "reason": "revoke"},
         headers={"X-Tenant-ID": tenant_uuid(1)},
     )

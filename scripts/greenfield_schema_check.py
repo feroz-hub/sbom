@@ -76,7 +76,7 @@ def verify(database="sbom_greenfield_uuid"):
                 for x in table.constraints
                 if isinstance(x, CheckConstraint)
             }
-            if table.name in TABLES:
+            if table.name in (*TABLES, "iam_users"):
                 expected_checks.add("ck_" + table.name + "_public_id_v4")
             assert checks == expected_checks, (table.name, "CHECK parity", checks ^ expected_checks)
             unique = {tuple(x["column_names"]) for x in catalog.get_unique_constraints(table.name)}
@@ -91,15 +91,15 @@ def verify(database="sbom_greenfield_uuid"):
         uuid_rows = conn.exec_driver_sql(
             "SELECT c.relname,a.attnotnull,format_type(a.atttypid,a.atttypmod),pg_get_expr(d.adbin,d.adrelid) FROM pg_attribute a JOIN pg_class c ON c.oid=a.attrelid JOIN pg_namespace n ON n.oid=c.relnamespace JOIN pg_attrdef d ON d.adrelid=c.oid AND d.adnum=a.attnum WHERE n.nspname='public' AND a.attname='public_id' AND NOT a.attisdropped ORDER BY c.relname"
         ).all()
-        assert len(uuid_rows) == 6
+        assert len(uuid_rows) == 7
         for name, notnull, typename, default in uuid_rows:
-            assert name in TABLES and notnull and typename == "uuid" and default == "gen_random_uuid()"
+            assert name in (*TABLES, "iam_users") and notnull and typename == "uuid" and default == "gen_random_uuid()"
             triggers = conn.execute(
                 text("SELECT tgname,tgenabled FROM pg_trigger WHERE tgrelid=to_regclass(:table) AND NOT tgisinternal"),
                 {"table": "public." + name},
             ).all()
             assert sorted(triggers) == sorted(
-                [(f"trg_{name}_public_id_insert", "O"), (f"trg_{name}_public_id_immutable", "O")]
+                [(f"trg_{name}_public_id_" + ("allocate" if name == "iam_users" else "insert"), "O"), (f"trg_{name}_public_id_immutable", "O")]
             )
             assert conn.execute(
                 text("SELECT convalidated FROM pg_constraint WHERE conrelid=to_regclass(:table) AND conname=:name"),

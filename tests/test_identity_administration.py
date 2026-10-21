@@ -18,7 +18,7 @@ from app.services.tenant_role_assignment_service import create_initial_assignmen
 from fastapi import HTTPException
 from sqlalchemy import select
 
-from tests.public_id_fixture import public_row, tenant_uuid
+from tests.public_id_fixture import public_row, tenant_uuid, user_uuid
 from tests.tenant_fixture_scope import verified_fixture_tenant
 
 
@@ -118,7 +118,7 @@ def test_membership_creation_writes_multiple_migration_049_role_assignments(clie
     created = client.post(
         f"/api/tenants/{tenant_uuid(1)}/users",
         json={
-            "user_id": user_id,
+            "user_id": user_uuid(user_id),
             "roles": ["VIEWER", "SECURITY_ANALYST"],
         },
     )
@@ -267,7 +267,7 @@ def test_platform_admin_can_list_create_and_audit_tenants(client):
         "name": "  Acme Security  ",
         "slug": f"acme-{suffix}",
         "external_iam_tenant_id": f"acme-external-{suffix}",
-        "initial_admin_user_id": dev_user_id,
+        "initial_admin_user_id": user_uuid(dev_user_id),
     }
     created = client.post("/api/tenants", json=payload, headers={"X-Correlation-ID": "tenant-create-test"})
     assert created.status_code == 201, created.text
@@ -317,7 +317,7 @@ def test_tenant_creation_validation_and_duplicate_conflicts(client):
         "name": "Conflict Tenant",
         "slug": f"conflict-{suffix}",
         "external_iam_tenant_id": f"external-{suffix}",
-        "initial_admin_user_id": dev_user_id,
+        "initial_admin_user_id": user_uuid(dev_user_id),
     }
     assert client.post("/api/tenants", json=payload).status_code == 201
 
@@ -327,7 +327,7 @@ def test_tenant_creation_validation_and_duplicate_conflicts(client):
             "name": "Other Name",
             "slug": payload["slug"],
             "external_iam_tenant_id": f"other-{suffix}",
-            "initial_admin_user_id": dev_user_id,
+            "initial_admin_user_id": user_uuid(dev_user_id),
         },
     )
     assert duplicate_slug.status_code == 409
@@ -339,7 +339,7 @@ def test_tenant_creation_validation_and_duplicate_conflicts(client):
             "name": "Other Name",
             "slug": f"other-{suffix}",
             "external_iam_tenant_id": payload["external_iam_tenant_id"],
-            "initial_admin_user_id": dev_user_id,
+            "initial_admin_user_id": user_uuid(dev_user_id),
         },
     )
     assert duplicate_external.status_code == 409
@@ -353,19 +353,19 @@ def test_tenant_creation_validation_and_duplicate_conflicts(client):
             "name": "   ",
             "slug": f"blank-{suffix}",
             "external_iam_tenant_id": f"blank-{suffix}",
-            "initial_admin_user_id": dev_user_id,
+            "initial_admin_user_id": user_uuid(dev_user_id),
         },
         {
             "name": "Invalid Slug",
             "slug": "Invalid slug",
             "external_iam_tenant_id": f"invalid-{suffix}",
-            "initial_admin_user_id": dev_user_id,
+            "initial_admin_user_id": user_uuid(dev_user_id),
         },
         {
             "name": "Double Hyphen",
             "slug": "double--hyphen",
             "external_iam_tenant_id": f"double-{suffix}",
-            "initial_admin_user_id": dev_user_id,
+            "initial_admin_user_id": user_uuid(dev_user_id),
         },
     ):
         assert client.post("/api/tenants", json=invalid).status_code == 422

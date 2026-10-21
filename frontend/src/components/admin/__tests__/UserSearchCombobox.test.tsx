@@ -20,7 +20,7 @@ vi.mock('@/lib/api', async () => {
 import { UserSearchCombobox } from '../UserSearchCombobox';
 
 const ferozeCandidate: UserSearchResult = {
-  id: 10,
+  id: '00000000-0000-4000-8000-00000000000a',
   email: 'ferozebasha.s@hcltech.com',
   display_name: 'Feroze Basha',
   username: 'feroze',
@@ -129,7 +129,7 @@ describe('UserSearchCombobox component', () => {
     expect(await screen.findByText('Feroze Basha')).toBeInTheDocument();
 
     // Now resolve first query with stale result
-    const staleUser: UserSearchResult = { ...ferozeCandidate, id: 99, display_name: 'Stale User' };
+    const staleUser: UserSearchResult = { ...ferozeCandidate, id: '00000000-0000-4000-8000-000000000063', display_name: 'Stale User' };
     resolveFirst([staleUser]);
 
     // Ensure stale result did NOT overwrite "Feroze Basha"

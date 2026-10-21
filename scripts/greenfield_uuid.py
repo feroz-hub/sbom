@@ -24,7 +24,7 @@ if not LOCAL_SOCKET.exists():
     LOCAL_SOCKET = Path("/var/run/docker.sock")
 DOCKER = [shutil.which("docker") or "/usr/local/bin/docker", "--host", "unix://" + str(LOCAL_SOCKET)]
 DB = "sbom_greenfield_uuid"
-REVISION = "100_greenfield_uuid_final"
+REVISION = "101_iam_user_public_uuid"
 
 
 def read_private(name):
@@ -262,8 +262,9 @@ def bootstrap(database=DB):
     os.environ.update(env)
     os.chdir(STATE)
     from app.greenfield_schema import application_metadata
+    from app.iam_schema import apply_user_uuid_revision, revision100_metadata
 
-    metadata = application_metadata()
+    metadata = revision100_metadata(application_metadata())
     from app.public_identity import TABLES, install_guards
     from sqlalchemy import create_engine, inspect, text
     from sqlalchemy.pool import NullPool
@@ -327,8 +328,9 @@ def bootstrap(database=DB):
                     seed_catalog(seed_session)
                 connection.exec_driver_sql("CREATE TABLE public.alembic_version(version_num varchar(128) PRIMARY KEY)")
                 connection.execute(
-                    text("INSERT INTO public.alembic_version(version_num) VALUES(:revision)"), {"revision": REVISION}
+                    text("INSERT INTO public.alembic_version(version_num) VALUES(:revision)"), {"revision": "100_greenfield_uuid_final"}
                 )
+                apply_user_uuid_revision(connection)
                 connection.exec_driver_sql("GRANT USAGE ON SCHEMA public TO greenfield_app")
                 connection.exec_driver_sql(
                     "GRANT SELECT, INSERT, UPDATE, DELETE ON ALL TABLES IN SCHEMA public TO greenfield_app"

@@ -58,7 +58,7 @@ beforeEach(() => {
       slug: 'olympus',
       status: 'ACTIVE',
       member_count: 4,
-      current_administrators: [{ user_id: 2 }],
+      current_administrators: [{ user_id: '00000000-0000-4000-8000-000000000002' }],
       created_at: '2026-09-12T00:00:00Z',
     },
   ]);

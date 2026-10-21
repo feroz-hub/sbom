@@ -32,43 +32,43 @@ it.each([undefined, { projectId: 1, applicationId: null, sbomId: null }, { proje
   expect(state.sboms).toHaveBeenCalledTimes(count); unmount();
 });
 it.each(['FINDINGS', 'ERROR', 'CANCELLED', 'INTERRUPTED'])('recovery retains active marker then reconciles %s', async status => {
-  addPendingAnalysis(5, 'test', '1:1', 8);
+  addPendingAnalysis(5, 'test', '1:00000000-0000-4000-8000-000000000001', 8);
   state.runs.mockResolvedValue([{ id: 8, sbom_id: 5, run_status: 'RUNNING' }]);
   const mounted = renderHook(() => usePendingAnalysisRecovery(), { wrapper });
   await waitFor(() => expect(state.runs).toHaveBeenCalledTimes(1));
-  expect(getStillPendingAnalyses('1:1')).toHaveLength(1);
+  expect(getStillPendingAnalyses('1:00000000-0000-4000-8000-000000000001')).toHaveLength(1);
   state.runs.mockResolvedValue([{ id: 8, sbom_id: 5, run_status: status }]);
   await act(async () => { await qc.refetchQueries({ queryKey: ['pending-analysis-recovery'] }); });
-  await waitFor(() => expect(getStillPendingAnalyses('1:1')).toHaveLength(0));
-  expect(qc.getQueryData(['analysis-terminal-sync', '1:1', 8])).toBe(status); mounted.unmount();
+  await waitFor(() => expect(getStillPendingAnalyses('1:00000000-0000-4000-8000-000000000001')).toHaveLength(0));
+  expect(qc.getQueryData(['analysis-terminal-sync', '1:00000000-0000-4000-8000-000000000001', 8])).toBe(status); mounted.unmount();
 });
 it.each(['missing', 'network'])('recent %s result retains marker; expired unresolved marker is removed', async failure => {
-  addPendingAnalysis(5, 'test', '1:1', 8);
+  addPendingAnalysis(5, 'test', '1:00000000-0000-4000-8000-000000000001', 8);
   if (failure === 'network') state.runs.mockRejectedValue(new Error('offline'));
   const mounted = renderHook(() => usePendingAnalysisRecovery(), { wrapper });
-  await waitFor(() => expect(state.runs).toHaveBeenCalledTimes(1)); expect(getStillPendingAnalyses('1:1')).toHaveLength(1);
-  const data = JSON.parse(sessionStorage.getItem('pending_analyses')!); data['1:1:5'].checkedAt = Date.now() - 240000;
+  await waitFor(() => expect(state.runs).toHaveBeenCalledTimes(1)); expect(getStillPendingAnalyses('1:00000000-0000-4000-8000-000000000001')).toHaveLength(1);
+  const data = JSON.parse(sessionStorage.getItem('pending_analyses')!); data['1:00000000-0000-4000-8000-000000000001:5'].checkedAt = Date.now() - 240000;
   sessionStorage.setItem('pending_analyses', JSON.stringify(data));
   await act(async () => { await qc.refetchQueries({ queryKey: ['pending-analysis-recovery'] }); });
-  await waitFor(() => expect(getStillPendingAnalyses('1:1')).toHaveLength(0)); mounted.unmount();
+  await waitFor(() => expect(getStillPendingAnalyses('1:00000000-0000-4000-8000-000000000001')).toHaveLength(0)); mounted.unmount();
 });
 it.each(['switch', 'logout'])('in-flight recovery cannot write after %s', async action => {
-  addPendingAnalysis(5, 'test', '1:1', 8);
+  addPendingAnalysis(5, 'test', '1:00000000-0000-4000-8000-000000000001', 8);
   let resolve!: (value: unknown) => void; state.runs.mockImplementation(() => new Promise(done => { resolve = done; }));
   const mounted = renderHook(() => usePendingAnalysisRecovery(), { wrapper });
   await waitFor(() => expect(state.runs).toHaveBeenCalled());
   state.tenant = action === 'switch' ? '2' : ''; state.loading = action === 'logout';
   mounted.rerender(); qc.clear();
   await act(async () => { resolve([{ id: 8, sbom_id: 5, run_status: 'FINDINGS' }]); });
-  expect(qc.getQueryData(['analysis-terminal-sync', '1:1', 8])).toBeUndefined();
-  expect(getStillPendingAnalyses('1:1')).toHaveLength(1); mounted.unmount();
+  expect(qc.getQueryData(['analysis-terminal-sync', '1:00000000-0000-4000-8000-000000000001', 8])).toBeUndefined();
+  expect(getStillPendingAnalyses('1:00000000-0000-4000-8000-000000000001')).toHaveLength(1); mounted.unmount();
 });
 it('a previous completed run cannot clear an unidentified new submission', async () => {
-  addPendingAnalysis(5, 'test', '1:1');
+  addPendingAnalysis(5, 'test', '1:00000000-0000-4000-8000-000000000001');
   state.runs.mockResolvedValue([{ id: 7, sbom_id: 5, run_status: 'OK', started_on: new Date(Date.now() - 60000).toISOString() }]);
   const mounted = renderHook(() => usePendingAnalysisRecovery(), { wrapper });
-  await waitFor(() => expect(state.runs).toHaveBeenCalled()); expect(getStillPendingAnalyses('1:1')).toHaveLength(1);
-  expect(qc.getQueryData(['analysis-terminal-sync', '1:1', 7])).toBeUndefined(); mounted.unmount();
+  await waitFor(() => expect(state.runs).toHaveBeenCalled()); expect(getStillPendingAnalyses('1:00000000-0000-4000-8000-000000000001')).toHaveLength(1);
+  expect(qc.getQueryData(['analysis-terminal-sync', '1:00000000-0000-4000-8000-000000000001', 7])).toBeUndefined(); mounted.unmount();
 });
 it('staggered observers share one list polling timer and hand off after owner unmount', async () => {
   vi.useFakeTimers();

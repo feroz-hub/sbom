@@ -405,6 +405,8 @@ def test_service_enforces_delegation_without_frontend(operation):
 
 
 def test_legacy_membership_endpoint_cannot_bypass_role_delegation(client):
+    from tests.public_id_fixture import user_uuid
+
     with SessionLocal() as db:
         user = seed_user(db)
         target_id = user.id
@@ -413,7 +415,7 @@ def test_legacy_membership_endpoint_cannot_bypass_role_delegation(client):
 
     with SessionLocal() as db:
         tenant_id = str(db.get(Tenant, 1).public_id)
-    response = client.post(f"/api/tenants/{tenant_id}/users", json={"user_id": target_id, "role": "TENANT_ADMIN"})
+    response = client.post(f"/api/tenants/{tenant_id}/users", json={"user_id": user_uuid(target_id), "role": "TENANT_ADMIN"})
     assert response.status_code == 403, response.text
 
 

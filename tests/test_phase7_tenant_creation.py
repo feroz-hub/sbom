@@ -13,7 +13,7 @@ from app.models import (
 )
 from sqlalchemy import func, select
 
-from tests.public_id_fixture import public_row
+from tests.public_id_fixture import public_row, user_wire_payload
 from tests.tenant_fixture_scope import verified_fixture_tenant
 
 from .phase7_helpers import seed_eligible_admin, seed_requester, tenant_payload
@@ -35,7 +35,7 @@ def test_atomic_api_creation_returns_safe_nested_contract(client):
 
     response = client.post(
         "/api/tenants",
-        json=payload,
+        json=user_wire_payload(payload),
         headers={"X-Correlation-ID": "phase7-create"},
     )
     assert response.status_code == 201, response.text
@@ -45,7 +45,7 @@ def test_atomic_api_creation_returns_safe_nested_contract(client):
     assert body["tenant"]["external_iam_tenant_id"] == "engineering-security"
     assert body["tenant"]["status"] == "ACTIVE"
     assert body["initial_administrator"] == {
-        "user_id": initial_admin.id,
+        "user_id": str(initial_admin.public_id),
         "email": initial_admin.email,
         "display_name": "Initial Admin",
         "membership_status": "ACTIVE",
@@ -115,7 +115,7 @@ def test_missing_initial_admin_is_stable_422_and_creates_no_tenant(client):
 
     response = client.post(
         "/api/tenants",
-        json={"name": "Orphan", "slug": "orphan-tenant"},
+        json=user_wire_payload({"name": "Orphan", "slug": "orphan-tenant"}),
     )
     assert response.status_code == 422
     assert response.json()["detail"]["code"] == "IAM_INITIAL_TENANT_ADMIN_REQUIRED"
@@ -136,11 +136,11 @@ def test_wellysis_creation_omits_external_mapping_and_preserves_local_default(cl
 
     response = client.post(
         "/api/tenants",
-        json={
+        json=user_wire_payload({
             "name": "Wellysis",
             "slug": f"wellysis-{initial_admin_id}",
             "initial_admin_user_id": initial_admin_id,
-        },
+        }),
     )
     assert response.status_code == 201, response.text
     correlation_id = response.headers["x-correlation-id"]
@@ -185,10 +185,10 @@ def test_local_default_cannot_be_reused_for_another_tenant(client):
 
     response = client.post(
         "/api/tenants",
-        json=tenant_payload(
+        json=user_wire_payload(tenant_payload(
             initial_admin_id,
             external_iam_tenant_id="local-default",
-        ),
+        )),
     )
     assert response.status_code == 409
     assert response.json()["detail"]["code"] == "IAM_TENANT_EXTERNAL_ID_CONFLICT"
@@ -202,23 +202,23 @@ def test_duplicate_slug_and_external_id_have_specific_safe_conflicts(client):
         initial_admin = seed_eligible_admin(db)
         first = tenant_payload(initial_admin.id)
 
-    assert client.post("/api/tenants", json=first).status_code == 201
+    assert client.post("/api/tenants", json=user_wire_payload(first)).status_code == 201
     slug_conflict = client.post(
         "/api/tenants",
-        json=tenant_payload(
+        json=user_wire_payload(tenant_payload(
             initial_admin.id,
             slug=first["slug"],
-        ),
+        )),
     )
     assert slug_conflict.status_code == 409
     assert slug_conflict.json()["detail"]["code"] == "IAM_TENANT_SLUG_CONFLICT"
 
     external_conflict = client.post(
         "/api/tenants",
-        json=tenant_payload(
+        json=user_wire_payload(tenant_payload(
             initial_admin.id,
             external_iam_tenant_id=first["external_iam_tenant_id"],
-        ),
+        )),
     )
     assert external_conflict.status_code == 409
     assert (
@@ -251,6 +251,6 @@ def test_tenant_name_and_slug_validation_uses_stable_codes(
         seed_requester(db)
         initial_admin = seed_eligible_admin(db)
         payload = tenant_payload(initial_admin.id, **overrides)
-    response = client.post("/api/tenants", json=payload)
+    response = client.post("/api/tenants", json=user_wire_payload(payload))
     assert response.status_code == 422
     assert response.json()["detail"]["code"] == expected_code

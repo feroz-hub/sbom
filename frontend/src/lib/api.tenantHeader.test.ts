@@ -78,8 +78,8 @@ describe('shared request helper tenant scoping', () => {
 
   it('resends using the explicit platform tenant and administrator without changing active tenant', async () => {
     sessionStorage.setItem('sbom_active_tenant_id', '00000000-0000-4000-8000-000000000001');
-    await resendPlatformTenantActivation('00000000-0000-4000-8000-000000000007', 42);
-    expect(fetchMock.mock.calls[0][0]).toContain('/api/platform/tenants/00000000-0000-4000-8000-000000000007/native-users/42/resend-activation');
+    await resendPlatformTenantActivation('00000000-0000-4000-8000-000000000007', '00000000-0000-4000-8000-00000000002a');
+    expect(fetchMock.mock.calls[0][0]).toContain('/api/platform/tenants/00000000-0000-4000-8000-000000000007/native-users/00000000-0000-4000-8000-00000000002a/resend-activation');
     expect(fetchMock.mock.calls[0][1]).toMatchObject({ method: 'POST' });
     expect(sessionStorage.getItem('sbom_active_tenant_id')).toBe('00000000-0000-4000-8000-000000000001');
   });

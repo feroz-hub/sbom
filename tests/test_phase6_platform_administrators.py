@@ -1,5 +1,7 @@
 from __future__ import annotations
 
+from uuid import uuid4
+
 import pytest
 from app.core.security import _resolve_context
 from app.db import SessionLocal
@@ -15,6 +17,7 @@ from tests.phase6_helpers import (
     seed_platform_grant,
     seed_user,
 )
+from tests.public_id_fixture import user_uuid
 
 
 def test_grant_is_eligible_duplicate_rejected_audited_and_immediate(client, monkeypatch):
@@ -30,7 +33,7 @@ def test_grant_is_eligible_duplicate_rejected_audited_and_immediate(client, monk
 
     granted = client.post(
         "/api/platform/administrators",
-        json={"user_id": target_id},
+        json={"user_id": user_uuid(target_id)},
         headers={"X-Correlation-ID": "grant-phase6"},
     )
     assert granted.status_code == 201, granted.text
@@ -39,7 +42,7 @@ def test_grant_is_eligible_duplicate_rejected_audited_and_immediate(client, monk
 
     repeated = client.post(
         "/api/platform/administrators",
-        json={"user_id": target_id},
+        json={"user_id": user_uuid(target_id)},
     )
     assert repeated.status_code == 409
     assert (
@@ -92,7 +95,7 @@ def test_inactive_grant_is_reactivated_without_duplicate(client):
 
     response = client.post(
         "/api/platform/administrators",
-        json={"user_id": target_id},
+        json={"user_id": user_uuid(target_id)},
     )
     assert response.status_code == 201
     assert response.json()["action"] == "REACTIVATED"
@@ -133,7 +136,7 @@ def test_ineligible_users_cannot_receive_platform_grant(
 
     response = client.post(
         "/api/platform/administrators",
-        json={"user_id": target_id},
+        json={"user_id": user_uuid(target_id)},
     )
     assert response.status_code == 409
     assert response.json()["detail"]["code"] == code
@@ -158,14 +161,14 @@ def test_unknown_user_and_invalid_selector_are_rejected(client):
 
     unknown = client.post(
         "/api/platform/administrators",
-        json={"user_id": 999999},
+        json={"user_id": str(uuid4())},
     )
     assert unknown.status_code == 404
     assert unknown.json()["detail"]["code"] == "IAM_USER_NOT_FOUND"
     assert client.post("/api/platform/administrators", json={}).status_code == 422
     assert client.post(
         "/api/platform/administrators",
-        json={"user_id": 1, "external_user_id": "also-supplied"},
+        json={"user_id": user_uuid(1), "external_user_id": "also-supplied"},
     ).status_code == 422
 
 

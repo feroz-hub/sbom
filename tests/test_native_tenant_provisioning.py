@@ -1,3 +1,5 @@
+from tests.public_id_fixture import public_row, user_uuid
+
 """Provisioning transactions and direct HTTP authorization against PostgreSQL."""
 
 import base64
@@ -37,6 +39,8 @@ def payload(slug="olympus", email="ajmer@example.test"):
 
 
 def activation_secret(db, user_id):
+    if isinstance(user_id, str):
+        user_id = public_row(db, IAMUser, user_id).id
     row = db.scalar(select(SecurityMailOutbox).where(SecurityMailOutbox.user_id == user_id,
                                                    SecurityMailOutbox.status == "PENDING"))
     return security_mail_outbox.cipher().decrypt(
@@ -53,15 +57,15 @@ def test_invited_admin_pending_atomic_outbox_then_activation(provisioning):
     assert result["tenant"]["status"] == "PENDING"
     with SessionLocal() as db:
         assert db.scalar(select(TenantUser.id).where(TenantUser.tenant_id == select(Tenant.id).where(Tenant.public_id == UUID(tid)).scalar_subquery(), TenantUser.user_id == actor_id)) is None
-        member = db.scalar(select(TenantUser).where(TenantUser.tenant_id == select(Tenant.id).where(Tenant.public_id == UUID(tid)).scalar_subquery(), TenantUser.user_id == uid))
+        member = db.scalar(select(TenantUser).where(TenantUser.tenant_id == select(Tenant.id).where(Tenant.public_id == UUID(tid)).scalar_subquery(), TenantUser.user_id == select(IAMUser.id).where(IAMUser.public_id == UUID(uid)).scalar_subquery()))
         assert effective_role_codes(db, member) == {"TENANT_ADMIN"}
-        assert db.get(IAMUser, uid).status == "PENDING_EMAIL_VERIFICATION"
+        assert public_row(db, IAMUser, uid).status == "PENDING_EMAIL_VERIFICATION"
         raw = activation_secret(db, uid)
         assert raw not in response.text
         native_auth_service.activate(db, raw, "a long native test passphrase")
         db.commit()
         assert db.scalar(select(Tenant).where(Tenant.public_id == UUID(tid))).status == "ACTIVE"
-        assert db.get(IAMUser, uid).email_verified
+        assert public_row(db, IAMUser, uid).email_verified
 
 
 def test_outbox_failure_rolls_back_every_provisioned_row(provisioning, monkeypatch):
@@ -89,7 +93,7 @@ def test_reuse_native_identity_across_tenants_without_hcl_linking(provisioning):
         db.commit()
     first = client.post("/api/tenants", json=payload()).json()
     uid = first["initial_administrator"]["user_id"]
-    assert uid != hcl_id
+    assert uid != user_uuid(hcl_id)
     with SessionLocal() as db:
         native_auth_service.activate(db, activation_secret(db, uid), "a long native test passphrase")
         db.commit()
@@ -100,7 +104,7 @@ def test_reuse_native_identity_across_tenants_without_hcl_linking(provisioning):
     assert second["tenant"]["status"] == "ACTIVE"
     with SessionLocal() as db:
         assert db.scalar(select(func.count(UserIdentity.id)).where(UserIdentity.provider_type == "NATIVE")) == 1
-        assert db.scalar(select(func.count(TenantUser.id)).where(TenantUser.user_id == uid)) == 2
+        assert db.scalar(select(func.count(TenantUser.id)).where(TenantUser.user_id == select(IAMUser.id).where(IAMUser.public_id == UUID(uid)).scalar_subquery())) == 2
     duplicate = client.post("/api/platform/native-users", json={
         **payload()["initial_admin_invitation"], "tenant_id": second["tenant"]["id"], "role_codes": ["VIEWER"],
     })
