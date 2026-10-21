@@ -1,0 +1,2 @@
+# Preserve reviewed terminal evidence bytes despite local core.autocrlf=input.
+frontend-build.log -text

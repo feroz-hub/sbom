@@ -1,0 +1,87 @@
+{
+  "recorded_at": "2026-10-21T12:21:25.444689+00:00",
+  "previous_sha": "aa264cd3673b074b3f9c15c9cc72a4ed95bdb222",
+  "implementation_commit": "409212f66be418a9d71c707d505d156a2a2df58c",
+  "documentation_commit": "19b64ff4b2acd2592c226bb1dfdfb43cbb7617b3",
+  "remote_verification_before_attestation": {
+    "github_commit_verified": "19b64ff4b2acd2592c226bb1dfdfb43cbb7617b3",
+    "github_parent": "409212f66be418a9d71c707d505d156a2a2df58c",
+    "github_remote_blob_matches": 116,
+    "github_source_files": 73,
+    "github_documentation_files": 43,
+    "terminal_evidence_original_bytes_restaged_for_final_attestation": true,
+    "ci": {
+      "head_sha": "19b64ff4b2acd2592c226bb1dfdfb43cbb7617b3",
+      "tracked_workflow_files": [],
+      "actions_runs": 0,
+      "check_runs": 0,
+      "combined_status_state": "pending",
+      "status_count": 0
+    }
+  },
+  "exact_index_scans": [
+    {
+      "file_count": 73,
+      "scanner": "Gitleaks 8.30.1",
+      "raw_exit_code": 0,
+      "raw_findings": 0,
+      "individually_verified_sha256_false_positives": 0,
+      "confirmed_secrets": 0,
+      "global_rule_exclusions": false,
+      "stage": "exact index blobs"
+    },
+    {
+      "file_count": 43,
+      "scanner": "Gitleaks 8.30.1",
+      "raw_exit_code": 1,
+      "raw_findings": 170,
+      "individually_verified_sha256_false_positives": 170,
+      "confirmed_secrets": 0,
+      "global_rule_exclusions": false,
+      "stage": "exact index blobs"
+    }
+  ],
+  "database_readonly_verification": {
+    "identity": {
+      "database": "sbom_greenfield_uuid",
+      "version": "16.15 (Debian 16.15-1.pgdg13+2)",
+      "cluster_id": "7698349709013049382"
+    },
+    "revision": [
+      "100_greenfield_uuid_final"
+    ],
+    "iam_public_id_exists": false,
+    "iam_users_count": 19,
+    "user_identities_count": 19,
+    "native_user_credentials_count": 18,
+    "tenant_users_count": 21,
+    "tenant_user_role_assignments_count": 21,
+    "platform_user_roles_count": 4,
+    "timestamp": "2026-10-21T12:19:56.873077+00:00",
+    "read_only": true,
+    "rollback_acknowledged": true,
+    "physical_connection_closed": true,
+    "baseline_preserved": true,
+    "main_processes": {
+      "84305": {
+        "start": "Wed Oct 21 09:54:29 2026",
+        "preserved": true
+      },
+      "84306": {
+        "start": "Wed Oct 21 09:54:29 2026",
+        "preserved": true
+      },
+      "84344": {
+        "start": "Wed Oct 21 09:54:30 2026",
+        "preserved": true
+      }
+    }
+  },
+  "iam_integer_fk_definitions_sha256": "36f012aeed3202ffd7e99a6892f26745a50b1e55bfbea011d931371f167fd7ae",
+  "source_hash_matches": 73,
+  "frozen_python_hash_matches": 855,
+  "excluded_unrelated_files_preserved": 1914,
+  "excluded_iam_evidence_files_preserved": 120,
+  "final_attestation_sha": "Recorded externally after this file is committed; never self-referential",
+  "no_migration_or_deployment": true
+}
