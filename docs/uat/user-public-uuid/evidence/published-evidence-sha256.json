@@ -1,0 +1,173 @@
+{
+  "files": [
+    {
+      "path": "docs/uat/user-public-uuid/API_MIGRATION_MATRIX.md",
+      "sha256": "883c4cb65c094b28483aab2204439de3f0e5e65577a54a2d5178adaaefcc6d45"
+    },
+    {
+      "path": "docs/uat/user-public-uuid/DATABASE_MIGRATION_PLAN.md",
+      "sha256": "c5f4cb3fdd4ab583c0edfdc60aecd4d574cb4a16f3b4343525154812bca58d03"
+    },
+    {
+      "path": "docs/uat/user-public-uuid/IDENTIFIER_CONTRACT_MATRIX.md",
+      "sha256": "20d3eea2189a960ab6ba69899917ca9aefcfc2f958b17fe62a91fa1137bb3cd0"
+    },
+    {
+      "path": "docs/uat/user-public-uuid/IMPLEMENTATION_REPORT.md",
+      "sha256": "e4d511871c7c06d31e19a7407e096a5931d8ae2027a86252233a1d0eeacd94dc"
+    },
+    {
+      "path": "docs/uat/user-public-uuid/LINEAR_RESULTS.md",
+      "sha256": "433d86f1d583cbe116f6c207069f83f2d433651cace157bed903dc9f5ef3dd63"
+    },
+    {
+      "path": "docs/uat/user-public-uuid/PUBLICATION_NOTES.md",
+      "sha256": "f45a24a32e02092a972749822a9cff537d5fe59580c301ebcc09e5fda50d323e"
+    },
+    {
+      "path": "docs/uat/user-public-uuid/TEST_RESULTS.md",
+      "sha256": "dfe3a0ece4ae8f3d9cedb506bc095442fbaa76102c4b548b32c83bc464c975ad"
+    },
+    {
+      "path": "docs/uat/user-public-uuid/evidence/FINAL_TEST_RESULTS.json",
+      "sha256": "82b2b80d0f090a23831f536f9b02aa64446fa424bc73435271afdd785dc3d4cc"
+    },
+    {
+      "path": "docs/uat/user-public-uuid/evidence/accepted-six-expansion-source-preservation.json",
+      "sha256": "ab049284d987f453678beb0a8a35c8b15b6eb45a3abebcfd7904cfaab4fe2017"
+    },
+    {
+      "path": "docs/uat/user-public-uuid/evidence/active-graph-final.json",
+      "sha256": "0fbf20ca63fe87f666ca4874e4aa35799b116418bd8db964bcdf1b3507fd4975"
+    },
+    {
+      "path": "docs/uat/user-public-uuid/evidence/backend-complete-attempt8-outcome.json",
+      "sha256": "b6037b2b338633ad88995db703269d18f1f74d0b470cad9932aef5e722649403"
+    },
+    {
+      "path": "docs/uat/user-public-uuid/evidence/backend-complete-attempt8-source-before.json",
+      "sha256": "dd8dcccb1554f678600c9c68b6a7820960e0c81e52a810f66c5506bfa2bde1f3"
+    },
+    {
+      "path": "docs/uat/user-public-uuid/evidence/backend-complete-attempt8.log",
+      "sha256": "42fad26192081b6c128cf317e198f2b5db3c5f4830972bc3fc9bd1e60f73a277"
+    },
+    {
+      "path": "docs/uat/user-public-uuid/evidence/backend-complete-attempt8.xml",
+      "sha256": "7c7d0ad6de410580cb62984f94b4514a24f81344893c86de03447a66e6544917"
+    },
+    {
+      "path": "docs/uat/user-public-uuid/evidence/baseline-tracked-sha256.json",
+      "sha256": "f546215340feaaa2ddd52064aaee227bd415a3f2203d28e34637fcba8af9a58f"
+    },
+    {
+      "path": "docs/uat/user-public-uuid/evidence/browser-final4.log",
+      "sha256": "27d9c9e48245f233267fb9da93f487d89fb9bdda7d0d1e0790e54f23c03f545a"
+    },
+    {
+      "path": "docs/uat/user-public-uuid/evidence/browser-results.json",
+      "sha256": "fd7a018202dd1c885135fb329cede1bcd8315c04092d0cef3b7de9faf48bac01"
+    },
+    {
+      "path": "docs/uat/user-public-uuid/evidence/eslint-full.log",
+      "sha256": "42cc404b4fbe2ed72124ce540209ae76b450a947eeb2b0bc840cff1e44af4877"
+    },
+    {
+      "path": "docs/uat/user-public-uuid/evidence/final-browser-source-sync.json",
+      "sha256": "ab280b2b0918474eec8bdbacb52c76605cff64fbd849340fccaff8e3f2df3aa1"
+    },
+    {
+      "path": "docs/uat/user-public-uuid/evidence/frontend-build.log",
+      "sha256": "7c8f58598d38d8e84c4cd56bd59e64d8a6b663882804c6f1053cfbcec4172f95"
+    },
+    {
+      "path": "docs/uat/user-public-uuid/evidence/frontend-full-final.log",
+      "sha256": "b80cff5243af9d96ae443a421f3e99e21808bfeb4d58917ce4c5fbb2b6ddcc2c"
+    },
+    {
+      "path": "docs/uat/user-public-uuid/evidence/git-delivery-secret-review.json",
+      "sha256": "a931df3b9b96004700cd58faa0eeda04fb1ef4a7571a187fec34470fe78dde4a"
+    },
+    {
+      "path": "docs/uat/user-public-uuid/evidence/historical-source-preservation.json",
+      "sha256": "b5ec66b35cf89da4c064d210e1dff52767f0278458c0e8417c2fe8aac22507fc"
+    },
+    {
+      "path": "docs/uat/user-public-uuid/evidence/iam-browser.cjs",
+      "sha256": "4cdd7fd5c3a06e74e4ae254bdaceedde28b656d2d1577879930e3e7a85b88673"
+    },
+    {
+      "path": "docs/uat/user-public-uuid/evidence/iam-route-inventory.before.json",
+      "sha256": "840e3f941eb66cbea64f5ea33a9e48f60bced7a09783c21543d9946ceb397149"
+    },
+    {
+      "path": "docs/uat/user-public-uuid/evidence/identifier-classification.json",
+      "sha256": "5e133293e1c65a76c96121a6803df6a0898f26df4af262618e1d0066b993a3ca"
+    },
+    {
+      "path": "docs/uat/user-public-uuid/evidence/identifier-occurrences.before.json",
+      "sha256": "8265b8a9fefae29d515af84a22409a0af03219f47ce94ba5d3df45cc6c5280a8"
+    },
+    {
+      "path": "docs/uat/user-public-uuid/evidence/implementation-source-sha256.json",
+      "sha256": "c8a9deb02773690a97b3296997c71377be6f79f42715b7ec1063661030b570c4"
+    },
+    {
+      "path": "docs/uat/user-public-uuid/evidence/implementation-source.patch",
+      "sha256": "be28874dbb89205aab927ba5c48b2afa2a2d18672cfb3b109045e7965ecd3861"
+    },
+    {
+      "path": "docs/uat/user-public-uuid/evidence/main-database-preservation-complete.json",
+      "sha256": "2b8b044734951244f2263bb28f87f69ff8f8bb6cf1f8a8da3926fef8ef5e1a00"
+    },
+    {
+      "path": "docs/uat/user-public-uuid/evidence/main-database-readonly-baseline.json",
+      "sha256": "877dbb2b876cebfda22c35287ce8f202986927548a05d6579822b439e25444de"
+    },
+    {
+      "path": "docs/uat/user-public-uuid/evidence/openapi-user-fields.json",
+      "sha256": "ca49f6ee524634b52c29ccc3b8a84776730ac1c01a3f2d837d590fdb84d3335e"
+    },
+    {
+      "path": "docs/uat/user-public-uuid/evidence/original-frontend-source-preservation.json",
+      "sha256": "0ba30127655159eab8b94936dbf2fc8b0c618cf11defef747a9c38049987112b"
+    },
+    {
+      "path": "docs/uat/user-public-uuid/evidence/protected-source-preservation-final2.json",
+      "sha256": "93bbd7270a5706249517e40a1b31c8ab5135f1fbf5b702279615d3a096721451"
+    },
+    {
+      "path": "docs/uat/user-public-uuid/evidence/restricted-runtime-allocator.json",
+      "sha256": "66796b600b8a01693145a423f3ff306f0167b4e0422061ec52e736990e1b8fec"
+    },
+    {
+      "path": "docs/uat/user-public-uuid/evidence/ruff-complete.log",
+      "sha256": "82b3e6a6c090a57601d22943bd23fca9218d1031dbe5a7b754092f9a156b4f18"
+    },
+    {
+      "path": "docs/uat/user-public-uuid/evidence/ruff-full-final.log",
+      "sha256": "6cce9decc45d2cc877b11de305cd01e0968da7fd80bd70cea8798c78f7097cf6"
+    },
+    {
+      "path": "docs/uat/user-public-uuid/evidence/schema-parity.json",
+      "sha256": "625743a6e33804c985d7620ca37ec25b658f33e832492981fe5f142b55bba9f0"
+    },
+    {
+      "path": "docs/uat/user-public-uuid/evidence/staged-uuid-source-preservation.json",
+      "sha256": "dd1305f214d06badb762d7b75bd908d0a3e741dc3239308b0395b3d7f14e0732"
+    },
+    {
+      "path": "docs/uat/user-public-uuid/evidence/task-service-pause-final4.json",
+      "sha256": "efd159713ad4cc42a3cb0c4b35c697ef5adf47e36527cb4384b240b3d0970f14"
+    },
+    {
+      "path": "docs/uat/user-public-uuid/evidence/typecheck-final.log",
+      "sha256": "e3b0c44298fc1c149afbf4c8996fb92427ae41e4649b934ca495991b7852b855"
+    },
+    {
+      "path": "docs/uat/user-public-uuid/evidence/whitespace-complete.log",
+      "sha256": "e3b0c44298fc1c149afbf4c8996fb92427ae41e4649b934ca495991b7852b855"
+    }
+  ],
+  "scope": "Curated original implementation reports and sanitized final passing evidence; excludes this self-describing manifest and later Git-delivery attestations"
+}

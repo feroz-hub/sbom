@@ -1,0 +1,10 @@
+{
+  "database": "sbom_iam_public_uuid_browser_test",
+  "role": "iam_uuid_browser_app",
+  "main_database_accessed": false,
+  "result": "PASS",
+  "explicit_null_allocator_native_uuid_v4": true,
+  "transaction_rolled_back": true,
+  "independent_absence_readback": true,
+  "browser_account_count": 7
+}

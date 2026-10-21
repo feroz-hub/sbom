@@ -1,0 +1,35 @@
+{
+  "result": "PASS",
+  "files": [
+    {
+      "file": "infra/uuid-migration/staged-alembic/080_uuid_public_id_expand.py",
+      "sha256": "2fc6e6f9992d0763ddf6818b9e7b62d573eef2b7cda01a39689b8fffcbc623f8",
+      "matches_operator_pin": true
+    },
+    {
+      "file": "infra/uuid-migration/staged-alembic/081_uuid_projects_expand.py",
+      "sha256": "28f803f5c5c439f1ae0f0fdb0748368b244c2c31b060bb1a61ff6302a3d2d95e",
+      "matches_operator_pin": true
+    },
+    {
+      "file": "infra/uuid-migration/staged-alembic/082_uuid_products_expand.py",
+      "sha256": "76d830f79e699cbdd5116c1e848cc5923f10281a764a17f0abd6c1cf8c4b5ace",
+      "matches_operator_pin": true
+    },
+    {
+      "file": "infra/uuid-migration/staged-alembic/083_uuid_logical_sbom_expand.py",
+      "sha256": "d7f8dbe4c262f4a045572c173b7fd61e38d003fa87f9ec28093427161234495e",
+      "matches_operator_pin": true
+    },
+    {
+      "file": "infra/uuid-migration/staged-alembic/084_uuid_sbom_source_expand.py",
+      "sha256": "13a84b0d6d3201a64be7ba90a32560a5c5738a319be1fc8af29d2364aec49803",
+      "matches_operator_pin": true
+    },
+    {
+      "file": "infra/uuid-migration/staged-alembic/085_uuid_sbom_component_expand.py",
+      "sha256": "45f331390609e52ceddbf0968651b5ec817bf26811f6f67845d1fb6d99cdbb0f",
+      "matches_operator_pin": true
+    }
+  ]
+}

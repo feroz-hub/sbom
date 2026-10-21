@@ -1,0 +1,92 @@
+
+/Users/ferozebasha/sbom/frontend/src/app/analysis/compare/_v1/page.tsx
+  3:20  warning  'useMemo' is defined but never used  @typescript-eslint/no-unused-vars
+
+/Users/ferozebasha/sbom/frontend/src/app/vex-investigation/page.test.tsx
+  304:24  warning  '_s' is assigned a value but never used  @typescript-eslint/no-unused-vars
+  304:40  warning  '_o' is assigned a value but never used  @typescript-eslint/no-unused-vars
+  304:51  warning  '_l' is assigned a value but never used  @typescript-eslint/no-unused-vars
+  304:63  warning  '_f' is assigned a value but never used  @typescript-eslint/no-unused-vars
+
+/Users/ferozebasha/sbom/frontend/src/components/admin/TenantSearchSelect.tsx
+  66:11  warning  Unused eslint-disable directive (no problems were reported from 'jsx-a11y/no-autofocus')
+
+/Users/ferozebasha/sbom/frontend/src/components/ai-fixes/AiFixSection/AiFixSection.tsx
+  82:13  warning  '_exhaustive' is assigned a value but never used  @typescript-eslint/no-unused-vars
+
+/Users/ferozebasha/sbom/frontend/src/components/analysis/FindingsTable.selection.test.tsx
+  277:11  warning  'user' is assigned a value but never used  @typescript-eslint/no-unused-vars
+
+/Users/ferozebasha/sbom/frontend/src/components/analysis/LiveAnalysisCard.tsx
+  12:3  warning  'KeyRound' is defined but never used  @typescript-eslint/no-unused-vars
+
+/Users/ferozebasha/sbom/frontend/src/components/analysis/RunDetailHero.tsx
+  11:3  warning  'KeyRound' is defined but never used  @typescript-eslint/no-unused-vars
+
+/Users/ferozebasha/sbom/frontend/src/components/analysis/SbomPreflightChecklist.tsx
+  6:3  warning  'CheckCircle2' is defined but never used  @typescript-eslint/no-unused-vars
+
+/Users/ferozebasha/sbom/frontend/src/components/analysis/SourceSelector.tsx
+  3:38  warning  'KeyRound' is defined but never used  @typescript-eslint/no-unused-vars
+
+/Users/ferozebasha/sbom/frontend/src/components/compare/SelectionBar/RunPicker.tsx
+  92:9  warning  The 'baseOptions' logical expression could make the dependencies of useMemo Hook (at line 101) change on every render. To fix this, wrap the initialization of 'baseOptions' in its own useMemo() Hook  react-hooks/exhaustive-deps
+  92:9  warning  The 'baseOptions' logical expression could make the dependencies of useMemo Hook (at line 127) change on every render. To fix this, wrap the initialization of 'baseOptions' in its own useMemo() Hook  react-hooks/exhaustive-deps
+
+/Users/ferozebasha/sbom/frontend/src/components/dashboard/FindingsTrendChart/FindingsTrendChart.tsx
+  132:9  warning  The 'points' logical expression could make the dependencies of useMemo Hook (at line 144) change on every render. To fix this, wrap the initialization of 'points' in its own useMemo() Hook                                                   react-hooks/exhaustive-deps
+  132:9  warning  The 'points' logical expression could make the dependencies of useMemo Hook (at line 164) change on every render. To fix this, wrap the initialization of 'points' in its own useMemo() Hook                                                   react-hooks/exhaustive-deps
+  133:9  warning  The 'annotations' logical expression could make the dependencies of useMemo Hook (at line 181) change on every render. Move it inside the useMemo callback. Alternatively, wrap the initialization of 'annotations' in its own useMemo() Hook  react-hooks/exhaustive-deps
+
+/Users/ferozebasha/sbom/frontend/src/components/dashboard/SeverityChart.tsx
+  84:26  warning  '_theme' is assigned a value but never used  @typescript-eslint/no-unused-vars
+
+/Users/ferozebasha/sbom/frontend/src/components/dashboard/TrendChart.tsx
+  81:9  warning  The 'series' logical expression could make the dependencies of useMemo Hook (at line 93) change on every render. To fix this, wrap the initialization of 'series' in its own useMemo() Hook   react-hooks/exhaustive-deps
+  81:9  warning  The 'series' logical expression could make the dependencies of useMemo Hook (at line 109) change on every render. To fix this, wrap the initialization of 'series' in its own useMemo() Hook  react-hooks/exhaustive-deps
+
+/Users/ferozebasha/sbom/frontend/src/components/sboms/SbomDetail.tsx
+   30:10  warning  'AnalysisProgress' is defined but never used                                                                      @typescript-eslint/no-unused-vars
+   45:3   warning  'editSbom' is defined but never used                                                                              @typescript-eslint/no-unused-vars
+   64:3   warning  'overrideVexStatement' is defined but never used                                                                  @typescript-eslint/no-unused-vars
+   94:7   warning  'VEX_STATUSES' is assigned a value but never used                                                                 @typescript-eslint/no-unused-vars
+  236:33  warning  'cancel' is assigned a value but never used                                                                       @typescript-eslint/no-unused-vars
+  268:10  warning  'vexComponentLocked' is assigned a value but never used                                                           @typescript-eslint/no-unused-vars
+  269:10  warning  'vexPairLocked' is assigned a value but never used                                                                @typescript-eslint/no-unused-vars
+  274:10  warning  'vexOverrideStatus' is assigned a value but never used                                                            @typescript-eslint/no-unused-vars
+  275:10  warning  'vexOverrideJustification' is assigned a value but never used                                                     @typescript-eslint/no-unused-vars
+  276:10  warning  'vexOverrideImpact' is assigned a value but never used                                                            @typescript-eslint/no-unused-vars
+  277:10  warning  'vexOverrideAction' is assigned a value but never used                                                            @typescript-eslint/no-unused-vars
+  278:10  warning  'vexOverrideFixedVersion' is assigned a value but never used                                                      @typescript-eslint/no-unused-vars
+  279:10  warning  'vexOverrideMitigation' is assigned a value but never used                                                        @typescript-eslint/no-unused-vars
+  280:10  warning  'vexOverrideEvidenceUrl' is assigned a value but never used                                                       @typescript-eslint/no-unused-vars
+  281:10  warning  'vexOverrideReason' is assigned a value but never used                                                            @typescript-eslint/no-unused-vars
+  282:10  warning  'vexOverrideError' is assigned a value but never used                                                             @typescript-eslint/no-unused-vars
+  283:10  warning  'isSavingVexOverride' is assigned a value but never used                                                          @typescript-eslint/no-unused-vars
+  283:31  warning  'setIsSavingVexOverride' is assigned a value but never used                                                       @typescript-eslint/no-unused-vars
+  285:10  warning  'isLoadingVexHistory' is assigned a value but never used                                                          @typescript-eslint/no-unused-vars
+  524:36  warning  'refetchVersions' is assigned a value but never used                                                              @typescript-eslint/no-unused-vars
+  652:6   warning  React Hook useEffect has a missing dependency: 'runPagination'. Either include it or remove the dependency array  react-hooks/exhaustive-deps
+  659:9   warning  'handleReset' is assigned a value but never used                                                                  @typescript-eslint/no-unused-vars
+
+/Users/ferozebasha/sbom/frontend/src/components/sboms/SbomUploadModal.repair.test.tsx
+  170:45  warning  '_payload' is defined but never used   @typescript-eslint/no-unused-vars
+  170:55  warning  '_handlers' is defined but never used  @typescript-eslint/no-unused-vars
+  190:45  warning  '_payload' is defined but never used   @typescript-eslint/no-unused-vars
+  190:55  warning  '_handlers' is defined but never used  @typescript-eslint/no-unused-vars
+
+/Users/ferozebasha/sbom/frontend/src/components/vulnerabilities/CveDetailDialog/CveHeader.tsx
+  32:54  warning  '_isLoading' is defined but never used  @typescript-eslint/no-unused-vars
+
+/Users/ferozebasha/sbom/frontend/src/hooks/useCompareUrlState.ts
+  204:22  warning  React Hook useCallback received a function whose dependencies are unknown. Pass an inline function instead  react-hooks/exhaustive-deps
+  205:27  warning  React Hook useCallback received a function whose dependencies are unknown. Pass an inline function instead  react-hooks/exhaustive-deps
+  206:28  warning  React Hook useCallback received a function whose dependencies are unknown. Pass an inline function instead  react-hooks/exhaustive-deps
+
+/Users/ferozebasha/sbom/frontend/src/lib/api.ts
+  205:39  warning  'getRoleLabel' is defined but never used       @typescript-eslint/no-unused-vars
+  325:21  warning  '_ignored' is assigned a value but never used  @typescript-eslint/no-unused-vars
+
+✖ 52 problems (0 errors, 52 warnings)
+  0 errors and 1 warning potentially fixable with the `--fix` option.
+

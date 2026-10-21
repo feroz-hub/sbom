@@ -1,0 +1,86 @@
+/* Real Chrome, task-owned DB/users only. Never save tokens, credentials or traces. */
+const fs=require('node:fs');
+const assert=require('node:assert/strict');
+const {chromium}=require('/Users/ferozebasha/.cache/codex-runtimes/codex-primary-runtime/dependencies/node/node_modules/playwright');
+const state='/Users/ferozebasha/.sbom-iam-public-uuid';
+const users=JSON.parse(fs.readFileSync(state+'/users.json','utf8'));
+const origin='https://localhost:13300';
+const results=[];
+let currentPage;
+const uuid=/^[0-9a-f]{8}-[0-9a-f]{4}-4[0-9a-f]{3}-[89ab][0-9a-f]{3}-[0-9a-f]{12}$/i;
+function safe(error){let value=String(error);for(const u of Object.values(users))value=value.split(u.password).join('[REDACTED]');return value.replace(/eyJ[A-Za-z0-9_.-]+/g,'[TOKEN]').slice(0,1200);}
+function record(name,result,observations){results.push({name,result,observations,time:new Date().toISOString()});fs.writeFileSync(__dirname+'/browser-results.json',JSON.stringify(results,null,2));console.log(name,result);}
+async function scenario(name,body){try{await body();record(name,'PASS',{});}catch(e){record(name,'FAIL',{error:safe(e)});}}
+async function login(browser,role){
+ const context=await browser.newContext({ignoreHTTPSErrors:false,viewport:{width:1440,height:1100},reducedMotion:'reduce'});const page=await context.newPage();currentPage=page;page.setDefaultTimeout(25000);
+ await page.goto(origin+'/native-sign-in');
+ await page.getByRole('heading',{name:'Welcome back',exact:true}).waitFor();
+ await page.getByLabel('Email address').fill(users[role].email);await page.getByLabel('Password',{exact:true}).fill(users[role].password);
+ const response=page.waitForResponse(r=>new URL(r.url()).pathname==='/api/auth/native/login'&&r.request().method()==='POST');
+ await page.getByRole('button',{name:'Sign in',exact:true}).click();assert.equal((await response).status(),200);
+ const heading=page.getByRole('heading',{name:role==='platform'?'Platform Dashboard':'Dashboard',exact:true});
+ const selection=page.getByRole('heading',{name:'Select tenant',exact:true});await heading.or(selection).waitFor();
+ if(await selection.isVisible()){const text=role==='foreign'?'UUID Test Foreign Tenant Admin':'UUID Test Olympus Tenant Admin';await page.getByRole('button',{name:text,exact:true}).click();}
+ await heading.waitFor();return {context,page};
+}
+async function api(page,role,path,method='GET',body){
+ return page.evaluate(async({path,method,body,tenant,origin})=>{const response=await fetch('/api/backend'+path,{method,headers:{'Content-Type':'application/json',Origin:origin,...(tenant?{'X-Tenant-ID':tenant}:{})},...(body===undefined?{}:{body:JSON.stringify(body)})});return {status:response.status,data:await response.json().catch(()=>null)};},{path,method,body,tenant:role==='platform'?null:users[role].tenant_id,origin});
+}
+(async()=>{const browser=await chromium.launch({channel:'chrome',headless:true});
+try{
+ for(const role of ['admin','analyst','developer','viewer','foreign','platform'])await scenario(role+': login, UUID context, refresh, logout/login stability',async()=>{
+  const {context,page}=await login(browser,role);try{
+   const me=await api(page,role,'/api/auth/me');assert.equal(me.status,200);assert.match(me.data.user_id,uuid);assert.equal(me.data.user_id,users[role].public_id);assert.equal(me.data.auth_context.user.id,me.data.user_id);
+   await page.reload();await page.getByRole('heading',{name:role==='platform'?'Platform Dashboard':'Dashboard',exact:true}).waitFor();assert.equal((await api(page,role,'/api/auth/me')).data.user_id,me.data.user_id);
+   if(role==='foreign'){
+    const denied=await page.evaluate(async tenant=>(await fetch('/api/backend/api/projects',{headers:{'X-Tenant-ID':tenant}})).status,users.admin.tenant_id);assert.equal(denied,403);
+   }
+   if(role==='viewer'){
+    assert.equal((await api(page,role,`/api/tenants/${users.viewer.tenant_id}/user-candidates?q=uuid`)).status,403);
+   }
+   if(role==='platform'){
+    for(const path of ['/api/platform/users',`/api/platform/users/${users.admin.public_id}`])assert.equal((await api(page,role,path)).status,403);
+    const candidates=await api(page,role,'/api/platform/tenant-admin-candidates?q=uuid-');assert.equal(candidates.status,200);assert(candidates.data.items.every(u=>uuid.test(u.id)));
+   }
+   await page.getByRole('button',{name:/Account menu for/}).click();await page.getByRole('menuitem',{name:'Sign Out',exact:true}).click();await page.waitForURL(/logged-out/);
+   await page.goto(origin+'/settings/tenant');await page.getByRole('heading',{name:'Welcome back',exact:true}).waitFor();
+  }finally{await context.close();}
+  const again=await login(browser,role);try{assert.equal((await api(again.page,role,'/api/auth/me')).data.user_id,users[role].public_id);}finally{await again.context.close();}
+ });
+ await scenario('Tenant Admin: actual Users & Access find/add/change roles/remove UUID user',async()=>{
+  const {context,page}=await login(browser,'admin');try{
+   await page.goto(origin+'/settings/tenant');
+   const previous=await api(page,'admin',`/api/tenants/${users.admin.tenant_id}/users`);
+   const old=previous.data.find(u=>u.user_id===users.candidate.public_id);
+   if(old){await page.getByRole('button',{name:'Open actions for UUID Test candidate',exact:true}).click();await page.getByRole('menuitem',{name:'Remove from tenant',exact:true}).click();const cleanup=page.getByRole('dialog');await cleanup.getByRole('checkbox',{name:'I understand this user will lose access to this tenant',exact:true}).check();await cleanup.getByRole('button',{name:'Remove from tenant',exact:true}).click();await cleanup.waitFor({state:'hidden'});}
+   await page.getByRole('button',{name:'Add Existing Member',exact:true}).waitFor();await page.getByRole('button',{name:'Add Existing Member',exact:true}).click();
+   const dialog=page.getByRole('dialog',{name:'Add Existing Member',exact:true});await dialog.waitFor();await dialog.getByRole('combobox',{name:'Search existing user'}).fill(users.candidate.email);
+   const option=page.getByRole('option',{name:/UUID Test candidate/});await option.waitFor();await option.click();
+   const pending=page.waitForResponse(r=>new URL(r.url()).pathname.endsWith(`/tenants/${users.admin.tenant_id}/users`)&&r.request().method()==='POST');await dialog.getByRole('button',{name:'Add Member',exact:true}).click();assert.equal((await pending).status(),201);
+   const list=await api(page,'admin',`/api/tenants/${users.admin.tenant_id}/users`);assert.equal(list.status,200);const member=list.data.find(u=>u.user_id===users.candidate.public_id);assert(member);assert.equal(typeof member.membership_id,'number');
+   const action=page.getByRole('button',{name:'Open actions for UUID Test candidate',exact:true});await action.waitFor();await action.click();await page.getByRole('menuitem',{name:/Manage roles/i}).click();
+   const roles=page.getByRole('dialog');await roles.waitFor();await roles.getByRole('checkbox',{name:/Developer/i}).check();const save=page.waitForResponse(r=>new URL(r.url()).pathname.endsWith(`/users/${users.candidate.public_id}/roles`)&&r.request().method()==='PUT').catch(()=>null);await roles.getByRole('button',{name:'Save changes',exact:true}).click();assert.equal((await save).status(),200);
+   await action.click();await page.getByRole('menuitem',{name:'Remove from tenant',exact:true}).click();const removal=page.getByRole('dialog');await removal.waitFor();const removed=page.waitForResponse(r=>new URL(r.url()).pathname.endsWith(`/users/${member.membership_id}`)&&r.request().method()==='DELETE');await removal.getByRole('checkbox',{name:'I understand this user will lose access to this tenant',exact:true}).check();await removal.getByRole('button',{name:'Remove from tenant',exact:true}).click();assert.equal((await removed).status(),204);
+  }finally{await context.close();}
+ });
+ await scenario('Platform Admin: purpose-limited UUID selection, actual grant/revoke UI',async()=>{
+  const {context,page}=await login(browser,'platform');let pendingGrant=null;try{
+   await page.goto(origin+'/settings/platform');await page.getByRole('heading',{name:'Grant Platform Administrator',exact:true}).waitFor();
+   await page.getByRole('combobox',{name:'Search users by email or name'}).fill(users.candidate.email);await page.getByRole('option',{name:/UUID Test candidate/}).click();
+   const granted=page.waitForResponse(r=>new URL(r.url()).pathname.endsWith('/platform/administrators')&&r.request().method()==='POST');
+   await page.getByRole('button',{name:'Grant Platform Administrator',exact:true}).click();const response=await granted;assert.equal(response.status(),201);assert.equal(response.request().postDataJSON().user_id,users.candidate.public_id);
+   const grant=await response.json();pendingGrant=grant.grant_id;assert.equal(typeof pendingGrant,'number');assert.equal(grant.user_id,users.candidate.public_id);assert.equal(grant.created_by_user_id,users.platform.public_id);
+   const row=page.getByRole('row').filter({hasText:'UUID Test candidate'});await row.getByRole('button',{name:'Revoke',exact:true}).click();
+   const revoked=page.waitForResponse(r=>new URL(r.url()).pathname.endsWith(`/platform/administrators/${pendingGrant}`)&&r.request().method()==='DELETE');await page.getByRole('dialog').getByRole('button',{name:'Revoke authority',exact:true}).click();assert.equal((await revoked).status(),204);pendingGrant=null;
+  }finally{if(pendingGrant!==null){const cleaned=await api(page,'platform',`/api/platform/administrators/${pendingGrant}`,'DELETE');assert.equal(cleaned.status,204,'Task-only grant cleanup failed');}await context.close();}
+ });
+ await scenario('Admin UUID path syntax, missing identities and membership separation',async()=>{
+  const {context,page}=await login(browser,'admin');try{
+   const invalidRole=await api(page,'admin',`/api/tenants/${users.admin.tenant_id}/users`,'POST',{user_id:users.candidate.public_id,roles:[]});assert.equal(invalidRole.status,422);assert.equal(invalidRole.data.detail.find(e=>e.loc.length===1&&e.loc[0]==='body').input.user_id,users.candidate.public_id);
+   for(const id of ['1','malformed','00000000-0000-1000-8000-000000000001'])assert.equal((await api(page,'admin',`/api/tenants/${users.admin.tenant_id}/users/${id}/roles`)).status,422);
+   assert.equal((await api(page,'admin',`/api/tenants/${users.admin.tenant_id}/users/${users.foreign.public_id}/roles`)).status,404);
+  }finally{await context.close();}
+ });
+}finally{await browser.close();}
+process.exitCode=results.some(r=>r.result==='FAIL')?1:0;
+})().catch(e=>{record('harness','FAIL',{error:safe(e)});process.exitCode=1;});

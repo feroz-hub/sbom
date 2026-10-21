@@ -1,0 +1,83 @@
+▲ Next.js 16.3.4 (Turbopack)
+- Environments: .env.local
+✓ Running next.config.mjs took 11ms
+
+  Creating an optimized production build ...
+✓ Compiled successfully in 6.7s
+  Running TypeScript ...
+  Finished TypeScript in 11.8s ...
+  Collecting page data using 7 workers ...
+  Generating static pages using 7 workers (0/47) ...
+  Generating static pages using 7 workers (11/47) 
+  Generating static pages using 7 workers (23/47) 
+  Generating static pages using 7 workers (35/47) 
+✓ Generating static pages using 7 workers (47/47) in 319ms
+  Finalizing page optimization ...
+
+Route (app)
+┌ ○ /
+├ ○ /_not-found
+├ ○ /access-denied
+├ ○ /access-pending
+├ ○ /activate-account
+├ ○ /admin/ai-usage
+├ ○ /admin/lifecycle-providers
+├ ○ /admin/lifecycle-vendor-records
+├ ○ /analysis
+├ ƒ /analysis/[id]
+├ ○ /analysis/compare
+├ ƒ /api/auth/callback
+├ ƒ /api/auth/entra
+├ ƒ /api/auth/entra/bridge
+├ ƒ /api/auth/login
+├ ƒ /api/auth/logout
+├ ƒ /api/auth/native/[action]
+├ ƒ /api/auth/session
+├ ƒ /api/backend/[...path]
+├ ƒ /api/ready
+├ ○ /auth/callback
+├ ƒ /auth/entra-callback
+├ ○ /change-password
+├ ○ /component-advisor
+├ ƒ /component-advisor/components/[key]
+├ ƒ /component-advisor/recommendations/[id]
+├ ○ /docs/sbom-validation-errors
+├ ○ /forgot-password
+├ ○ /kev
+├ ƒ /logged-out
+├ ƒ /native-sign-in
+├ ○ /platform
+├ ○ /platform/configuration/advisor-policies
+├ ○ /platform/configuration/ai
+├ ○ /platform/configuration/lifecycle
+├ ƒ /products/[id]
+├ ○ /projects
+├ ƒ /repair/[workspaceId]
+├ ○ /reset-password
+├ ƒ /sbom-validation-sessions/[id]
+├ ○ /sboms
+├ ƒ /sboms/[id]
+├ ƒ /sboms/logical/[id]
+├ ○ /schedules
+├ ○ /settings
+├ ○ /settings/advisor-policies
+├ ○ /settings/ai
+├ ○ /settings/iam
+├ ○ /settings/native-users
+├ ○ /settings/notifications
+├ ○ /settings/platform
+├ ○ /settings/platform/tenants
+├ ƒ /settings/platform/tenants/[tenantId]
+├ ○ /settings/tenant
+├ ○ /settings/users
+├ ○ /settings/users/audit
+├ ƒ /sign-in
+├ ○ /verification-required
+└ ○ /vex-investigation
+
+
+ƒ Proxy (Middleware)
+
+○  (Static)   prerendered as static content
+ƒ  (Dynamic)  server-rendered on demand
+

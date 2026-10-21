@@ -1,0 +1,15 @@
+{
+  "private_workspace": "/Users/ferozebasha/.sbom-greenfield-uuid/frontend",
+  "source_matches_original_baseline": {
+    "frontend/src/hooks/useAuth.tsx": true,
+    "frontend/src/lib/api.ts": true,
+    "frontend/src/components/admin/UserLifecycle.tsx": true,
+    "frontend/src/app/settings/platform/page.tsx": true,
+    "frontend/src/app/settings/platform/tenants/page.tsx": true,
+    "frontend/src/lib/queryInvalidation.ts": true,
+    "frontend/src/types/reports.ts": true,
+    "frontend/src/lib/tenantForm.ts": true
+  },
+  "result": "PASS",
+  "not_updated_to_new_UUID_contract": true
+}
