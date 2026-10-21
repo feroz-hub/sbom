@@ -446,7 +446,7 @@ def test_tile_counts_equal_table_counts__VEX_DASH_004(client, db, project):
 
     payload = summary(db, project)
     response = client.get(
-        "/api/vex/investigations", params={"sbom_id": project["sbom"].id}
+        "/api/vex/investigations", params={"sbom_id": str(project["sbom"].public_id)}
     )
     assert response.status_code == 200, response.text
     assert payload["total_contexts"] == response.json()["total"]
@@ -473,7 +473,7 @@ def test_report_and_csv_carry_native_and_effective_status__DoD_19(db, project):
 def test_vex_pack_zip_still_builds__DoD_19(client, db, project):
     import_vex_document(db, project["sbom"].id, project["document"], source_type="embedded")
     db.commit()
-    response = client.get(f"/api/sboms/{project['sbom'].id}/reports/vex-pack")
+    response = client.get(f"/api/sboms/{project['sbom'].public_id}/reports/vex-pack")
     assert response.status_code == 200, response.text
     assert response.headers["content-type"] == "application/zip"
 

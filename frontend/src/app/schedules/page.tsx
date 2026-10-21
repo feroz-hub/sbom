@@ -114,11 +114,11 @@ export default function SchedulesPage() {
   });
 
   const projectById = useMemo(
-    () => new Map<number, Project>((projectsQuery.data ?? []).map((p) => [p.id, p])),
+    () => new Map<string | number, Project>((projectsQuery.data ?? []).map((p) => [p.id, p])),
     [projectsQuery.data],
   );
   const sbomById = useMemo(
-    () => new Map<number, SBOMSource>((sbomsQuery.data ?? []).map((s) => [s.id, s])),
+    () => new Map<string | number, SBOMSource>((sbomsQuery.data ?? []).map((s) => [s.id, s])),
     [sbomsQuery.data],
   );
 

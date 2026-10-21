@@ -10,7 +10,7 @@ import { Select } from '@/components/ui/Select';
 import { CveDetailDialog, type CveRowSeed } from '@/components/vulnerabilities/CveDetailDialog';
 import type { VexComparisonContext } from '@/types';
 
-export function VexVersionComparisonPanel({sbomId}: {sbomId: number}) {
+export function VexVersionComparisonPanel({sbomId}: {sbomId: (string | number)}) {
   const {activeTenantId} = useAuth();
   const [open, setOpen] = useState(false);
   const [category, setCategory] = useState('ALL');

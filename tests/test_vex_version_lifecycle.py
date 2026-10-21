@@ -172,7 +172,7 @@ def test_previous_version_contexts_are_retained_as_history__VEX_INV_002(client, 
 
 def test_tiles_equal_queue_total_for_project_and_application_filters__VEX_DASH_004(client, app_line):
     two_versions(app_line)
-    scope = {"project_id": app_line.project.id, "product_id": app_line.product.id}
+    scope = {"project_id": str(app_line.project.public_id), "product_id": str(app_line.product.public_id)}
     assert tiles(client, **scope)["total_contexts"] == queue(client, **scope)["total"] == 2
 
 
@@ -218,7 +218,7 @@ def test_filtered_metrics_equal_matching_count__VEX_DASH_004(client, app_line, f
 
 def test_filtered_metrics_honour_scope_filters__VEX_DASH_004(client, app_line):
     two_versions(app_line)
-    scope = {"project_id": app_line.project.id, "product_id": app_line.product.id}
+    scope = {"project_id": str(app_line.project.public_id), "product_id": str(app_line.product.public_id)}
     cards = summary(client, **scope)
     assert cards["total"] == queue(client, **scope)["total"] == tiles(client, **scope)["total_contexts"]
 

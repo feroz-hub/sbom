@@ -21,6 +21,8 @@ describe('MembershipConfirmDialogs', () => {
 
       expect(screen.getByText('Disable tenant membership?')).toBeInTheDocument();
       expect(screen.getByText(/will no longer be able to access/i)).toBeInTheDocument();
+      expect(screen.getByText(/Their sign-in identity and SBOM user account will remain unchanged/)).toBeInTheDocument();
+      expect(screen.queryByText(/HCL\.CS|Microsoft Entra/)).not.toBeInTheDocument();
       expect(screen.getByText(/Warning: You are disabling your own membership/i)).toBeInTheDocument();
       expect(screen.getByRole('button', { name: 'Disable membership' })).toBeInTheDocument();
     });
@@ -62,6 +64,8 @@ describe('MembershipConfirmDialogs', () => {
 
       expect(screen.getByText('Remove user from tenant?')).toBeInTheDocument();
       expect(screen.getByText(/This does not delete:/i)).toBeInTheDocument();
+      expect(screen.getByText('their sign-in identity')).toBeInTheDocument();
+      expect(screen.queryByText(/HCL\.CS|Microsoft Entra/)).not.toBeInTheDocument();
       expect(screen.getByText(/Warning: You are removing yourself from this tenant/i)).toBeInTheDocument();
 
       const confirmButton = screen.getByRole('button', { name: 'Remove from tenant' });

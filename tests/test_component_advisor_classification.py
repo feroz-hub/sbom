@@ -5,7 +5,6 @@ Test matrix ids (T1…T7) come from the implementation prompt §10; decision ids
 """
 
 import pytest
-
 from app.services.component_advisor.classification import (
     INFORMATIONAL_SUPPORTED,
     AcceptedRiskOutcome,

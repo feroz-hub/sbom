@@ -686,7 +686,7 @@ def test_lifecycle_refresh_returns_summary(client, db):
     db.add(SBOMComponent(sbom_id=sbom.id, name="pkg", version="1.0.0", component_type="library"))
     db.commit()
 
-    response = client.post(f"/api/sboms/{sbom.id}/lifecycle/refresh?force=true")
+    response = client.post(f"/api/sboms/{sbom.public_id}/lifecycle/refresh?force=true")
     assert response.status_code == 200
     body = response.json()
     assert body["total_components"] == 1

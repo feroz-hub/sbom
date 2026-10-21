@@ -64,7 +64,10 @@ def test_soft_delete_visibility_remains_independent(tenant_projects):
 
 def test_foreign_deleted_project_cannot_be_restored(client, tenant_projects):
     tenant_b, identifiers = tenant_projects
-    response = client.post(f"/api/projects/{identifiers[tenant_b, False]}/restore")
+    with tenant_scope(minimal_background_context(tenant_b)), SessionLocal() as db:
+        foreign = db.scalar(select(Projects).where(Projects.id == identifiers[tenant_b, False]).execution_options(include_deleted=True))
+        public_id = str(foreign.public_id)
+    response = client.post(f"/api/projects/{public_id}/restore")
     assert response.status_code == 404
     with tenant_scope(minimal_background_context(tenant_b)), SessionLocal() as db:
         row = db.scalar(

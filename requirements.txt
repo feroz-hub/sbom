@@ -19,6 +19,7 @@ click-didyoumean==0.3.1
 click-plugins==1.1.1.2
 click-repl==0.3.0
 click==8.4.2
+croniter==6.2.4
 cryptography==49.0.0
 cyclonedx-python-lib==11.11.0
 cvss==3.6
@@ -72,6 +73,7 @@ python-dotenv==1.2.2
 python-multipart==0.0.32
 PyYAML==6.0.3
 rdflib==7.6.0
+rfc3986-validator==0.1.1
 redis==6.4.0
 referencing==0.37.0
 reportlab==5.0.0

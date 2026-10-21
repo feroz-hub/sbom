@@ -311,7 +311,8 @@ function KevCatalogContent() {
         subtitle="Known Exploited Vulnerabilities catalog"
         action={
           <Button
-            permission="tenant:settings:update" onClick={() => syncMutation.mutate()}
+            permission="platform:admin" disabledReason="The global KEV catalog is synchronized by a Platform Administrator."
+            onClick={() => syncMutation.mutate()}
             loading={syncMutation.isPending}
             loadingLabel="Syncing KEV catalog"
           >

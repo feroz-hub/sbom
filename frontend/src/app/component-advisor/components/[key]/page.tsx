@@ -31,9 +31,8 @@ import { usePermission } from '@/hooks/usePermission';
 import { ApiError, getAdvisorComponent } from '@/lib/api';
 import type { AdvisorComponentDetail, AdvisorPurposeField, RecommendationTrigger } from '@/types/componentAdvisor';
 
-function positiveOrNull(value: string | null): number | null {
-  const id = Number(value);
-  return value && Number.isSafeInteger(id) && id > 0 ? id : null;
+function positiveOrNull(value: string | null): string | null {
+  return value || null;
 }
 
 export default function ComponentDetailPage({ params }: { params: Promise<{ key: string }> }) {

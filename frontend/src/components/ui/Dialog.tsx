@@ -1,6 +1,6 @@
 'use client';
 
-import { useCallback, useEffect, useId, useRef, useState, type ReactNode } from 'react';
+import { useCallback, useEffect, useLayoutEffect, useId, useRef, useState, type ReactNode } from 'react';
 import { createPortal } from 'react-dom';
 import { X } from 'lucide-react';
 import { cn } from '@/lib/utils';
@@ -130,22 +130,21 @@ export function Dialog({
     };
   }, [open]);
 
-  useEffect(() => {
+  // Focus in the commit phase: a deferred animation frame can otherwise
+  // steal focus after the user has already begun typing in an async form.
+  useLayoutEffect(() => {
     if (open) {
       previouslyFocused.current = (document.activeElement as HTMLElement) ?? null;
-      const raf = requestAnimationFrame(() => {
-        if (panelRef.current) {
-          const focusable = getFocusable(panelRef.current);
-          (focusable[0] ?? panelRef.current).focus();
-          // Initial scroll state once the body has rendered.
-          updateScrollState();
-        }
-      });
-      return () => cancelAnimationFrame(raf);
+      if (panelRef.current) {
+        const focusable = getFocusable(panelRef.current);
+        (focusable[0] ?? panelRef.current).focus();
+        updateScrollState();
+      }
+      return () => {
+        if (previouslyFocused.current?.isConnected) previouslyFocused.current.focus();
+      };
     }
-    if (previouslyFocused.current && previouslyFocused.current.isConnected) {
-      previouslyFocused.current.focus();
-    }
+    if (previouslyFocused.current?.isConnected) previouslyFocused.current.focus();
   }, [open, updateScrollState]);
 
   if (!open) return null;

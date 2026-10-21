@@ -38,7 +38,7 @@ interface ScheduleEditorProps {
   open: boolean;
   onClose: () => void;
   scope: 'TENANT' | 'PROJECT' | 'PRODUCT' | 'SBOM';
-  targetId: number;          // project_id or sbom_id depending on scope
+  targetId: (string | number);          // project_id or sbom_id depending on scope
   existing?: AnalysisSchedule | null;
 }
 

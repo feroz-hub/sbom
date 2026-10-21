@@ -99,7 +99,7 @@ interface ProductDetailPageProps {
 
 export default function ProductDetailPage({ params }: ProductDetailPageProps) {
   const { id: idParam } = use(params);
-  const id = Number(idParam);
+  const id = String(idParam);
   const queryClient = useQueryClient();
   const { showToast } = useToast();
   const canSelectCurrent = usePermission('product:update');
@@ -109,16 +109,16 @@ export default function ProductDetailPage({ params }: ProductDetailPageProps) {
   const productQuery = useQuery({
     queryKey: ['product', id],
     queryFn: ({ signal }) => getProduct(id, signal),
-    enabled: Number.isFinite(id),
+    enabled: Boolean(id),
   });
 
   const sbomsQuery = useQuery({
     queryKey: ['product-sboms', id],
     queryFn: ({ signal }) => getProductSboms(id, signal),
-    enabled: Number.isFinite(id),
+    enabled: Boolean(id),
   });
 
-  const logicalSbomsQuery = useQuery({ queryKey: ['logical-sboms', id, masterPage], queryFn: ({ signal }) => getLogicalSboms(id, signal, masterPage), enabled: Number.isFinite(id) });
+  const logicalSbomsQuery = useQuery({ queryKey: ['logical-sboms', id, masterPage], queryFn: ({ signal }) => getLogicalSboms(id, signal, masterPage), enabled: Boolean(id) });
 
   const selectionModeMutation = useMutation({
     mutationFn: (mode: 'AUTO' | 'MANUAL_PIN') => updateProduct(id, { current_sbom_mode: mode }),
@@ -127,7 +127,7 @@ export default function ProductDetailPage({ params }: ProductDetailPageProps) {
   });
 
   const currentSbomMutation = useMutation({
-    mutationFn: (currentSbomId: number) => updateProduct(id, { current_sbom_id: currentSbomId }),
+    mutationFn: (currentSbomId: (string | number)) => updateProduct(id, { current_sbom_id: currentSbomId }),
     onSuccess: () => {
       invalidateProductSurfaces(queryClient, id);
       queryClient.invalidateQueries({ queryKey: ['product', id] });
@@ -197,7 +197,7 @@ export default function ProductDetailPage({ params }: ProductDetailPageProps) {
                   label="Current version used by CURRENT_ONLY schedules"
                   value={product.current_sbom_id ? String(product.current_sbom_id) : ''}
                   disabled={!canSelectCurrent || currentSbomMutation.isPending}
-                  onChange={(event) => currentSbomMutation.mutate(Number(event.target.value))}
+                  onChange={(event) => currentSbomMutation.mutate(event.target.value)}
                   hint="Selecting a version creates a manual pin. New uploads and analyses cannot override it."
                 >
                   <option value="" disabled>Select current SBOM…</option>

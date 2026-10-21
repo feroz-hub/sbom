@@ -25,7 +25,7 @@ function preferencesOnly(sub: ReportSubscription): ReportPreferences {
     suppress_when_unchanged: sub.suppress_when_unchanged, enabled: sub.enabled };
 }
 
-function TenantAnalysisSchedule({ tenantId }: { tenantId: number }) {
+function TenantAnalysisSchedule({ tenantId }: { tenantId: (string | number) }) {
   const [open, setOpen] = useState(false);
   const schedule = useQuery({ queryKey: ['schedule', 'TENANT', tenantId], queryFn: () => getTenantSchedule(tenantId) });
   return <div className="mt-4 border-t border-border-subtle pt-4"><p className="mb-2 text-sm text-hcl-muted">Tenant-wide analysis schedule: {schedule.data ? `${schedule.data.cadence} · ${schedule.data.enabled ? 'enabled' : 'paused'}` : 'not configured'}. Child schedules, including paused overrides, take priority.</p>
@@ -33,7 +33,7 @@ function TenantAnalysisSchedule({ tenantId }: { tenantId: number }) {
     <ScheduleEditor open={open} onClose={() => setOpen(false)} scope="TENANT" targetId={tenantId} existing={schedule.data} />
   </div>;
 }
-export function defaultReportPreferences(scope: ReportScope = 'PROJECT', target?: number): ReportPreferences {
+export function defaultReportPreferences(scope: ReportScope = 'PROJECT', target?: string | number): ReportPreferences {
   return { scope, project_id: scope === 'PROJECT' ? target ?? null : null, product_id: scope === 'PRODUCT' ? target ?? null : null,
     sbom_id: scope === 'SBOM' ? target ?? null : null, cadence: 'DAILY', parts: ['A', 'B'], formats: ['PDF', 'XLSX'],
     severity_floor: 'ALL', baseline_mode: 'FIRST_RUN_OF_SBOM', cross_version_target: 'PARENT', timezone: 'UTC', suppress_when_unchanged: false, enabled: true };
@@ -68,7 +68,7 @@ export function ReportPreferencesEditor({ initial, id, tenantScopeAllowed, onClo
             {(['TENANT', 'PROJECT', 'PRODUCT', 'SBOM'] as const).filter(s => s !== 'TENANT' || tenantScopeAllowed).map(s => <option key={s}>{s}</option>)}
           </select></label>
           {form.scope !== 'TENANT' && <div><label>Search scope<input className={fieldClass} value={search} onChange={e => setSearch(e.target.value)} placeholder="Filter by name (first 200 matches)" /></label>
-            <label>Target<select className={fieldClass} value={target ?? ''} onChange={e => patch({ project_id: form.scope === 'PROJECT' ? Number(e.target.value) || null : null, product_id: form.scope === 'PRODUCT' ? Number(e.target.value) || null : null, sbom_id: form.scope === 'SBOM' ? Number(e.target.value) || null : null })}>
+            <label>Target<select className={fieldClass} value={target ?? ''} onChange={e => patch({ project_id: form.scope === 'PROJECT' ? e.target.value || null : null, product_id: form.scope === 'PRODUCT' ? e.target.value || null : null, sbom_id: form.scope === 'SBOM' ? e.target.value || null : null })}>
               <option value="">Choose a target</option>{target && !targets.data?.some(t => t.id === target) && <option value={target}>Selected #{target}</option>}
               {targets.data?.map(t => <option value={t.id} key={t.id}>{t.label} · #{t.id}</option>)}
             </select></label>{targets.isError && <p role="alert">Could not load targets.</p>}</div>}
@@ -95,7 +95,7 @@ export function ReportPreferencesEditor({ initial, id, tenantScopeAllowed, onClo
 export function ReportNotificationsPage() {
   const params = useSearchParams();
   const requestedScope = params.get('scope') as ReportScope;
-  const initial = defaultReportPreferences(['TENANT', 'PROJECT', 'PRODUCT', 'SBOM'].includes(requestedScope) ? requestedScope : 'PROJECT', Number(params.get('target')) || undefined);
+  const initial = defaultReportPreferences(['TENANT', 'PROJECT', 'PRODUCT', 'SBOM'].includes(requestedScope) ? requestedScope : 'PROJECT', params.get('target') || undefined);
   const [editing, setEditing] = useState<{ preferences: ReportPreferences; id?: number } | null>(params.has('scope') ? { preferences: initial } : null);
   const [remove, setRemove] = useState<ReportSubscription | null>(null);
   const [allTenant, setAllTenant] = useState(false);

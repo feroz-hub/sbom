@@ -245,7 +245,7 @@ def _accepted_risk_dict(outcome: AcceptedRiskOutcome | None) -> dict[str, Any] |
     }
 
 
-def _trust_dict(version: "ComponentVersionIntelligence") -> dict[str, Any]:
+def _trust_dict(version: ComponentVersionIntelligence) -> dict[str, Any]:
     outcome = version.trust
     if outcome is None:
         return {"status": "POLICY_NOT_CONFIGURED", "policy_version_id": None, "criteria": []}

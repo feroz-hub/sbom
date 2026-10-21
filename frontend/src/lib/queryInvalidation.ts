@@ -15,7 +15,7 @@ import type { QueryClient } from '@tanstack/react-query';
 import type { Project, SBOMSource, VexInvestigationListResponse } from '@/types';
 
 /** Platform tenant mutations affect control-plane rollups and every list variant. */
-export async function invalidatePlatformTenantSurfaces(qc: QueryClient, tenantId: number): Promise<void> {
+export async function invalidatePlatformTenantSurfaces(qc: QueryClient, tenantId: (string | number)): Promise<void> {
   await Promise.all([
     qc.invalidateQueries({ queryKey: ['platform-summary'] }),
     qc.invalidateQueries({ queryKey: ['platform-tenants'] }),
@@ -33,7 +33,7 @@ export async function invalidatePlatformAdministratorSurfaces(qc: QueryClient): 
 
 /** Membership/role changes affect counts and effective administrator coverage. */
 export function invalidateTenantMembershipSurfaces(
-  qc: QueryClient, tenantId: number, options: { affectsMetrics?: boolean } = {},
+  qc: QueryClient, tenantId: (string | number), options: { affectsMetrics?: boolean } = {},
 ): Promise<void> {
   return invalidateUserSurfaces(qc, { tenantIds: [tenantId], affectsMetrics: options.affectsMetrics ?? true });
 }
@@ -41,7 +41,7 @@ export function invalidateTenantMembershipSurfaces(
 /** Profile/evidence-only changes refresh labels without changing metric values. */
 export function invalidateUserSurfaces(
   qc: QueryClient,
-  options: { tenantIds: number[]; userId?: number; affectsMetrics?: boolean; accountChanged?: boolean },
+  options: { tenantIds: (string | number)[]; userId?: number; affectsMetrics?: boolean; accountChanged?: boolean },
 ): Promise<void> {
   const keys: Array<readonly unknown[]> = [['platform-tenants']];
   const tenants = new Set(options.tenantIds);
@@ -49,18 +49,18 @@ export function invalidateUserSurfaces(
   // memberships for that same global identity without refetching unrelated details.
   if (options.userId != null && options.accountChanged) {
     for (const [key, rows] of qc.getQueriesData<Array<{ user_id: number }>>({ queryKey: ['tenant-users'] })) {
-      if (Array.isArray(rows) && rows.some(row => row.user_id === options.userId)) tenants.add(Number(key[1]));
+      if (Array.isArray(rows) && rows.some(row => row.user_id === options.userId)) tenants.add(key[1] as string | number);
     }
   }
   for (const id of tenants) {
-    if (!Number.isFinite(id) || id <= 0) continue;
+    if (!id) continue;
     keys.push(['tenant-users', id], ['tenant-roles', id], ['tenant-audit-history', id],
       ['platform-tenant', id], ['vex-assignees', String(id)], ['vex-investigations', String(id)]);
   }
   // Assignment labels/eligibility are projections of membership identity too.
   // Lists carry tenant keys; use their known rows to target unscoped detail keys.
   for (const [key, list] of qc.getQueriesData<VexInvestigationListResponse>({ queryKey: ['vex-investigations'] })) {
-    if (!tenants.has(Number(key[1])) || !Array.isArray(list?.items)) continue;
+    if (!tenants.has(key[1] as string | number) || !Array.isArray(list?.items)) continue;
     for (const row of list.items) keys.push(['vex-investigation', row.id], ['vex-investigation-by-triple', row.sbom_id]);
   }
   // Global identity edits can also change administrator display names/status.
@@ -111,7 +111,7 @@ export async function invalidateProjectMetadata(
   ]);
 }
 
-export async function invalidateProjectSurfaces(qc: QueryClient, projectId?: number | null): Promise<void> {
+export async function invalidateProjectSurfaces(qc: QueryClient, projectId?: (string | number) | null): Promise<void> {
   await Promise.all([invalidateProjectLists(qc), invalidateQueryKeys(qc, projectId == null ? [] : [
     ['project', projectId], ['project-detail', projectId], ['project-schedule', projectId],
   ])]);
@@ -123,7 +123,7 @@ export async function invalidateProjectSurfaces(qc: QueryClient, projectId?: num
  * Omit `productId` to prefix-bust every product's caches — used by callers
  * (analysis completion) that know an SBOM changed but not which product owns it.
  */
-export async function invalidateProductSurfaces(qc: QueryClient, productId?: number | null): Promise<void> {
+export async function invalidateProductSurfaces(qc: QueryClient, productId?: (string | number) | null): Promise<void> {
   await Promise.all([
     invalidateVersionPosture(qc),
     invalidateQueryKeys(qc, [
@@ -146,7 +146,7 @@ export function invalidateLifecycleSummary(qc: QueryClient): void {
   qc.invalidateQueries({ queryKey: ['dashboard-health'] });
 }
 
-export async function invalidateUploadSurfaces(qc: QueryClient, projectId?: number | null, productId?: number | null): Promise<void> {
+export async function invalidateUploadSurfaces(qc: QueryClient, projectId?: (string | number) | null, productId?: (string | number) | null): Promise<void> {
   await Promise.all([
     invalidateProductSurfaces(qc, productId), invalidateSbomLists(qc), invalidateDashboardSummary(qc),
     projectId == null ? Promise.resolve() : invalidateQueryKeys(qc, [['project', projectId], ['project-detail', projectId]]),
@@ -155,8 +155,8 @@ export async function invalidateUploadSurfaces(qc: QueryClient, projectId?: numb
 
 export async function invalidateProjectAssignmentSurfaces(
   qc: QueryClient,
-  args: { sbomId: number; previousProjectId?: number | null; nextProjectId?: number | null;
-    previousProductId?: number | null; nextProductId?: number | null },
+  args: { sbomId: (string | number); previousProjectId?: (string | number) | null; nextProjectId?: (string | number) | null;
+    previousProductId?: (string | number) | null; nextProductId?: (string | number) | null },
 ): Promise<void> {
   const keys: Array<readonly unknown[]> = [
     ['sbom', args.sbomId], ['sbom-info', args.sbomId], ['sbom-versions', args.sbomId],
@@ -180,8 +180,8 @@ export async function invalidateProjectAssignmentSurfaces(
  */
 export function invalidateSbomConversionSurfaces(
   qc: QueryClient,
-  sourceSbomId: number,
-  convertedSbomId?: number | null,
+  sourceSbomId: (string | number),
+  convertedSbomId?: (string | number) | null,
 ): void {
   qc.invalidateQueries({ queryKey: ['sbom', sourceSbomId] });
   qc.invalidateQueries({ queryKey: ['sbom-info', sourceSbomId] });
@@ -192,7 +192,7 @@ export function invalidateSbomConversionSurfaces(
   }
 }
 
-export function invalidateLifecycleOverrideSurfaces(qc: QueryClient, sbomId: number): Promise<void> {
+export function invalidateLifecycleOverrideSurfaces(qc: QueryClient, sbomId: (string | number)): Promise<void> {
   return invalidateQueryKeys(qc, [
     ['sbom-components', sbomId], ['sbom-components-canonical', sbomId],
     ['dashboard-lifecycle'], ['dashboard-health'], ['dashboard-summary'],
@@ -202,7 +202,7 @@ export function invalidateLifecycleOverrideSurfaces(qc: QueryClient, sbomId: num
 /** VEX assignments change queue scope, but do not change security metric values. */
 export async function invalidateVexSurfaces(
   qc: QueryClient,
-  sbomId?: number,
+  sbomId?: (string | number),
   options: { change?: 'evidence' | 'assignment'; investigationId?: number } = {},
 ): Promise<void> {
   const keys: Array<readonly unknown[]> = [
@@ -247,7 +247,7 @@ export function invalidateRemediationSurfaces(qc: QueryClient): void {
   qc.invalidateQueries({ queryKey: ['dashboard-remediation-stats'] });
 }
 
-export function invalidateSbomVersionSurfaces(qc: QueryClient, sbomId: number): void {
+export function invalidateSbomVersionSurfaces(qc: QueryClient, sbomId: (string | number)): void {
   qc.invalidateQueries({ queryKey: ['sbom', sbomId] });
   qc.invalidateQueries({ queryKey: ['sbom-components', sbomId] });
   qc.invalidateQueries({ queryKey: ['sbom-versions', sbomId] });
@@ -271,7 +271,7 @@ export async function invalidateSbomRevisionCreated(qc: QueryClient, parent: SBO
   ]);
 }
 
-export async function invalidateSbomSurfaces(qc: QueryClient, sbomId?: number | null): Promise<void> {
+export async function invalidateSbomSurfaces(qc: QueryClient, sbomId?: (string | number) | null): Promise<void> {
   const keys: Array<readonly unknown[]> = [];
   if (sbomId != null) {
     keys.push(...['sbom', 'sbom-info', 'sbom-risk', 'sbom-components', 'sbom-components-canonical',
@@ -354,7 +354,7 @@ export function invalidateFindings(qc: QueryClient): void {
  */
 export async function invalidateAnalysisCompletion(
   qc: QueryClient,
-  args: { sbomId?: number; runId?: number } = {},
+  args: { sbomId?: (string | number); runId?: number } = {},
 ): Promise<void> {
   const keys: Array<readonly unknown[]> = [
     args.runId == null ? ['findings-enriched'] : ['findings-enriched', args.runId],
@@ -436,7 +436,7 @@ export function invalidateComponentAdvisorSurfaces(qc: QueryClient, recommendati
 }
 
 /** Lifecycle affects current metrics across inventory, advisor and reports. */
-export async function invalidateSbomLifecycle(qc: QueryClient, sbom: { id: number; projectid: number | null; product_id?: number | null }): Promise<void> {
+export async function invalidateSbomLifecycle(qc: QueryClient, sbom: { id: (string | number); projectid: (string | number) | null; product_id?: (string | number) | null }): Promise<void> {
   await Promise.all([
     invalidateSbomSurfaces(qc, sbom.id), invalidateProjectSurfaces(qc, sbom.projectid),
     invalidateProductSurfaces(qc, sbom.product_id), invalidateRunLists(qc),
@@ -474,7 +474,7 @@ export function invalidateLifecycleVendorRecords(qc: QueryClient): Promise<void>
  * candidate evidence at its final position (with an optional checks segment).
  * Platform defaults may affect every inheriting tenant; tenant overrides cannot.
  */
-export function invalidateAdvisorPolicySurfaces(qc: QueryClient, tenantId: number | null): Promise<void> {
+export function invalidateAdvisorPolicySurfaces(qc: QueryClient, tenantId: (string | number) | null): Promise<void> {
   const keys: Array<readonly unknown[]> = [];
   for (const query of qc.getQueryCache().getAll()) {
     const key = query.queryKey;

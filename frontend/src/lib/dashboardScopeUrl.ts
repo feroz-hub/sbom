@@ -1,18 +1,14 @@
 import type { DashboardFilterScope } from '@/lib/api';
-
-function positiveId(raw: string | null): number | null {
-  const value = Number(raw);
-  return raw && Number.isSafeInteger(value) && value > 0 ? value : null;
-}
+import { publicId } from '@/lib/publicId';
 
 /** Discard orphaned child IDs from edited URLs before requesting data. */
 export function parseDashboardScope(params: Pick<URLSearchParams, 'get'>): DashboardFilterScope {
-  const projectId = positiveId(params.get('project'));
-  const applicationId = projectId ? positiveId(params.get('application')) : null;
+  const projectId = publicId(params.get('project'));
+  const applicationId = projectId ? publicId(params.get('application')) : null;
   return {
     projectId,
     applicationId,
-    sbomId: applicationId ? positiveId(params.get('sbom')) : null,
+    sbomId: applicationId ? publicId(params.get('sbom')) : null,
   };
 }
 

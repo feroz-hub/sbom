@@ -1,4 +1,5 @@
 """Application-level SPDX release gates using the shared Phase 1/2 workflow."""
+
 import copy
 import json
 import logging
@@ -16,6 +17,7 @@ from app.services.sbom.repair.engine import RepairEngine
 from app.validation import run
 from sqlalchemy import func, select
 
+from tests.public_id_fixture import public_row
 from tests.tenant_fixture_scope import verified_fixture_tenant
 from tests.test_sbom_spdx_integration import base, job, upload
 from tests.test_sbom_spdx_quality_repair import document, raw
@@ -175,7 +177,7 @@ def test_spdx_deletion_cascades_evidence_retains_original_files(client, monkeypa
         workspace = db.get(SBOMValidationSession, deleted[0])
         paths = [Path(p) for p in (workspace.raw_storage_path, workspace.repair_storage_path) if p]
         originals = {p: p.read_bytes() for p in paths}
-        SBOMDeleteService(db, tenant_id=1).permanently_delete_sbom(deleted[2], 'spdx-release', True)
+        SBOMDeleteService(db, tenant_id=1).permanently_delete_sbom(public_row(db, SBOMSource, deleted[2]).id, 'spdx-release', True)
         assert db.get(SBOMRepairJob, deleted[1]) is None
         assert db.get(SBOMValidationSession, deleted[0]) is None
         assert db.scalar(select(func.count()).select_from(SBOMValidationSessionEvent).where(SBOMValidationSessionEvent.session_id == deleted[0])) == 0

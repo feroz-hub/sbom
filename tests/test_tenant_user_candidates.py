@@ -3,7 +3,6 @@
 from __future__ import annotations
 
 import pytest
-
 from app.core.security import get_current_user
 from app.db import SessionLocal
 from app.models import Tenant, TenantUser
@@ -42,9 +41,9 @@ def test_tenant_admin_can_search_eligible_users_in_active_tenant(app, client):
     _override_user(app, claims)
     try:
         res = client.get(
-            f"/api/tenants/{wellysis.id}/user-candidates",
+            f"/api/tenants/{wellysis.public_id}/user-candidates",
             params={"q": "eligible"},
-            headers={"X-Tenant-ID": str(wellysis.id)},
+            headers={"X-Tenant-ID": str(wellysis.public_id)},
         )
     finally:
         _clear_override(app)
@@ -80,9 +79,9 @@ def test_external_issuer_serialization_and_subject_regression(app, client):
     _override_user(app, claims)
     try:
         res = client.get(
-            f"/api/tenants/{wellysis.id}/user-candidates",
+            f"/api/tenants/{wellysis.public_id}/user-candidates",
             params={"q": "aswini"},
-            headers={"X-Tenant-ID": str(wellysis.id)},
+            headers={"X-Tenant-ID": str(wellysis.public_id)},
         )
     finally:
         _clear_override(app)
@@ -119,9 +118,9 @@ def test_account_in_another_tenant_is_addable_without_exposing_memberships(app, 
     _override_user(app, claims)
     try:
         res = client.get(
-            f"/api/tenants/{wellysis.id}/user-candidates",
+            f"/api/tenants/{wellysis.public_id}/user-candidates",
             params={"q": "feroze"},
-            headers={"X-Tenant-ID": str(wellysis.id)},
+            headers={"X-Tenant-ID": str(wellysis.public_id)},
         )
     finally:
         _clear_override(app)
@@ -148,14 +147,14 @@ def test_user_already_in_selected_tenant_is_excluded(app, client):
     _override_user(app, claims)
     try:
         res = client.get(
-            f"/api/tenants/{wellysis.id}/user-candidates",
+            f"/api/tenants/{wellysis.public_id}/user-candidates",
             params={"q": "existing.member"},
-            headers={"X-Tenant-ID": str(wellysis.id)},
+            headers={"X-Tenant-ID": str(wellysis.public_id)},
         )
         added = client.post(
-            f"/api/tenants/{wellysis.id}/users",
+            f"/api/tenants/{wellysis.public_id}/users",
             json={"user_id": existing_id, "roles": ["VIEWER"]},
-            headers={"X-Tenant-ID": str(wellysis.id)},
+            headers={"X-Tenant-ID": str(wellysis.public_id)},
         )
     finally:
         _clear_override(app)
@@ -185,9 +184,9 @@ def test_disabled_membership_in_selected_tenant_is_excluded(app, client):
     _override_user(app, claims)
     try:
         res = client.get(
-            f"/api/tenants/{wellysis.id}/user-candidates",
+            f"/api/tenants/{wellysis.public_id}/user-candidates",
             params={"q": "disabled.member"},
-            headers={"X-Tenant-ID": str(wellysis.id)},
+            headers={"X-Tenant-ID": str(wellysis.public_id)},
         )
     finally:
         _clear_override(app)
@@ -218,9 +217,9 @@ def test_active_verified_user_is_returned(app, client):
     _override_user(app, claims)
     try:
         res = client.get(
-            f"/api/tenants/{wellysis.id}/user-candidates",
+            f"/api/tenants/{wellysis.public_id}/user-candidates",
             params={"q": "active.verified"},
-            headers={"X-Tenant-ID": str(wellysis.id)},
+            headers={"X-Tenant-ID": str(wellysis.public_id)},
         )
     finally:
         _clear_override(app)
@@ -250,9 +249,9 @@ def test_unverified_user_is_excluded(app, client):
     _override_user(app, claims)
     try:
         res = client.get(
-            f"/api/tenants/{wellysis.id}/user-candidates",
+            f"/api/tenants/{wellysis.public_id}/user-candidates",
             params={"q": "unverified"},
-            headers={"X-Tenant-ID": str(wellysis.id)},
+            headers={"X-Tenant-ID": str(wellysis.public_id)},
         )
     finally:
         _clear_override(app)
@@ -283,9 +282,9 @@ def test_verification_required_user_is_excluded(app, client):
     _override_user(app, claims)
     try:
         res = client.get(
-            f"/api/tenants/{wellysis.id}/user-candidates",
+            f"/api/tenants/{wellysis.public_id}/user-candidates",
             params={"q": "verif.req"},
-            headers={"X-Tenant-ID": str(wellysis.id)},
+            headers={"X-Tenant-ID": str(wellysis.public_id)},
         )
     finally:
         _clear_override(app)
@@ -315,9 +314,9 @@ def test_disabled_user_is_excluded(app, client):
     _override_user(app, claims)
     try:
         res = client.get(
-            f"/api/tenants/{wellysis.id}/user-candidates",
+            f"/api/tenants/{wellysis.public_id}/user-candidates",
             params={"q": "disabled.account"},
-            headers={"X-Tenant-ID": str(wellysis.id)},
+            headers={"X-Tenant-ID": str(wellysis.public_id)},
         )
     finally:
         _clear_override(app)
@@ -342,9 +341,9 @@ def test_search_matches_email(app, client):
     _override_user(app, claims)
     try:
         res = client.get(
-            f"/api/tenants/{wellysis.id}/user-candidates",
+            f"/api/tenants/{wellysis.public_id}/user-candidates",
             params={"q": "unique.email.match"},
-            headers={"X-Tenant-ID": str(wellysis.id)},
+            headers={"X-Tenant-ID": str(wellysis.public_id)},
         )
     finally:
         _clear_override(app)
@@ -368,9 +367,9 @@ def test_search_matches_display_name(app, client):
     _override_user(app, claims)
     try:
         res = client.get(
-            f"/api/tenants/{wellysis.id}/user-candidates",
+            f"/api/tenants/{wellysis.public_id}/user-candidates",
             params={"q": "Unique Display Name"},
-            headers={"X-Tenant-ID": str(wellysis.id)},
+            headers={"X-Tenant-ID": str(wellysis.public_id)},
         )
     finally:
         _clear_override(app)
@@ -395,9 +394,9 @@ def test_external_username_is_not_a_search_field(app, client):
     _override_user(app, claims)
     try:
         res = client.get(
-            f"/api/tenants/{wellysis.id}/user-candidates",
+            f"/api/tenants/{wellysis.public_id}/user-candidates",
             params={"q": "unique_principal_username"},
-            headers={"X-Tenant-ID": str(wellysis.id)},
+            headers={"X-Tenant-ID": str(wellysis.public_id)},
         )
     finally:
         _clear_override(app)
@@ -418,9 +417,9 @@ def test_unauthorized_user_receives_403(app, client):
     _override_user(app, claims)
     try:
         res = client.get(
-            f"/api/tenants/{wellysis.id}/user-candidates",
+            f"/api/tenants/{wellysis.public_id}/user-candidates",
             params={"q": "search"},
-            headers={"X-Tenant-ID": str(wellysis.id)},
+            headers={"X-Tenant-ID": str(wellysis.public_id)},
         )
     finally:
         _clear_override(app)
@@ -442,14 +441,14 @@ def test_cross_tenant_unauthorized_request_receives_403(app, client):
     _override_user(app, claims)
     try:
         res = client.get(
-            f"/api/tenants/{tenant_b.id}/user-candidates",
+            f"/api/tenants/{tenant_b.public_id}/user-candidates",
             params={"q": "search"},
-            headers={"X-Tenant-ID": str(tenant_a.id)},
+            headers={"X-Tenant-ID": str(tenant_a.public_id)},
         )
     finally:
         _clear_override(app)
 
-    assert res.status_code == 403
+    assert res.status_code == 404
 
 
 def test_unknown_tenant_receives_404(app, client):
@@ -464,9 +463,9 @@ def test_unknown_tenant_receives_404(app, client):
     _override_user(app, claims)
     try:
         res = client.get(
-            "/api/tenants/999999/user-candidates",
+            "/api/tenants/00000000-0000-4000-8000-000000000000/user-candidates",
             params={"q": "search"},
-            headers={"X-Tenant-ID": str(tenant.id)},
+            headers={"X-Tenant-ID": str(tenant.public_id)},
         )
     finally:
         _clear_override(app)
@@ -486,14 +485,14 @@ def test_query_length_validation_works(app, client):
     _override_user(app, claims)
     try:
         res_empty = client.get(
-            f"/api/tenants/{tenant.id}/user-candidates",
+            f"/api/tenants/{tenant.public_id}/user-candidates",
             params={"q": ""},
-            headers={"X-Tenant-ID": str(tenant.id)},
+            headers={"X-Tenant-ID": str(tenant.public_id)},
         )
         res_long = client.get(
-            f"/api/tenants/{tenant.id}/user-candidates",
+            f"/api/tenants/{tenant.public_id}/user-candidates",
             params={"q": "a" * 201},
-            headers={"X-Tenant-ID": str(tenant.id)},
+            headers={"X-Tenant-ID": str(tenant.public_id)},
         )
     finally:
         _clear_override(app)
@@ -518,9 +517,9 @@ def test_wildcard_characters_are_escaped_safely(app, client):
     _override_user(app, claims)
     try:
         res = client.get(
-            f"/api/tenants/{tenant.id}/user-candidates",
+            f"/api/tenants/{tenant.public_id}/user-candidates",
             params={"q": "special_user%test"},
-            headers={"X-Tenant-ID": str(tenant.id)},
+            headers={"X-Tenant-ID": str(tenant.public_id)},
         )
     finally:
         _clear_override(app)
@@ -550,9 +549,9 @@ def test_results_are_limited_and_deterministically_ordered(app, client):
     _override_user(app, claims)
     try:
         res = client.get(
-            f"/api/tenants/{tenant.id}/user-candidates",
+            f"/api/tenants/{tenant.public_id}/user-candidates",
             params={"q": "candidate"},
-            headers={"X-Tenant-ID": str(tenant.id)},
+            headers={"X-Tenant-ID": str(tenant.public_id)},
         )
     finally:
         _clear_override(app)
@@ -578,17 +577,17 @@ def test_nonmember_first_last_name_and_email_search(app, client, query):
         db.commit()
     _override_user(app, claims)
     try:
-        response = client.get(f"/api/tenants/{tenant.id}/user-candidates", params={"q": query},
-                              headers={"X-Tenant-ID": str(tenant.id)})
+        response = client.get(f"/api/tenants/{tenant.public_id}/user-candidates", params={"q": query},
+                              headers={"X-Tenant-ID": str(tenant.public_id)})
         assert response.status_code == 200, response.text
         assert [item["id"] for item in response.json()["items"]] == [candidate_id]
-        added = client.post(f"/api/tenants/{tenant.id}/users",
+        added = client.post(f"/api/tenants/{tenant.public_id}/users",
                             json={"user_id": candidate_id, "roles": ["VIEWER"]},
-                            headers={"X-Tenant-ID": str(tenant.id)})
+                            headers={"X-Tenant-ID": str(tenant.public_id)})
         assert added.status_code == 201, added.text
         assert added.json()["user_id"] == candidate_id
-        response = client.get(f"/api/tenants/{tenant.id}/user-candidates", params={"q": query},
-                              headers={"X-Tenant-ID": str(tenant.id)})
+        response = client.get(f"/api/tenants/{tenant.public_id}/user-candidates", params={"q": query},
+                              headers={"X-Tenant-ID": str(tenant.public_id)})
         assert response.json()["items"] == []
     finally:
         _clear_override(app)
@@ -607,17 +606,17 @@ def test_no_internal_or_external_id_lookup_and_minimum_search_length(app, client
     _override_user(app, claims)
     try:
         for query in [str(candidate_id).zfill(2), "private-subject", candidate.external_iam_user_id]:
-            response = client.get(f"/api/tenants/{tenant.id}/user-candidates", params={"q": query},
-                                  headers={"X-Tenant-ID": str(tenant.id)})
+            response = client.get(f"/api/tenants/{tenant.public_id}/user-candidates", params={"q": query},
+                                  headers={"X-Tenant-ID": str(tenant.public_id)})
             assert response.status_code == 200, response.text
             assert response.json()["items"] == []
         for query in ["p", " p ", "  "]:
-            response = client.get(f"/api/tenants/{tenant.id}/user-candidates", params={"q": query},
-                                  headers={"X-Tenant-ID": str(tenant.id)})
+            response = client.get(f"/api/tenants/{tenant.public_id}/user-candidates", params={"q": query},
+                                  headers={"X-Tenant-ID": str(tenant.public_id)})
             assert response.status_code == 422
-        response = client.get(f"/api/tenants/{tenant.id}/user-candidates",
+        response = client.get(f"/api/tenants/{tenant.public_id}/user-candidates",
                               params={"q": "person", "page_size": 51},
-                              headers={"X-Tenant-ID": str(tenant.id)})
+                              headers={"X-Tenant-ID": str(tenant.public_id)})
         assert response.status_code == 422
     finally:
         _clear_override(app)

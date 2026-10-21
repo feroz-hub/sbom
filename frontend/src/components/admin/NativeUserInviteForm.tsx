@@ -25,13 +25,13 @@ export default function NativeUserInviteForm({ onCreated, onCancel, onBusyChange
   const [message, setMessage] = useState('');
   const [busy, setBusy] = useState(false);
   const [selectedTenant, setSelectedTenant] = useState<TenantSummary | null>(null);
-  const [conflictTenant, setConflictTenant] = useState<number | null>(null);
+  const [conflictTenant, setConflictTenant] = useState<string | number | null>(null);
   async function submit(event: FormEvent<HTMLFormElement>) {
     event.preventDefault();
     if (busy) return;
     setMessage('');
     const data = new FormData(event.currentTarget);
-    const tenantId = Number(platform ? selectedTenant?.id : activeTenantId);
+    const tenantId = platform ? selectedTenant?.id : activeTenantId;
     if (!tenantId) { setMessage('Select an active tenant.'); return; }
     const isCurrent = mutationScope.capture();
     setConflictTenant(null);

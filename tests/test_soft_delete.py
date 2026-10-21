@@ -374,7 +374,7 @@ def test_endpoint_writes_audit_row_for_soft_delete(client, db):
     pid = proj.id
 
     resp = client.delete(
-        f"/api/projects/{pid}",
+        f"/api/projects/{proj.public_id}",
         params={"user_id": "alice", "confirm": "yes"},
     )
     assert resp.status_code == 200, resp.text
@@ -449,7 +449,7 @@ def test_permanent_project_delete_removes_repair_workspaces(client, db):
     product_id = product.id
 
     resp = client.delete(
-        f"/api/projects/{pid}",
+        f"/api/projects/{project.public_id}",
         params={"user_id": "alice", "confirm": "yes", "permanent": "true"},
     )
     assert resp.status_code == 200, resp.text
@@ -488,7 +488,7 @@ def test_endpoint_writes_audit_row_for_permanent_delete(client, db):
     pid = proj.id
 
     resp = client.delete(
-        f"/api/projects/{pid}",
+        f"/api/projects/{proj.public_id}",
         params={"user_id": "alice", "confirm": "yes", "permanent": "true"},
     )
     assert resp.status_code == 200, resp.text

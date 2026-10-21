@@ -26,7 +26,15 @@ def db(client):
 
 
 def response(client, **params):
-    r = client.get(URL, params=params)
+    # Positive domain fixtures supply internal IDs to the metric layer. The
+    # HTTP boundary requires the corresponding public UUIDs.
+    from app.db import SessionLocal
+    models = {"project_id": Projects, "product_id": Product, "sbom_id": SBOMSource}
+    with SessionLocal() as db:
+        from tests.tenant_fixture_scope import verified_fixture_tenant
+        with verified_fixture_tenant(db, 1):
+            wire_params = {key: str(db.get(models[key], value).public_id) for key, value in params.items()}
+    r = client.get(URL, params=wire_params)
     assert r.status_code == 200, r.text
     return r.json()
 
@@ -104,7 +112,7 @@ def test_pending_and_failed_replacement_have_available_last_known_evidence(clien
     data = response(client)
     assert data["summary"]["evidence_status"] == "AVAILABLE"
     item = data["items"][0]
-    assert item["target_sbom_id"] == b.id and item["posture_sbom_id"] == a.id and item["analysis_run_id"] == run.id
+    assert item["target_sbom_id"] == str(b.public_id) and item["posture_sbom_id"] == str(a.public_id) and item["analysis_run_id"] == run.id
     assert item["last_known_posture"] and item["analysis_finding_rows"] == 1
 
 
@@ -116,7 +124,7 @@ def test_partial_missing_is_scoped_not_global_unavailable(client, app_line, db):
     data = response(client)
     assert data["summary"]["evidence_status"] == "PARTIAL"
     assert data["summary"]["available_targets"] == 1 and data["summary"]["missing_targets"] == 1
-    assert next(i for i in data["items"] if i["target_sbom_id"] == missing.id)["analysis_run_id"] is None
+    assert next(i for i in data["items"] if i["target_sbom_id"] == str(missing.public_id))["analysis_run_id"] is None
     assert sum(i["analysis_finding_rows"] or 0 for i in data["items"]) == 1
 
 
@@ -165,7 +173,7 @@ def test_dashboard_posture_is_tenant_isolated_and_permission_protected(client, a
         assert response(client)["items"] == []
         assert (
             client.get(
-                URL, params={"project_id": app_line.project.id, "product_id": app_line.product.id, "sbom_id": sbom.id}
+                URL, params={"project_id": str(app_line.project.public_id), "product_id": str(app_line.product.public_id), "sbom_id": str(sbom.public_id)}
             ).status_code
             == 404
         )

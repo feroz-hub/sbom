@@ -14,7 +14,7 @@ import type { AnalysisConfig } from '@/lib/api';
 
 export interface ConsolidatedAnalysisPanelProps {
   analysisConfig: AnalysisConfig | undefined;
-  sboms: { id: number; sbom_name: string }[] | undefined;
+  sboms: { id: string | number; sbom_name: string }[] | undefined;
   consolidatedSbomId: string;
   onConsolidatedSbomIdChange: (value: string) => void;
   /** Selected sources (controlled). */
@@ -34,8 +34,8 @@ export function ConsolidatedAnalysisPanel({
   onComplete,
 }: ConsolidatedAnalysisPanelProps) {
   const sbomIdNumber = useMemo(() => {
-    const n = Number(consolidatedSbomId);
-    return Number.isFinite(n) && n > 0 ? n : null;
+    const n = consolidatedSbomId;
+    return n || null;
   }, [consolidatedSbomId]);
 
   const { state, startAnalysis, cancel, reset } = useAnalysisStream(sbomIdNumber ?? 0);

@@ -32,6 +32,7 @@ from app.settings import reset_settings
 from sqlalchemy import select
 
 from tests.phase6_helpers import identity_claims, seed_membership, seed_platform_grant, seed_user
+from tests.public_id_fixture import tenant_uuid
 from tests.tenant_fixture_scope import fixture_business_snapshot, verified_fixture_tenant
 
 
@@ -62,6 +63,7 @@ def configured_actors(app, client, monkeypatch):
         seed_membership(db, viewer, tenant_id=1, role="VIEWER")
         seed_membership(db, analyst, tenant_id=1, role="SECURITY_ANALYST")
         seed_membership(db, developer, tenant_id=1, role="DEVELOPER")
+        tenant_headers = {"olympus": str(db.get(Tenant, 1).public_id), "astra": str(db.get(Tenant, 2).public_id)}
         identities = {
             "platform": identity_claims(platform),
             "olympus": identity_claims(olympus),
@@ -76,7 +78,7 @@ def configured_actors(app, client, monkeypatch):
         app.dependency_overrides[get_current_user] = lambda: identities[actor]
         headers = kwargs.pop("headers", {})
         if actor != "platform":
-            headers.setdefault("X-Tenant-ID", "2" if actor == "astra" else "1")
+            headers.setdefault("X-Tenant-ID", tenant_headers["astra" if actor == "astra" else "olympus"])
         return client.request(method, path, headers=headers, **kwargs)
 
     yield call
@@ -123,7 +125,7 @@ def test_ai_dynamic_defaults_override_update_and_reset(configured_actors):
         "PUT",
         f"/api/platform/configuration/ai/credentials/{pid}",
         json={"default_model": "platform-new"},
-        headers={"X-Tenant-ID": "2"},
+        headers={"X-Tenant-ID": tenant_uuid(2)},
     )
     assert updated.status_code == 200, updated.text
     assert (
@@ -170,13 +172,13 @@ def test_tenant_admin_cannot_modify_platform_configuration(configured_actors, fa
     ],
 )
 def test_platform_configuration_does_not_grant_tenant_entry(configured_actors, path, method, payload):
-    result = configured_actors("platform", method, path, json=payload, headers={"X-Tenant-ID": "1"})
+    result = configured_actors("platform", method, path, json=payload, headers={"X-Tenant-ID": tenant_uuid(1)})
     assert result.status_code == 403, result.text
 
 
 @pytest.mark.parametrize("path", ["/api/v1/ai/effective-config", "/api/admin/lifecycle-providers"])
 def test_cross_tenant_configuration_request_rejected(configured_actors, path):
-    assert configured_actors("olympus", "GET", path, headers={"X-Tenant-ID": "2"}).status_code == 403
+    assert configured_actors("olympus", "GET", path, headers={"X-Tenant-ID": tenant_uuid(2)}).status_code == 403
     assert configured_actors("viewer", "GET", path).status_code == 403
 
 
@@ -674,7 +676,7 @@ def test_read_only_roles_share_effective_status_without_configuration_authority(
     assert call(role_actor, "POST", "/api/v1/ai/override").status_code == 403
     assert call(role_actor, "DELETE", "/api/v1/ai/override").status_code == 403
     assert call(role_actor, "GET", "/api/platform/configuration/ai/credentials").status_code == 403
-    assert call(role_actor, "GET", "/api/analysis/config", headers={"X-Tenant-ID": "2"}).status_code == 403
+    assert call(role_actor, "GET", "/api/analysis/config", headers={"X-Tenant-ID": tenant_uuid(2)}).status_code == 403
     # Analysis execution is independent of credential/configuration authority.
     can_run = role_actor == "analyst"
     result = call(role_actor, "POST", "/api/v1/findings/0/ai-fix", json={})

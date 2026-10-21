@@ -6,12 +6,11 @@ Run: python -m unittest discover -s tests -p test_alembic_metadata_commands.py -
 from __future__ import annotations
 
 import os
-from pathlib import Path
 import subprocess
 import sys
 import tempfile
 import unittest
-
+from pathlib import Path
 
 ROOT = Path(__file__).resolve().parents[1]
 

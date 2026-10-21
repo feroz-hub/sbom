@@ -13,7 +13,7 @@ export function PolicyHistory({
   tenantId,
   kind,
 }: {
-  tenantId: number | null;
+  tenantId: (string | number) | null;
   kind: AdvisorPolicyKind;
 }) {
   const history = useQuery({

@@ -20,6 +20,8 @@ from app.core.security import get_current_user
 from app.models import Tenant, TenantUser
 from sqlalchemy import func, select
 
+from tests.public_id_fixture import tenant_uuid
+
 from .phase6_helpers import identity_claims, seed_membership, seed_platform_grant, seed_user
 
 
@@ -46,7 +48,7 @@ def _seed_platform_admin(db, *, membership_tenants: int = 0) -> tuple[dict, list
     for index in range(membership_tenants):
         tenant = _seed_tenant(db, f"member-{index}")
         seed_membership(db, user, tenant_id=tenant.id, role="TENANT_ADMIN")
-        tenant_ids.append(tenant.id)
+        tenant_ids.append(str(tenant.public_id))
     db.commit()
     return identity_claims(user), tenant_ids
 
@@ -57,7 +59,7 @@ def _seed_tenant_user(db, *, memberships: int) -> tuple[dict, list[int]]:
     for index in range(memberships):
         tenant = _seed_tenant(db, f"plain-{index}")
         seed_membership(db, user, tenant_id=tenant.id, role="VIEWER")
-        tenant_ids.append(tenant.id)
+        tenant_ids.append(str(tenant.public_id))
     db.commit()
     return identity_claims(user), tenant_ids
 
@@ -157,7 +159,7 @@ def test_explicit_tenant_selection_rejected_without_a_membership(client, app):
         db.commit()
     _as(app, claims)
     try:
-        response = client.get("/api/auth/me", headers={"X-Tenant-ID": str(target_id)})
+        response = client.get("/api/auth/me", headers={"X-Tenant-ID": tenant_uuid(target_id)})
         assert response.status_code == 403
         with SessionLocal() as db:
             assert (
@@ -204,7 +206,7 @@ def test_tenant_scoped_api_still_requires_explicit_tenant_context(client, app):
         assert unscoped.status_code == 403
         assert unscoped.json()["detail"]["code"] == "IAM_NO_TENANT"
 
-        scoped = client.get("/api/projects", headers={"X-Tenant-ID": str(target_id)})
+        scoped = client.get("/api/projects", headers={"X-Tenant-ID": tenant_uuid(target_id)})
         assert scoped.status_code == 403, scoped.text
     finally:
         app.dependency_overrides.pop(get_current_user, None)

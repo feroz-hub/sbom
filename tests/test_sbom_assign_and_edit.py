@@ -3,8 +3,9 @@ from __future__ import annotations
 import json
 
 from app.db import SessionLocal
-from app.models import AnalysisRun, AuditLog, SBOMComponent
+from app.models import AnalysisRun, AuditLog, Projects, SBOMComponent, SBOMSource
 
+from tests.public_id_fixture import public_row
 from tests.tenant_fixture_scope import verified_fixture_tenant
 
 CLEAN_CYCLONEDX = {
@@ -86,10 +87,10 @@ def test_patch_sbom_valid_project_assigns_project(client):
     db = SessionLocal()
     try:
         with verified_fixture_tenant(db, 1):
-            audit = db.query(AuditLog).filter_by(target_kind="sbom", target_id=sbom["id"], action="sbom.update").first()
+            audit = db.query(AuditLog).filter_by(target_kind="sbom", target_id=public_row(db, SBOMSource, sbom["id"]).id, action="sbom.update").first()
             assert audit is not None
             assert audit.metadata_json["old_project_id"] is None
-            assert audit.metadata_json["new_project_id"] == project["id"]
+            assert audit.metadata_json["new_project_id"] == public_row(db, Projects, project["id"]).id
     finally:
         db.close()
 
@@ -170,8 +171,8 @@ def test_project_assignment_preserves_components_and_runs(client):
     db = SessionLocal()
     try:
         with verified_fixture_tenant(db, 1):
-            comp_count_before = db.query(SBOMComponent).filter_by(sbom_id=sbom["id"]).count()
-            runs_count_before = db.query(AnalysisRun).filter_by(sbom_id=sbom["id"]).count()
+            comp_count_before = db.query(SBOMComponent).filter_by(sbom_id=public_row(db, SBOMSource, sbom["id"]).id).count()
+            runs_count_before = db.query(AnalysisRun).filter_by(sbom_id=public_row(db, SBOMSource, sbom["id"]).id).count()
             assert comp_count_before > 0
             assert runs_count_before > 0
     finally:
@@ -184,15 +185,15 @@ def test_project_assignment_preserves_components_and_runs(client):
     db = SessionLocal()
     try:
         with verified_fixture_tenant(db, 1):
-            comp_count_after = db.query(SBOMComponent).filter_by(sbom_id=sbom["id"]).count()
-            runs_count_after = db.query(AnalysisRun).filter_by(sbom_id=sbom["id"]).count()
+            comp_count_after = db.query(SBOMComponent).filter_by(sbom_id=public_row(db, SBOMSource, sbom["id"]).id).count()
+            runs_count_after = db.query(AnalysisRun).filter_by(sbom_id=public_row(db, SBOMSource, sbom["id"]).id).count()
             assert comp_count_after == comp_count_before
             assert runs_count_after == runs_count_before
 
             # Verify AnalysisRuns project_id cascaded
-            runs = db.query(AnalysisRun).filter_by(sbom_id=sbom["id"]).all()
+            runs = db.query(AnalysisRun).filter_by(sbom_id=public_row(db, SBOMSource, sbom["id"]).id).all()
             for r in runs:
-                assert r.project_id == project["id"]
+                assert r.project_id == public_row(db, Projects, project["id"]).id
     finally:
         db.close()
 

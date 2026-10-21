@@ -132,7 +132,7 @@ export interface AdvisorComponent {
     sbom_count: number;
     project_count: number;
     product_count: number;
-    references: Array<{ component_id: number; sbom_id: number; sbom_name: string | null; project_id: number | null; product_id: number | null }>;
+    references: Array<{ component_id: (string | number); sbom_id: (string | number); sbom_name: string | null; project_id: (string | number) | null; product_id: (string | number) | null }>;
   };
   risk: {
     classification: AdvisorRiskClassification;
@@ -148,7 +148,7 @@ export interface AdvisorComponent {
   };
   lifecycle: { bucket: AdvisorLifecycleBucket; status: string; effective_date: string | null; source: string | null; manual_override: boolean };
   freshness: { latest_analysis_at: string | null; analysed_occurrences: number; total_occurrences: number; lifecycle_checked_at: string | null; lifecycle_is_stale: boolean };
-  evidence: Array<{ sbom_id: number; analysis_run_id: number }>;
+  evidence: Array<{ sbom_id: (string | number); analysis_run_id: number }>;
   recommendation: { status: RecommendationStatus | 'NOT_EVALUATED'; id?: number; trigger_type?: RecommendationTrigger };
 }
 
@@ -209,9 +209,9 @@ export interface AdvisorFilterParams {
   trusted?: boolean;
   q?: string;
   facet?: AdvisorFacet;
-  project_id?: number | null;
-  product_id?: number | null;
-  sbom_id?: number | null;
+  project_id?: (string | number) | null;
+  product_id?: (string | number) | null;
+  sbom_id?: (string | number) | null;
   sort_by?: AdvisorSortField;
   sort_order?: 'asc' | 'desc';
   limit?: number;
@@ -305,8 +305,8 @@ export interface AdvisorRecommendation {
   status: RecommendationStatus;
   trigger_type: RecommendationTrigger;
   trigger_evidence: Record<string, unknown>;
-  source: { canonical_key: string; family_key: string | null; name: string; version: string | null; ecosystem: string | null; component_id: number | null };
-  context: { project_id: number | null; product_id: number | null; sbom_id: number | null; level: 'SBOM' | 'TENANT' };
+  source: { canonical_key: string; family_key: string | null; name: string; version: string | null; ecosystem: string | null; component_id: (string | number) | null };
+  context: { project_id: (string | number) | null; product_id: (string | number) | null; sbom_id: (string | number) | null; level: 'SBOM' | 'TENANT' };
   discovery: {
     status: string;
     same_family_candidates?: number;

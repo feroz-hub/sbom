@@ -27,11 +27,12 @@ import statistics
 import time
 
 import pytest
-from sqlalchemy import text
-
 from app.db import SessionLocal
 from app.metrics.cache import reset_cache
 from app.models import AnalysisFinding, AnalysisRun, Product, Projects, SBOMComponent, SBOMSource, VexInvestigation
+from sqlalchemy import select
+
+from tests.tenant_fixture_scope import declare_fixture_tenant, verified_fixture_tenant
 
 pytestmark = pytest.mark.bench
 
@@ -46,9 +47,14 @@ def _env(name, default):
 
 
 def _load(db, tenant_id, sboms, per_sbom, pool, seed):
+    with verified_fixture_tenant(db, tenant_id):
+        return _load_scoped(db, tenant_id, sboms, per_sbom, pool, seed)
+
+
+def _load_scoped(db, tenant_id, sboms, per_sbom, pool, seed):
     rng = random.Random(seed)
     db.execute(Projects.__table__.insert(), [{"tenant_id": tenant_id, "project_name": f"bench-{tenant_id}-{i}", "project_status": 1, "is_active": True} for i in range(20)])
-    project_ids = [r[0] for r in db.execute(text("SELECT id FROM projects WHERE tenant_id = :t ORDER BY id"), {"t": tenant_id})]
+    project_ids = [r[0] for r in db.execute(select(Projects.id).where(Projects.tenant_id == tenant_id).order_by(Projects.id))]
     db.execute(
         Product.__table__.insert(),
         [
@@ -57,23 +63,23 @@ def _load(db, tenant_id, sboms, per_sbom, pool, seed):
             for i in range(100)
         ],
     )
-    products = list(db.execute(text("SELECT id, project_id FROM products WHERE tenant_id = :t ORDER BY id"), {"t": tenant_id}))
-    db.execute(
-        SBOMSource.__table__.insert(),
-        [
-            {"tenant_id": tenant_id, "sbom_name": f"sbom-{tenant_id}-{i}", "projectid": products[i % len(products)][1],
-             "product_id": products[i % len(products)][0], "is_active": True, "status": "validated",
-             "error_count": 0, "warning_count": 0}
-            for i in range(sboms)
-        ],
-    )
-    sbom_ids = [r[0] for r in db.execute(text("SELECT id FROM sbom_source WHERE tenant_id = :t ORDER BY id"), {"t": tenant_id})]
+    products = list(db.execute(select(Product.id, Product.project_id).where(Product.tenant_id == tenant_id).order_by(Product.id)))
+    # ORM creation establishes the required logical-SBOM/version relationship.
+    # Bulk component/finding inserts below still measure the declared dataset.
+    db.add_all([
+        SBOMSource(tenant_id=tenant_id, sbom_name=f"sbom-{tenant_id}-{i}",
+                   projectid=products[i % len(products)][1], product_id=products[i % len(products)][0],
+                   is_active=True, status="validated", error_count=0, warning_count=0)
+        for i in range(sboms)
+    ])
+    db.flush()
+    sbom_ids = [r[0] for r in db.execute(select(SBOMSource.id).where(SBOMSource.tenant_id == tenant_id).order_by(SBOMSource.id))]
     db.execute(
         AnalysisRun.__table__.insert(),
         [{"tenant_id": tenant_id, "sbom_id": s, "run_status": "FINDINGS", "source": "NVD", "started_on": NOW,
           "completed_on": NOW, "duration_ms": 0, "is_active": True} for s in sbom_ids],
     )
-    run_of = dict(db.execute(text("SELECT sbom_id, id FROM analysis_run WHERE tenant_id = :t"), {"t": tenant_id}).all())
+    run_of = dict(db.execute(select(AnalysisRun.sbom_id, AnalysisRun.id).where(AnalysisRun.tenant_id == tenant_id)).all())
 
     components = []
     for s in sbom_ids:
@@ -89,7 +95,7 @@ def _load(db, tenant_id, sboms, per_sbom, pool, seed):
             })
     for start in range(0, len(components), 5000):
         db.execute(SBOMComponent.__table__.insert(), components[start : start + 5000])
-    rows = db.execute(text("SELECT id, sbom_id FROM sbom_component WHERE tenant_id = :t"), {"t": tenant_id}).all()
+    rows = db.execute(select(SBOMComponent.id, SBOMComponent.sbom_id).where(SBOMComponent.tenant_id == tenant_id)).all()
 
     findings, contexts = [], []
     for component_id, sbom_id in rows:
@@ -132,11 +138,7 @@ def test_T44_component_advisor_benchmark__NFR_SCA_005(client):
     pool = _env("SCA_BENCH_VERSION_POOL", 5000)
     iterations = _env("SCA_BENCH_ITERATIONS", 20)
     with SessionLocal() as db:
-        db.execute(
-            text("INSERT INTO tenants (id, name, slug, external_iam_tenant_id, status, created_at, updated_at) "
-                 "VALUES (2, 'Noise', 'noise', 'noise', 'ACTIVE', :n, :n) ON CONFLICT (id) DO NOTHING"),
-            {"n": NOW},
-        )
+        declare_fixture_tenant(db, 2, name="Noise")
         start = time.perf_counter()
         occurrences, findings = _load(db, 1, sboms, per_sbom, pool, seed=1)
         _load(db, 2, max(1, sboms // 5), per_sbom, pool, seed=2)
@@ -144,10 +146,13 @@ def test_T44_component_advisor_benchmark__NFR_SCA_005(client):
         load_seconds = time.perf_counter() - start
         # Bulk loads leave the planner without statistics until autovacuum
         # runs; production tables always have them, so measure with them.
-        for table in ("sbom_source", "sbom_component", "analysis_run", "analysis_finding",
-                      "vex_investigation", "products", "projects"):
-            db.execute(text(f"ANALYZE {table}"))
-        db.commit()
+        # Planner maintenance uses an explicit operator connection on the
+        # disposable test DB; ORM queries and inserts remain tenant guarded.
+        assert "_test" in (db.bind.url.database or "").lower()
+        with db.bind.begin() as connection:
+            for table in ("sbom_source", "sbom_component", "analysis_run", "analysis_finding",
+                          "vex_investigation", "products", "projects"):
+                connection.exec_driver_sql(f"ANALYZE {table}")
 
     reset_cache()
     start = time.perf_counter()

@@ -15,9 +15,52 @@ vi.mock('@/lib/api', async () => {
 });
 
 describe('UserSearchCombobox', () => {
+  it('keeps results in layout flow and supports keyboard selection without submitting the dialog', async () => {
+    const candidate = { id: 31, email: 'keyboard@example.test', display_name: 'Keyboard Candidate', status: 'ACTIVE', email_verified: true, verification_required: false };
+    vi.mocked(api.searchTenantUserCandidates).mockResolvedValue([candidate]);
+    const select = vi.fn();
+    render(<UserSearchCombobox tenantId="cd9e3737-67fe-4d06-8e6c-8d185854e11b" onSelect={select} selectedUser={null} />);
+    const input = screen.getByRole('combobox');
+    fireEvent.change(input, { target: { value: 'keyboard' } });
+    const option = await screen.findByRole('option');
+    expect(screen.getByRole('listbox')).not.toHaveClass('absolute');
+    fireEvent.keyDown(input, { key: 'ArrowDown' });
+    expect(input).toHaveAttribute('aria-activedescendant', option.id);
+    fireEvent.keyDown(input, { key: 'Enter' });
+    expect(select).toHaveBeenCalledExactlyOnceWith(candidate);
+    expect(screen.queryByRole('listbox')).not.toBeInTheDocument();
+  });
+
+  it('Escape dismisses results, keeps input focus and does not dismiss the parent dialog', async () => {
+    vi.mocked(api.searchTenantUserCandidates).mockResolvedValue([]);
+    const bubble = vi.fn();
+    render(<div onKeyDown={bubble}><UserSearchCombobox tenantId={1} onSelect={vi.fn()} selectedUser={null} /></div>);
+    const input = screen.getByRole('combobox');
+    input.focus();
+    fireEvent.change(input, { target: { value: 'missing' } });
+    await screen.findByRole('listbox');
+    fireEvent.keyDown(input, { key: 'Escape' });
+    expect(screen.queryByRole('listbox')).not.toBeInTheDocument();
+    expect(input).toHaveFocus();
+    expect(bubble).not.toHaveBeenCalled();
+  });
+
+  it('keeps the popup in place until an outside pointer click completes', async () => {
+    vi.mocked(api.searchTenantUserCandidates).mockResolvedValue([]);
+    const cancel = vi.fn();
+    render(<><UserSearchCombobox tenantId={1} onSelect={vi.fn()} selectedUser={null} /><button onClick={cancel}>Cancel</button></>);
+    fireEvent.change(screen.getByRole('combobox'), { target: { value: 'missing' } });
+    await screen.findByRole('listbox');
+    const button = screen.getByRole('button', { name: 'Cancel' });
+    fireEvent.mouseDown(button);
+    expect(screen.getByRole('listbox')).toBeInTheDocument();
+    fireEvent.click(button);
+    expect(cancel).toHaveBeenCalledTimes(1);
+    expect(screen.queryByRole('listbox')).not.toBeInTheDocument();
+  });
   it('does not search tenant candidates before two trimmed characters', async () => {
     render(<UserSearchCombobox tenantId={1} onSelect={() => {}} selectedUser={null} />);
-    fireEvent.change(screen.getByRole('textbox', { name: 'Search existing user' }), { target: { value: ' a ' } });
+    fireEvent.change(screen.getByRole('combobox', { name: 'Search existing user' }), { target: { value: ' a ' } });
     await new Promise(resolve => setTimeout(resolve, 300));
     expect(api.searchTenantUserCandidates).not.toHaveBeenCalled();
     expect(api.searchPlatformUsers).not.toHaveBeenCalled();
@@ -181,7 +224,7 @@ describe('UserSearchCombobox', () => {
     fireEvent.change(screen.getByPlaceholderText(/Search existing SBOM users/i), {
       target: { value: 'Disabled User' },
     });
-    const option = await screen.findByRole('button', { name: /Disabled User/ });
+    const option = await screen.findByRole('option', { name: /Disabled User/ });
     expect(option).toBeDisabled();
     fireEvent.click(option);
     expect(onSelect).not.toHaveBeenCalled();
@@ -201,12 +244,12 @@ it('refreshes candidate eligibility after a local mutation revision without clea
   const candidate = { id: 55, display_name: 'New member', email: 'member@example.test', status: 'ACTIVE', email_verified: true, verification_required: false };
   vi.mocked(api.searchTenantUserCandidates).mockResolvedValue([candidate]);
   const view = render(<UserSearchCombobox tenantId={7} revision={0} onSelect={() => {}} selectedUser={null} />);
-  const input = screen.getByRole('textbox', { name: 'Search existing user' });
+  const input = screen.getByRole('combobox', { name: 'Search existing user' });
   fireEvent.change(input, { target: { value: 'member' } });
   await screen.findByText('New member');
   vi.mocked(api.searchTenantUserCandidates).mockResolvedValue([]);
   view.rerender(<UserSearchCombobox tenantId={7} revision={1} onSelect={() => {}} selectedUser={null} />);
   await waitFor(() => expect(screen.queryByText('New member')).not.toBeInTheDocument());
   expect(input).toHaveValue('member');
-  expect(api.searchTenantUserCandidates).toHaveBeenCalledTimes(2);
+  await waitFor(() => expect(api.searchTenantUserCandidates).toHaveBeenCalledTimes(2));
 });

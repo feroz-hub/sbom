@@ -23,9 +23,8 @@ interface Props {
 
 const ALL: DashboardFilterScope = { projectId: null, applicationId: null, sbomId: null };
 
-function idOrNull(value: string): number | null {
-  const id = Number(value);
-  return value && Number.isSafeInteger(id) && id > 0 ? id : null;
+function idOrNull(value: string): string | null {
+  return value || null;
 }
 
 function optionElements(items: DashboardOption[], label: 'name' | 'display_name' = 'name') {

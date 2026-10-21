@@ -7,6 +7,7 @@ from pathlib import Path
 
 from app.models import AuditLog, SBOMSource, SBOMValidationSession, SBOMValidationSessionEvent
 
+from tests.public_id_fixture import public_row
 from tests.tenant_fixture_scope import verified_fixture_tenant
 
 BAD_PURL_CYCLONEDX = {
@@ -377,7 +378,7 @@ def test_sbom_detail_marks_legacy_record_without_original_content_unavailable(cl
     db = SessionLocal()
     try:
         with verified_fixture_tenant(db, 1):
-            sbom = db.get(SBOMSource, sbom_id)
+            sbom = public_row(db, SBOMSource, sbom_id)
             assert sbom is not None
             sbom.sbom_data = None
             db.add(sbom)
@@ -464,7 +465,7 @@ def test_cross_tenant_workspace_backfill_denied(client):
                 )
                 db.add(sbom)
                 db.commit()
-                sbom_id = sbom.id
+                sbom_id = str(sbom.public_id)
     finally:
         db.close()
 
@@ -568,7 +569,7 @@ def test_valid_repaired_draft_revalidates_then_imports_trusted_sbom(client):
     db = SessionLocal()
     try:
         with verified_fixture_tenant(db, 1):
-            trusted = db.get(SBOMSource, sbom_id)
+            trusted = public_row(db, SBOMSource, sbom_id)
             assert trusted is not None
             assert trusted.sbom_name == name
             assert "pkg:generic/x@1.0.0" in trusted.sbom_data
@@ -920,7 +921,7 @@ def test_lazy_session_creation_and_inplace_import(client):
     db = SessionLocal()
     try:
         with verified_fixture_tenant(db, 1):
-            sbom = db.get(SBOMSource, sbom_id)
+            sbom = public_row(db, SBOMSource, sbom_id)
             assert sbom is not None
             sbom.sbom_data = json.dumps(BAD_PURL_CYCLONEDX)
             sbom.status = "failed"
@@ -952,7 +953,7 @@ def test_lazy_session_creation_and_inplace_import(client):
     db = SessionLocal()
     try:
         with verified_fixture_tenant(db, 1):
-            updated_sbom = db.get(SBOMSource, sbom_id)
+            updated_sbom = public_row(db, SBOMSource, sbom_id)
             assert updated_sbom.status == "validated"
             assert "pkg:generic/x@1.0.0" in updated_sbom.sbom_data
     finally:

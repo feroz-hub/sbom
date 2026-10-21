@@ -101,7 +101,7 @@ def test_sbom_with_no_analysis_shows_no_latest_analysis(client, db):
     sbom = _seed_sbom(db, name=f"sbom-{created_by}", created_by=created_by)
     db.commit()
 
-    row = _listed_sbom(client, created_by=created_by, sbom_id=sbom.id)
+    row = _listed_sbom(client, created_by=created_by, sbom_id=str(sbom.public_id))
 
     assert row["latest_analysis"] is None
 
@@ -134,7 +134,7 @@ def test_sbom_list_returns_latest_analysis_state(client, db, status, normalized_
         _seed_finding(db, run=run, severity="HIGH", score=7.0)
     db.commit()
 
-    row = _listed_sbom(client, created_by=created_by, sbom_id=sbom.id)
+    row = _listed_sbom(client, created_by=created_by, sbom_id=str(sbom.public_id))
     latest = row["latest_analysis"]
 
     assert latest["run_id"] == run.id
@@ -159,7 +159,7 @@ def test_sbom_list_selects_latest_run_when_multiple_exist(client, db):
     latest_run = _seed_run(db, sbom=sbom, status="ERROR", raw_report={"query_errors": [{"message": "newer failed"}]})
     db.commit()
 
-    row = _listed_sbom(client, created_by=created_by, sbom_id=sbom.id)
+    row = _listed_sbom(client, created_by=created_by, sbom_id=str(sbom.public_id))
 
     assert row["latest_analysis"]["run_id"] == latest_run.id
     assert row["latest_analysis"]["run_id"] != old_run.id
@@ -193,5 +193,5 @@ def test_sbom_list_latest_analysis_preserves_tenant_isolation(client, db):
     assert resp.status_code == 200, resp.text
     rows = resp.json()
 
-    assert [row["id"] for row in rows] == [default_sbom.id]
+    assert [row["id"] for row in rows] == [str(default_sbom.public_id)]
     assert rows[0]["latest_analysis"]["status"] == "completed"

@@ -27,7 +27,7 @@ export interface CveDetailDialogProps {
    */
   scanId?: number | null;
   /** Constrain scan enrichment to the selected component, never the first CVE match. */
-  componentId?: number | null;
+  componentId?: (string | number) | null;
   /** Wait for the host to resolve the precise scan/component context. */
   detailsEnabled?: boolean;
   /** Optional contextual workflow, sharing this dialog's enrichment and accessibility. */

@@ -48,8 +48,8 @@ const STATUS_OPTIONS: Array<{ value: VexEffectiveStatus; label: string }> = [
 ];
 
 export interface VexDecisionEditorProps {
-  sbomId: number;
-  componentId: number;
+  sbomId: (string | number);
+  componentId: (string | number);
   componentLabel?: string;
   vulnerabilityId: string;
   /** Present when a reconciled context exists: unlocks evidence and row_version. */

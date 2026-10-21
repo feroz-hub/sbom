@@ -175,10 +175,11 @@ def test_scope_and_owner_filters_intersect_before_pagination(client, db, seeded,
     seeded["sbom"].projectid = project.id
     seeded["sbom"].product_id = application.id
     db.commit()
-    params = {"project_id": project.id, "product_id": application.id, "sbom_id": seeded["sbom"].id,
+    params = {"project_id": str(project.public_id), "product_id": str(application.public_id), "sbom_id": str(seeded["sbom"].public_id),
               "assignee": membership_key(people["DEVELOPER"]), "q": "CVE-2026-5001", "component": "openssl 1.1.1"}
     result = fetch(client, **params, limit=1)
     assert result["total"] == 1
     assert result["items"][0]["project_name"] == "Queue project"
     assert result["items"][0]["product_name"] == "Queue app"
-    assert fetch(client, **{**params, "project_id": project.id + 1})["total"] == 0
+    from uuid import uuid4
+    assert client.get(BASE, params={**params, "project_id": str(uuid4())}).status_code == 404

@@ -18,6 +18,7 @@ from app.services.tenant_role_assignment_service import create_initial_assignmen
 from fastapi import HTTPException
 from sqlalchemy import select
 
+from tests.public_id_fixture import public_row, tenant_uuid
 from tests.tenant_fixture_scope import verified_fixture_tenant
 
 
@@ -65,34 +66,34 @@ def test_membership_lifecycle_validation_and_audit(client):
         external_id = user.external_iam_user_id
 
     created = client.post(
-        "/api/tenants/1/users",
+        f"/api/tenants/{tenant_uuid(1)}/users",
         json={"external_user_id": external_id, "role": "SECURITY_ANALYST"},
     )
     assert created.status_code == 201, created.text
     membership_id = created.json()["membership_id"]
     assert created.json()["user_status"] == "ACTIVE"
 
-    fetched = client.get(f"/api/tenants/1/users/{membership_id}")
+    fetched = client.get(f"/api/tenants/{tenant_uuid(1)}/users/{membership_id}")
     assert fetched.status_code == 200
     assert fetched.json()["role"] == "SECURITY_ANALYST"
 
     updated = client.patch(
-        f"/api/tenants/1/users/{membership_id}",
+        f"/api/tenants/{tenant_uuid(1)}/users/{membership_id}",
         json={"role": "VIEWER"},
     )
     assert updated.status_code == 200
     assert updated.json()["role"] == "VIEWER"
 
-    assert client.patch(f"/api/tenants/1/users/{membership_id}", json={"role": "PLATFORM_ADMIN"}).status_code == 422
-    assert client.patch(f"/api/tenants/1/users/{membership_id}", json={"status": "ENABLED123"}).status_code == 422
+    assert client.patch(f"/api/tenants/{tenant_uuid(1)}/users/{membership_id}", json={"role": "PLATFORM_ADMIN"}).status_code == 422
+    assert client.patch(f"/api/tenants/{tenant_uuid(1)}/users/{membership_id}", json={"status": "ENABLED123"}).status_code == 422
 
-    deactivated = client.post(f"/api/tenants/1/users/{membership_id}/deactivate")
+    deactivated = client.post(f"/api/tenants/{tenant_uuid(1)}/users/{membership_id}/deactivate")
     assert deactivated.status_code == 200
     assert deactivated.json()["status"] == "DISABLED"
-    activated = client.post(f"/api/tenants/1/users/{membership_id}/activate")
+    activated = client.post(f"/api/tenants/{tenant_uuid(1)}/users/{membership_id}/activate")
     assert activated.status_code == 200
     assert activated.json()["status"] == "ACTIVE"
-    removed = client.delete(f"/api/tenants/1/users/{membership_id}")
+    removed = client.delete(f"/api/tenants/{tenant_uuid(1)}/users/{membership_id}")
     assert removed.status_code == 204
 
     with SessionLocal() as db, verified_fixture_tenant(db, 1):
@@ -115,7 +116,7 @@ def test_membership_creation_writes_multiple_migration_049_role_assignments(clie
         user_id = user.id
 
     created = client.post(
-        "/api/tenants/1/users",
+        f"/api/tenants/{tenant_uuid(1)}/users",
         json={
             "user_id": user_id,
             "roles": ["VIEWER", "SECURITY_ANALYST"],
@@ -184,7 +185,7 @@ def test_membership_identifier_is_tenant_scoped(client):
             )
             db.commit()
             membership_id = membership.id
-            tenant_id = other.id
+            tenant_id = str(other.public_id)
     assert client.get(f"/api/tenants/{tenant_id}/users/{membership_id}").status_code == 404
     assert client.patch(f"/api/tenants/{tenant_id}/users/{membership_id}", json={"role": "DEVELOPER"}).status_code == 404
     assert client.delete(f"/api/tenants/{tenant_id}/users/{membership_id}").status_code == 404
@@ -197,13 +198,13 @@ def test_last_active_tenant_admin_is_protected(client):
         membership = db.get(TenantUser, 1)
         before = (membership.role, membership.status, membership.role_assignment_version)
         assignments = list(db.execute(select(TenantUserRoleAssignment.__table__)))
-    response = client.post("/api/tenants/1/users/1/deactivate")
+    response = client.post(f"/api/tenants/{tenant_uuid(1)}/users/1/deactivate")
     assert response.status_code == 409
     # Tenant Admin may manage membership status, but cannot delegate/remove
     # TENANT_ADMIN roles. Exercise this invariant through authorized status work.
-    response = client.patch("/api/tenants/1/users/1", json={"status": "DISABLED"})
+    response = client.patch(f"/api/tenants/{tenant_uuid(1)}/users/1", json={"status": "DISABLED"})
     assert response.status_code == 409
-    response = client.delete("/api/tenants/1/users/1")
+    response = client.delete(f"/api/tenants/{tenant_uuid(1)}/users/1")
     assert response.status_code == 409
     with SessionLocal() as db, verified_fixture_tenant(db, 1):
         membership = db.get(TenantUser, 1)
@@ -225,7 +226,7 @@ def test_tenant_admin_cannot_remove_tenant_admin_role(client):
     models = (TenantUser, TenantUserRoleAssignment)
     with SessionLocal() as db:
         before = fixture_business_snapshot(db, models, (1,))
-    response = client.patch("/api/tenants/1/users/1", json={"role": "VIEWER"})
+    response = client.patch(f"/api/tenants/{tenant_uuid(1)}/users/1", json={"role": "VIEWER"})
     assert response.status_code == 403, response.text
     with SessionLocal() as db:
         assert fixture_business_snapshot(db, models, (1,)) == before
@@ -282,11 +283,12 @@ def test_platform_admin_can_list_create_and_audit_tenants(client):
     assert any(tenant["id"] == body["id"] for tenant in listed.json())
 
     with SessionLocal() as db:
-        assert db.execute(select(Tenant).where(Tenant.slug == payload["slug"])).scalar_one().id == body["id"]
+        tenant = public_row(db, Tenant, body["id"])
+        assert tenant.slug == payload["slug"]
         audit = db.execute(
             select(AuthorizationAuditLog).where(
                 AuthorizationAuditLog.action == "PLATFORM_TENANT_CREATED",
-                AuthorizationAuditLog.tenant_id == body["id"],
+                AuthorizationAuditLog.tenant_id == tenant.id,
             )
         ).scalars().first()
         assert audit.actor_user_id == dev_user_id
@@ -407,8 +409,8 @@ def test_platform_grant_lifecycle_and_immediate_revocation(client, monkeypatch):
         target_user_id = target.id
 
     assert client.get("/api/platform/administrators").status_code == 200
-    assert client.patch(f"/api/platform/users/{target_user_id}", json={"status": "SUPERUSER"}).status_code == 422
-    assert client.patch("/api/platform/tenants/1", json={"status": "ENABLED123"}).status_code == 422
+    assert client.patch(f"/api/platform/users/{target_user_id}", json={"status": "SUPERUSER"}).status_code == 403
+    assert client.patch(f"/api/platform/tenants/{tenant_uuid(1)}", json={"status": "ENABLED123"}).status_code == 422
     granted = client.post("/api/platform/administrators", json={"external_user_id": target_external_id})
     assert granted.status_code == 201, granted.text
     grant_id = granted.json()["grant_id"]
@@ -513,7 +515,7 @@ def test_authorization_audit_metadata_contains_no_secrets(client):
         user = _seed_user(db, status="ACTIVE")
 
     response = client.post(
-        "/api/tenants/1/users",
+        f"/api/tenants/{tenant_uuid(1)}/users",
         json={"external_user_id": user.external_iam_user_id, "role": "VIEWER"},
     )
     assert response.status_code == 201

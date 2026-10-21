@@ -110,18 +110,19 @@ def test_component_and_sbom_lifecycle_routes_reject_foreign_tenant(client):
             component = SBOMComponent(sbom_id=sbom.id, name="foreign", version="1", component_type="library")
             db.add(component)
             db.commit()
-            component_id, sbom_id = component.id, sbom.id
+            component_id = component.id
+            component_public_id, sbom_public_id = str(component.public_id), str(sbom.public_id)
     requests = [
-        ("GET", f"/api/lifecycle/component/{component_id}", None),
-        ("POST", f"/api/components/{component_id}/lifecycle/refresh", None),
+        ("GET", f"/api/lifecycle/component/{component_public_id}", None),
+        ("POST", f"/api/components/{component_public_id}/lifecycle/refresh", None),
         (
             "PATCH",
-            f"/api/components/{component_id}/lifecycle-override",
+            f"/api/components/{component_public_id}/lifecycle-override",
             {"lifecycle_status": "EOL", "reason": "cross tenant"},
         ),
-        ("PUT", f"/api/lifecycle/component/{component_id}", {"lifecycle_status": "EOL", "reason": "cross tenant"}),
-        ("POST", f"/api/sboms/{sbom_id}/lifecycle/refresh", None),
-        ("GET", f"/api/sboms/{sbom_id}/lifecycle", None),
+        ("PUT", f"/api/lifecycle/component/{component_public_id}", {"lifecycle_status": "EOL", "reason": "cross tenant"}),
+        ("POST", f"/api/sboms/{sbom_public_id}/lifecycle/refresh", None),
+        ("GET", f"/api/sboms/{sbom_public_id}/lifecycle", None),
     ]
     for method, path, payload in requests:
         response = client.request(method, path, json=payload)

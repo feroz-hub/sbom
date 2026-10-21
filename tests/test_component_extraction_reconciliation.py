@@ -170,7 +170,7 @@ def test_missing_raw_content_does_not_crash_startup():
 def test_reprocess_endpoint_can_process_valid_repaired_sbom(client):
     sbom_id = _seed_sbom(_unique("reprocess-valid"), json.dumps(_cyclonedx_doc()), status="failed")
 
-    response = client.post(f"/api/sboms/{sbom_id}/components/reprocess")
+    response = client.post(f"/api/sboms/{_get_sbom(sbom_id).public_id}/components/reprocess")
 
     assert response.status_code == 200, response.text
     body = response.json()
@@ -184,7 +184,7 @@ def test_reprocess_endpoint_can_process_valid_repaired_sbom(client):
 def test_reprocess_endpoint_returns_clear_error_for_unsupported_format(client):
     sbom_id = _seed_sbom(_unique("reprocess-unsupported"), json.dumps({"ok": False}), status="validated")
 
-    response = client.post(f"/api/sboms/{sbom_id}/components/reprocess")
+    response = client.post(f"/api/sboms/{_get_sbom(sbom_id).public_id}/components/reprocess")
 
     assert response.status_code == 422
     detail = response.json()["detail"]
@@ -204,7 +204,7 @@ def test_reprocess_endpoint_preserves_tenant_isolation(client):
                               status="validated", tenant_id=2)
             db.add(sbom)
             db.commit()
-            sbom_id = sbom.id
+            sbom_id = str(sbom.public_id)
             before = sbom.component_extraction_status
         assert client.post(f"/api/sboms/{sbom_id}/components/reprocess").status_code == 404
         with verified_fixture_tenant(db, 2):
@@ -220,5 +220,5 @@ def test_list_api_still_returns_skipped_extraction_records(client):
 
     assert response.status_code == 200, response.text
     rows = response.json()
-    row = next(item for item in rows if item["id"] == sbom_id)
+    row = next(item for item in rows if item["id"] == str(_get_sbom(sbom_id).public_id))
     assert row["component_extraction_status"] == "skipped"

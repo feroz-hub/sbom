@@ -102,6 +102,7 @@ from app.db import SessionLocal
 from app.metrics.findings import canonical_finding_metrics_for_run, canonical_findings_for_run
 from app.models import AnalysisRun
 from app.services.finding_metrics import apply_metrics_to_run
+from app.services.maintenance_scope import active_tenant_ids, maintenance_tenant
 from sqlalchemy import select
 
 
@@ -136,51 +137,52 @@ def main() -> int:
     if not args.apply:
         args.dry_run = True
 
-    db = SessionLocal()
     updated = 0
-    try:
-        runs = _iter_runs(db, args)
-        if args.run_id is not None and not runs:
-            print(f"Run {args.run_id}: not found")
-            return 1
+    found = False
+    tenant_ids = (args.tenant_id,) if args.tenant_id is not None else active_tenant_ids()
+    for tenant_id in tenant_ids:
+        with maintenance_tenant(tenant_id, "reconcile_analysis_run_finding_counts"), SessionLocal() as db:
+            runs = _iter_runs(db, args)
+            found = found or bool(runs)
+            for run in runs:
+                stored_total = int(run.total_findings or 0)
+                before_severity = _severity_total(run)
+                metrics = canonical_finding_metrics_for_run(db, run=run)
+                after_severity = sum(metrics.severity_counts.values())
+                rows = canonical_findings_for_run(db, run_id=int(run.id))
+                changed = (
+                    stored_total != metrics.total_findings
+                    or int(run.critical_count or 0) != metrics.severity_counts["critical"]
+                    or int(run.high_count or 0) != metrics.severity_counts["high"]
+                    or int(run.medium_count or 0) != metrics.severity_counts["medium"]
+                    or int(run.low_count or 0) != metrics.severity_counts["low"]
+                    or int(run.unknown_count or 0) != metrics.severity_counts["unknown"]
+                )
+                print(f"Run {run.id}:")
+                print(f"  stored findings_count: {stored_total}")
+                print(f"  persisted finding rows: {len(rows)}")
+                print(f"  provider observations: {metrics.raw_observation_count}")
+                print(f"  canonical findings: {metrics.total_findings}")
+                print(f"  severity total before: {before_severity}")
+                print(f"  severity total after: {after_severity}")
+                print(f"  updated: {'yes' if changed and args.apply else 'no'}")
 
-        for run in runs:
-            stored_total = int(run.total_findings or 0)
-            before_severity = _severity_total(run)
-            metrics = canonical_finding_metrics_for_run(db, run=run)
-            after_severity = sum(metrics.severity_counts.values())
-            rows = canonical_findings_for_run(db, run_id=int(run.id))
-            changed = (
-                stored_total != metrics.total_findings
-                or int(run.critical_count or 0) != metrics.severity_counts["critical"]
-                or int(run.high_count or 0) != metrics.severity_counts["high"]
-                or int(run.medium_count or 0) != metrics.severity_counts["medium"]
-                or int(run.low_count or 0) != metrics.severity_counts["low"]
-                or int(run.unknown_count or 0) != metrics.severity_counts["unknown"]
-            )
-            print(f"Run {run.id}:")
-            print(f"  stored findings_count: {stored_total}")
-            print(f"  persisted finding rows: {len(rows)}")
-            print(f"  provider observations: {metrics.raw_observation_count}")
-            print(f"  canonical findings: {metrics.total_findings}")
-            print(f"  severity total before: {before_severity}")
-            print(f"  severity total after: {after_severity}")
-            print(f"  updated: {'yes' if changed and args.apply else 'no'}")
+                if changed and args.apply:
+                    apply_metrics_to_run(run, metrics)
+                    db.add(run)
+                    updated += 1
 
-            if changed and args.apply:
-                apply_metrics_to_run(run, metrics)
-                db.add(run)
-                updated += 1
-
-        if args.apply:
-            db.commit()
-        else:
-            db.rollback()
-        if args.all:
-            print(f"Reconciled runs updated: {updated}")
-    finally:
-        db.close()
-
+            if args.apply:
+                db.commit()
+            else:
+                db.rollback()
+        if runs and not args.all:
+            break
+    if args.run_id is not None and not found:
+        print(f"Run {args.run_id}: not found")
+        return 1
+    if args.all:
+        print(f"Reconciled runs updated: {updated}")
     return 0
 
 

@@ -12,7 +12,7 @@ import { Table, TableHead, TableBody, Th, Td } from '@/components/ui/Table';
 import { SbomStatusBadge } from './SbomStatusBadge';
 import type { SBOMSource } from '@/types';
 
-function VersionRow({ version, latestId }: { version: SBOMSource; latestId?: number }) {
+function VersionRow({ version, latestId }: { version: SBOMSource; latestId?: string | number }) {
   const { state, startAnalysis } = useAnalysisStream(version.id);
   const { hasPermission } = useAuth();
   const busy = ['connecting', 'parsing', 'running'].includes(state.phase);
@@ -26,7 +26,7 @@ function VersionRow({ version, latestId }: { version: SBOMSource; latestId?: num
     <Td>{hasPermission('analysis:run') && <Button size="sm" disabled={busy || !eligibility.eligible} loading={busy} onClick={() => startAnalysis({ sources: ['NVD', 'OSV', 'GITHUB'] })}>Run Analysis</Button>}</Td>
   </tr>;
 }
-export function LogicalSbomHistory({ id }: { id: number }) {
+export function LogicalSbomHistory({ id }: { id: (string | number) }) {
   const { activeTenantId } = useAuth();
   const master = useQuery({ queryKey: ['logical-sbom', activeTenantId, id], queryFn: ({ signal }) => getLogicalSbom(id, signal) });
   const versions = useQuery({ queryKey: ['logical-sbom-versions', activeTenantId, id], queryFn: ({ signal }) => getLogicalSbomVersions(id, signal) });

@@ -11,6 +11,7 @@ from app.services.sbom.repair.engine import RepairEngine
 from app.services.sbom.repair.policy import RepairPolicy
 from app.validation import run as validate
 
+from tests.public_id_fixture import public_row
 from tests.tenant_fixture_scope import verified_fixture_tenant
 
 
@@ -228,7 +229,7 @@ def test_api_approval_imports_only_candidate_and_keeps_original(client):
     from app.models import SBOMRepairJob, SBOMSource, SBOMValidationSessionEvent
 
     with SessionLocal() as db, verified_fixture_tenant(db, 1):
-        assert db.get(SBOMSource, approved.json()["imported_sbom_id"]).sbom_data == candidate
+        assert public_row(db, SBOMSource, approved.json()["imported_sbom_id"]).sbom_data == candidate
         assert db.get(SBOMRepairJob, job["repair_job_id"]).approval_status == "APPROVED"
         events = [e.event_type for e in db.query(SBOMValidationSessionEvent).filter_by(session_id=session)]
         assert "SBOM_REPAIR_APPROVED" in events
@@ -428,7 +429,7 @@ def test_existing_accepted_artifact_is_preserved_on_approval(client):
     from app.models import SBOMSource
 
     with SessionLocal() as db, verified_fixture_tenant(db, 1):
-        assert json.loads(db.get(SBOMSource, source_id).sbom_data) == document()
+        assert json.loads(public_row(db, SBOMSource, source_id).sbom_data) == document()
     assert (
         client.get(base + "/download-repair-draft").content
         == client.get(base + f"/repair/{job['repair_job_id']}/download").content
@@ -498,15 +499,16 @@ def test_permanent_delete_handles_new_repair_job_foreign_keys(client):
     job = run_job(client, session)
     approved = client.post(f"/api/sbom-validation-sessions/{session}/repair/{job['repair_job_id']}/approve").json()
     from app.db import SessionLocal
-    from app.models import SBOMRepairJob
+    from app.models import SBOMRepairJob, SBOMSource
     from app.services.sbom_delete_service import SBOMDeleteService
 
     with SessionLocal() as db, verified_fixture_tenant(db, 1):
         service = SBOMDeleteService(db, tenant_id=1)
-        impact = service.get_delete_impact(approved["imported_sbom_id"])
+        internal_sbom_id = public_row(db, SBOMSource, approved["imported_sbom_id"]).id
+        impact = service.get_delete_impact(internal_sbom_id)
         assert impact["can_delete"]
         assert impact["dependent_counts"]["repair_jobs"] == 1
-        service.permanently_delete_sbom(approved["imported_sbom_id"], "test", True)
+        service.permanently_delete_sbom(internal_sbom_id, "test", True)
         assert db.get(SBOMRepairJob, job["repair_job_id"]) is None
 
 

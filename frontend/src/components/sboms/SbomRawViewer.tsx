@@ -20,7 +20,7 @@ function formatBytes(bytes: number): string {
 }
 
 interface SbomRawViewerProps {
-  sbomId: number;
+  sbomId: (string | number);
   stats?: SbomDocumentStats | null;
   workspaceAction?: ReactNode;
   workspaceUnavailableReason?: string | null;

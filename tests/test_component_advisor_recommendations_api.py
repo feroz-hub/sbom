@@ -115,7 +115,7 @@ def test_T17_critical_component_creates_and_evaluates_a_work_item__FR_SCA_011(cl
     assert body["created"] is True
     assert body["status"] == "REVIEW_REQUIRED"  # human review is mandatory
     assert body["trigger_evidence"]["highest_actionable_severity"] == "CRITICAL"
-    assert body["trigger_evidence"]["evidence"][0]["sbom_id"] == seeded["sboms"][0].id
+    assert body["trigger_evidence"]["evidence"][0]["sbom_id"] == str(seeded["sboms"][0].public_id)
     assert body["discovery"]["status"] == "CANDIDATES_FOUND"
     assert body["correlation_id"]
     assert body["advisory_only"] is True
@@ -179,9 +179,9 @@ def test_T20_different_context_or_trigger_is_a_separate_item__D10(client, seeded
     tenant_wide = create(client, LOG4J, "CRITICAL_FINDING").json()
     manual = create(client, LOG4J, "MANUAL").json()
     scoped = create(client, LOG4J, "CRITICAL_FINDING",
-                    params={"project_id": product.project_id, "product_id": product.id, "sbom_id": sbom.id}).json()
+                    params={"project_id": str(product.project.public_id), "product_id": str(product.public_id), "sbom_id": str(sbom.public_id)}).json()
     assert len({tenant_wide["id"], manual["id"], scoped["id"]}) == 3
-    assert scoped["context"] == {"project_id": product.project_id, "product_id": product.id, "sbom_id": sbom.id, "level": "SBOM"}
+    assert scoped["context"] == {"project_id": str(product.project.public_id), "product_id": str(product.public_id), "sbom_id": str(sbom.public_id), "level": "SBOM"}
 
 
 def test_T20_a_closed_item_does_not_block_a_new_one(client, seeded, db):

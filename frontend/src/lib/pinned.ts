@@ -9,7 +9,7 @@ import { useCallback, useEffect, useState } from 'react';
 export type PinnedKind = 'sbom' | 'run';
 
 export interface PinnedItem {
-  id: number;
+  id: string | number;
   label: string;
   href: string;
   pinnedAt: number;
@@ -41,7 +41,7 @@ function read(kind: PinnedKind): PinnedItem[] {
     return parsed.items.filter(
       (i): i is PinnedItem =>
         i != null &&
-        typeof i.id === 'number' &&
+        (typeof i.id === 'number' || typeof i.id === 'string') &&
         typeof i.label === 'string' &&
         typeof i.href === 'string' &&
         typeof i.pinnedAt === 'number',
@@ -67,7 +67,7 @@ export function listPinned(kind: PinnedKind): PinnedItem[] {
   return read(kind).sort((a, b) => b.pinnedAt - a.pinnedAt);
 }
 
-export function isPinned(kind: PinnedKind, id: number): boolean {
+export function isPinned(kind: PinnedKind, id: string | number): boolean {
   return read(kind).some((i) => i.id === id);
 }
 
@@ -80,7 +80,7 @@ export function pin(kind: PinnedKind, item: Omit<PinnedItem, 'pinnedAt'>): void 
   write(kind, next);
 }
 
-export function unpin(kind: PinnedKind, id: number): void {
+export function unpin(kind: PinnedKind, id: string | number): void {
   write(kind, read(kind).filter((i) => i.id !== id));
 }
 
@@ -100,9 +100,9 @@ export function togglePinned(kind: PinnedKind, item: Omit<PinnedItem, 'pinnedAt'
  */
 export function usePinned(kind: PinnedKind): {
   items: PinnedItem[];
-  isPinned: (id: number) => boolean;
+  isPinned: (id: string | number) => boolean;
   toggle: (item: Omit<PinnedItem, 'pinnedAt'>) => boolean;
-  remove: (id: number) => void;
+  remove: (id: string | number) => void;
 } {
   // Initial state must match the server render (empty) — `listPinned`
   // reads localStorage, which is unavailable during SSR. The mount
@@ -125,12 +125,12 @@ export function usePinned(kind: PinnedKind): {
     };
   }, [kind]);
 
-  const has = useCallback((id: number) => items.some((i) => i.id === id), [items]);
+  const has = useCallback((id: string | number) => items.some((i) => i.id === id), [items]);
   const toggle = useCallback(
     (item: Omit<PinnedItem, 'pinnedAt'>) => togglePinned(kind, item),
     [kind],
   );
-  const remove = useCallback((id: number) => unpin(kind, id), [kind]);
+  const remove = useCallback((id: string | number) => unpin(kind, id), [kind]);
 
   return { items, isPinned: has, toggle, remove };
 }

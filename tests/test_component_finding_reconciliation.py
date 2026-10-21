@@ -407,7 +407,7 @@ def test_persistence_api_evidence_metrics_vex_and_pagination(client, reconciliat
     assert response.headers["X-Total-Count"] == "2"
     all_rows = client.get(f"/api/runs/{run.id}/findings-enriched").json()
     finding = next(r for r in all_rows if r["vuln_id"] == "CVE-2021-44228")
-    assert finding["component_id"] == stored.id
+    assert finding["component_id"] == str(stored.public_id)
     assert finding["component_name"] == "log4j-core" and finding["component_version"] == "2.14.1"
     assert finding["score"] == 10 and finding["cvss_source"] == "NVD"
     assert len(finding["source_observations"]) == 2

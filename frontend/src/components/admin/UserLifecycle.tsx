@@ -15,8 +15,8 @@ import { ConfirmationDialog } from '@/components/ui/ConfirmationDialog';
 import { type TenantSummary } from '@/lib/api';
 import { TenantSearchSelect } from './TenantSearchSelect';
 
-type Membership = { membership_id: number; tenant_id: number; tenant_name: string; membership_status: string; roles: string[]; primary_role: string; role_assignment_version: number };
-type Audit = { actor_user_id?: number | null; tenant_id?: number | null; id: number; action: string; outcome: string; timestamp: string };
+type Membership = { membership_id: number; tenant_id: (string | number); tenant_name: string; membership_status: string; roles: string[]; primary_role: string; role_assignment_version: number };
+type Audit = { actor_user_id?: number | null; tenant_id?: (string | number) | null; id: number; action: string; outcome: string; timestamp: string };
 type User = Partial<Membership> & { is_platform_admin?: boolean; active_tenant_count?: number; id?: number; user_id?: number; display_name: string; first_name: string | null; last_name: string | null; email: string; phone: string | null; account_status: string; providers: string[]; email_verified: boolean; last_login_at: string | null; created_at: string; updated_at: string; tenant_memberships?: Membership[]; security?: { password_changed_at?: string | null; failed_login_count: number; locked_until: string | null } | null; activity?: { items: Audit[]; total: number } };
 const providerLabel = (value: string) => ({ NATIVE: 'Native', HCL_CS: 'HCL.CS', MICROSOFT_ENTRA: 'Microsoft Entra' }[value] || value);
 const statuses = ['PENDING', 'SUSPENDED', 'ACTIVE', 'PENDING_EMAIL_VERIFICATION', 'LOCKED', 'DISABLED', 'FORCE_PASSWORD_CHANGE'];
@@ -107,11 +107,11 @@ function Lifecycle({ platform, scope, permission, onAdd, refreshKey }: { platfor
     try {
       const data = await api(path, tenant, method, body);
       if (!isCurrent()) return;
-      const tenantMatch = path.match(/\/tenants\/(\d+)\//);
+      const tenantMatch = path.match(/\/tenants\/([0-9a-f-]{36})\//i);
       const profileChanged = path.endsWith('/profile');
       const accountChanged = profileChanged || path.startsWith('/platform/users/');
-      const tenantIds = accountChanged ? (platform ? detail?.tenant_memberships?.map(m => m.tenant_id) ?? [] : [Number(scope)])
-        : tenantMatch ? [Number(tenantMatch[1])] : [];
+      const tenantIds = accountChanged ? (platform ? detail?.tenant_memberships?.map(m => m.tenant_id) ?? [] : (scope ? [scope] : []))
+        : tenantMatch ? [tenantMatch[1]] : [];
       const selfChange = (detail?.id ?? detail?.user_id) === currentUser?.userId && !path.endsWith('/resend-activation');
       if (!selfChange || profileChanged) {
         await invalidateUserSurfaces(qc, { tenantIds, userId: detail?.id ?? detail?.user_id, accountChanged,
@@ -171,7 +171,7 @@ function Lifecycle({ platform, scope, permission, onAdd, refreshKey }: { platfor
           </form></>}
         {canInvite && detail.account_status === 'PENDING_EMAIL_VERIFICATION' && detail.providers.includes('NATIVE') && <button disabled={busy} onClick={() => confirm(`Resend activation to ${detail.display_name} for ${m.tenant_name}? The previous activation link will stop working.`, () => mutate(`${platform ? '/platform' : ''}/tenants/${m.tenant_id}/native-users/${uid}/resend-activation`, 'POST', undefined, platform ? null : m.tenant_id))}>Resend activation</button>}
       </section>)}
-      {platform && canInvite && <form onSubmit={e => { e.preventDefault(); if (!newTenant) return; const data = new FormData(e.currentTarget); const tenant = Number(newTenant.id); void mutate(`/tenants/${tenant}/memberships`, 'POST', { user_id: uid, role_codes: data.getAll('roles') }, tenant); }}><h3>Add existing user to another tenant</h3><TenantSearchSelect value={newTenant} onChange={setNewTenant} />{roles.map(r => <label className="mr-3" key={r}><input type="checkbox" name="roles" value={r} defaultChecked={r === 'VIEWER'} /> {r}</label>)}<button disabled={busy || !newTenant}>Add membership</button></form>}
+      {platform && canInvite && <form onSubmit={e => { e.preventDefault(); if (!newTenant) return; const data = new FormData(e.currentTarget); const tenant = newTenant.id; void mutate(`/tenants/${tenant}/memberships`, 'POST', { user_id: uid, role_codes: data.getAll('roles') }, tenant); }}><h3>Add existing user to another tenant</h3><TenantSearchSelect value={newTenant} onChange={setNewTenant} />{roles.map(r => <label className="mr-3" key={r}><input type="checkbox" name="roles" value={r} defaultChecked={r === 'VIEWER'} /> {r}</label>)}<button disabled={busy || !newTenant}>Add membership</button></form>}
       <h3 id="audit" className="font-semibold">Recent audit activity</h3><ol aria-label="Audit timeline" className="border-l-2 pl-4 space-y-3">{detail.activity?.items.map(a => <li key={a.id}><time>{a.timestamp}</time><p className="capitalize font-medium">{readable(a.action)} · {a.outcome}</p><p className="text-sm">{a.tenant_id ? 'Tenant activity' : 'Account activity'}</p></li>)}</ol><p>{detail.activity?.total || 0} recorded events; showing the most recent 50.</p>
     </article>}
     <ConfirmationDialog open={Boolean(confirmation)} title="Confirm access change" description={confirmation?.text || ''} confirmLabel="Confirm" onClose={() => setConfirmation(null)} onConfirm={() => { const run = confirmation?.run; setConfirmation(null); if (run) void run(); }} />

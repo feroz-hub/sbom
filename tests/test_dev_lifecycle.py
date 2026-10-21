@@ -7,7 +7,8 @@ from types import SimpleNamespace
 from unittest.mock import MagicMock
 
 import pytest
-from scripts import dev, dev_runtime as lifecycle
+from scripts import dev
+from scripts import dev_runtime as lifecycle
 
 process_info_adapter = lifecycle.process_info
 

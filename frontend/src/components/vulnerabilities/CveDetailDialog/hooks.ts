@@ -24,7 +24,7 @@ export function useCveDetail({
 }: {
   cveId: string | null;
   scanId?: number | null;
-  componentId?: number | null;
+  componentId?: (string | number) | null;
   enabled: boolean;
 }) {
   // Suppress the network call for ids the frontend already knows the

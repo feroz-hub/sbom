@@ -70,6 +70,7 @@ def seeded(db):
         AnalysisFinding(
             analysis_run_id=run.id, component_id=openssl.id, vuln_id="CVE-2026-5001",
             tenant_id=1, source="NVD", severity="HIGH", description="analyser finding",
+            match_confidence=0.95,
             reference_url="https://example.test/1",
         )
     )
@@ -164,8 +165,27 @@ def test_filter_by_component__VEX_UI_002(client, seeded):
 
 
 def test_filter_by_sbom__VEX_UI_002(client, seeded):
-    assert fetch(client, sbom_id=seeded["sbom"].id)["total"] == 2
-    assert fetch(client, sbom_id=seeded["sbom"].id + 9999)["total"] == 0
+    assert fetch(client, sbom_id=str(seeded["sbom"].public_id))["total"] == 2
+    from uuid import uuid4
+    assert client.get(BASE, params={"sbom_id": str(uuid4())}).status_code == 404
+
+
+def test_integer_resource_ids_are_rejected_at_public_boundary(client, seeded, db):
+    """SBO-54: UUID fixture corrections must not re-enable integer API IDs."""
+    sbom, component = seeded["sbom"], seeded["zlib"]
+    assert client.get(BASE, params={"sbom_id": sbom.id}).status_code == 422
+    assert client.get(f"/api/sboms/{sbom.id}/vex").status_code == 422
+    assert client.get(RESOLVE, params={
+        "sbom_id": str(sbom.public_id), "component_id": component.id,
+        "vulnerability_id": "CVE-2026-5002",
+    }).status_code == 422
+    context = context_for(db, "CVE-2026-5002")
+    before = context.row_version
+    assert client.put(f"{BASE}/{context.id}/component", json={
+        "component_id": component.id, "row_version": before, "reason": "Integer ID negative control",
+    }).status_code == 422
+    db.refresh(context)
+    assert context.row_version == before
 
 
 def test_search_by_vulnerability_id__VEX_UI_002(client, seeded):
@@ -208,7 +228,7 @@ def test_sort_order_is_honoured(client, seeded):
 
 def test_tile_counts_equal_row_counts_for_the_same_filters__VEX_DASH_004(client, seeded, db):
     summary = vex_dashboard_summary(db, tenant_id=1, sbom_ids=[seeded["sbom"].id])
-    rows = fetch(client, sbom_id=seeded["sbom"].id)
+    rows = fetch(client, sbom_id=str(seeded["sbom"].public_id))
     assert summary["total_contexts"] == rows["total"]
 
 
@@ -354,14 +374,14 @@ def test_decision_survives_reconciliation__VEX_INV_004(client, seeded, db):
 
 def test_component_vulnerabilities_endpoint_still_responds(client, seeded):
     response = client.get(
-        f"/api/sboms/{seeded['sbom'].id}/components/{seeded['zlib'].id}/vulnerabilities"
+        f"/api/sboms/{seeded['sbom'].public_id}/components/{seeded['zlib'].public_id}/vulnerabilities"
     )
     assert response.status_code == 200, response.text
     assert "vulnerabilities" in response.json()
 
 
 def test_sbom_vex_list_endpoint_still_responds(client, seeded):
-    response = client.get(f"/api/sboms/{seeded['sbom'].id}/vex")
+    response = client.get(f"/api/sboms/{seeded['sbom'].public_id}/vex")
     assert response.status_code == 200, response.text
     assert "statements" in response.json()
 
@@ -378,8 +398,8 @@ def resolve(client, seeded, vuln_id, component=None):
     return client.get(
         RESOLVE,
         params={
-            "sbom_id": seeded["sbom"].id,
-            "component_id": (component or seeded["zlib"]).id,
+            "sbom_id": str(seeded["sbom"].public_id),
+            "component_id": str((component or seeded["zlib"]).public_id),
             "vulnerability_id": vuln_id,
         },
     )
@@ -390,7 +410,7 @@ def test_resolve_finds_the_context_for_a_pair(client, seeded, db):
     assert response.status_code == 200, response.text
     payload = response.json()
     assert payload["vulnerability"]["canonical_vulnerability_id"] == "CVE-2026-5002"
-    assert payload["component"]["component_id"] == seeded["zlib"].id
+    assert payload["component"]["component_id"] == str(seeded["zlib"].public_id)
     # Carries the concurrency token the SBOM page previously had no way to get.
     assert payload["row_version"] >= 1
 
@@ -413,8 +433,8 @@ def test_resolve_matches_an_alias__VEX_CTX_002(client, seeded, db):
 def test_resolve_is_tenant_scoped__VEX_SEC_002(client, seeded, db):
     foreign = foreign_vex_fixture(db, vuln_id="CVE-2026-5002")
     before = foreign_vex_snapshot(db, 2, foreign["context_id"])
-    assert client.get(f"{BASE}/resolve", params={"sbom_id": foreign["sbom_id"],
-                      "component_id": foreign["component_id"], "vulnerability_id": "CVE-2026-5002"}).status_code == 404
+    assert client.get(f"{BASE}/resolve", params={"sbom_id": foreign["sbom_public_id"],
+                      "component_id": foreign["component_public_id"], "vulnerability_id": "CVE-2026-5002"}).status_code == 404
     assert foreign_vex_snapshot(db, 2, foreign["context_id"]) == before
 
 

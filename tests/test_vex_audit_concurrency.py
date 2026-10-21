@@ -184,7 +184,7 @@ def test_every_mutation_requires_row_version__VEX_AUD_002(client, seeded, db):
     for path, body in (
         ("decision", {"status": "AFFECTED", "reason": "x"}),
         ("assignment", {"assigned_to": "analyst", "reason": "x"}),
-        ("component", {"component_id": seeded["component"].id, "reason": "x"}),
+        ("component", {"component_id": str(seeded["component"].public_id), "reason": "x"}),
     ):
         response = client.put(f"{BASE}/{context.id}/{path}", json=body)
         assert response.status_code == 422, f"{path} must require row_version"
@@ -283,7 +283,7 @@ def test_analyst_can_bind_an_unresolved_assertion__VEX_MAP_001(client, seeded, d
     response = client.put(
         f"{BASE}/{context.id}/component",
         json={
-            "component_id": seeded["component"].id,
+            "component_id": str(seeded["component"].public_id),
             "row_version": context.row_version,
             "reason": "supplier confirmed this is the 1.1.1 build",
         },
@@ -300,7 +300,7 @@ def test_binding_is_audited_while_component_was_null__VEX_AUD_001(client, seeded
     client.put(
         f"{BASE}/{context.id}/component",
         json={
-            "component_id": seeded["component"].id,
+            "component_id": str(seeded["component"].public_id),
             "row_version": context.row_version,
             "reason": "confirmed",
         },
@@ -316,7 +316,7 @@ def test_binding_a_resolved_context_is_refused(client, seeded, db):
     response = client.put(
         f"{BASE}/{context.id}/component",
         json={
-            "component_id": seeded["other"].id,
+            "component_id": str(seeded["other"].public_id),
             "row_version": context.row_version,
             "reason": "should not be allowed",
         },
@@ -336,7 +336,7 @@ def test_binding_to_a_component_in_another_sbom_is_refused__VEX_CTX_001(client, 
     response = client.put(
         f"{BASE}/{context.id}/component",
         json={
-            "component_id": foreign.id,
+            "component_id": str(foreign.public_id),
             "row_version": context.row_version,
             "reason": "wrong sbom",
         },
@@ -369,7 +369,7 @@ def test_cross_tenant_mutations_are_rejected__VEX_SEC_002(client, seeded, db):
     for path, body in (
         ("decision", {"status": "AFFECTED", "row_version": foreign["row_version"], "reason": "x"}),
         ("assignment", {"assigned_to": "mallory", "row_version": foreign["row_version"], "reason": "x"}),
-        ("component", {"component_id": seeded["component"].id, "row_version": foreign["row_version"], "reason": "x"}),
+        ("component", {"component_id": str(seeded["component"].public_id), "row_version": foreign["row_version"], "reason": "x"}),
     ):
         assert client.put(f"{BASE}/{foreign['context_id']}/{path}", json=body).status_code == 404
     assert foreign_vex_snapshot(db, 2, foreign["context_id"]) == before

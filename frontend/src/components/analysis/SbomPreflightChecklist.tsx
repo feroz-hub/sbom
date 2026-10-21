@@ -19,7 +19,7 @@ import { getSbomInfo } from '@/lib/api';
 import { cn } from '@/lib/utils';
 
 interface SbomPreflightChecklistProps {
-  sbomId: number | null;
+  sbomId: (string | number) | null;
 }
 
 type Tone = 'pass' | 'warn' | 'info' | 'idle';
@@ -75,7 +75,7 @@ function formatRuntimeRange(min: number, max: number): string {
 }
 
 export function SbomPreflightChecklist({ sbomId }: SbomPreflightChecklistProps) {
-  const enabled = sbomId != null && Number.isFinite(sbomId) && sbomId > 0;
+  const enabled = Boolean(sbomId);
   const { data, isLoading, error } = useQuery({
     queryKey: ['sbom-info', sbomId],
     queryFn: ({ signal }) => getSbomInfo(sbomId as number, signal),

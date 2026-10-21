@@ -269,7 +269,7 @@ def test_component_list_includes_dynamic_eol_eos_status(client, unique_name):
             ]
             db.add_all(rows)
             db.commit()
-            sbom_id = sbom.id
+            sbom_id = str(sbom.public_id)
     finally:
         db.close()
 

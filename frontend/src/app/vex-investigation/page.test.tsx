@@ -58,12 +58,12 @@ vi.mock('@/components/layout/TopBar', () => ({
 // page feeds its selection through to the query.
 vi.mock('@/components/dashboard/DashboardFilters', () => ({
   DashboardFilters: ({ scope, onChange }: {
-    scope: { projectId: number | null };
-    onChange: (s: { projectId: number | null; applicationId: number | null; sbomId: number | null }) => void;
+    scope: { projectId: (string | number) | null };
+    onChange: (s: { projectId: (string | number) | null; applicationId: (string | number) | null; sbomId: (string | number) | null }) => void;
   }) => (
     <button
       type="button"
-      onClick={() => onChange({ projectId: 7, applicationId: null, sbomId: null })}
+      onClick={() => onChange({ projectId: "00000000-0000-4000-8000-000000000007", applicationId: null, sbomId: null })}
     >
       pick-project-7 (current: {String(scope.projectId)})
     </button>
@@ -116,14 +116,14 @@ const listResponse: VexInvestigationListResponse = {
       canonical_vulnerability_id: 'CVE-2026-4001',
       aliases: ['GHSA-ABCD-1234-5678'],
       severity: 'CRITICAL',
-      component_id: 11,
+      component_id: "00000000-0000-4000-8000-00000000000b",
       component_name: 'openssl',
       component_version: '1.1.1',
       project_id: null,
       project_name: null,
       product_id: null,
       product_name: null,
-      sbom_id: 5,
+      sbom_id: "00000000-0000-4000-8000-000000000005",
       sbom_name: 'rtos-1',
       analyzer_detection_state: 'NOT_DETECTED',
       analyzer_sources: [],
@@ -144,14 +144,14 @@ const listResponse: VexInvestigationListResponse = {
       canonical_vulnerability_id: 'CVE-2026-5001',
       aliases: [],
       severity: 'HIGH',
-      component_id: 12,
+      component_id: "00000000-0000-4000-8000-00000000000c",
       component_name: 'zlib',
       component_version: '1.2.11',
       project_id: null,
       project_name: null,
       product_id: null,
       product_name: null,
-      sbom_id: 5,
+      sbom_id: "00000000-0000-4000-8000-000000000005",
       sbom_name: 'rtos-1',
       analyzer_detection_state: 'DETECTED',
       analyzer_sources: ['NVD'],
@@ -179,7 +179,7 @@ const detail: VexInvestigationDetail = {
     read_only_reason: null,
   },
   id: 1,
-  sbom_id: 5,
+  sbom_id: "00000000-0000-4000-8000-000000000005",
   project_name: null,
   product_name: null,
   sbom_name: 'rtos-1',
@@ -192,7 +192,7 @@ const detail: VexInvestigationDetail = {
     references: [],
   },
   component: {
-    component_id: 11,
+    component_id: "00000000-0000-4000-8000-00000000000b",
     name: 'openssl',
     version: '1.1.1',
     purl: 'pkg:generic/openssl@1.1.1',
@@ -300,7 +300,7 @@ describe('summary cards', () => {
     await waitFor(() => {
       const list = api.listVexInvestigations.mock.calls.at(-1)?.[0];
       const metrics = api.getVexInvestigationSummary.mock.calls.at(-1)?.[0];
-      expect(metrics).toMatchObject({ project_id: 7 });
+      expect(metrics).toMatchObject({ project_id: "00000000-0000-4000-8000-000000000007" });
       const { sort_by: _s, sort_order: _o, limit: _l, offset: _f, ...listFilters } = list;
       expect(metrics).toEqual(listFilters);
     });
@@ -454,7 +454,7 @@ describe('scope selector', () => {
     fireEvent.click(screen.getByText(/pick-project-7/));
     await waitFor(() => {
       const last = api.listVexInvestigations.mock.calls.at(-1)?.[0];
-      expect(last).toMatchObject({ project_id: 7 });
+      expect(last).toMatchObject({ project_id: "00000000-0000-4000-8000-000000000007" });
     });
   });
 });
@@ -468,10 +468,10 @@ describe('work queue filters', () => {
   });
 
   it('combines personal work, severity, status and scope in the URL and request', async () => {
-    navigation.search = 'my_work=me&severity=CRITICAL&effective_status=UNDER_INVESTIGATION&project_id=7&product_id=8&sbom_id=9';
+    navigation.search = "my_work=me&severity=CRITICAL&effective_status=UNDER_INVESTIGATION&project_id=00000000-0000-4000-8000-000000000007&product_id=00000000-0000-4000-8000-000000000008&sbom_id=00000000-0000-4000-8000-000000000009";
     renderPage();
     await screen.findByText('CVE-2026-4001');
-    expect(api.listVexInvestigations.mock.calls.at(-1)?.[0]).toMatchObject({ my_work: 'me', severity: 'CRITICAL', effective_status: 'UNDER_INVESTIGATION', project_id: 7, product_id: 8, sbom_id: 9 });
+    expect(api.listVexInvestigations.mock.calls.at(-1)?.[0]).toMatchObject({ my_work: 'me', severity: 'CRITICAL', effective_status: 'UNDER_INVESTIGATION', project_id: "00000000-0000-4000-8000-000000000007", product_id: "00000000-0000-4000-8000-000000000008", sbom_id: "00000000-0000-4000-8000-000000000009" });
     expect(screen.getByLabelText('My work')).toHaveValue('me');
     expect(screen.getByLabelText('Severity')).toHaveValue('CRITICAL');
     expect(navigation.replace.mock.calls.at(-1)?.[0]).toContain('my_work=me');
@@ -525,7 +525,7 @@ describe('work queue filters', () => {
   });
 
   it('synchronizes quick filters, removable chips and Clear all', async () => {
-    navigation.search = 'project_id=7&product_id=8&sbom_id=9&q=CVE&component=openssl&my_work=me&assignee=membership%3A2&severity=HIGH&effective_status=AFFECTED&reconciliation_status=MATCHED&needs_review=true&unresolved_component=true';
+    navigation.search = "project_id=00000000-0000-4000-8000-000000000007&product_id=00000000-0000-4000-8000-000000000008&sbom_id=00000000-0000-4000-8000-000000000009&q=CVE&component=openssl&my_work=me&assignee=membership%3A2&severity=HIGH&effective_status=AFFECTED&reconciliation_status=MATCHED&needs_review=true&unresolved_component=true";
     renderPage();
     await screen.findByText('CVE-2026-4001');
     fireEvent.click(screen.getByRole('button', { name: 'Critical' }));
@@ -675,12 +675,12 @@ describe('ownership and mapping', () => {
       reconciliation_status: 'UNRESOLVED_MAPPING',
     });
     await openDetail();
-    fireEvent.change(screen.getByLabelText('Component ID'), { target: { value: '42' } });
+    fireEvent.change(screen.getByLabelText('Component ID'), { target: { value: "00000000-0000-4000-8000-00000000002a" } });
     fireEvent.click(screen.getByText('Bind to component'));
     await waitFor(() => {
       expect(api.resolveVexInvestigationComponent).toHaveBeenCalledWith(
         1,
-        expect.objectContaining({ component_id: 42, row_version: 1 }),
+        expect.objectContaining({ component_id: "00000000-0000-4000-8000-00000000002a", row_version: 1 }),
       );
     });
   });
@@ -757,7 +757,7 @@ describe('shared CVE detail workflow', () => {
     expect(within(context).getByText('NOT_AFFECTED')).toBeVisible();
     expect(within(context).getByText('VEX ONLY')).toBeVisible();
     await waitFor(() => expect(api.getCveDetail).toHaveBeenCalledWith(
-      { cveId: 'CVE-2026-4001', scanId: 7, componentId: 11 }, expect.any(AbortSignal),
+      { cveId: 'CVE-2026-4001', scanId: 7, componentId: "00000000-0000-4000-8000-00000000000b" }, expect.any(AbortSignal),
     ));
     const detailsTab = within(dialog).getByRole('tab', { name: 'Vulnerability Details' });
     detailsTab.focus();
@@ -831,7 +831,7 @@ describe('shared CVE detail workflow', () => {
   });
 
   it('preserves filters and URL state across opening, tab changes and closing', async () => {
-    navigation.search = 'q=CVE-2026&project_id=7&product_id=8&sbom_id=9&effective_status=NOT_AFFECTED&reconciliation_status=VEX_ONLY&component=openssl&needs_review=true&sort_by=component&sort_order=asc&limit=25';
+    navigation.search = "q=CVE-2026&project_id=00000000-0000-4000-8000-000000000007&product_id=00000000-0000-4000-8000-000000000008&sbom_id=00000000-0000-4000-8000-000000000009&effective_status=NOT_AFFECTED&reconciliation_status=VEX_ONLY&component=openssl&needs_review=true&sort_by=component&sort_order=asc&limit=25";
     renderPage();
     await screen.findByRole('button', { name: 'View vulnerability CVE-2026-4001' });
     await new Promise(resolve => setTimeout(resolve, 400));
@@ -891,7 +891,7 @@ it('version scope updates summary and rows together and labels historical eviden
 });
 
 it('reads historical version scope directly from a URL', async () => {
-  navigation.search='version_scope=all&sbom_id=5';renderPage();
-  await waitFor(() => expect(api.listVexInvestigations.mock.calls.at(-1)?.[0]).toMatchObject({version_scope:'all',sbom_id:5}));
+  navigation.search="version_scope=all&sbom_id=00000000-0000-4000-8000-000000000005";renderPage();
+  await waitFor(() => expect(api.listVexInvestigations.mock.calls.at(-1)?.[0]).toMatchObject({version_scope:'all',sbom_id:"00000000-0000-4000-8000-000000000005"}));
   expect(screen.getByText('All versions view')).toBeInTheDocument();
 });

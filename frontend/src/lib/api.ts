@@ -249,14 +249,14 @@ export interface UserSearchResult {
   external_subject?: string | null;
   is_platform_admin?: boolean;
   tenant_membership?: {
-    tenant_id: number;
+    tenant_id: (string | number);
     tenant_name?: string | null;
     status: string;
     role: string;
     roles?: string[];
   } | null;
   tenant_memberships?: Array<{
-    tenant_id: number;
+    tenant_id: (string | number);
     tenant_name?: string | null;
     status: string;
     role: string;
@@ -445,12 +445,12 @@ export async function requestVoid(
 }
 
 const adminRequestOptions = { authErrorMode: 'throw' as const };
-const tenantRequestOptions = (tenantId: number) => ({
+const tenantRequestOptions = (tenantId: (string | number)) => ({
   ...adminRequestOptions,
   headers: { 'X-Tenant-ID': String(tenantId) },
 });
 
-export async function getTenantMembers(tenantId: number): Promise<TenantMember[]> {
+export async function getTenantMembers(tenantId: (string | number)): Promise<TenantMember[]> {
   const res = await request<TenantMember[] | { items: TenantMember[] }>(
     `/api/tenants/${tenantId}/users`,
     tenantRequestOptions(tenantId),
@@ -458,7 +458,7 @@ export async function getTenantMembers(tenantId: number): Promise<TenantMember[]
   return Array.isArray(res) ? res : res?.items ?? [];
 }
 
-export async function getAssignableTenantRoles(tenantId?: number): Promise<{ roles: RoleValue[] }> {
+export async function getAssignableTenantRoles(tenantId?: (string | number)): Promise<{ roles: RoleValue[] }> {
   const res = await request<{ roles: RoleValue[] } | RoleValue[]>(
     '/api/tenant-roles',
     tenantId ? tenantRequestOptions(tenantId) : adminRequestOptions,
@@ -468,7 +468,7 @@ export async function getAssignableTenantRoles(tenantId?: number): Promise<{ rol
 }
 
 export function addTenantMember(
-  tenantId: number,
+  tenantId: (string | number),
   payload: { user_id: number; roles: TenantRole[]; status?: MembershipStatus },
 ): Promise<TenantMember> {
   const roleCodes = payload.roles.map(getRoleCode);
@@ -512,7 +512,7 @@ export interface TenantAuditEvent {
 }
 
 export async function getTenantAuditHistory(
-  tenantId: number,
+  tenantId: (string | number),
 ): Promise<TenantAuditEvent[]> {
   const response = await request<{ items: TenantAuditEvent[] }>(
     `/api/tenants/${tenantId}/audit-history?page=1&page_size=5&administrative_only=true`,
@@ -525,7 +525,7 @@ export interface TenantAuditPage {
   items: TenantAuditEvent[]; page: number; page_size: number; total: number; total_pages: number;
 }
 
-export function getTenantAuditPage(tenantId: number, filters: {
+export function getTenantAuditPage(tenantId: (string | number), filters: {
   page: number; page_size: number; q?: string; category?: string; outcome?: string;
   from_time?: string; to_time?: string;
 }): Promise<TenantAuditPage> {
@@ -544,12 +544,12 @@ export async function searchPlatformTenantAdminCandidates(query: string): Promis
   return result.items;
 }
 
-export function recoverPlatformTenantAdmin(tenantId: number, userId: number) {
+export function recoverPlatformTenantAdmin(tenantId: (string | number), userId: number) {
   return request(`/api/platform/tenants/${tenantId}/recover-admin`, { ...adminRequestOptions, method: 'POST', body: JSON.stringify({ user_id: userId }) });
 }
 
 export function replaceTenantMemberRoles(
-  tenantId: number,
+  tenantId: (string | number),
   userId: number,
   roles: TenantRole[],
   expectedVersion: number,
@@ -568,7 +568,7 @@ export function replaceTenantMemberRoles(
 }
 
 export function updateTenantMemberRole(
-  tenantId: number,
+  tenantId: (string | number),
   membershipId: number,
   role: TenantRole,
 ): Promise<TenantMember> {
@@ -580,28 +580,28 @@ export function updateTenantMemberRole(
   });
 }
 
-export function activateTenantMember(tenantId: number, membershipId: number): Promise<TenantMember> {
+export function activateTenantMember(tenantId: (string | number), membershipId: number): Promise<TenantMember> {
   return request<TenantMember>(`/api/tenants/${tenantId}/users/${membershipId}/activate`, {
     ...tenantRequestOptions(tenantId),
     method: 'POST',
   });
 }
 
-export function deactivateTenantMember(tenantId: number, membershipId: number): Promise<TenantMember> {
+export function deactivateTenantMember(tenantId: (string | number), membershipId: number): Promise<TenantMember> {
   return request<TenantMember>(`/api/tenants/${tenantId}/users/${membershipId}/deactivate`, {
     ...tenantRequestOptions(tenantId),
     method: 'POST',
   });
 }
 
-export function removeTenantMember(tenantId: number, membershipId: number): Promise<void> {
+export function removeTenantMember(tenantId: (string | number), membershipId: number): Promise<void> {
   return requestVoid(`/api/tenants/${tenantId}/users/${membershipId}`, {
     ...tenantRequestOptions(tenantId),
     method: 'DELETE',
   });
 }
 
-export async function searchPlatformUsers(query: string, tenantId?: number): Promise<UserSearchResult[]> {
+export async function searchPlatformUsers(query: string, tenantId?: (string | number)): Promise<UserSearchResult[]> {
   if (!query.trim()) return [];
   const params = new URLSearchParams({ q: query.trim() });
   if (tenantId) params.set('tenant_id', String(tenantId));
@@ -612,7 +612,7 @@ export async function searchPlatformUsers(query: string, tenantId?: number): Pro
   return Array.isArray(res) ? res : res?.items ?? [];
 }
 
-export async function searchTenantUserCandidates(tenantId: number, query: string): Promise<UserSearchResult[]> {
+export async function searchTenantUserCandidates(tenantId: (string | number), query: string): Promise<UserSearchResult[]> {
   if (query.trim().length < 2 || !tenantId) return [];
   const res = await request<UserSearchResult[] | { items: UserSearchResult[] }>(
     `/api/tenants/${tenantId}/user-candidates?q=${encodeURIComponent(query.trim())}`,
@@ -647,12 +647,12 @@ export async function listPlatformTenants(query = '', page = 1, pageSize = 50): 
   return Array.isArray(res) ? res : res?.items ?? [];
 }
 
-export function getPlatformTenant(tenantId: number): Promise<TenantSummary> {
+export function getPlatformTenant(tenantId: (string | number)): Promise<TenantSummary> {
   return request<TenantSummary>(`/api/platform/tenants/${tenantId}`, adminRequestOptions);
 }
 
 /** Reuse the existing platform activation endpoint; token issuance stays on the server. */
-export function resendPlatformTenantActivation(tenantId: number, userId: number): Promise<{ delivery: { status: string } }> {
+export function resendPlatformTenantActivation(tenantId: (string | number), userId: number): Promise<{ delivery: { status: string } }> {
   return request(`/api/platform/tenants/${tenantId}/native-users/${userId}/resend-activation`, {
     ...adminRequestOptions,
     method: 'POST',
@@ -669,10 +669,10 @@ export async function createPlatformTenant(payload: CreateTenantRequest): Promis
 }
 
 export function updatePlatformTenantStatus(
-  tenantId: number | string,
+  tenantId: (string | number) | string,
   status: 'ACTIVE' | 'DISABLED',
-): Promise<{ tenant_id: number; status: string }> {
-  return request<{ tenant_id: number; status: string }>(`/api/platform/tenants/${tenantId}`, {
+): Promise<{ tenant_id: (string | number); status: string }> {
+  return request<{ tenant_id: (string | number); status: string }>(`/api/platform/tenants/${tenantId}`, {
     ...adminRequestOptions,
     method: 'PATCH',
     body: JSON.stringify({ status }),
@@ -742,9 +742,9 @@ export function getHealth(signal?: AbortSignal) {
 
 // ─── Dashboard ───────────────────────────────────────────────────────────────
 export interface DashboardFilterScope {
-  projectId: number | null;
-  applicationId: number | null;
-  sbomId: number | null;
+  projectId: (string | number) | null;
+  applicationId: (string | number) | null;
+  sbomId: (string | number) | null;
 }
 
 export function dashboardScopeParams(scope?: DashboardFilterScope): URLSearchParams {
@@ -767,10 +767,10 @@ export function getDashboardProjectOptions(signal?: AbortSignal) {
 }
 
 export function getDashboardScannedProjectIds(scope?: DashboardFilterScope, signal?: AbortSignal) {
-  return request<{ ids: number[] }>(withDashboardScope('/dashboard/scanned-project-ids', scope), { signal });
+  return request<{ ids: (string | number)[] }>(withDashboardScope('/dashboard/scanned-project-ids', scope), { signal });
 }
 
-export function getDashboardApplicationOptions(projectId: number, signal?: AbortSignal) {
+export function getDashboardApplicationOptions(projectId: (string | number), signal?: AbortSignal) {
   return request<{ items: DashboardOption[] }>(`/dashboard/filter-options/applications?project_id=${projectId}`, { signal });
 }
 
@@ -821,7 +821,7 @@ export function getProjects(signal?: AbortSignal) {
   return request<Project[]>('/api/projects', { signal });
 }
 
-export function getProject(id: number, signal?: AbortSignal) {
+export function getProject(id: (string | number), signal?: AbortSignal) {
   return request<Project>(`/api/projects/${id}`, { signal });
 }
 
@@ -833,15 +833,15 @@ export function createProject(payload: CreateProjectPayload, signal?: AbortSigna
   });
 }
 
-export function getProducts(projectId: number, signal?: AbortSignal) {
+export function getProducts(projectId: (string | number), signal?: AbortSignal) {
   return request<ProductListResponse>(`/api/projects/${projectId}/products`, { signal });
 }
 
-export function getProduct(id: number, signal?: AbortSignal) {
+export function getProduct(id: (string | number), signal?: AbortSignal) {
   return request<Product>(`/api/products/${id}`, { signal });
 }
 
-export function createProduct(projectId: number, payload: Partial<Product> & { name: string }, signal?: AbortSignal) {
+export function createProduct(projectId: (string | number), payload: Partial<Product> & { name: string }, signal?: AbortSignal) {
   return request<Product>(`/api/projects/${projectId}/products`, {
     method: 'POST',
     body: JSON.stringify(payload),
@@ -849,7 +849,7 @@ export function createProduct(projectId: number, payload: Partial<Product> & { n
   });
 }
 
-export function updateProduct(id: number, payload: Partial<Product>, signal?: AbortSignal) {
+export function updateProduct(id: (string | number), payload: Partial<Product>, signal?: AbortSignal) {
   return request<Product>(`/api/products/${id}`, {
     method: 'PATCH',
     body: JSON.stringify(payload),
@@ -857,19 +857,19 @@ export function updateProduct(id: number, payload: Partial<Product>, signal?: Ab
   });
 }
 
-export function deleteProduct(id: number, signal?: AbortSignal) {
-  return request<{ status: string; product_id: number }>(`/api/products/${id}`, {
+export function deleteProduct(id: (string | number), signal?: AbortSignal) {
+  return request<{ status: string; product_id: (string | number) }>(`/api/products/${id}`, {
     method: 'DELETE',
     signal,
   });
 }
 
-export function getProductSboms(id: number, signal?: AbortSignal) {
+export function getProductSboms(id: (string | number), signal?: AbortSignal) {
   return request<SBOMSource[]>(`/api/products/${id}/sboms`, { signal });
 }
 
 export function updateProject(
-  id: number,
+  id: (string | number),
   payload: UpdateProjectPayload,
   signal?: AbortSignal
 ) {
@@ -881,7 +881,7 @@ export function updateProject(
 }
 
 export interface ProjectDeleteImpact {
-  project_id: number;
+  project_id: (string | number);
   project_name: string;
   sboms: number;
   components: number;
@@ -890,12 +890,12 @@ export interface ProjectDeleteImpact {
   schedules: number;
 }
 
-export function getProjectDeleteImpact(id: number, signal?: AbortSignal) {
+export function getProjectDeleteImpact(id: (string | number), signal?: AbortSignal) {
   return request<ProjectDeleteImpact>(`/api/projects/${id}/delete-impact`, { signal });
 }
 
 export function deleteProject(
-  id: number,
+  id: (string | number),
   options: { permanent?: boolean; userId?: string } = {},
   signal?: AbortSignal,
 ) {
@@ -914,25 +914,25 @@ export function getSboms(page = 1, pageSize = 50, signal?: AbortSignal, scope?: 
   return request<SBOMSource[]>(withDashboardScope(path, scope), { signal });
 }
 
-export function changeSbomLifecycle(id: number, status: 'ACTIVE' | 'INACTIVE', reason: string) {
+export function changeSbomLifecycle(id: (string | number), status: 'ACTIVE' | 'INACTIVE', reason: string) {
   return request<SBOMSource>(`/api/sboms/${id}/lifecycle`, { method: 'POST', body: JSON.stringify({ status, reason }) });
 }
 
-export function getSbomLifecycleHistory(id: number, signal?: AbortSignal) {
+export function getSbomLifecycleHistory(id: (string | number), signal?: AbortSignal) {
   return request<import('@/types').SbomLifecycleEvent[]>(`/api/sboms/${id}/lifecycle-history`, { signal });
 }
 
-export function getSbom(id: number, signal?: AbortSignal, includeRaw = false) {
+export function getSbom(id: (string | number), signal?: AbortSignal, includeRaw = false) {
   const qs = includeRaw ? '?include_raw=true' : '';
   return request<SBOMSource>(`/api/sboms/${id}${qs}`, { signal });
 }
 
-export function getSbomStats(sbomId: number, signal?: AbortSignal) {
+export function getSbomStats(sbomId: (string | number), signal?: AbortSignal) {
   return request<SbomDocumentStats>(`/api/sboms/${sbomId}/stats`, { signal });
 }
 
 export function getSbomRawChunk(
-  sbomId: number,
+  sbomId: (string | number),
   offset = 0,
   limit = 500,
   signal?: AbortSignal,
@@ -943,7 +943,7 @@ export function getSbomRawChunk(
   );
 }
 
-export async function downloadSbomOriginal(sbomId: number, signal?: AbortSignal): Promise<Blob> {
+export async function downloadSbomOriginal(sbomId: (string | number), signal?: AbortSignal): Promise<Blob> {
   const res = await performRequest(`/api/sboms/${sbomId}/download`, { signal }, 120_000);
   return res.blob();
 }
@@ -1011,7 +1011,7 @@ export async function uploadSbom(payload: CreateSBOMPayload, signal?: AbortSigna
 }
 
 export function updateSbom(
-  id: number,
+  id: (string | number),
   payload: UpdateSBOMPayload,
   signal?: AbortSignal
 ) {
@@ -1022,7 +1022,7 @@ export function updateSbom(
   });
 }
 
-export function editSbom(id: number, payload: any, userId?: string, signal?: AbortSignal) {
+export function editSbom(id: (string | number), payload: any, userId?: string, signal?: AbortSignal) {
   const qs = userId ? `?user_id=${encodeURIComponent(userId)}` : '';
   return request<SBOMSource>(`/api/sboms/${id}/edit${qs}`, {
     method: 'POST',
@@ -1031,18 +1031,18 @@ export function editSbom(id: number, payload: any, userId?: string, signal?: Abo
   });
 }
 
-export function createWorkspaceForSbom(sbomId: number, signal?: AbortSignal) {
+export function createWorkspaceForSbom(sbomId: (string | number), signal?: AbortSignal) {
   return request<ValidationRepairSession>(`/api/sboms/${sbomId}/workspace`, {
     method: 'POST',
     signal,
   });
 }
 
-export function getSbomVersions(id: number, signal?: AbortSignal) {
+export function getSbomVersions(id: (string | number), signal?: AbortSignal) {
   return request<SBOMSource[]>(`/api/sboms/${id}/versions`, { signal });
 }
 
-export function compareSbomVersions(versionA: number, versionB: number, signal?: AbortSignal) {
+export function compareSbomVersions(versionA: string | number, versionB: string | number, signal?: AbortSignal) {
   return request<{
     added: any[];
     removed: any[];
@@ -1050,7 +1050,7 @@ export function compareSbomVersions(versionA: number, versionB: number, signal?:
   }>(`/api/sboms/compare-versions?version_a=${versionA}&version_b=${versionB}`, { signal });
 }
 
-export function restoreSbomVersion(id: number, versionId: number, userId?: string, signal?: AbortSignal) {
+export function restoreSbomVersion(id: (string | number), versionId: string | number, userId?: string, signal?: AbortSignal) {
   const qs = userId ? `?user_id=${encodeURIComponent(userId)}` : '';
   return request<SBOMSource>(`/api/sboms/${id}/restore/${versionId}${qs}`, {
     method: 'POST',
@@ -1059,7 +1059,7 @@ export function restoreSbomVersion(id: number, versionId: number, userId?: strin
 }
 
 export interface SbomDeleteImpact {
-  sbom_id: number;
+  sbom_id: (string | number);
   sbom_name: string;
   components: number;
   runs: number;
@@ -1087,24 +1087,24 @@ export interface SbomDeleteImpact {
   };
   table_counts: Record<string, number>;
   blocking_dependencies: Record<string, number>;
-  child_sbom_ids: number[];
+  child_sbom_ids: (string | number)[];
   child_sboms: Array<{
-    sbom_id: number;
+    sbom_id: (string | number);
     sbom_name: string;
     parent_id: number | null;
-    source_sbom_id: number | null;
-    converted_sbom_id: number | null;
+    source_sbom_id: (string | number) | null;
+    converted_sbom_id: (string | number) | null;
   }>;
   warnings: string[];
   delete_order: string[];
 }
 
-export function getSbomDeleteImpact(id: number, signal?: AbortSignal) {
+export function getSbomDeleteImpact(id: (string | number), signal?: AbortSignal) {
   return request<SbomDeleteImpact>(`/api/sboms/${id}/delete-impact`, { signal });
 }
 
 export function deleteSbom(
-  id: number,
+  id: (string | number),
   userId: number | string,
   options: { permanent?: boolean } = {},
   signal?: AbortSignal,
@@ -1121,7 +1121,7 @@ export function deleteSbom(
 }
 
 export function getSbomComponents(
-  sbomId: number,
+  sbomId: (string | number),
   options: GetSbomComponentsOptions = {},
 ): Promise<SbomComponentListResponse> {
   const {
@@ -1148,22 +1148,22 @@ export function getSbomComponents(
   });
 }
 
-export function getSbomDedupeReport(sbomId: number, signal?: AbortSignal) {
+export function getSbomDedupeReport(sbomId: (string | number), signal?: AbortSignal) {
   return request<any>(`/api/sboms/${sbomId}/dedupe-report`, { signal });
 }
 
-export function getSbomNormalizationReport(sbomId: number, signal?: AbortSignal) {
+export function getSbomNormalizationReport(sbomId: (string | number), signal?: AbortSignal) {
   return request<any>(`/api/sboms/${sbomId}/normalization-report`, { signal });
 }
 
-export function normalizeDeduplicateSbom(sbomId: number, force = true, signal?: AbortSignal) {
+export function normalizeDeduplicateSbom(sbomId: (string | number), force = true, signal?: AbortSignal) {
   return request<any>(`/api/sboms/${sbomId}/normalize-deduplicate?force=${force ? 'true' : 'false'}`, {
     method: 'POST',
     signal,
   });
 }
 
-export function refreshSbomLifecycle(sbomId: number, force = true, signal?: AbortSignal) {
+export function refreshSbomLifecycle(sbomId: (string | number), force = true, signal?: AbortSignal) {
   return request<import('@/types').LifecycleRefreshSummary>(
     `/api/sboms/${sbomId}/lifecycle/refresh?force=${force ? 'true' : 'false'}`,
     {
@@ -1182,11 +1182,11 @@ export function getLifecycleSources(signal?: AbortSignal) {
   return request<{ sources: import('@/types').LifecycleProviderSource[] }>('/api/lifecycle/sources', { signal });
 }
 
-export function getSbomLifecycleReport(sbomId: number, signal?: AbortSignal) {
+export function getSbomLifecycleReport(sbomId: (string | number), signal?: AbortSignal) {
   return request<LifecycleReport>(`/api/sboms/${sbomId}/lifecycle/report`, { signal });
 }
 
-export function exportSbomLifecycleReportCsv(sbomId: number, reportType = 'all', signal?: AbortSignal) {
+export function exportSbomLifecycleReportCsv(sbomId: (string | number), reportType = 'all', signal?: AbortSignal) {
   const params = new URLSearchParams({ format: 'csv' });
   if (reportType && reportType !== 'all') params.set('report_type', reportType);
   return downloadBinary(
@@ -1196,11 +1196,11 @@ export function exportSbomLifecycleReportCsv(sbomId: number, reportType = 'all',
   );
 }
 
-export function exportSbomLifecycleReportPack(sbomId: number, signal?: AbortSignal) {
+export function exportSbomLifecycleReportPack(sbomId: (string | number), signal?: AbortSignal) {
   return downloadBinary(`/api/sboms/${sbomId}/reports/lifecycle-pack`, `sbom_${sbomId}_lifecycle_reports.zip`, signal);
 }
 
-export function refreshComponentLifecycle(componentId: number, force = true, signal?: AbortSignal) {
+export function refreshComponentLifecycle(componentId: (string | number), force = true, signal?: AbortSignal) {
   return request<SBOMComponent>(
     `/api/components/${componentId}/lifecycle/refresh?force=${force ? 'true' : 'false'}`,
     {
@@ -1212,7 +1212,7 @@ export function refreshComponentLifecycle(componentId: number, force = true, sig
 }
 
 export function overrideComponentLifecycle(
-  componentId: number,
+  componentId: (string | number),
   payload: LifecycleOverridePayload,
   signal?: AbortSignal,
 ) {
@@ -1227,7 +1227,7 @@ export function overrideComponentLifecycle(
   );
 }
 
-export function analyzeSbom(sbomId: number, signal?: AbortSignal) {
+export function analyzeSbom(sbomId: (string | number), signal?: AbortSignal) {
   return request<AnalysisRun>(`/api/sboms/${sbomId}/analyze`, {
     method: 'POST',
     signal,
@@ -1245,9 +1245,9 @@ export function analyzeConsolidated(payload: AnalyzeSBOMPayload, signal?: AbortS
 
 // ─── Analysis Runs ────────────────────────────────────────────────────────────
 export interface RunsFilter {
-  sbom_id?: number;
-  project_id?: number;
-  product_id?: number;
+  sbom_id?: (string | number);
+  project_id?: (string | number);
+  product_id?: (string | number);
   run_status?: string;
   page?: number;
   page_size?: number;
@@ -1261,11 +1261,8 @@ export interface RunsFilter {
  */
 function buildRunsQuery(filter: RunsFilter): URLSearchParams {
   const params = new URLSearchParams();
-  const addPositiveInt = (key: string, value: number | undefined) => {
-    if (value === undefined) return;
-    if (!Number.isFinite(value)) return; // drops NaN and ±Infinity
-    if (value <= 0) return;               // backend requires ge=1 on these
-    params.set(key, String(Math.trunc(value)));
+  const addPositiveInt = (key: string, value: string | number | undefined) => {
+    if (value != null && String(value)) params.set(key, String(value));
   };
   addPositiveInt('sbom_id', filter.sbom_id);
   addPositiveInt('project_id', filter.project_id);
@@ -1300,13 +1297,12 @@ export interface RunsAggregate {
 }
 
 export function getRunsAggregate(
-  filter: { sbom_id?: number; project_id?: number; product_id?: number } = {},
+  filter: { sbom_id?: (string | number); project_id?: (string | number); product_id?: (string | number) } = {},
   signal?: AbortSignal,
 ) {
   const params = new URLSearchParams();
-  const addPositiveInt = (key: string, value: number | undefined) => {
-    if (value === undefined || !Number.isFinite(value) || value <= 0) return;
-    params.set(key, String(Math.trunc(value)));
+  const addPositiveInt = (key: string, value: string | number | undefined) => {
+    if (value != null && String(value)) params.set(key, String(value));
   };
   addPositiveInt('sbom_id', filter.sbom_id);
   addPositiveInt('project_id', filter.project_id);
@@ -1335,11 +1331,11 @@ export interface VulnerabilityRow {
   fixed_versions: string | null;
   source: string | null;
   run_id: number;
-  sbom_id: number | null;
+  sbom_id: (string | number) | null;
   sbom_name: string | null;
-  project_id: number | null;
+  project_id: (string | number) | null;
   project_name: string | null;
-  product_id: number | null;
+  product_id: (string | number) | null;
   product_name: string | null;
 }
 
@@ -1569,19 +1565,19 @@ export function getSbomTypes(signal?: AbortSignal) {
 }
 
 // ─── SBOM info / risk-summary ────────────────────────────────────────────────
-export function getSbomInfo(sbomId: number, signal?: AbortSignal) {
+export function getSbomInfo(sbomId: (string | number), signal?: AbortSignal) {
   return request<SBOMInfo>(`/api/sboms/${sbomId}/info`, { signal });
 }
 
-export function getSbomRiskSummary(sbomId: number, signal?: AbortSignal) {
+export function getSbomRiskSummary(sbomId: (string | number), signal?: AbortSignal) {
   return request<SBOMRiskSummary>(`/api/sboms/${sbomId}/risk-summary`, { signal });
 }
 
-export function getSbomValidationReport(sbomId: number, signal?: AbortSignal) {
+export function getSbomValidationReport(sbomId: (string | number), signal?: AbortSignal) {
   return request<ValidationReport>(`/api/sboms/${sbomId}/validation-report`, { signal });
 }
 
-export function convertSbomToCycloneDX(sbomId: number, userId?: string, signal?: AbortSignal) {
+export function convertSbomToCycloneDX(sbomId: (string | number), userId?: string, signal?: AbortSignal) {
   const params = userId ? `?user_id=${encodeURIComponent(userId)}` : '';
   return request<SbomConversionResponse>(`/api/sboms/${sbomId}/convert/cyclonedx${params}`, {
     method: 'POST',
@@ -1589,12 +1585,12 @@ export function convertSbomToCycloneDX(sbomId: number, userId?: string, signal?:
   });
 }
 
-export function getSbomConversionReport(sbomId: number, signal?: AbortSignal) {
+export function getSbomConversionReport(sbomId: (string | number), signal?: AbortSignal) {
   return request<SbomConversionReport>(`/api/sboms/${sbomId}/conversion-report`, { signal });
 }
 
 export function exportSbomDocument(
-  sbomId: number,
+  sbomId: (string | number),
   opts?: { format?: string; exportMode?: string },
   signal?: AbortSignal,
 ) {
@@ -1606,7 +1602,7 @@ export function exportSbomDocument(
   return downloadBinary(`/api/sboms/${sbomId}/export${suffix}`, `sbom_${sbomId}.json`, signal);
 }
 
-export function exportSbomVulnerabilityExcel(sbomId: number, signal?: AbortSignal) {
+export function exportSbomVulnerabilityExcel(sbomId: (string | number), signal?: AbortSignal) {
   return downloadBinary(
     `/api/sboms/${sbomId}/reports/vulnerabilities.xlsx`,
     `sbom-${sbomId}-vulnerability-report.xlsx`,
@@ -1615,7 +1611,7 @@ export function exportSbomVulnerabilityExcel(sbomId: number, signal?: AbortSigna
 }
 
 export function exportFda510kSbomReport(
-  projectId: number,
+  projectId: (string | number),
   payload: Fda510kReportExportRequest,
   signal?: AbortSignal,
 ) {
@@ -1638,7 +1634,7 @@ export function exportFda510kSbomReport(
  * ``HttpError.detail`` carrying the structured failure when the report
  * has any error-severity entry.
  */
-export function revalidateSbom(sbomId: number, signal?: AbortSignal) {
+export function revalidateSbom(sbomId: (string | number), signal?: AbortSignal) {
   return request<SBOMSource>(`/api/sboms/${sbomId}/revalidate`, {
     method: 'POST',
     signal,
@@ -1722,7 +1718,7 @@ export function saveValidationSessionRepairDraft(
 
 export function updateValidationSession(
   sessionId: string,
-  content: string | null | { current_content?: string | null; project_id?: number | null },
+  content: string | null | { current_content?: string | null; project_id?: (string | number) | null },
   signal?: AbortSignal,
 ) {
   const body = typeof content === 'string' || content === null
@@ -1827,7 +1823,7 @@ export function getDashboardTrend(days = 30, signal?: AbortSignal, scope?: Dashb
  * legacy daily `getDashboardTrend` so the existing chart is untouched.
  */
 export function getDashboardTrendFiltered(
-  opts: { granularity: TrendGranularity; applicationIds?: number[] },
+  opts: { granularity: TrendGranularity; applicationIds?: (string | number)[] },
   signal?: AbortSignal,
   scope?: DashboardFilterScope,
 ) {
@@ -1920,16 +1916,16 @@ export function getDashboardRemediationStats(signal?: AbortSignal) {
   }>('/dashboard/remediation-stats', { signal });
 }
 
-export function getComponentVulnerabilities(sbomId: number, componentId: number, signal?: AbortSignal) {
+export function getComponentVulnerabilities(sbomId: (string | number), componentId: (string | number), signal?: AbortSignal) {
   return request<import('@/types').ComponentVulnerabilitiesResponse>(
     `/api/sboms/${sbomId}/components/${componentId}/vulnerabilities`, { signal });
 }
 
-export function getSbomVexStatements(sbomId: number, signal?: AbortSignal) {
+export function getSbomVexStatements(sbomId: (string | number), signal?: AbortSignal) {
   return request<VexListResponse>(`/api/sboms/${sbomId}/vex`, { signal });
 }
 
-export function discoverSbomVexDocuments(sbomId: number, force = false, signal?: AbortSignal) {
+export function discoverSbomVexDocuments(sbomId: (string | number), force = false, signal?: AbortSignal) {
   return request<VexDiscoveryResponse>(
     `/api/sboms/${sbomId}/vex/discover?force=${force ? 'true' : 'false'}`,
     {
@@ -1941,7 +1937,7 @@ export function discoverSbomVexDocuments(sbomId: number, force = false, signal?:
 }
 
 export function uploadSbomVexDocument(
-  sbomId: number,
+  sbomId: (string | number),
   payload: {
     document: Record<string, unknown>;
     source_type?: string;
@@ -1958,11 +1954,11 @@ export function uploadSbomVexDocument(
 }
 
 export function overrideVexStatement(
-  componentId: number,
+  componentId: (string | number),
   vulnerabilityId: string,
   payload: VexOverridePayload,
   signal?: AbortSignal,
-  sbomId?: number,
+  sbomId?: (string | number),
 ) {
   return request<VexListResponse['statements'][number]>(
     `/api${sbomId ? `/sboms/${sbomId}` : ''}/components/${componentId}/vulnerabilities/${encodeURIComponent(vulnerabilityId)}/vex-override`,
@@ -1974,20 +1970,20 @@ export function overrideVexStatement(
   );
 }
 
-export function getVexOverrideHistory(componentId: number, vulnerabilityId: string, signal?: AbortSignal, sbomId?: number) {
+export function getVexOverrideHistory(componentId: (string | number), vulnerabilityId: string, signal?: AbortSignal, sbomId?: (string | number)) {
   return request<VexOverrideHistoryResponse>(
     `/api${sbomId ? `/sboms/${sbomId}` : ''}/components/${componentId}/vulnerabilities/${encodeURIComponent(vulnerabilityId)}/vex-override/history`,
     { signal },
   );
 }
 
-export function exportSbomVexReportJson(sbomId: number, reportType = 'all', signal?: AbortSignal) {
+export function exportSbomVexReportJson(sbomId: (string | number), reportType = 'all', signal?: AbortSignal) {
   const params = new URLSearchParams({ format: 'json' });
   if (reportType && reportType !== 'all') params.set('report_type', reportType);
   return downloadBinary(`/api/sboms/${sbomId}/vex/report?${params.toString()}`, `sbom_${sbomId}_vex.json`, signal);
 }
 
-export function exportSbomVexReportCsv(sbomId: number, reportType = 'all', signal?: AbortSignal) {
+export function exportSbomVexReportCsv(sbomId: (string | number), reportType = 'all', signal?: AbortSignal) {
   const params = new URLSearchParams({ format: 'csv' });
   if (reportType && reportType !== 'all') params.set('report_type', reportType);
   return downloadBinary(
@@ -1997,7 +1993,7 @@ export function exportSbomVexReportCsv(sbomId: number, reportType = 'all', signa
   );
 }
 
-export function exportSbomVexReportPack(sbomId: number, signal?: AbortSignal) {
+export function exportSbomVexReportPack(sbomId: (string | number), signal?: AbortSignal) {
   return downloadBinary(`/api/sboms/${sbomId}/reports/vex-pack`, `sbom_${sbomId}_vex_reports.zip`, signal);
 }
 
@@ -2164,20 +2160,20 @@ export function analyzeSbomOsv(payload: AnalyzeSBOMPayload, signal?: AbortSignal
 // ─── Periodic analysis schedules ─────────────────────────────────────────────
 // See app/routers/schedules.py for the server contract.
 
-export function getProjectSchedule(projectId: number, signal?: AbortSignal) {
+export function getProjectSchedule(projectId: (string | number), signal?: AbortSignal) {
   return request<AnalysisSchedule>(`/api/projects/${projectId}/schedule`, { signal });
 }
 
-export function getProductSchedule(productId: number, signal?: AbortSignal) {
+export function getProductSchedule(productId: (string | number), signal?: AbortSignal) {
   return request<AnalysisSchedule>(`/api/products/${productId}/schedule`, { signal });
 }
 
-export function getEffectiveProductSchedule(productId: number, signal?: AbortSignal) {
+export function getEffectiveProductSchedule(productId: (string | number), signal?: AbortSignal) {
   return request<SbomScheduleResolved>(`/api/products/${productId}/schedule/effective`, { signal });
 }
 
 export function upsertProductSchedule(
-  productId: number,
+  productId: (string | number),
   payload: ScheduleUpsertPayload,
   signal?: AbortSignal,
 ) {
@@ -2187,7 +2183,7 @@ export function upsertProductSchedule(
 }
 
 export function patchProductSchedule(
-  productId: number,
+  productId: (string | number),
   payload: Partial<ScheduleUpsertPayload>,
   signal?: AbortSignal,
 ) {
@@ -2197,7 +2193,7 @@ export function patchProductSchedule(
 }
 
 export function deleteProductSchedule(
-  productId: number,
+  productId: (string | number),
   options: { permanent?: boolean } = {},
   signal?: AbortSignal,
 ) {
@@ -2206,7 +2202,7 @@ export function deleteProductSchedule(
 }
 
 export function upsertProjectSchedule(
-  projectId: number,
+  projectId: (string | number),
   payload: ScheduleUpsertPayload,
   signal?: AbortSignal,
 ) {
@@ -2218,7 +2214,7 @@ export function upsertProjectSchedule(
 }
 
 export function patchProjectSchedule(
-  projectId: number,
+  projectId: (string | number),
   payload: Partial<ScheduleUpsertPayload>,
   signal?: AbortSignal,
 ) {
@@ -2230,7 +2226,7 @@ export function patchProjectSchedule(
 }
 
 export function deleteProjectSchedule(
-  projectId: number,
+  projectId: (string | number),
   options: { permanent?: boolean } = {},
   signal?: AbortSignal,
 ) {
@@ -2241,12 +2237,12 @@ export function deleteProjectSchedule(
   });
 }
 
-export function getSbomSchedule(sbomId: number, signal?: AbortSignal) {
+export function getSbomSchedule(sbomId: (string | number), signal?: AbortSignal) {
   return request<SbomScheduleResolved>(`/api/sboms/${sbomId}/schedule`, { signal });
 }
 
 export function upsertSbomSchedule(
-  sbomId: number,
+  sbomId: (string | number),
   payload: ScheduleUpsertPayload,
   signal?: AbortSignal,
 ) {
@@ -2258,7 +2254,7 @@ export function upsertSbomSchedule(
 }
 
 export function patchSbomSchedule(
-  sbomId: number,
+  sbomId: (string | number),
   payload: Partial<ScheduleUpsertPayload>,
   signal?: AbortSignal,
 ) {
@@ -2270,7 +2266,7 @@ export function patchSbomSchedule(
 }
 
 export function deleteSbomSchedule(
-  sbomId: number,
+  sbomId: (string | number),
   options: { permanent?: boolean } = {},
   signal?: AbortSignal,
 ) {
@@ -2284,28 +2280,28 @@ export function deleteSbomSchedule(
 export interface ListSchedulesFilter {
   scope?: 'TENANT' | 'PROJECT' | 'PRODUCT' | 'SBOM';
   enabled?: boolean;
-  project_id?: number;
+  project_id?: (string | number);
 }
 
-export function getTenantSchedule(tenantId: number, signal?: AbortSignal) {
+export function getTenantSchedule(tenantId: (string | number), signal?: AbortSignal) {
   return request<AnalysisSchedule | null>(`/api/tenants/${tenantId}/schedule`, { signal });
 }
 
-export function upsertScopedSchedule(scope: 'TENANT' | 'PRODUCT', targetId: number, payload: ScheduleUpsertPayload) {
+export function upsertScopedSchedule(scope: 'TENANT' | 'PRODUCT', targetId: (string | number), payload: ScheduleUpsertPayload) {
   return request<AnalysisSchedule>(`/api/${scope === 'TENANT' ? 'tenants' : 'products'}/${targetId}/schedule`, { method: 'POST', body: JSON.stringify(payload) });
 }
 
-export function deleteScopedSchedule(scope: 'TENANT' | 'PRODUCT', targetId: number) {
+export function deleteScopedSchedule(scope: 'TENANT' | 'PRODUCT', targetId: (string | number)) {
   return requestVoid(`/api/${scope === 'TENANT' ? 'tenants' : 'products'}/${targetId}/schedule`, { method: 'DELETE' });
 }
 
-export function excludeFromParentSchedule(scope: 'PRODUCT' | 'SBOM', targetId: number) {
+export function excludeFromParentSchedule(scope: 'PRODUCT' | 'SBOM', targetId: string | number) {
   return request<AnalysisSchedule>(`/api/${scope === 'PRODUCT' ? 'products' : 'sboms'}/${targetId}/schedule/exclude`, {
     method: 'POST',
   });
 }
 
-export function restoreScheduleInheritance(scope: 'PRODUCT' | 'SBOM', targetId: number) {
+export function restoreScheduleInheritance(scope: 'PRODUCT' | 'SBOM', targetId: string | number) {
   return request<{ status: string; id?: number }>(
     `/api/${scope === 'PRODUCT' ? 'products' : 'sboms'}/${targetId}/schedule/inherit`,
     { method: 'POST' },
@@ -2342,8 +2338,8 @@ export function resumeSchedule(scheduleId: number, signal?: AbortSignal) {
 export interface RunNowResult {
   status: string;
   schedule_id: number;
-  sbom_ids: number[];
-  failed_sbom_ids?: number[];
+  sbom_ids: (string | number)[];
+  failed_sbom_ids?: (string | number)[];
   scope?: string;
   target_count?: number;
   skipped_count?: number;
@@ -2760,7 +2756,7 @@ import type { CveDetail, CveDetailWithContext } from '@/types';
  * call the global endpoint.
  */
 export function getCveDetail(
-  args: { cveId: string; scanId?: number | null; componentId?: number | null },
+  args: { cveId: string; scanId?: number | null; componentId?: (string | number) | null },
   signal?: AbortSignal,
 ): Promise<CveDetail | CveDetailWithContext> {
   const id = encodeURIComponent(args.cveId.trim().toUpperCase());
@@ -2831,7 +2827,7 @@ export function syncKevCatalog(signal?: AbortSignal): Promise<KevSyncResult> {
   );
 }
 
-export function upsertRemediation(projectId: number, payload: any, signal?: AbortSignal) {
+export function upsertRemediation(projectId: (string | number), payload: any, signal?: AbortSignal) {
   return request<any>(`/api/remediation?project_id=${projectId}`, {
     method: 'POST',
     body: JSON.stringify(payload),
@@ -3067,7 +3063,7 @@ export function setVexInvestigationAssignment(
  */
 export function resolveVexInvestigationComponent(
   investigationId: number,
-  body: { component_id: number; row_version: number; reason: string },
+  body: { component_id: (string | number); row_version: number; reason: string },
 ): Promise<VexInvestigationDetail> {
   return request<VexInvestigationDetail>(`/api/vex/investigations/${investigationId}/component`, {
     method: 'PUT',
@@ -3084,7 +3080,7 @@ export function resolveVexInvestigationComponent(
  * saves through the component-scoped override instead.
  */
 export async function getVexInvestigationByTriple(
-  args: { sbom_id: number; component_id: number; vulnerability_id: string },
+  args: { sbom_id: (string | number); component_id: (string | number); vulnerability_id: string },
   signal?: AbortSignal,
 ): Promise<VexInvestigationDetail | null> {
   const params = new URLSearchParams({
@@ -3222,14 +3218,14 @@ export function downloadSbomRepair(sessionId: string, jobId: string, kind: 'down
 export function getSessionQuality(sessionId: string, signal?: AbortSignal) {
   return request<import('@/types/sbomQuality').QualityResponse>(`/api/sbom-validation-sessions/${sessionId}/quality`, { signal });
 }
-export function getSbomQuality(sbomId: number, signal?: AbortSignal) {
+export function getSbomQuality(sbomId: (string | number), signal?: AbortSignal) {
   return request<import('@/types/sbomQuality').QualityResponse>(`/api/sboms/${sbomId}/quality`, { signal });
 }
 
-export function getLogicalSboms(productId: number, signal?: AbortSignal, page = 1, pageSize = 50) {
+export function getLogicalSboms(productId: (string | number), signal?: AbortSignal, page = 1, pageSize = 50) {
   return request<import('@/types').LogicalSBOMListResponse>(`/api/products/${productId}/logical-sboms?page=${page}&page_size=${pageSize}`, { signal });
 }
-export async function getLogicalSbomChoices(productId: number, signal?: AbortSignal) {
+export async function getLogicalSbomChoices(productId: (string | number), signal?: AbortSignal) {
   const first = await getLogicalSboms(productId, signal, 1, 500);
   const items = [...first.items];
   for (let page = 2; items.length < first.total; page++) {
@@ -3239,13 +3235,13 @@ export async function getLogicalSbomChoices(productId: number, signal?: AbortSig
   }
   return items;
 }
-export function getLogicalSbom(id: number, signal?: AbortSignal) {
+export function getLogicalSbom(id: (string | number), signal?: AbortSignal) {
   return request<import('@/types').LogicalSBOM>(`/api/logical-sboms/${id}`, { signal });
 }
-export function getLogicalSbomVersions(id: number, signal?: AbortSignal) {
+export function getLogicalSbomVersions(id: (string | number), signal?: AbortSignal) {
   return request<SBOMSource[]>(`/api/logical-sboms/${id}/versions`, { signal });
 }
-export function createLogicalSbom(productId: number, payload: { name: string; description?: string }) {
+export function createLogicalSbom(productId: (string | number), payload: { name: string; description?: string }) {
   return request<import('@/types').LogicalSBOM>(`/api/products/${productId}/logical-sboms`, { method: 'POST', body: JSON.stringify(payload) });
 }
 
@@ -3256,13 +3252,13 @@ export function getDashboardPostureVersions(scope?: DashboardFilterScope, signal
 export function getVexInvestigationVersions(scope?: DashboardFilterScope, signal?: AbortSignal) {
   return request<{items: Array<{id: number; name: string; version: string | null; historical: boolean; active: boolean}>}>(withDashboardScope('/api/vex/investigations/versions', scope), {signal});
 }
-export function getVexVersionComparison(sbomId: number, signal?: AbortSignal) {
+export function getVexVersionComparison(sbomId: (string | number), signal?: AbortSignal) {
   return request<import('@/types').VexVersionComparison>(`/api/vex/investigations/comparison?sbom_id=${sbomId}`, {signal});
 }
 
 
 export interface DashboardPriorityFinding {
-  component_id: number | null;
+  component_id: (string | number) | null;
   id: number;
   analysis_run_id: number;
   vuln_id: string;
@@ -3279,12 +3275,12 @@ export function getDashboardPriorityFindings(scope: DashboardFilterScope, signal
   );
 }
 
-export function getVexAnalysisRuns(sbomId: number, signal?: AbortSignal) {
+export function getVexAnalysisRuns(sbomId: (string | number), signal?: AbortSignal) {
   return request<{items: Array<{id: number; run_status: string; completed_on: string | null; is_current: boolean}>}>(
     `/api/vex/investigations/analysis-runs?sbom_id=${sbomId}`, {signal});
 }
 
-export function getVexRunSnapshot(sbomId: number, runId: number, offset: number, signal?: AbortSignal) {
+export function getVexRunSnapshot(sbomId: (string | number), runId: number, offset: number, signal?: AbortSignal) {
   return request<{total: number; snapshot_available: boolean; obsolete: boolean; items: Array<{
     investigation_id: number; canonical_vulnerability_id: string; component_name: string | null;
     component_version: string | null; effective_status: string; reconciliation_status: string;

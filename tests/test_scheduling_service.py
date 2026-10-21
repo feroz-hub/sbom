@@ -120,3 +120,28 @@ def test_failure_backoff_grows_then_caps():
     assert compute_failure_backoff(5, base) - base == timedelta(hours=16)
     assert compute_failure_backoff(6, base) - base == timedelta(hours=24)
     assert compute_failure_backoff(99, base) - base == timedelta(hours=24)
+
+
+@pytest.mark.parametrize("expression", ["not a cron", "* * * * * *", "* * * * * * 2099", "0 0 31 2 *"])
+def test_supported_custom_schedule_rejects_invalid_or_non_five_field_cron(expression):
+    with pytest.raises(ScheduleValidationError):
+        validate_spec(ScheduleSpec(cadence="CUSTOM", cron_expression=expression))
+
+
+def test_custom_schedule_uses_utc_for_offset_input_and_strictly_advances():
+    from datetime import timezone
+
+    now = datetime(2026, 10, 20, 14, 30, tzinfo=timezone(timedelta(hours=5, minutes=30)))
+    spec = ScheduleSpec(cadence="CUSTOM", cron_expression="*/5 * * * *")
+    assert compute_next_run_at(spec, now) == datetime(2026, 10, 20, 9, 5, tzinfo=UTC)
+
+
+def test_schedule_payload_validates_display_timezone_without_shifting_utc_hour():
+    from app.schemas import ScheduleUpsert
+    from pydantic import ValidationError
+
+    payload = ScheduleUpsert(cadence="MONTHLY", day_of_month=1, hour_utc=2, timezone="Asia/Kolkata", enabled=False)
+    assert payload.hour_utc == 2
+    assert payload.timezone == "Asia/Kolkata"
+    with pytest.raises(ValidationError, match="Unknown IANA timezone"):
+        ScheduleUpsert(cadence="DAILY", timezone="Mars/Base", enabled=False)

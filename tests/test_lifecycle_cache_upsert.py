@@ -250,10 +250,10 @@ def test_lifecycle_refresh_twice_does_not_raise(client, db):
     db.add(component)
     db.commit()
 
-    first = client.post(f"/api/sboms/{sbom.id}/lifecycle/refresh?force=true")
+    first = client.post(f"/api/sboms/{sbom.public_id}/lifecycle/refresh?force=true")
     assert first.status_code == 200
 
-    second = client.post(f"/api/sboms/{sbom.id}/lifecycle/refresh?force=true")
+    second = client.post(f"/api/sboms/{sbom.public_id}/lifecycle/refresh?force=true")
     assert second.status_code == 200
 
     assert _identity_count(

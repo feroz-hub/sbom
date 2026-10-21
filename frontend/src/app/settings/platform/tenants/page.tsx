@@ -192,7 +192,7 @@ export default function PlatformTenantsPage() {
       setSelectedInitialAdmin(null);
       setFieldErrors({});
       setFormOpen(false);
-      await invalidatePlatformTenantSurfaces(queryClient, Number(tenant.id));
+      await invalidatePlatformTenantSurfaces(queryClient, tenant.id);
       router.push(`/settings/platform/tenants/${tenant.id}`);
     },
     onSettled: () => {
@@ -218,7 +218,7 @@ export default function PlatformTenantsPage() {
         `Tenant “${variables.name}” was ${variables.status === 'ACTIVE' ? 'activated' : 'disabled'} successfully.`,
       );
       setDisableTarget(null);
-      await invalidatePlatformTenantSurfaces(queryClient, Number(variables.id));
+      await invalidatePlatformTenantSurfaces(queryClient, variables.id);
     },
     onError: (error) =>
       showError(

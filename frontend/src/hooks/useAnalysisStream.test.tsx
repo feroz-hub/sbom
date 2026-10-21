@@ -23,13 +23,13 @@ let analysisFetch = vi.fn<(url: string, init: RequestInit) => Promise<Response>>
 function wrapper({ children }: { children: ReactNode }) {
   return <QueryClientProvider client={client}><AuthProvider>{children}</AuthProvider></QueryClientProvider>;
 }
-const tenants = [7, 1].map(id => ({ id, name: `Synthetic tenant ${id}`, slug: `synthetic-${id}`, status: 'ACTIVE', membership_status: 'ACTIVE', roles: ['SECURITY_ANALYST'] }));
+const tenants = ['00000000-0000-4000-8000-000000000007', '00000000-0000-4000-8000-000000000001'].map(id => ({ id, name: `Synthetic tenant ${id}`, slug: `synthetic-${id}`, status: 'ACTIVE', membership_status: 'ACTIVE', roles: ['SECURITY_ANALYST'] }));
 function json(body: unknown) { return new Response(JSON.stringify(body), { status: 200, headers: { 'Content-Type': 'application/json' } }); }
 function emptyStream() { return new Response(new ReadableStream({ start(controller) { controller.close(); } })); }
 async function mount() {
   const hook = renderHook(() => ({ ...useAnalysisStream(42), auth: useAuth() }), { wrapper });
   await waitFor(() => expect(hook.result.current.auth.bootstrapState).toBe('ready'));
-  expect(hook.result.current.auth.activeTenantId).toBe('7');
+  expect(hook.result.current.auth.activeTenantId).toBe('00000000-0000-4000-8000-000000000007');
   expect(hook.result.current.auth.hasPermission('analysis:run')).toBe(true);
   return hook;
 }
@@ -37,13 +37,13 @@ async function mount() {
 describe('useAnalysisStream', () => {
   beforeEach(() => {
     sessionStorage.clear();
-    sessionStorage.setItem('sbom_active_tenant_id', '7');
+    sessionStorage.setItem('sbom_active_tenant_id', '00000000-0000-4000-8000-000000000007');
     client = new QueryClient({ defaultOptions: { queries: { retry: false, staleTime: 300_000, refetchOnWindowFocus: false } } });
     analysisFetch = vi.fn<(url: string, init: RequestInit) => Promise<Response>>().mockResolvedValue(emptyStream());
     vi.stubGlobal('fetch', vi.fn((url: string, init?: RequestInit) => {
       if (url === '/api/auth/session') return Promise.resolve(json({ authenticated: true }));
       if (url.endsWith('/api/auth/me')) {
-        const id = Number((init?.headers as Record<string, string> | undefined)?.['X-Tenant-ID'] ?? 7);
+        const id = String((init?.headers as Record<string, string> | undefined)?.['X-Tenant-ID'] ?? '00000000-0000-4000-8000-000000000007');
         return Promise.resolve(json({ authenticated: true, user_id: 3, tenant_id: id, roles: ['SECURITY_ANALYST'], permissions: ['analysis:run', 'sbom:read'], is_platform_admin: false,
           auth_context: { status: 'READY', user: { id: 3 }, tenant_context: { active_tenant: tenants.find(tenant => tenant.id === id), available_tenants: tenants } } }));
       }
@@ -80,6 +80,18 @@ describe('useAnalysisStream', () => {
     );
   });
 
+  it('delegates omitted provider selection to server configuration', async () => {
+    const { result } = await mount();
+    await act(async () => { await result.current.startAnalysis(); });
+    expect(JSON.parse(String(analysisFetch.mock.calls[0][1].body))).not.toHaveProperty('sources');
+  });
+
+  it('preserves an explicit provider selection', async () => {
+    const { result } = await mount();
+    await act(async () => { await result.current.startAnalysis({ sources: ['osv'] }); });
+    expect(JSON.parse(String(analysisFetch.mock.calls[0][1].body)).sources).toEqual(['OSV']);
+  });
+
   it('sends the active tenant on the stream request', async () => {
     const { result } = await mount();
 
@@ -90,7 +102,7 @@ describe('useAnalysisStream', () => {
     expect(analysisFetch).toHaveBeenCalledWith(
       'http://test.local/api/sboms/42/analyze/stream',
       expect.objectContaining({
-        headers: expect.objectContaining({ 'X-Tenant-ID': '7' }),
+        headers: expect.objectContaining({ 'X-Tenant-ID': '00000000-0000-4000-8000-000000000007' }),
       }),
     );
   });
@@ -115,8 +127,8 @@ describe('useAnalysisStream', () => {
       await result.current.startAnalysis();
     });
 
-    await act(async () => { await result.current.auth.selectTenant('1'); });
-    await waitFor(() => expect(result.current.auth.activeTenantId).toBe('1'));
+    await act(async () => { await result.current.auth.selectTenant('00000000-0000-4000-8000-000000000001'); });
+    await waitFor(() => expect(result.current.auth.activeTenantId).toBe('00000000-0000-4000-8000-000000000001'));
 
     await act(async () => {
       await result.current.startAnalysis();
@@ -124,8 +136,8 @@ describe('useAnalysisStream', () => {
 
     const calls = analysisFetch.mock.calls;
     expect(calls).toHaveLength(2);
-    expect(new Headers(calls[0][1].headers).get('X-Tenant-ID')).toBe('7');
-    expect(new Headers(calls[1][1].headers).get('X-Tenant-ID')).toBe('1');
+    expect(new Headers(calls[0][1].headers).get('X-Tenant-ID')).toBe('00000000-0000-4000-8000-000000000007');
+    expect(new Headers(calls[1][1].headers).get('X-Tenant-ID')).toBe('00000000-0000-4000-8000-000000000001');
   });
 
   it('cancels an active request and returns to idle without inventing completion', async () => {
@@ -147,12 +159,12 @@ describe('useAnalysisStream', () => {
     const { result } = await mount(); let task!: Promise<void>;
     act(() => { task = result.current.startAnalysis(); });
     await waitFor(() => expect(result.current.state.phase).toBe('connecting'));
-    await act(async () => { await result.current.auth.selectTenant('1'); });
+    await act(async () => { await result.current.auth.selectTenant('00000000-0000-4000-8000-000000000001'); });
     await act(async () => { await task; });
-    await waitFor(() => expect(result.current.auth.activeTenantId).toBe('1'));
+    await waitFor(() => expect(result.current.auth.activeTenantId).toBe('00000000-0000-4000-8000-000000000001'));
     await act(async () => { await result.current.startAnalysis(); });
     expect(analysisFetch).toHaveBeenCalledTimes(2);
-    expect(new Headers(analysisFetch.mock.calls[1][1].headers).get('X-Tenant-ID')).toBe('1');
+    expect(new Headers(analysisFetch.mock.calls[1][1].headers).get('X-Tenant-ID')).toBe('00000000-0000-4000-8000-000000000001');
   });
   it.each(['tenant switch', 'logout'] as const)('%s aborts active requests and ignores old terminal results/cache writes', async action => {
     let finish!: (value: Response) => void; let signal!: AbortSignal;
@@ -160,13 +172,13 @@ describe('useAnalysisStream', () => {
     const { result } = await mount(); client.setQueryData(['privileged', 'old tenant'], 'old data'); let task!: Promise<void>;
     act(() => { task = result.current.startAnalysis(); });
     await waitFor(() => expect(finish).toBeDefined());
-    await act(async () => { if (action === 'logout') result.current.auth.logout(); else await result.current.auth.selectTenant('1'); });
+    await act(async () => { if (action === 'logout') result.current.auth.logout(); else await result.current.auth.selectTenant('00000000-0000-4000-8000-000000000001'); });
     expect(signal.aborted).toBe(true);
     expect(client.getQueryData(['privileged', 'old tenant'])).toBeUndefined();
     await act(async () => { finish(new Response('event: complete\ndata: {"runId":8,"status":"FINDINGS","total":81}\n\n')); await task; });
     expect(result.current.state.summary).toBeNull(); expect(result.current.state.phase).not.toBe('done');
     expect(client.getQueryCache().getAll()).toHaveLength(0);
     if (action === 'logout') expect(result.current.auth.isAuthenticated).toBe(false);
-    else expect(result.current.auth.activeTenantId).toBe('1');
+    else expect(result.current.auth.activeTenantId).toBe('00000000-0000-4000-8000-000000000001');
   });
 });

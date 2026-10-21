@@ -19,16 +19,16 @@ export default function ProjectsPage() {
 
 function ProjectsContent() {
   const [showCreate, setShowCreate] = useState(false);
-  const [visibleIds, setVisibleIds] = useState<number[] | null>(null);
+  const [visibleIds, setVisibleIds] = useState<(string | number)[] | null>(null);
   const params = useSearchParams();
   const router = useRouter();
   // Existing dashboard scope is retained. Selection has a separate URL key,
   // so selecting a card never changes scanned/application/SBOM filtering.
-  const projectId = Number(params?.get('project')) || null;
-  const applicationId = projectId ? Number(params?.get('product')) || null : null;
-  const sbomId = applicationId ? Number(params?.get('sbom')) || null : null;
+  const projectId = params?.get('project') || null;
+  const applicationId = projectId ? params?.get('product') || null : null;
+  const sbomId = applicationId ? params?.get('sbom') || null : null;
   const scanned = params?.get('scanned') === '1';
-  const requestedId = Number(params?.get('selectedProject')) || projectId;
+  const requestedId = params?.get('selectedProject') || projectId;
   const scope: DashboardFilterScope = { projectId, applicationId, sbomId };
 
   const { data: projects, isLoading, error } = useQuery({ queryKey: ['projects'], queryFn: ({ signal }) => getProjects(signal) });
@@ -41,7 +41,7 @@ function ProjectsContent() {
   const pageError = error || (scanned ? scannedProjects.error : null);
   const resultProjects = visibleIds === null ? visibleProjects : visibleProjects?.filter(project => visibleIds.includes(project.id));
   const selected = resultProjects?.find(project => project.id === requestedId) ?? resultProjects?.find(project => project.id === visibleIds?.[0]) ?? resultProjects?.[0];
-  const onVisibleIdsChange = useCallback((ids: number[]) => setVisibleIds(previous => previous?.length === ids.length && previous.every((id, index) => id === ids[index]) ? previous : ids), []);
+  const onVisibleIdsChange = useCallback((ids: (string | number)[]) => setVisibleIds(previous => previous?.length === ids.length && previous.every((id, index) => id === ids[index]) ? previous : ids), []);
   function selectProject(project: Project) {
     const next = new URLSearchParams(params?.toString());
     next.set('selectedProject', String(project.id));

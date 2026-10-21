@@ -15,8 +15,9 @@ import json
 from pathlib import Path
 
 import pytest
-from app.models import AnalysisRun
+from app.models import AnalysisRun, SBOMSource
 
+from tests.public_id_fixture import public_row
 from tests.tenant_fixture_scope import verified_fixture_tenant
 
 from ._normalize import normalize
@@ -33,7 +34,7 @@ def _load_or_write(name: str, actual: dict) -> dict:
     return json.loads(path.read_text())
 
 
-def _assert_deprecated(resp, sbom_id: int) -> None:
+def _assert_deprecated(resp, sbom_id: str) -> None:
     assert resp.headers["Deprecation"] == "true"
     assert resp.headers["Sunset"] == "Sun, 31 Jan 2027 23:59:59 GMT"
     assert resp.headers["Link"] == f'</api/sboms/{sbom_id}/analyze>; rel="successor-version"'
@@ -101,7 +102,7 @@ def test_legacy_consolidated_returns_existing_active_run(client, seeded_sbom):
     try:
         with verified_fixture_tenant(db, 1):
             active = AnalysisRun(
-                sbom_id=seeded_sbom["id"],
+                sbom_id=public_row(db, SBOMSource, seeded_sbom["id"]).id,
                 run_status="RUNNING",
                 sbom_name=seeded_sbom["sbom_name"],
                 source="NVD,OSV,GITHUB,VULNDB",
@@ -114,7 +115,7 @@ def test_legacy_consolidated_returns_existing_active_run(client, seeded_sbom):
             db.commit()
             db.refresh(active)
             active_id = active.id
-            before_count = db.query(AnalysisRun).filter(AnalysisRun.sbom_id == seeded_sbom["id"]).count()
+            before_count = db.query(AnalysisRun).filter(AnalysisRun.sbom_id == public_row(db, SBOMSource, seeded_sbom["id"]).id).count()
     finally:
         db.close()
 
@@ -133,7 +134,7 @@ def test_legacy_consolidated_returns_existing_active_run(client, seeded_sbom):
     db = SessionLocal()
     try:
         with verified_fixture_tenant(db, 1):
-            after_count = db.query(AnalysisRun).filter(AnalysisRun.sbom_id == seeded_sbom["id"]).count()
+            after_count = db.query(AnalysisRun).filter(AnalysisRun.sbom_id == public_row(db, SBOMSource, seeded_sbom["id"]).id).count()
             assert after_count == before_count
             db.query(AnalysisRun).filter(AnalysisRun.id == active_id).delete()
             db.commit()

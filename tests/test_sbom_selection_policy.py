@@ -1,5 +1,6 @@
 """AUTO/MANUAL_PIN policy (lifecycle phases 1–3, VEX-DASH-004/005)."""
 import importlib.util
+from pathlib import Path
 
 import pytest
 from alembic.migration import MigrationContext
@@ -30,7 +31,7 @@ def test_auto_promotes_only_successful_descendant_and_keeps_pending_posture(clie
     app_line.reconcile(b)
     assert app_line.product.current_sbom_id == b.id
     assert queue(client)["total"] == 15
-    assert queue(client, version_scope="historical", sbom_id=a.id)["total"] == 81
+    assert queue(client, version_scope="historical", sbom_id=str(a.public_id))["total"] == 81
     audits = db.scalars(select(AuditLog).where(AuditLog.action == "product.current_sbom.changed")).all()
     assert audits[-1].new_value["analysis_run_id"] == successful.id
     assert not promote_successful_analysis(db, first)  # late completion cannot revert a newer descendant
@@ -41,7 +42,7 @@ def test_manual_selection_pins_until_explicit_mode_change(client, app_line, db):
     run = app_line.run(a, [], status="OK")
     promote_successful_analysis(db, run)
     db.commit()
-    response = client.patch(f"/api/products/{app_line.product.id}", json={"current_sbom_id": a.id})
+    response = client.patch(f"/api/products/{app_line.product.public_id}", json={"current_sbom_id": str(a.public_id)})
     assert response.status_code == 200, response.text
     assert response.json()["current_sbom_mode"] == "MANUAL_PIN"
     b = app_line.version("2", parent=a)
@@ -49,7 +50,7 @@ def test_manual_selection_pins_until_explicit_mode_change(client, app_line, db):
     assert not promote_successful_analysis(db, newer)
     assert app_line.product.current_sbom_id == a.id
     db.commit()
-    response = client.patch(f"/api/products/{app_line.product.id}", json={"current_sbom_mode": "AUTO"})
+    response = client.patch(f"/api/products/{app_line.product.public_id}", json={"current_sbom_mode": "AUTO"})
     assert response.status_code == 200, response.text
     assert promote_successful_analysis(db, newer)
 
@@ -92,7 +93,7 @@ def test_invalid_pin_is_explicit_and_does_not_mutate_selection(client, app_line,
 
 
 def test_selection_migration_preserves_legacy_pins_and_rolls_back():
-    spec = importlib.util.spec_from_file_location("selection_migration", "alembic/versions/077_sbom_selection_mode.py")
+    spec = importlib.util.spec_from_file_location("selection_migration", str(Path(__file__).resolve().parents[1] / "alembic/versions/077_sbom_selection_mode.py"))
     migration = importlib.util.module_from_spec(spec)
     spec.loader.exec_module(migration)
     engine = create_engine("sqlite://")
@@ -123,14 +124,14 @@ def test_run_snapshot_preserves_prior_assignment_and_decision(client, app_line, 
     context.effective_status = "AFFECTED"
     capture_run_snapshot(db, run)
     db.commit()
-    response = client.get("/api/vex/investigations/run-snapshot", params={"sbom_id": a.id, "analysis_run_id": run.id})
+    response = client.get("/api/vex/investigations/run-snapshot", params={"sbom_id": str(a.public_id), "analysis_run_id": run.id})
     assert response.status_code == 200, response.text
     data = response.json()
     assert data["total"] == 1 and data["read_only"]
     assert data["items"][0]["assigned_to"] == "original-assignee"
     assert data["items"][0]["effective_status"] == "NOT_AFFECTED"
     other = app_line.version("unrelated")
-    assert client.get("/api/vex/investigations/run-snapshot", params={"sbom_id": other.id, "analysis_run_id": run.id}).status_code == 404
+    assert client.get("/api/vex/investigations/run-snapshot", params={"sbom_id": str(other.public_id), "analysis_run_id": run.id}).status_code == 404
 
 
 def test_zero_context_snapshot_distinguishes_legacy_missing_snapshot(client, app_line, db):
@@ -139,7 +140,7 @@ def test_zero_context_snapshot_distinguishes_legacy_missing_snapshot(client, app
     run = app_line.run(a, [], status="OK")
     capture_run_snapshot(db, run)
     db.commit()
-    data = client.get("/api/vex/investigations/run-snapshot", params={"sbom_id": a.id, "analysis_run_id": run.id}).json()
+    data = client.get("/api/vex/investigations/run-snapshot", params={"sbom_id": str(a.public_id), "analysis_run_id": run.id}).json()
     assert data["snapshot_available"] and data["total"] == 0
 
 
@@ -191,8 +192,8 @@ def test_obsolete_analyzer_contexts_are_not_current_security_posture(client, app
     db.commit()
     assert queue(client)["total"] == 0
     assert client.get('/dashboard/vex').json()['total_contexts'] == 0
-    assert queue(client, version_scope="all", sbom_id=a.id)["total"] == 1
-    historical = queue(client, version_scope="historical", sbom_id=a.id)
+    assert queue(client, version_scope="all", sbom_id=str(a.public_id))["total"] == 1
+    historical = queue(client, version_scope="historical", sbom_id=str(a.public_id))
     assert historical["total"] == 1 and historical["items"][0]["historical"]
     assert not client.get(f'/api/vex/investigations/{historical["items"][0]["id"]}').json()["capabilities"]["can_update"]
 
@@ -302,9 +303,9 @@ def test_acceptance_auto_81_to_15_with_http_decisions_assignment_and_inactive_fa
     assert promote_successful_analysis(db, successful)
     app_line.reconcile(b)
     assert queue(client)["total"] == 15
-    diff = client.get('/api/vex/investigations/comparison', params={"sbom_id": b.id}).json()
+    diff = client.get('/api/vex/investigations/comparison', params={"sbom_id": str(b.public_id)}).json()
     assert (diff["previous_findings"], diff["current_findings"], diff["still_detected"], diff["new"], diff["no_longer_observed"]) == (81, 15, 12, 3, 69)
-    assert queue(client, version_scope="historical", sbom_id=a.id)["total"] == 81
+    assert queue(client, version_scope="historical", sbom_id=str(a.public_id))["total"] == 81
     db.expire_all()
     current = db.scalars(select(VexInvestigation).where(VexInvestigation.sbom_id == b.id)).all()
     assert all(row.assigned_to is None and row.effective_status == "UNDER_INVESTIGATION" for row in current)

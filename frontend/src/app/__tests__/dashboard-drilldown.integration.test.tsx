@@ -171,7 +171,7 @@ describe('dashboard hero — severity drill-down', () => {
     expect(screen.getByRole('region', { name: 'Portfolio metrics' })).toBeInTheDocument();
   });
   it('renders filter-specific guidance and clears the URL when a scope is empty', async () => {
-    queryString = 'project=1&application=2';
+    queryString = 'project=00000000-0000-4000-8000-000000000001&application=00000000-0000-4000-8000-000000000002';
     getDashboardSummary.mockResolvedValue({ posture: { total_sboms: 0 } });
     render(wrap(<DashboardPage />));
     expect(await screen.findByText('No data matches the current filters')).toBeInTheDocument();
@@ -180,21 +180,21 @@ describe('dashboard hero — severity drill-down', () => {
     expect(push).toHaveBeenCalledWith('/', { scroll: false });
   });
   it('clears the URL hierarchy without switching tenants', () => {
-    queryString = 'project=1&application=2&sbom=3';
+    queryString = 'project=00000000-0000-4000-8000-000000000001&application=00000000-0000-4000-8000-000000000002&sbom=00000000-0000-4000-8000-000000000003';
     render(wrap(<DashboardPage />));
     fireEvent.click(screen.getByRole('button', { name: 'Reset filters' }));
     expect(push).toHaveBeenCalledWith('/', { scroll: false });
   });
 
   it('loads and propagates the selected hierarchy to findings', async () => {
-    queryString = 'project=1&application=2&sbom=3';
+    queryString = 'project=00000000-0000-4000-8000-000000000001&application=00000000-0000-4000-8000-000000000002&sbom=00000000-0000-4000-8000-000000000003';
     render(wrap(<DashboardPage />));
     const buttons = await screen.findAllByRole('button', { name: /View Critical findings/i });
     expect(getDashboardSummary).toHaveBeenCalledWith(expect.anything(), {
-      projectId: 1, applicationId: 2, sbomId: 3,
+      projectId: '00000000-0000-4000-8000-000000000001', applicationId: '00000000-0000-4000-8000-000000000002', sbomId: '00000000-0000-4000-8000-000000000003',
     });
     fireEvent.click(buttons[0]!);
-    expect(push).toHaveBeenCalledWith('/analysis?tab=vulnerabilities&severity=critical&project=1&product=2&sbom=3');
+    expect(push).toHaveBeenCalledWith('/analysis?tab=vulnerabilities&severity=critical&project=00000000-0000-4000-8000-000000000001&product=00000000-0000-4000-8000-000000000002&sbom=00000000-0000-4000-8000-000000000003');
   });
 
   it('opens the portfolio-wide Vulnerabilities tab for the clicked severity', async () => {

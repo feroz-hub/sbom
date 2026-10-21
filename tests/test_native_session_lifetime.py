@@ -3,11 +3,10 @@ from types import SimpleNamespace
 
 import jwt
 import pytest
+from app.services import native_jwt_service
+from app.settings import Settings
 from cryptography.hazmat.primitives.asymmetric import rsa
 from pydantic import ValidationError
-
-from app.settings import Settings
-from app.services import native_jwt_service
 
 
 def test_native_session_defaults_to_one_day():

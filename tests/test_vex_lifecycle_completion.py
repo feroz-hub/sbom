@@ -3,7 +3,7 @@
 import json
 
 import pytest
-from app.models import AnalysisRun, VexInvestigation, VexStatement
+from app.models import AnalysisRun, SBOMComponent, VexInvestigation, VexStatement
 from app.services.dashboard_scope import DashboardScope
 from app.services.vex.reconciliation import MANUAL_SOURCE_NAME
 from sqlalchemy import event, select
@@ -14,7 +14,7 @@ pytest_plugins = ["tests.test_vex_version_lifecycle"]
 
 
 def comparison(client, sbom):
-    response = client.get("/api/vex/investigations/comparison", params={"sbom_id": sbom.id})
+    response = client.get("/api/vex/investigations/comparison", params={"sbom_id": str(sbom.public_id)})
     assert response.status_code == 200, response.text
     return response.json()
 
@@ -27,11 +27,11 @@ def test_pending_upload_preserves_last_known_posture(client, app_line):
     b = app_line.version("A1.1.0", parent=a)
     data = queue(client)
     assert data["total"] == tiles(client)["total_contexts"] == 81
-    assert data["posture"][0]["current_sbom"]["id"] == b.id
-    assert data["posture"][0]["posture_sbom"]["id"] == a.id
+    assert data["posture"][0]["current_sbom"]["id"] == str(b.public_id)
+    assert data["posture"][0]["posture_sbom"]["id"] == str(a.public_id)
     assert data["posture"][0]["analysis_status"] == "ANALYSIS_PENDING"
     assert "last known security posture from A1.0.0" in data["posture"][0]["warning"]
-    assert client.get("/api/vex/investigations/comparison", params={"sbom_id": b.id}).status_code == 409
+    assert client.get("/api/vex/investigations/comparison", params={"sbom_id": str(b.public_id)}).status_code == 409
 
 
 @pytest.mark.parametrize("inactive", ["lifecycle", "soft_delete"])
@@ -53,7 +53,7 @@ def test_designated_current_not_overridden_by_upload_or_analysis(client, app_lin
     data = queue(client)
     assert data["total"] == tiles(client)["total_contexts"] == 3
     assert data["posture"][0]["designation_required"]
-    assert data["posture"][0]["current_sbom"]["id"] == a.id
+    assert data["posture"][0]["current_sbom"]["id"] == str(a.public_id)
     app_line.product.current_sbom_id = b.id
     db.commit()
     assert queue(client)["total"] == 2
@@ -115,9 +115,9 @@ def test_full_81_to_15_workflow_with_history_and_prior_decision(client, app_line
         diff["new"],
         diff["no_longer_observed"],
     ) == (81, 15, 12, 3, 69)
-    historical = queue(client, version_scope="historical", sbom_id=a.id, limit=5)
+    historical = queue(client, version_scope="historical", sbom_id=str(a.public_id), limit=5)
     summary = client.get(
-        "/api/vex/investigations/summary", params={"version_scope": "historical", "sbom_id": a.id}
+        "/api/vex/investigations/summary", params={"version_scope": "historical", "sbom_id": str(a.public_id)}
     ).json()
     assert historical["total"] == summary["total"] == 81
     assert all(row["historical"] for row in historical["items"])
@@ -291,7 +291,7 @@ def test_historical_assignments_do_not_authorize_mutation(client, app_line, db):
         as_actor(client, developer)
         assert (
             client.patch(
-                f"/api/components/{old.component_id}/vulnerabilities/{old.canonical_vulnerability_id}/vex-override",
+                f"/api/components/{db.get(SBOMComponent, old.component_id).public_id}/vulnerabilities/{old.canonical_vulnerability_id}/vex-override",
                 json={"status": "affected", "reason": "bypass"},
             ).status_code
             == 403
@@ -320,17 +320,16 @@ def test_history_comparison_and_versions_cross_tenant_not_found(client, app_line
     try:
         for url in [
             f"/api/vex/investigations/{row.id}",
-            f"/api/vex/investigations?version_scope=all&sbom_id={a.id}",
-            f"/api/vex/investigations/summary?version_scope=all&sbom_id={a.id}",
-            f"/api/vex/investigations/comparison?sbom_id={b.id}",
+            f"/api/vex/investigations?version_scope=all&sbom_id={a.public_id}",
+            f"/api/vex/investigations/summary?version_scope=all&sbom_id={a.public_id}",
+            f"/api/vex/investigations/comparison?sbom_id={b.public_id}",
         ]:
             response = client.get(url)
             assert response.status_code == 404, response.text
             assert a.sbom_name not in response.text and "CVE-2026-1001" not in response.text
-        assert (
-            client.get("/api/vex/investigations/versions", params={"product_id": app_line.product.id}).json()["items"]
-            == []
-        )
+        versions = client.get("/api/vex/investigations/versions", params={"product_id": str(app_line.product.public_id)})
+        assert versions.status_code == 404, versions.text
+        assert a.sbom_name not in versions.text and "CVE-2026-1001" not in versions.text
     finally:
         client.app.dependency_overrides.pop(get_current_tenant_context, None)
 
@@ -386,7 +385,7 @@ def test_imported_vex_only_is_version_scoped_and_metrics_agree(client, app_line,
     summary = client.get("/api/vex/investigations/summary").json()
     assert summary["total"] == 3 and summary["vex_only_count"] == 1
     assert comparison(client, b)["current_findings"] == 2
-    assert queue(client, version_scope="historical", sbom_id=a.id)["total"] == 3
+    assert queue(client, version_scope="historical", sbom_id=str(a.public_id))["total"] == 3
 
 
 def test_run_bound_severity_ignores_failed_newer_findings(client, app_line):
@@ -414,14 +413,14 @@ def test_active_grandchild_supersedes_through_inactive_middle(client, app_line, 
     app_line.run(tip, [(ct, "CVE-2026-1002")])
     app_line.reconcile(tip)
     assert queue(client)["total"] == 1
-    assert queue(client)["items"][0]["sbom_id"] == tip.id
+    assert queue(client)["items"][0]["sbom_id"] == str(tip.public_id)
 
 
 def test_direct_historical_url_and_inactive_history_remain_read_only(client, app_line, db):
     a, b = two_versions(app_line)
     b.lifecycle_status = "INACTIVE"
     db.commit()
-    data = queue(client, version_scope="all", sbom_id=b.id)
+    data = queue(client, version_scope="all", sbom_id=str(b.public_id))
     assert data["total"] == 2 and all(row["historical"] for row in data["items"])
     detail = client.get(f"/api/vex/investigations/{data['items'][0]['id']}").json()
     assert detail["historical"] and not detail["capabilities"]["can_update"]
@@ -480,7 +479,7 @@ def test_retired_same_sbom_context_cannot_be_mutated_by_legacy_override(client, 
     app_line.run(a, [], status="OK")
     app_line.reconcile(a)
     response = client.patch(
-        f"/api/components/{component.id}/vulnerabilities/{identifier}/vex-override",
+        f"/api/components/{component.public_id}/vulnerabilities/{identifier}/vex-override",
         json={"status": "affected", "reason": "old context bypass"},
     )
     assert response.status_code == 403
@@ -497,11 +496,11 @@ def test_unlinked_designated_upload_preserves_application_evidence_without_inven
     db.commit()
     result = queue(client)
     assert result["total"] == tiles(client)["total_contexts"] == 1
-    assert result["posture"][0]["current_sbom"]["id"] == b.id
-    assert result["posture"][0]["posture_sbom"]["id"] == a.id
+    assert result["posture"][0]["current_sbom"]["id"] == str(b.public_id)
+    assert result["posture"][0]["posture_sbom"]["id"] == str(a.public_id)
     assert "another declared lineage" in result["posture"][0]["warning"]
     assert b.parent_id is None
-    assert client.get("/api/vex/investigations/comparison", params={"sbom_id": b.id}).status_code == 409
+    assert client.get("/api/vex/investigations/comparison", params={"sbom_id": str(b.public_id)}).status_code == 409
 
 
 def test_same_failed_source_coverage_cannot_prove_absence(client, app_line, db):

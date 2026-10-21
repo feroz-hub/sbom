@@ -68,7 +68,7 @@ def _seed_legacy_row(client, name: str, body: str | None) -> int:
         sbom = SBOMSource(sbom_name=name, sbom_data=body, status="validated", tenant_id=1)
         db.add(sbom)
         db.commit()
-        return sbom.id
+        return str(sbom.public_id)
 
 
 def _set_pending(client, sbom_id: int) -> None:
@@ -79,8 +79,9 @@ def _set_pending(client, sbom_id: int) -> None:
     from tests.tenant_fixture_scope import verified_fixture_tenant
 
     with SessionLocal() as db, verified_fixture_tenant(db, 1):
-        assert db.get(SBOMSource, sbom_id) is not None
-        db.execute(update(SBOMSource).where(SBOMSource.id == sbom_id,
+        from tests.public_id_fixture import public_row
+        row = public_row(db, SBOMSource, sbom_id)
+        db.execute(update(SBOMSource).where(SBOMSource.id == row.id,
                    SBOMSource.validated_at.is_(None), SBOMSource.status == "validated").values(status="pending"))
         db.commit()
 
@@ -137,7 +138,7 @@ def test_revalidate_is_idempotent(client):
 
 
 def test_revalidate_404_on_unknown_id(client):
-    resp = client.post("/api/sboms/99999999/revalidate")
+    resp = client.post(f"/api/sboms/{uuid.uuid4()}/revalidate")
     assert resp.status_code == 404
 
 

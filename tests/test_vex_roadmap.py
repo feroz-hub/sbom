@@ -97,7 +97,7 @@ def test_csaf_import_maps_products_and_keeps_unmatched(client):
             db.commit()
 
             response = client.post(
-                f"/api/sboms/{sbom.id}/vex",
+                f"/api/sboms/{sbom.public_id}/vex",
                 json={"document": _csaf_document(), "source_name": "CSAF upload"},
             )
 
@@ -108,9 +108,9 @@ def test_csaf_import_maps_products_and_keeps_unmatched(client):
             assert body["matched_statements"] == 1
             assert body["unmatched_statements"] == 1
 
-            listed = client.get(f"/api/sboms/{sbom.id}/vex").json()["statements"]
+            listed = client.get(f"/api/sboms/{sbom.public_id}/vex").json()["statements"]
             by_status = {row["status"]: row for row in listed}
-            assert by_status["not_affected"]["component_id"] == component.id
+            assert by_status["not_affected"]["component_id"] == str(component.public_id)
             assert by_status["not_affected"]["confidence"] == MEDIUM
             assert by_status["affected"]["component_id"] is None
             assert by_status["affected"]["confidence"] == LOW
@@ -245,7 +245,7 @@ def test_vex_csv_report_export(client):
             )
             db.commit()
 
-            response = client.get(f"/api/sboms/{sbom.id}/vex/report?format=csv&report_type=affected")
+            response = client.get(f"/api/sboms/{sbom.public_id}/vex/report?format=csv&report_type=affected")
             assert response.status_code == 200
             assert response.headers["content-type"].startswith("text/csv")
             rows = list(csv.DictReader(io.StringIO(response.text)))
@@ -268,13 +268,13 @@ def test_manual_vex_override_validation_and_history_endpoint(client):
             db.commit()
 
             invalid = client.patch(
-                f"/api/components/{component.id}/vulnerabilities/CVE-2026-0002/vex-override",
+                f"/api/components/{component.public_id}/vulnerabilities/CVE-2026-0002/vex-override",
                 json={"status": "fixed", "reason": "reviewed"},
             )
             assert invalid.status_code == 422
 
             valid = client.patch(
-                f"/api/components/{component.id}/vulnerabilities/CVE-2026-0002/vex-override",
+                f"/api/components/{component.public_id}/vulnerabilities/CVE-2026-0002/vex-override",
                 json={
                     "status": "fixed",
                     "fixed_version": "3.0.8",
@@ -284,7 +284,7 @@ def test_manual_vex_override_validation_and_history_endpoint(client):
             )
             assert valid.status_code == 200
 
-            history = client.get(f"/api/components/{component.id}/vulnerabilities/CVE-2026-0002/vex-override/history")
+            history = client.get(f"/api/components/{component.public_id}/vulnerabilities/CVE-2026-0002/vex-override/history")
             assert history.status_code == 200
             body = history.json()
             assert len(body["history"]) == 1
@@ -316,7 +316,7 @@ def test_lifecycle_csv_report_export(client):
             )
             db.commit()
 
-            response = client.get(f"/api/sboms/{sbom.id}/lifecycle/report?format=csv&report_type=eol_eos_eof")
+            response = client.get(f"/api/sboms/{sbom.public_id}/lifecycle/report?format=csv&report_type=eol_eos_eof")
             assert response.status_code == 200
             rows = list(csv.DictReader(io.StringIO(response.text)))
             assert rows[0]["name"] == "legacy-lib"
@@ -346,11 +346,11 @@ def test_report_pack_exports(client):
             )
             db.commit()
 
-            vex_pack = client.get(f"/api/sboms/{sbom.id}/reports/vex-pack")
+            vex_pack = client.get(f"/api/sboms/{sbom.public_id}/reports/vex-pack")
             assert vex_pack.status_code == 200
             assert vex_pack.headers["content-type"].startswith("application/zip")
 
-            lifecycle_pack = client.get(f"/api/sboms/{sbom.id}/reports/lifecycle-pack")
+            lifecycle_pack = client.get(f"/api/sboms/{sbom.public_id}/reports/lifecycle-pack")
             assert lifecycle_pack.status_code == 200
             assert lifecycle_pack.headers["content-type"].startswith("application/zip")
     finally:
@@ -449,14 +449,14 @@ def test_rbac_blocks_viewer_and_allows_security_override(client, monkeypatch):
 
             app.dependency_overrides[get_current_tenant_context] = _viewer_dep
             blocked = client.patch(
-                f"/api/components/{component.id}/vulnerabilities/CVE-2026-9999/vex-override",
+                f"/api/components/{component.public_id}/vulnerabilities/CVE-2026-9999/vex-override",
                 json=payload,
             )
             assert blocked.status_code == 403
 
             app.dependency_overrides[get_current_tenant_context] = _analyst_dep
             allowed = client.patch(
-                f"/api/components/{component.id}/vulnerabilities/CVE-2026-9999/vex-override",
+                f"/api/components/{component.public_id}/vulnerabilities/CVE-2026-9999/vex-override",
                 json=payload,
             )
             assert allowed.status_code == 200

@@ -41,10 +41,10 @@ export function useBackgroundAnalysis() {
   const queryClient = useQueryClient();
   const scope = useAnalysisScope();
 
-  const triggerRef = useRef<((sbomId: number, sbomName: string) => void) | null>(null);
+  const triggerRef = useRef<((sbomId: (string | number), sbomName: string) => void) | null>(null);
 
   const triggerBackgroundAnalysis = useCallback(
-    (sbomId: number, sbomName: string) => {
+    (sbomId: (string | number), sbomName: string) => {
       if (!scope.ready) return;
       const isCurrent = scope.capture();
       removePendingAnalysis(sbomId, scope.key);

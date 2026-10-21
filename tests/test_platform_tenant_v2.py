@@ -1,14 +1,15 @@
 """Control-plane authority never substitutes for explicit customer membership."""
 
 import pytest
-from app.authorization_catalog_seed_v5 import PLATFORM_ADMIN_PERMISSIONS_V5
 from app.authorization_catalog_seed_v2 import PLATFORM_ADMIN_PERMISSIONS_V2
+from app.authorization_catalog_seed_v5 import PLATFORM_ADMIN_PERMISSIONS_V5
 from app.core.permissions import ROLE_PERMISSIONS
 from app.core.security import get_current_user
 from app.db import SessionLocal
 from app.services.auth_context_service import resolve_authorization_state
 
 from tests.phase6_helpers import identity_claims, seed_membership, seed_platform_grant, seed_user
+from tests.public_id_fixture import tenant_uuid
 
 
 def test_platform_catalog_contains_only_control_plane_permissions():
@@ -100,7 +101,7 @@ def test_pure_platform_admin_cannot_enter_tenant(app, client, method, path, payl
         db.commit()
     app.dependency_overrides[get_current_user] = lambda: claims
     try:
-        response = client.request(method, path, json=payload, headers={"X-Tenant-ID": "1"})
+        response = client.request(method, path.replace("/tenants/1", f"/tenants/{tenant_uuid(1)}"), json=payload, headers={"X-Tenant-ID": tenant_uuid(1)})
         assert response.status_code == 403, response.text
     finally:
         app.dependency_overrides.pop(get_current_user, None)
@@ -165,14 +166,14 @@ def test_dedicated_admin_recovery_keeps_actor_platform_only(app, client):
         db.commit()
     app.dependency_overrides[get_current_user] = lambda: claims
     try:
-        response = client.post("/api/platform/tenants/1/recover-admin", json={"user_id": candidate_id})
+        response = client.post(f"/api/platform/tenants/{tenant_uuid(1)}/recover-admin", json={"user_id": candidate_id})
         assert response.status_code == 200, response.text
         with SessionLocal() as db:
             member = db.query(TenantUser).filter_by(tenant_id=1, user_id=candidate_id).one()
             assert effective_role_codes(db, member) == {"TENANT_ADMIN"}
             assert db.query(TenantUser).filter_by(user_id=actor_id).count() == 0
-        assert client.post("/api/platform/tenants/1/recover-admin", json={"user_id": candidate_id}).status_code == 200
-        assert client.get("/api/tenants/1/users", headers={"X-Tenant-ID": "1"}).status_code == 403
+        assert client.post(f"/api/platform/tenants/{tenant_uuid(1)}/recover-admin", json={"user_id": candidate_id}).status_code == 200
+        assert client.get(f"/api/tenants/{tenant_uuid(1)}/users", headers={"X-Tenant-ID": tenant_uuid(1)}).status_code == 403
     finally:
         app.dependency_overrides.pop(get_current_user, None)
 
@@ -245,20 +246,20 @@ def test_tenant_audit_pagination_excludes_context_telemetry(app, client):
     app.dependency_overrides[get_current_user] = lambda: claims
     try:
         result = client.get(
-            "/api/tenants/1/audit-history",
+            f"/api/tenants/{tenant_uuid(1)}/audit-history",
             params={"page_size": 5, "administrative_only": True},
-            headers={"X-Tenant-ID": "1"},
+            headers={"X-Tenant-ID": tenant_uuid(1)},
         )
         assert result.status_code == 200, result.text
         body = result.json()
         assert body["total"] == 9 and body["total_pages"] == 2 and len(body["items"]) == 5
         assert all(event["label"] == "Member added" for event in body["items"])
         second = client.get(
-            "/api/tenants/1/audit-history?page=2&page_size=5&administrative_only=true", headers={"X-Tenant-ID": "1"}
+            f"/api/tenants/{tenant_uuid(1)}/audit-history?page=2&page_size=5&administrative_only=true", headers={"X-Tenant-ID": tenant_uuid(1)}
         ).json()
         assert len(second["items"]) == 4
         assert client.get("/api/platform/summary").status_code == 403
-        assert client.get("/api/tenants/999/audit-history", headers={"X-Tenant-ID": "1"}).status_code == 404
+        assert client.get(f"/api/tenants/{__import__('uuid').uuid4()}/audit-history", headers={"X-Tenant-ID": tenant_uuid(1)}).status_code == 404
     finally:
         app.dependency_overrides.pop(get_current_user, None)
 
@@ -321,25 +322,25 @@ def test_existing_identity_memberships_are_independent(app, client):
         candidate_id, other_member_id = candidate.id, second_member.id
         db.commit()
     app.dependency_overrides[get_current_user] = lambda: claims
-    headers = {"X-Tenant-ID": "1"}
+    headers = {"X-Tenant-ID": tenant_uuid(1)}
     try:
-        found = client.get("/api/tenants/1/user-candidates?q=Independent", headers=headers).json()["items"]
+        found = client.get(f"/api/tenants/{tenant_uuid(1)}/user-candidates?q=Independent", headers=headers).json()["items"]
         assert len(found) == 1 and found[0]["id"] == candidate_id
         assert not any(key in found[0] for key in ["memberships", "tenant_id", "roles", "external_subject"])
         created = client.post(
-            "/api/tenants/1/users", json={"user_id": candidate_id, "roles": ["DEVELOPER"]}, headers=headers
+            f"/api/tenants/{tenant_uuid(1)}/users", json={"user_id": candidate_id, "roles": ["DEVELOPER"]}, headers=headers
         )
         assert created.status_code == 201, created.text
         assert (
             client.post(
-                "/api/tenants/1/users", json={"user_id": candidate_id, "roles": ["VIEWER"]}, headers=headers
+                f"/api/tenants/{tenant_uuid(1)}/users", json={"user_id": candidate_id, "roles": ["VIEWER"]}, headers=headers
             ).status_code
             == 409
         )
         with SessionLocal() as db:
             member = db.query(TenantUser).filter_by(tenant_id=1, user_id=candidate_id).one()
             current_member_id = member.id
-        response = client.post(f"/api/tenants/1/users/{current_member_id}/deactivate", headers=headers)
+        response = client.post(f"/api/tenants/{tenant_uuid(1)}/users/{current_member_id}/deactivate", headers=headers)
         assert response.status_code == 200, response.text
         with SessionLocal() as db:
             assert db.get(IAMUser, candidate_id).status == "ACTIVE"
@@ -365,10 +366,10 @@ def test_dual_role_authority_is_independent(app, client):
         assert platform["tenant_id"] is None
         assert "platform:tenant:read" in platform["permissions"]
         assert "tenant:user:read" not in platform["permissions"]
-        body = client.get("/api/auth/me", headers={"X-Tenant-ID": "1"}).json()
+        body = client.get("/api/auth/me", headers={"X-Tenant-ID": tenant_uuid(1)}).json()
         assert body["roles"] == ["VIEWER"]
         assert set(body["permissions"]) == set(ROLE_PERMISSIONS["VIEWER"])
         assert "platform:admin" not in body["permissions"]
-        assert client.get("/api/platform/summary", headers={"X-Tenant-ID": "1"}).status_code == 200
+        assert client.get("/api/platform/summary", headers={"X-Tenant-ID": tenant_uuid(1)}).status_code == 200
     finally:
         app.dependency_overrides.pop(get_current_user, None)

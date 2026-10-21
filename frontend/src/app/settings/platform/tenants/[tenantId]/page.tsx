@@ -15,8 +15,8 @@ import { invalidatePlatformTenantSurfaces } from '@/lib/queryInvalidation';
 
 export default function PlatformTenantDetailPage({ params }: { params: Promise<{ tenantId: string }> }) {
   const { tenantId } = use(params);
-  const id = Number(tenantId);
-  const valid = /^\d+$/.test(tenantId) && Number.isSafeInteger(id) && id > 0;
+  const id = tenantId;
+  const valid = /^[0-9a-f-]{36}$/i.test(tenantId);
   const {  isLoading } = useAuth();
   const { can: hasPermission } = usePermissions();
   const canRead = hasPermission('platform:tenant:read');

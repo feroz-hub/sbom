@@ -332,7 +332,7 @@ def test_T12_every_advisor_endpoint_rejects_foreign_ids_without_leaking__FR_SCA_
     as_role(client, "TENANT_ADMIN")
     item = new_item(client)
     cid = item["candidates"][0]["id"]
-    project_id = db.scalar(select(Projects.id).order_by(Projects.id).limit(1))
+    project_id = str(db.scalar(select(Projects.public_id).order_by(Projects.id).limit(1)))
     as_role(client, "TENANT_ADMIN", tenant_id=2)
     caplog.set_level(logging.DEBUG)
     rid = item["id"]

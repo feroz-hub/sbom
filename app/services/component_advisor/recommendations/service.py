@@ -38,17 +38,17 @@ from ....models import (
     ComponentRecommendationEvent,
     ComponentRecommendationFactor,
 )
-from ..policy import PolicyKind
-from ..policy_service import effective_policy
 from ...audit_service import write_audit_log
 from ...dashboard_scope import DashboardScope, dashboard_scope
 from ..intelligence_service import cached_snapshot, get_component_version
+from ..policy import PolicyKind
+from ..policy_service import effective_policy
 from .alternative_discovery import discover_alternatives, manual_candidate, product_constraints
 from .audit import EventAction, record_event, serialize_event
-from .decisions import PERMISSION, Decision, InvalidDecision, allowed, check_candidate, next_status
 from .compatibility import evaluate_compatibility, summarize
 from .confidence import confidence as confidence_for
 from .confidence import freshness_view
+from .decisions import PERMISSION, Decision, InvalidDecision, allowed, check_candidate, next_status
 from .explanation import explain
 from .history import build_history, candidate_cpe, to_observations, window_start
 from .scoring import ScoringPolicy, score_candidate

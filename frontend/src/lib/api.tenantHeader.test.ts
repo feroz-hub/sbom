@@ -34,21 +34,21 @@ describe('shared request helper tenant scoping', () => {
   });
 
   it('injects X-Tenant-ID from the persisted active tenant', async () => {
-    sessionStorage.setItem('sbom_active_tenant_id', '7');
+    sessionStorage.setItem('sbom_active_tenant_id', '00000000-0000-4000-8000-000000000007');
 
     await request('/api/sboms');
 
-    expect(requestHeaders(0).get('X-Tenant-ID')).toBe('7');
+    expect(requestHeaders(0).get('X-Tenant-ID')).toBe('00000000-0000-4000-8000-000000000007');
   });
 
   it('serializes queue filters and preserves the selected tenant header', async () => {
-    sessionStorage.setItem('sbom_active_tenant_id', '7');
+    sessionStorage.setItem('sbom_active_tenant_id', '00000000-0000-4000-8000-000000000007');
     await listVexInvestigations({ my_work: 'me', assignee: 'membership:42', severity: 'CRITICAL', effective_status: 'UNDER_INVESTIGATION', needs_review: true, unresolved_component: true, limit: 25, offset: 25 });
     const url = new URL(fetchMock.mock.calls[0][0], 'http://localhost');
     expect(Object.fromEntries(url.searchParams)).toMatchObject({ my_work: 'me', assignee: 'membership:42', severity: 'CRITICAL', effective_status: 'UNDER_INVESTIGATION', needs_review: 'true', unresolved_component: 'true', limit: '25', offset: '25' });
-    expect(requestHeaders(0).get('X-Tenant-ID')).toBe('7');
+    expect(requestHeaders(0).get('X-Tenant-ID')).toBe('00000000-0000-4000-8000-000000000007');
     await searchVexAssignees('analyst@example.com', 50);
-    expect(requestHeaders(1).get('X-Tenant-ID')).toBe('7');
+    expect(requestHeaders(1).get('X-Tenant-ID')).toBe('00000000-0000-4000-8000-000000000007');
     const searchUrl = new URL(fetchMock.mock.calls[1][0], 'http://localhost');
     expect(Object.fromEntries(searchUrl.searchParams)).toMatchObject({ q: 'analyst@example.com', limit: '50', offset: '50' });
   });
@@ -59,29 +59,29 @@ describe('shared request helper tenant scoping', () => {
     expect(requestHeaders(0).get('X-Tenant-ID')).toBeNull();
   });
 
-  it.each(['7', 'all'])('omits stale tenant selection for global platform reads (%s)', async tenant => {
+  it.each(['00000000-0000-4000-8000-000000000007', 'all'])('omits stale tenant selection for global platform reads (%s)', async tenant => {
     sessionStorage.setItem('sbom_active_tenant_id', tenant);
     await request('/api/platform/users?page=1&page_size=20');
     expect(requestHeaders(0).has('X-Tenant-ID')).toBe(false);
   });
 
   it('uses the newly selected tenant on the next request after a switch', async () => {
-    sessionStorage.setItem('sbom_active_tenant_id', '7');
+    sessionStorage.setItem('sbom_active_tenant_id', '00000000-0000-4000-8000-000000000007');
     await request('/api/sboms');
 
-    sessionStorage.setItem('sbom_active_tenant_id', '1');
+    sessionStorage.setItem('sbom_active_tenant_id', '00000000-0000-4000-8000-000000000001');
     await request('/api/sboms');
 
-    expect(requestHeaders(0).get('X-Tenant-ID')).toBe('7');
-    expect(requestHeaders(1).get('X-Tenant-ID')).toBe('1');
+    expect(requestHeaders(0).get('X-Tenant-ID')).toBe('00000000-0000-4000-8000-000000000007');
+    expect(requestHeaders(1).get('X-Tenant-ID')).toBe('00000000-0000-4000-8000-000000000001');
   });
 
   it('resends using the explicit platform tenant and administrator without changing active tenant', async () => {
-    sessionStorage.setItem('sbom_active_tenant_id', '1');
-    await resendPlatformTenantActivation(7, 42);
-    expect(fetchMock.mock.calls[0][0]).toContain('/api/platform/tenants/7/native-users/42/resend-activation');
+    sessionStorage.setItem('sbom_active_tenant_id', '00000000-0000-4000-8000-000000000001');
+    await resendPlatformTenantActivation('00000000-0000-4000-8000-000000000007', 42);
+    expect(fetchMock.mock.calls[0][0]).toContain('/api/platform/tenants/00000000-0000-4000-8000-000000000007/native-users/42/resend-activation');
     expect(fetchMock.mock.calls[0][1]).toMatchObject({ method: 'POST' });
-    expect(sessionStorage.getItem('sbom_active_tenant_id')).toBe('1');
+    expect(sessionStorage.getItem('sbom_active_tenant_id')).toBe('00000000-0000-4000-8000-000000000001');
   });
 
   it('does not duplicate content-type when caller casing differs', async () => {

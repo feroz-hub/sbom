@@ -9,7 +9,6 @@ version), T30 (24-month history where available; actual coverage visible).
 from datetime import UTC, datetime, timedelta
 
 import pytest
-
 from app.services.component_advisor.policy import PolicyKind, PolicyStatus, PolicyValidationError, PolicyVersionRef
 from app.services.component_advisor.recommendations.confidence import confidence, freshness_view
 from app.services.component_advisor.recommendations.explanation import (

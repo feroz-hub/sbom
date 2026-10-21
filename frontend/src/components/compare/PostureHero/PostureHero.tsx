@@ -20,7 +20,7 @@ interface Props {
   posture: PostureDelta;
   relationship: RunRelationship | null;
   /** SBOM id for the sparkline; null when cross-SBOM (sparkline hides). */
-  sharedSbomId: number | null;
+  sharedSbomId: (string | number) | null;
   /** Run B id — the "current" data point on the sparkline. */
   currentRunId?: number;
   /** Optional sbom name used in the sparkline aria-label. */

@@ -74,9 +74,9 @@ export function PlatformTenantOverview({
   const { showSuccess, showError, showInfo, showWarning } = useNotifications();
   const resend = useMutation({
     mutationFn: () =>
-      resendPlatformTenantActivation(Number(tenant.id), administrator!.user_id),
+      resendPlatformTenantActivation(tenant.id, administrator!.user_id),
     onSuccess: async (result) => {
-      await invalidateTenantMembershipSurfaces(queryClient, Number(tenant.id), { affectsMetrics: false });
+      await invalidateTenantMembershipSurfaces(queryClient, tenant.id, { affectsMetrics: false });
       setDeliveryStatus(result.delivery.status);
       setConfirmOpen(false);
       if (result.delivery.status === "SENT")

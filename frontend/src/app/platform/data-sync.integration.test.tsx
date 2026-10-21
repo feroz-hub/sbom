@@ -40,7 +40,7 @@ import Administrators from '../settings/platform/page';
 
 const initialSummary = { total_tenants: 4, active_tenants: 2, pending_tenants: 1, disabled_tenants: 1,
   total_memberships: 7, tenants_without_admin: 0, platform_admins: 1 };
-const tenant: TenantSummary = { id: 7, name: 'Test Tenant', slug: 'test-tenant', external_iam_tenant_id: null, status: 'PENDING', created_at: '2026-10-01T00:00:00Z', member_count: 2, current_administrators: [] };
+const tenant: TenantSummary = { id: "00000000-0000-4000-8000-000000000007", name: 'Test Tenant', slug: 'test-tenant', external_iam_tenant_id: null, status: 'PENDING', created_at: '2026-10-01T00:00:00Z', member_count: 2, current_administrators: [] };
 const admin: PlatformAdministrator = { grant_id: 3, user_id: 3, email: 'candidate@example.test', display_name: 'Candidate',
   role: 'PLATFORM_ADMIN', grant_status: 'ACTIVE', local_status: 'ACTIVE', email_verified: true,
   verification_required: false, is_effective: true, created_at: '2026-10-01T00:00:00Z' };
@@ -58,8 +58,8 @@ function seed() {
   client.setQueryData(['platform-tenants', 'overview'], [tenant]);
   client.setQueryData(['platform-tenants', '', 1], [tenant]);
   client.setQueryData(['platform-tenants', 'filtered', 2], [tenant]);
-  client.setQueryData(['platform-tenant', 7], tenant);
-  client.setQueryData(['platform-tenant', 99], { ...tenant, id: 99 });
+  client.setQueryData(['platform-tenant', "00000000-0000-4000-8000-000000000007"], tenant);
+  client.setQueryData(['platform-tenant', "00000000-0000-4000-8000-000000000063"], { ...tenant, id: "00000000-0000-4000-8000-000000000063" });
   client.setQueryData(['platform-administrators'], []);
   client.setQueryData(['sboms', 'tenant-7'], ['business data']);
 }
@@ -86,7 +86,7 @@ async function statusChange(from: 'PENDING' | 'ACTIVE', entry: 'list' | 'detail'
 beforeEach(() => {
   vi.clearAllMocks(); state.allowed = true;
   client = new QueryClient({ defaultOptions: { queries: { staleTime: 5 * 60_000, refetchOnWindowFocus: false, retry: false }, mutations: { retry: false } } });
-  detailParams = Promise.resolve({ tenantId: '7' });
+  detailParams = Promise.resolve({ tenantId: "00000000-0000-4000-8000-000000000007" });
   state.summary.mockResolvedValue(initialSummary); state.tenants.mockResolvedValue([tenant]); state.detail.mockResolvedValue(tenant);
   state.admins.mockResolvedValue([]); state.recover.mockResolvedValue({}); seed();
 });
@@ -94,7 +94,7 @@ afterEach(() => client.clear());
 
 describe('platform control-plane cache integration', () => {
   it.each(['PENDING', 'ACTIVE'] as const)('creation of %s invalidates fresh inactive summary and refetches on dashboard return', async status => {
-    const created = { ...tenant, id: 8, name: 'New Tenant', status };
+    const created = { ...tenant, id: "00000000-0000-4000-8000-000000000008", name: 'New Tenant', status };
     const authoritative = { ...initialSummary, total_tenants: 5,
       pending_tenants: status === 'PENDING' ? 2 : 1, active_tenants: status === 'ACTIVE' ? 3 : 2 };
     state.create.mockImplementation(async () => {
@@ -104,7 +104,7 @@ describe('platform control-plane cache integration', () => {
     expectMetric('Total Tenants', 4); expect(state.summary).not.toHaveBeenCalled();
     await act(async () => { mounted.rerender(view(<TenantList />)); });
     await createTenant();
-    await waitFor(() => expect(state.push).toHaveBeenCalledWith('/settings/platform/tenants/8'));
+    await waitFor(() => expect(state.push).toHaveBeenCalledWith("/settings/platform/tenants/00000000-0000-4000-8000-000000000008"));
     expect(await screen.findByText('New Tenant')).toBeInTheDocument();
     expect(client.getQueryState(['platform-summary'])?.isInvalidated).toBe(true);
     expect(client.getQueryState(['platform-tenants', 'overview'])?.isInvalidated).toBe(true);
@@ -123,18 +123,18 @@ describe('platform control-plane cache integration', () => {
       state.detail.mockResolvedValue(updated); state.tenants.mockResolvedValue([updated]);
       state.summary.mockResolvedValue({ ...initialSummary, pending_tenants: 0,
         active_tenants: status === 'ACTIVE' ? 3 : 2, disabled_tenants: status === 'DISABLED' ? 2 : 1 });
-      return { tenant_id: 7, status };
+      return { tenant_id: "00000000-0000-4000-8000-000000000007", status };
     });
     const mounted = await renderView(entry === 'list' ? <TenantList /> : detailPage());
     await statusChange('PENDING', entry);
     await waitFor(() => expect(client.getQueryState(['platform-summary'])?.isInvalidated).toBe(true));
     if (entry === 'list') {
       await screen.findByText('Active');
-      expect(client.getQueryState(['platform-tenant', 7])?.isInvalidated).toBe(true);
+      expect(client.getQueryState(['platform-tenant', "00000000-0000-4000-8000-000000000007"])?.isInvalidated).toBe(true);
       await act(async () => { mounted.rerender(view(detailPage())); });
     }
     await screen.findByRole('button', { name: 'Disable tenant' });
-    expect(client.getQueryData<TenantSummary>(['platform-tenant', 7])?.status).toBe('ACTIVE');
+    expect(client.getQueryData<TenantSummary>(['platform-tenant', "00000000-0000-4000-8000-000000000007"])?.status).toBe('ACTIVE');
     await act(async () => { mounted.rerender(view(<Dashboard />)); });
     await screen.findByLabelText('Active Tenants: 3'); expectMetric('Pending Setup', 0);
     expect(screen.getByRole('row', { name: /Test Tenant/ })).toHaveTextContent('Active');
@@ -143,12 +143,12 @@ describe('platform control-plane cache integration', () => {
     await waitFor(() => expect(client.getQueryState(['platform-summary'])?.isInvalidated).toBe(true));
     if (entry === 'list') { await screen.findByText('Disabled'); await act(async () => { mounted.rerender(view(detailPage())); }); }
     await screen.findByRole('button', { name: 'Enable tenant' });
-    expect(client.getQueryData<TenantSummary>(['platform-tenant', 7])?.status).toBe('DISABLED');
+    expect(client.getQueryData<TenantSummary>(['platform-tenant', "00000000-0000-4000-8000-000000000007"])?.status).toBe('DISABLED');
     await act(async () => { mounted.rerender(view(<Dashboard />)); });
     await screen.findByLabelText('Disabled Tenants: 2'); expectMetric('Active Tenants', 2); expectMetric('Pending Setup', 0);
     expect(screen.getByRole('row', { name: /Test Tenant/ })).toHaveTextContent('Disabled');
-    expect(state.status.mock.calls).toEqual([[7, 'ACTIVE'], [7, 'DISABLED']]);
-    expect(client.getQueryState(['platform-tenant', 99])?.isInvalidated).toBe(false);
+    expect(state.status.mock.calls).toEqual([['00000000-0000-4000-8000-000000000007', 'ACTIVE'], ['00000000-0000-4000-8000-000000000007', 'DISABLED']]);
+    expect(client.getQueryState(['platform-tenant', "00000000-0000-4000-8000-000000000063"])?.isInvalidated).toBe(false);
     expect(client.getQueryState(['sboms', 'tenant-7'])?.isInvalidated).toBe(false);
   });
 

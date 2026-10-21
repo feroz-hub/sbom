@@ -7,7 +7,7 @@ import { cn } from '@/lib/utils';
 
 interface Props {
   /** SBOM whose run history feeds the sparkline. Null = render nothing. */
-  sbomId: number | null;
+  sbomId: (string | number) | null;
   /** Run id of the rightmost point — visually highlighted. */
   currentRunId?: number;
   /** Title attribute / sr-only description suffix (e.g. SBOM name). */

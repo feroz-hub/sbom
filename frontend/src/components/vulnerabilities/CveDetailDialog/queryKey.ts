@@ -12,8 +12,8 @@
 export function cveQueryKey(
   scanId: number | null | undefined,
   cveId: string,
-  componentId?: number | null,
-): readonly ['cve', number | 'global', string] | readonly ['cve', number, string, number] {
+  componentId?: (string | number) | null,
+): readonly ['cve', number | 'global', string] | readonly ['cve', number, string, string | number] {
   if (scanId != null && componentId != null) return ['cve', scanId, cveId.trim().toUpperCase(), componentId] as const;
   return ['cve', scanId ?? 'global', cveId.trim().toUpperCase()] as const;
 }

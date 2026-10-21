@@ -105,7 +105,7 @@ export interface RemediationSummary {
 // ─── Risk map (treemap) + risk matrix (scatter) ──────────────────────────────
 
 export interface RiskMapItem {
-  sbom_id: number;
+  sbom_id: (string | number);
   run_id: number;
   name: string;
   project: string | null;

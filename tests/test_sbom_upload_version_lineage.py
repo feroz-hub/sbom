@@ -21,6 +21,7 @@ from app.db import SessionLocal
 from app.models import SBOMSource
 from app.services.sbom_version_lineage import parse_version
 
+from tests.public_id_fixture import public_row
 from tests.tenant_fixture_scope import verified_fixture_tenant
 
 
@@ -97,7 +98,7 @@ def test_upload_without_parent_stays_standalone(client):
     assert resp.status_code == 202, resp.text
 
     with SessionLocal() as db, verified_fixture_tenant(db, 1):
-        row = db.get(SBOMSource, resp.json()["sbom_id"])
+        row = public_row(db, SBOMSource, resp.json()["sbom_id"])
         assert row.parent_id is None
 
 
@@ -120,8 +121,8 @@ def test_upload_as_new_version_links_the_chain(client):
     second_id = second.json()["sbom_id"]
 
     with SessionLocal() as db, verified_fixture_tenant(db, 1):
-        child = db.get(SBOMSource, second_id)
-        assert child.parent_id == first_id
+        child = public_row(db, SBOMSource, second_id)
+        assert child.parent_id == public_row(db, SBOMSource, first_id).id
         assert "new version of" in (child.change_summary or "").lower()
 
     # Both endpoints that read the chain now see two versions from either end.
@@ -152,7 +153,7 @@ def test_linking_an_older_version_extends_the_chain_instead_of_forking(client):
     v3 = third.json()["sbom_id"]
 
     with SessionLocal() as db, verified_fixture_tenant(db, 1):
-        assert db.get(SBOMSource, v3).parent_id == v2
+        assert public_row(db, SBOMSource, v3).parent_id == public_row(db, SBOMSource, v2).id
 
     listed = client.get(f"/api/sboms/{v1}/versions")
     assert [row["id"] for row in listed.json()] == [v1, v2, v3]
@@ -222,7 +223,7 @@ def test_unknown_parent_returns_404(client):
         project_id=project["id"],
         product_id=product["id"],
         version="1.1.0",
-        parent_sbom_id=99_999_999,
+        parent_sbom_id=str(uuid.uuid4()),
     )
     assert resp.status_code == 404, resp.text
 

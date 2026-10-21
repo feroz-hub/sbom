@@ -1,6 +1,6 @@
 // @vitest-environment jsdom
 
-import { render, screen } from '@testing-library/react';
+import { fireEvent, render, screen } from '@testing-library/react';
 import userEvent from '@testing-library/user-event';
 import { beforeEach, describe, expect, it, vi } from 'vitest';
 import { MemberActionMenu } from '../MemberActionMenu';
@@ -163,4 +163,28 @@ describe('MemberActionMenu', () => {
     expect(screen.queryByRole('menu', { name: 'Actions for User One' })).not.toBeInTheDocument();
     expect(screen.getByRole('menu', { name: 'Actions for User Two' })).toBeInTheDocument();
   });
+  it('keeps fixed popup coordinates through hover and supports arrow-key navigation', async () => {
+    const user = userEvent.setup();
+    render(<MemberActionMenu {...defaultProps} />);
+    const trigger = screen.getByRole('button', { name: 'Open actions for HCLCS Administrator' });
+    expect(trigger).toHaveClass('border-border');
+    await user.click(trigger);
+    const menu = screen.getByRole('menu');
+    const position = { top: menu.style.top, left: menu.style.left };
+    expect(menu).toHaveStyle({ position: 'fixed' });
+    expect(trigger).toHaveAttribute('aria-controls', menu.id);
+    await user.hover(trigger);
+    await user.hover(menu);
+    fireEvent(window, new Event('resize'));
+    expect(menu.style.top).toBe(position.top);
+    expect(menu.style.left).toBe(position.left);
+    expect(screen.getByRole('menuitem', { name: 'Manage roles' })).toHaveFocus();
+    await user.keyboard('{ArrowDown}');
+    expect(screen.getByRole('menuitem', { name: 'Disable membership' })).toHaveFocus();
+    await user.keyboard('{ArrowUp}');
+    expect(screen.getByRole('menuitem', { name: 'Manage roles' })).toHaveFocus();
+    await user.keyboard('{Escape}');
+    expect(trigger).toHaveFocus();
+  });
+
 });

@@ -7,6 +7,7 @@ from app.models import Tenant, TenantUser, UserIdentity
 from sqlalchemy import select
 
 from tests.phase6_helpers import identity_claims, now, seed_membership, seed_platform_grant, seed_user
+from tests.public_id_fixture import tenant_uuid
 
 
 @pytest.fixture
@@ -28,7 +29,7 @@ def directory(client):
         # A Native identity need not have legacy HCL identity metadata.
         first.external_issuer = first.external_subject = first.external_iam_user_id = None
         db.commit()
-        ids = {"admin": admin.id, "one": first.id, "two": second.id, "tenant": tenant.id}
+        ids = {"admin": admin.id, "one": first.id, "two": second.id, "tenant": str(tenant.public_id)}
         admin_claims, tenant_claims = identity_claims(admin), identity_claims(tenant_admin)
         assert db.scalar(select(TenantUser.id).where(TenantUser.user_id == admin.id)) is None
     client.app.dependency_overrides[get_current_claims] = lambda: admin_claims
@@ -57,11 +58,11 @@ def test_platform_filters_remain_authorized(directory):
 def test_tenant_admin_cannot_read_global_or_unrelated_projection(directory):
     client, ids, tenant_claims = directory
     client.app.dependency_overrides[get_current_claims] = lambda: tenant_claims
-    headers = {"X-Tenant-ID": "1"}
+    headers = {"X-Tenant-ID": tenant_uuid(1)}
     for path in ("/api/platform/users", f'/api/platform/users/{ids["admin"]}', "/api/platform/tenants", "/api/platform/administrators"):
         assert client.get(path, headers=headers).status_code == 403
     assert client.get(f'/api/tenants/{ids["tenant"]}/users', headers=headers).status_code in {403, 404}
-    result = client.get("/api/tenants/1/users?page=1&page_size=20", headers=headers)
+    result = client.get(f"/api/tenants/{tenant_uuid(1)}/users?page=1&page_size=20", headers=headers)
     assert result.status_code == 200, result.text
     assert ids["admin"] not in {user["user_id"] for user in result.json()["items"]}
     for user in result.json()["items"]:

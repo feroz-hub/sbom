@@ -132,6 +132,9 @@ def generate(delivery_id, tenant_id):
                     ]
                     report["unchanged"] = False
                 report["scheduled_outcomes"] = payload.get("completed", {})
+                from ..services.report_composer import public_report_snapshot
+
+                report = public_report_snapshot(db, report, tenant_id)
             # Session is CLOSED before any PDF/Excel/MIME rendering.
             if preferences.suppress_when_unchanged and report["unchanged"]:
                 log_event(

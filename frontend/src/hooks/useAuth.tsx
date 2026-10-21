@@ -11,13 +11,13 @@ import { followLogoutRedirect } from '@/lib/auth/logout-navigation';
 
 export interface AuthUser {
   userId: number | null; externalUserId: string; email: string | null; displayName: string | null;
-  tenantId: number | null; externalTenantId: string | null; roles: string[]; permissions: string[];
+  tenantId: (string | number) | null; externalTenantId: string | null; roles: string[]; permissions: string[];
   isPlatformAdmin: boolean;
   localStatus?: string;
 }
 
 export interface TenantInfo {
-  id: number; name: string; slug: string; externalIamTenantId: string | null;
+  id: (string | number); name: string; slug: string; externalIamTenantId: string | null;
   identity_mapping?: Record<string, unknown> | null;
   identityMapping?: IdentityMappingInfo | null;
   status: string; role: string | null;
@@ -116,7 +116,7 @@ function tenantInfoFromContext(tenant: Record<string, unknown>): TenantInfo {
       ? [String(tenant.current_role)]
       : [];
   return {
-    id: Number(tenant.id),
+    id: String(tenant.id),
     name: String(tenant.name ?? ''),
     slug: String(tenant.slug ?? ''),
     externalIamTenantId: (tenant.external_iam_tenant_id as string) ?? null,
@@ -201,6 +201,12 @@ export function AuthProvider({ children }: { children: ReactNode }) {
       const sessionResponse = await fetch('/api/auth/session', { credentials: 'include', cache: 'no-store' });
       const session = await sessionResponse.json().catch(() => null);
       sessionProviderRef.current = session?.provider ?? null;
+
+      if (!sessionResponse.ok && sessionResponse.status !== 401) {
+        setUser(null);
+        setBootstrapState('error', 'The sign-in service is temporarily unavailable. Retry to check your session.');
+        return;
+      }
 
       if (!sessionResponse.ok || session?.authenticated !== true) {
         clearActiveTenantId();
@@ -302,7 +308,7 @@ export function AuthProvider({ children }: { children: ReactNode }) {
               const resJson = await tenantsResponse.json();
               if (Array.isArray(resJson)) {
                 contextTenants = resJson.map((tenant: Record<string, unknown>) => ({
-                  id: Number(tenant.id), name: String(tenant.name ?? ''), slug: String(tenant.slug ?? ''),
+                  id: String(tenant.id), name: String(tenant.name ?? ''), slug: String(tenant.slug ?? ''),
                   externalIamTenantId: (tenant.external_iam_tenant_id as string) ?? null,
                   status: (tenant.status as string) ?? 'ACTIVE',
                   role: tenant.role ? String(tenant.role) : null,
@@ -355,7 +361,7 @@ export function AuthProvider({ children }: { children: ReactNode }) {
             externalUserId: body.external_user_id ?? body.externalUserId ?? '',
             email: body.email ?? contextUser.email ?? null,
             displayName: body.display_name ?? body.displayName ?? contextUser.display_name ?? null,
-            tenantId: body.tenant_id ?? Number(selectedIdStr),
+            tenantId: body.tenant_id ?? selectedIdStr,
             externalTenantId: body.external_tenant_id ?? selectedTenant.externalIamTenantId ?? null,
             roles: body.roles || [],
             permissions: body.permissions || [],
@@ -408,7 +414,7 @@ export function AuthProvider({ children }: { children: ReactNode }) {
             externalUserId: body.external_user_id ?? body.externalUserId ?? '',
             email: body.email ?? contextUser.email ?? null,
             displayName: body.display_name ?? body.displayName ?? contextUser.display_name ?? null,
-            tenantId: body.tenant_id ?? Number(autoSelectedIdStr),
+            tenantId: body.tenant_id ?? autoSelectedIdStr,
             externalTenantId: body.external_tenant_id ?? memberships[0].externalIamTenantId ?? null,
             roles: body.roles || [],
             permissions: body.permissions || [],

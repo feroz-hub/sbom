@@ -693,7 +693,7 @@ def test_runs_aggregate_endpoint_does_not_filter_on_legacy_status(client, db):
         findings=[{"vuln_id": "CVE-2026-LEG1", "severity": "HIGH"}],
     )
 
-    body = client.get(f"/api/runs/aggregate?sbom_id={s1.id}").json()
+    body = client.get(f"/api/runs/aggregate?sbom_id={s1.public_id}").json()
     assert body["by_outcome"]["with_findings"] >= 1, "aggregate dropped FINDINGS-status runs — F1 has regressed"
 
 
@@ -712,7 +712,7 @@ def test_runs_aggregate_counts_legacy_pass_fail_aliases_with_canonical_outcomes(
         findings=[{"vuln_id": "CVE-2026-ALIAS1", "severity": "HIGH"}],
     )
 
-    body = client.get(f"/api/runs/aggregate?sbom_id={s1.id}").json()
+    body = client.get(f"/api/runs/aggregate?sbom_id={s1.public_id}").json()
     assert body["total_runs"] == 2
     assert body["by_outcome"]["no_issues"] == 1
     assert body["by_outcome"]["with_findings"] == 1
@@ -741,10 +741,10 @@ def test_runs_filter_matches_canonical_status_and_legacy_alias_rows(client, db):
         findings=[{"vuln_id": "CVE-2026-FILTER2", "severity": "MEDIUM"}],
     )
 
-    clean = client.get(f"/api/runs?sbom_id={s1.id}&run_status=OK").json()
+    clean = client.get(f"/api/runs?sbom_id={s1.public_id}&run_status=OK").json()
     assert {item["id"] for item in clean} == {ok.id, legacy_pass.id}
 
-    vulnerable = client.get(f"/api/runs?sbom_id={s1.id}&run_status=FINDINGS").json()
+    vulnerable = client.get(f"/api/runs?sbom_id={s1.public_id}&run_status=FINDINGS").json()
     assert {item["id"] for item in vulnerable} == {findings.id, legacy_fail.id}
 
 

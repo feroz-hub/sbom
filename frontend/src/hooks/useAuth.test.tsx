@@ -76,7 +76,7 @@ const identity = {
 function meBody(
   status: string,
   availableTenants: Array<Record<string, unknown>>,
-  tenantId: number | null = null,
+  tenantId: string | null = null,
 ) {
   return {
     authenticated: true,
@@ -130,7 +130,7 @@ function platformAdminMeBody({
 }
 
 /** A tenant a platform admin reaches by authority, not by membership. */
-function platformReachableTenant(id: number) {
+function platformReachableTenant(id: string) {
   return {
     id,
     name: `Tenant ${id}`,
@@ -144,7 +144,7 @@ function platformReachableTenant(id: number) {
 }
 
 const wellysis = {
-  id: 7,
+  id: '00000000-0000-4000-8000-000000000007',
   name: 'Wellysis',
   slug: 'wellysis',
   status: 'ACTIVE',
@@ -153,7 +153,7 @@ const wellysis = {
   roles: ['TENANT_ADMIN'],
 };
 const defaultTenant = {
-  id: 1,
+  id: '00000000-0000-4000-8000-000000000001',
   name: 'Default Tenant',
   slug: 'default',
   status: 'ACTIVE',
@@ -180,7 +180,7 @@ describe('AuthProvider membership-based tenant context', () => {
 
   it('keeps a valid session without a tenant claim authenticated and selects its one SBOM membership', async () => {
     const tenant = {
-      id: 7,
+      id: '00000000-0000-4000-8000-000000000007',
       name: 'Wellysis',
       slug: 'wellysis',
       membership_status: 'ACTIVE',
@@ -190,13 +190,13 @@ describe('AuthProvider membership-based tenant context', () => {
     const fetchMock = vi.spyOn(globalThis, 'fetch');
     fetchMock
       .mockResolvedValueOnce(jsonResponse({ authenticated: true }))
-      .mockResolvedValueOnce(jsonResponse(meBody('READY', [tenant], 7)));
+      .mockResolvedValueOnce(jsonResponse(meBody('READY', [tenant], '00000000-0000-4000-8000-000000000007')));
 
     render(wrap(<Probe />));
 
     await waitFor(() => expect(screen.getByTestId('status')).toHaveTextContent('authenticated'));
     expect(screen.getByTestId('authenticated')).toHaveTextContent('true');
-    expect(screen.getByTestId('active-tenant')).toHaveTextContent('7');
+    expect(screen.getByTestId('active-tenant')).toHaveTextContent('00000000-0000-4000-8000-000000000007');
     expect(screen.getByTestId('tenant-names')).toHaveTextContent('Wellysis');
     expect(screen.getByTestId('email')).toHaveTextContent(identity.email);
     expect(fetchMock).toHaveBeenCalledTimes(2);
@@ -246,8 +246,20 @@ describe('AuthProvider membership-based tenant context', () => {
     expect(fetchMock).toHaveBeenCalledTimes(2);
   });
 
-  it('clears an invalid persisted tenant and requires selection when several memberships exist', async () => {
+  it('discards a legacy integer preference before sending an authentication-context header', async () => {
     sessionStorage.setItem('sbom_active_tenant_id', '999');
+    const fetchMock = vi.spyOn(globalThis, 'fetch')
+      .mockResolvedValueOnce(jsonResponse({ authenticated: true }))
+      .mockResolvedValueOnce(jsonResponse(meBody('READY', [wellysis, defaultTenant], null)));
+    render(wrap(<Probe />));
+    await waitFor(() => expect(screen.getByTestId('status')).toHaveTextContent('tenant-selection-required'));
+    expect(fetchMock).toHaveBeenCalledTimes(2);
+    expect(fetchMock.mock.calls[1][1]?.headers).toEqual({});
+    expect(sessionStorage.getItem('sbom_active_tenant_id')).toBeNull();
+  });
+
+  it('clears an unauthorized UUID tenant and requires selection when several memberships exist', async () => {
+    sessionStorage.setItem('sbom_active_tenant_id', '00000000-0000-4000-8000-000000000999');
     const fetchMock = vi.spyOn(globalThis, 'fetch');
     fetchMock
       .mockResolvedValueOnce(jsonResponse({ authenticated: true }))
@@ -265,7 +277,7 @@ describe('AuthProvider membership-based tenant context', () => {
 
   it('persists the choice, clears cached data, and becomes ready once selectTenant resolves', async () => {
     const queryClient = makeQueryClient();
-    queryClient.setQueryData(['sboms'], [{ id: 1 }]);
+    queryClient.setQueryData(['sboms'], [{ id: '00000000-0000-4000-8000-000000000001' }]);
     queryClient.setQueryData(['platform-summary'], { total_tenants: 4 });
     queryClient.setQueryData(['platform-administrators'], [{ user_id: 3 }]);
 
@@ -275,7 +287,7 @@ describe('AuthProvider membership-based tenant context', () => {
       .mockResolvedValueOnce(jsonResponse(meBody('TENANT_SELECTION_REQUIRED', [wellysis, defaultTenant])))
       // selectTenant re-runs the whole auth context with the chosen tenant.
       .mockResolvedValueOnce(jsonResponse({ authenticated: true }))
-      .mockResolvedValueOnce(jsonResponse(meBody('READY', [wellysis, defaultTenant], 7)));
+      .mockResolvedValueOnce(jsonResponse(meBody('READY', [wellysis, defaultTenant], '00000000-0000-4000-8000-000000000007')));
 
     render(wrap(<Probe />, queryClient));
     await waitFor(() =>
@@ -283,39 +295,39 @@ describe('AuthProvider membership-based tenant context', () => {
     );
 
     await act(async () => {
-      await latestAuth!.selectTenant('7');
+      await latestAuth!.selectTenant('00000000-0000-4000-8000-000000000007');
     });
 
     await waitFor(() => expect(screen.getByTestId('status')).toHaveTextContent('authenticated'));
-    expect(sessionStorage.getItem('sbom_active_tenant_id')).toBe('7');
-    expect(screen.getByTestId('active-tenant')).toHaveTextContent('7');
+    expect(sessionStorage.getItem('sbom_active_tenant_id')).toBe('00000000-0000-4000-8000-000000000007');
+    expect(screen.getByTestId('active-tenant')).toHaveTextContent('00000000-0000-4000-8000-000000000007');
     expect(queryClient.getQueryData(['sboms'])).toBeUndefined();
     expect(queryClient.getQueryData(['platform-summary'])).toBeUndefined();
     expect(queryClient.getQueryData(['platform-administrators'])).toBeUndefined();
     // The re-resolved context was fetched with the selected tenant's header.
-    expect(lastMeTenantHeader(fetchMock)).toBe('7');
+    expect(lastMeTenantHeader(fetchMock)).toBe('00000000-0000-4000-8000-000000000007');
   });
 
   it('sends the newly selected tenant on subsequent auth-context requests when switching', async () => {
-    sessionStorage.setItem('sbom_active_tenant_id', '7');
+    sessionStorage.setItem('sbom_active_tenant_id', '00000000-0000-4000-8000-000000000007');
     const fetchMock = vi.spyOn(globalThis, 'fetch');
     fetchMock
       .mockResolvedValueOnce(jsonResponse({ authenticated: true }))
-      .mockResolvedValueOnce(jsonResponse(meBody('READY', [wellysis, defaultTenant], 7)))
+      .mockResolvedValueOnce(jsonResponse(meBody('READY', [wellysis, defaultTenant], '00000000-0000-4000-8000-000000000007')))
       .mockResolvedValueOnce(jsonResponse({ authenticated: true }))
-      .mockResolvedValueOnce(jsonResponse(meBody('READY', [wellysis, defaultTenant], 1)));
+      .mockResolvedValueOnce(jsonResponse(meBody('READY', [wellysis, defaultTenant], '00000000-0000-4000-8000-000000000001')));
 
     render(wrap(<Probe />));
     await waitFor(() => expect(screen.getByTestId('status')).toHaveTextContent('authenticated'));
-    expect(lastMeTenantHeader(fetchMock)).toBe('7');
+    expect(lastMeTenantHeader(fetchMock)).toBe('00000000-0000-4000-8000-000000000007');
 
     await act(async () => {
-      await latestAuth!.selectTenant('1');
+      await latestAuth!.selectTenant('00000000-0000-4000-8000-000000000001');
     });
 
-    await waitFor(() => expect(screen.getByTestId('active-tenant')).toHaveTextContent('1'));
-    expect(lastMeTenantHeader(fetchMock)).toBe('1');
-    expect(sessionStorage.getItem('sbom_active_tenant_id')).toBe('1');
+    await waitFor(() => expect(screen.getByTestId('active-tenant')).toHaveTextContent('00000000-0000-4000-8000-000000000001'));
+    expect(lastMeTenantHeader(fetchMock)).toBe('00000000-0000-4000-8000-000000000001');
+    expect(sessionStorage.getItem('sbom_active_tenant_id')).toBe('00000000-0000-4000-8000-000000000001');
   });
 
   it('clears the active tenant on logout', async () => {
@@ -325,11 +337,11 @@ describe('AuthProvider membership-based tenant context', () => {
     const fetchMock = vi.spyOn(globalThis, 'fetch');
     fetchMock
       .mockResolvedValueOnce(jsonResponse({ authenticated: true }))
-      .mockResolvedValueOnce(jsonResponse(meBody('READY', [wellysis], 7)));
+      .mockResolvedValueOnce(jsonResponse(meBody('READY', [wellysis], '00000000-0000-4000-8000-000000000007')));
 
     render(wrap(<Probe />, queryClient));
     await waitFor(() => expect(screen.getByTestId('status')).toHaveTextContent('authenticated'));
-    expect(sessionStorage.getItem('sbom_active_tenant_id')).toBe('7');
+    expect(sessionStorage.getItem('sbom_active_tenant_id')).toBe('00000000-0000-4000-8000-000000000007');
 
     // Never-settling logout call: keeps the jsdom navigation that follows it
     // out of the test while the synchronous teardown still runs.
@@ -354,7 +366,7 @@ describe('AuthProvider membership-based tenant context', () => {
     const fetchMock = vi.spyOn(globalThis, 'fetch');
     fetchMock
       .mockResolvedValueOnce(jsonResponse({ authenticated: true }))
-      .mockResolvedValueOnce(jsonResponse(meBody('READY', [wellysis], 7)))
+      .mockResolvedValueOnce(jsonResponse(meBody('READY', [wellysis], '00000000-0000-4000-8000-000000000007')))
       .mockResolvedValueOnce(jsonResponse({ redirectUrl: 'https://identity.test/security/endsession?post_logout_redirect_uri=...' }));
 
     render(wrap(<Probe />));
@@ -373,7 +385,7 @@ describe('AuthProvider membership-based tenant context', () => {
     const fetchMock = vi.spyOn(globalThis, 'fetch');
     fetchMock
       .mockResolvedValueOnce(jsonResponse({ authenticated: true, provider: 'NATIVE' }))
-      .mockResolvedValueOnce(jsonResponse(meBody('READY', [wellysis], 7)));
+      .mockResolvedValueOnce(jsonResponse(meBody('READY', [wellysis], '00000000-0000-4000-8000-000000000007')));
     if (failure === 'network-failure') fetchMock.mockRejectedValueOnce(new Error('Unavailable'));
     else fetchMock.mockResolvedValueOnce(jsonResponse({}));
     render(wrap(<Probe />));
@@ -383,9 +395,9 @@ describe('AuthProvider membership-based tenant context', () => {
   });
 
   it('restores a valid persisted tenant on initial load', async () => {
-    sessionStorage.setItem('sbom_active_tenant_id', '7');
+    sessionStorage.setItem('sbom_active_tenant_id', '00000000-0000-4000-8000-000000000007');
     const tenant = {
-      id: 7,
+      id: '00000000-0000-4000-8000-000000000007',
       name: 'Wellysis',
       slug: 'wellysis',
       status: 'ACTIVE',
@@ -396,18 +408,18 @@ describe('AuthProvider membership-based tenant context', () => {
     const fetchMock = vi.spyOn(globalThis, 'fetch');
     fetchMock
       .mockResolvedValueOnce(jsonResponse({ authenticated: true }))
-      .mockResolvedValueOnce(jsonResponse(meBody('READY', [tenant], 7)));
+      .mockResolvedValueOnce(jsonResponse(meBody('READY', [tenant], '00000000-0000-4000-8000-000000000007')));
 
     render(wrap(<Probe />));
 
     await waitFor(() => expect(screen.getByTestId('status')).toHaveTextContent('authenticated'));
-    expect(screen.getByTestId('active-tenant')).toHaveTextContent('7');
+    expect(screen.getByTestId('active-tenant')).toHaveTextContent('00000000-0000-4000-8000-000000000007');
   });
 
-  it('clears invalid persisted tenant and auto-selects valid single membership', async () => {
-    sessionStorage.setItem('sbom_active_tenant_id', '999');
+  it('clears an unauthorized UUID tenant and auto-selects valid single membership', async () => {
+    sessionStorage.setItem('sbom_active_tenant_id', '00000000-0000-4000-8000-000000000999');
     const tenant = {
-      id: 7,
+      id: '00000000-0000-4000-8000-000000000007',
       name: 'Wellysis',
       slug: 'wellysis',
       status: 'ACTIVE',
@@ -420,13 +432,13 @@ describe('AuthProvider membership-based tenant context', () => {
       .mockResolvedValueOnce(jsonResponse({ authenticated: true }))
       .mockResolvedValueOnce(jsonResponse({ detail: { code: 'IAM_UNAUTHORIZED_TENANT' } }, 403))
       .mockResolvedValueOnce(jsonResponse(meBody('READY', [tenant], null)))
-      .mockResolvedValueOnce(jsonResponse(meBody('READY', [tenant], 7)));
+      .mockResolvedValueOnce(jsonResponse(meBody('READY', [tenant], '00000000-0000-4000-8000-000000000007')));
 
     render(wrap(<Probe />));
 
     await waitFor(() => expect(screen.getByTestId('status')).toHaveTextContent('authenticated'));
-    expect(screen.getByTestId('active-tenant')).toHaveTextContent('7');
-    expect(sessionStorage.getItem('sbom_active_tenant_id')).toBe('7');
+    expect(screen.getByTestId('active-tenant')).toHaveTextContent('00000000-0000-4000-8000-000000000007');
+    expect(sessionStorage.getItem('sbom_active_tenant_id')).toBe('00000000-0000-4000-8000-000000000007');
   });
 });
 
@@ -444,7 +456,7 @@ describe('AuthProvider platform administrator context', () => {
       .mockResolvedValueOnce(jsonResponse(platformAdminMeBody()))
       // Would be the legacy tenant-list fallback — a platform admin must not
       // pull every tenant in the deployment at sign-in.
-      .mockResolvedValueOnce(jsonResponse([platformReachableTenant(1)]));
+      .mockResolvedValueOnce(jsonResponse([platformReachableTenant('00000000-0000-4000-8000-000000000001')]));
 
     render(wrap(<Probe />));
 
@@ -481,7 +493,7 @@ describe('AuthProvider platform administrator context', () => {
   });
 
   it('never requires tenant selection for a platform admin with a hundred reachable tenants', async () => {
-    const reachable = Array.from({ length: 100 }, (_, index) => platformReachableTenant(index + 1));
+    const reachable = Array.from({ length: 100 }, (_, index) => platformReachableTenant(`00000000-0000-4000-8000-${(index + 1).toString(16).padStart(12, '0')}`));
     const fetchMock = vi.spyOn(globalThis, 'fetch');
     fetchMock
       .mockResolvedValueOnce(jsonResponse({ authenticated: true }))
@@ -498,7 +510,7 @@ describe('AuthProvider platform administrator context', () => {
 
   it('enters tenant context when a platform admin explicitly selects a tenant', async () => {
     const nova = {
-      id: 42,
+      id: '00000000-0000-4000-8000-00000000002a',
       name: 'Nova',
       slug: 'nova',
       status: 'ACTIVE',
@@ -517,14 +529,14 @@ describe('AuthProvider platform administrator context', () => {
     await waitFor(() => expect(screen.getByTestId('platform-context')).toHaveTextContent('true'));
 
     await act(async () => {
-      await latestAuth!.selectTenant('42');
+      await latestAuth!.selectTenant('00000000-0000-4000-8000-00000000002a');
     });
 
-    await waitFor(() => expect(screen.getByTestId('active-tenant')).toHaveTextContent('42'));
+    await waitFor(() => expect(screen.getByTestId('active-tenant')).toHaveTextContent('00000000-0000-4000-8000-00000000002a'));
     expect(screen.getByTestId('status')).toHaveTextContent('authenticated');
     expect(screen.getByTestId('platform-context')).toHaveTextContent('false');
-    expect(sessionStorage.getItem('sbom_active_tenant_id')).toBe('42');
-    expect(lastMeTenantHeader(fetchMock)).toBe('42');
+    expect(sessionStorage.getItem('sbom_active_tenant_id')).toBe('00000000-0000-4000-8000-00000000002a');
+    expect(lastMeTenantHeader(fetchMock)).toBe('00000000-0000-4000-8000-00000000002a');
     // A tenant reached by platform authority is named in the switcher without
     // becoming a membership.
     expect(screen.getByTestId('tenant-names')).toHaveTextContent('Nova');
@@ -533,9 +545,9 @@ describe('AuthProvider platform administrator context', () => {
   });
 
   it('clears the active tenant when a platform admin switches back to Platform', async () => {
-    sessionStorage.setItem('sbom_active_tenant_id', '42');
+    sessionStorage.setItem('sbom_active_tenant_id', '00000000-0000-4000-8000-00000000002a');
     const nova = {
-      id: 42,
+      id: '00000000-0000-4000-8000-00000000002a',
       name: 'Nova',
       slug: 'nova',
       status: 'ACTIVE',
@@ -551,7 +563,7 @@ describe('AuthProvider platform administrator context', () => {
       .mockResolvedValueOnce(jsonResponse(platformAdminMeBody()));
 
     render(wrap(<Probe />));
-    await waitFor(() => expect(screen.getByTestId('active-tenant')).toHaveTextContent('42'));
+    await waitFor(() => expect(screen.getByTestId('active-tenant')).toHaveTextContent('00000000-0000-4000-8000-00000000002a'));
 
     act(() => {
       latestAuth!.clearTenantSelection();
@@ -675,9 +687,9 @@ it('refreshSession discards privileged caches and resolves server permissions af
   sessionStorage.clear(); latestAuth = null;
   const fetchMock = vi.fn()
     .mockResolvedValueOnce(jsonResponse({ authenticated: true }))
-    .mockResolvedValueOnce(jsonResponse(meBody('ACTIVE', [defaultTenant], 1)))
+    .mockResolvedValueOnce(jsonResponse(meBody('ACTIVE', [defaultTenant], '00000000-0000-4000-8000-000000000001')))
     .mockResolvedValueOnce(jsonResponse({ authenticated: true }))
-    .mockResolvedValueOnce(jsonResponse({ ...meBody('ACTIVE', [defaultTenant], 1), roles: ['VIEWER'], permissions: [] }));
+    .mockResolvedValueOnce(jsonResponse({ ...meBody('ACTIVE', [defaultTenant], '00000000-0000-4000-8000-000000000001'), roles: ['VIEWER'], permissions: [] }));
   vi.stubGlobal('fetch', fetchMock);
   const qc = makeQueryClient(); render(wrap(<Probe />, qc));
   await waitFor(() => expect(latestAuth?.bootstrapState).toBe('ready'));
@@ -686,4 +698,41 @@ it('refreshSession discards privileged caches and resolves server permissions af
   expect(qc.getQueryData(['tenant-users', 1])).toBeUndefined();
   expect(latestAuth!.hasPermission('tenant:user:read')).toBe(false);
   expect(latestAuth!.user?.roles).toEqual(['VIEWER']);
+});
+
+describe('session service outage recovery', () => {
+  beforeEach(() => { sessionStorage.clear(); latestAuth = null; vi.restoreAllMocks(); });
+
+  it.each([429, 500, 503])('fails closed with Retry after HTTP %s without discarding tenant preference', async status => {
+    const { setActiveTenantId, getActiveTenantId } = await import('@/lib/auth');
+    const tenantId = '00000000-0000-4000-8000-000000000001';
+    setActiveTenantId(tenantId);
+    const fetcher = vi.fn().mockResolvedValueOnce(jsonResponse({ authenticated: false }, status));
+    vi.stubGlobal('fetch', fetcher);
+    render(wrap(<Probe />));
+    await waitFor(() => expect(latestAuth?.authStatus).toBe('service-unavailable'));
+    expect(latestAuth?.isAuthenticated).toBe(false);
+    expect(latestAuth?.user).toBeNull();
+    expect(getActiveTenantId()).toBe(tenantId);
+    expect(fetcher).toHaveBeenCalledTimes(1);
+    fetcher.mockResolvedValueOnce(jsonResponse({ authenticated: true, provider: 'NATIVE' }))
+      .mockResolvedValueOnce(jsonResponse({ ...meBody('READY', [defaultTenant], tenantId), roles: ['VIEWER'], permissions: ['sbom:read'] }));
+    await act(async () => { latestAuth!.retryBootstrap(); });
+    await waitFor(() => expect(latestAuth?.bootstrapState).toBe('ready'));
+    expect(latestAuth?.user?.roles).toEqual(['VIEWER']);
+    expect(latestAuth?.hasPermission('tenant:user:update')).toBe(false);
+    expect(getActiveTenantId()).toBe(tenantId);
+  });
+
+  it.each([200, 401])('still clears authentication and tenant preference for a confirmed invalid session (HTTP %s)', async status => {
+    const { setActiveTenantId, getActiveTenantId } = await import('@/lib/auth');
+    setActiveTenantId('00000000-0000-4000-8000-000000000001');
+    const fetcher = vi.fn().mockResolvedValue(jsonResponse({ authenticated: false }, status));
+    vi.stubGlobal('fetch', fetcher);
+    render(wrap(<Probe />));
+    await waitFor(() => expect(latestAuth?.bootstrapState).toBe('unauthenticated'));
+    expect(latestAuth?.isAuthenticated).toBe(false);
+    expect(getActiveTenantId()).toBeNull();
+    expect(fetcher).toHaveBeenCalledTimes(1);
+  });
 });

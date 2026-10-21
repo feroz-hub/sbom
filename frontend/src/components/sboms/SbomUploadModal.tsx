@@ -109,8 +109,8 @@ function formatUploadError(err: unknown): string {
 interface SbomUploadModalProps {
   open: boolean;
   onClose: () => void;
-  initialProjectId?: number | null;
-  initialProductId?: number | null;
+  initialProjectId?: (string | number) | null;
+  initialProductId?: (string | number) | null;
   /** Called after upload succeeds so parent views can refresh/optimistically insert. */
   onSuccess?: (sbom: SBOMSource) => void;
 }
@@ -175,8 +175,8 @@ export function SbomUploadModal({ open, onClose, initialProjectId, initialProduc
   const sbomDataValue = watch('sbom_data');
   const selectedSbomTypeId = watch('sbom_type_id');
   const selectedLogicalSbomId = watch('logical_sbom_id');
-  const mastersQuery = useQuery({ queryKey: ['logical-sboms', selectedProductId, 'choices'], queryFn: ({ signal }) => getLogicalSbomChoices(Number(selectedProductId), signal), enabled: open && Boolean(selectedProductId) });
-  const selectedVersionsQuery = useQuery({ queryKey: ['logical-sbom-versions', selectedLogicalSbomId], queryFn: ({ signal }) => getLogicalSbomVersions(Number(selectedLogicalSbomId), signal), enabled: open && Boolean(selectedLogicalSbomId) });
+  const mastersQuery = useQuery({ queryKey: ['logical-sboms', selectedProductId, 'choices'], queryFn: ({ signal }) => getLogicalSbomChoices(selectedProductId, signal), enabled: open && Boolean(selectedProductId) });
+  const selectedVersionsQuery = useQuery({ queryKey: ['logical-sbom-versions', selectedLogicalSbomId], queryFn: ({ signal }) => getLogicalSbomVersions(selectedLogicalSbomId!, signal), enabled: open && Boolean(selectedLogicalSbomId) });
   const sbomVersionValue = watch('sbom_version');
 
   const duplicateNameError = selectedLogicalSbomId && selectedVersionsQuery.data?.some(
@@ -192,7 +192,7 @@ export function SbomUploadModal({ open, onClose, initialProjectId, initialProduc
   );
   const uploadRepairUrl = uploadResult ? getRepairWorkspaceUrl(uploadResult) : null;
   const validationFailureRepairUrl = validationFailure ? getRepairWorkspaceUrl(validationFailure) : null;
-  const selectedProjectNumber = selectedProjectId ? Number(selectedProjectId) : undefined;
+  const selectedProjectNumber = selectedProjectId ? selectedProjectId : undefined;
 
   const productsQuery = useQuery({
     queryKey: ['products', selectedProjectNumber],
@@ -302,10 +302,10 @@ export function SbomUploadModal({ open, onClose, initialProjectId, initialProduc
         sbom_data: selectedFile ? '' : (values.sbom_data || ''),
         sbom_file: selectedFile || undefined,
         sbom_type: values.sbom_type_id ? Number(values.sbom_type_id) : undefined,
-        projectid: values.projectid ? Number(values.projectid) : undefined,
-        project_id: values.projectid ? Number(values.projectid) : undefined,
-        product_id: values.productid ? Number(values.productid) : undefined,
-        logical_sbom_id: values.logical_sbom_id ? Number(values.logical_sbom_id) : undefined,
+        projectid: values.projectid ? values.projectid : undefined,
+        project_id: values.projectid ? values.projectid : undefined,
+        product_id: values.productid ? values.productid : undefined,
+        logical_sbom_id: values.logical_sbom_id ? values.logical_sbom_id : undefined,
         create_new_logical_sbom: !values.logical_sbom_id,
         sbom_version: values.sbom_version || undefined,
         product_version: values.product_version || undefined,

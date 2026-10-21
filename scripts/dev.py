@@ -1052,6 +1052,18 @@ def stop_processes(processes: list[subprocess.Popen]) -> None:
 
 
 def start_application(args) -> None:
+    if getattr(args, "profile", "legacy") == "greenfield":
+        if not args.check:
+            check_application_ports(DEV_API_PORT, DEV_FRONTEND_PORT)
+        if __package__:
+            from . import dev_greenfield
+        else:
+            import dev_greenfield
+        try:
+            dev_greenfield.start(args, ACTIVE_RUNTIME)
+        except dev_greenfield.https.HttpsTrustError as error:
+            raise SetupError(str(error)) from error
+        return
     if not args.check:
         ensure_dependencies()
     print("SBOM Analyzer Development Setup\n", flush=True)
@@ -1283,6 +1295,8 @@ def parse_args(argv=None):
                         help="start services, stop owned services, restart, or show status")
     parser.add_argument("--check", action="store_true", help="inspect prerequisites only; never start or stop processes")
     parser.add_argument("--verbose", action="store_true", help="show redacted technical diagnostics")
+    parser.add_argument("--profile", choices=("auto", "greenfield", "legacy"), default="auto",
+                        help="auto selects an installed greenfield UUID stack; legacy uses .env.dev.local")
     return parser.parse_args(argv)
 
 
@@ -1290,11 +1304,21 @@ def main() -> None:
     global VERBOSE, ACTIVE_RUNTIME
     args = parse_args()
     VERBOSE = args.verbose
+    if args.profile == "auto":
+        installed = (Path.home() / ".sbom-greenfield-uuid").exists()
+        args.profile = "greenfield" if installed and (ROOT / "scripts/greenfield_uuid.py").exists() else "legacy"
     if args.check:
         start_application(args)
         return
     if args.command == "status":
-        application_status()
+        if args.profile == "greenfield":
+            if __package__:
+                from . import dev_greenfield
+            else:
+                import dev_greenfield
+            dev_greenfield.status(Runtime(ROOT))
+        else:
+            application_status()
         return
     if args.command in {"stop", "restart"}:
         stop_application()
@@ -1307,7 +1331,10 @@ def main() -> None:
         launcher = (state or {}).get("launcher_pid")
         suffix = f" (launcher PID {launcher})" if isinstance(launcher, int) else ""
         say("INFO", "SBOM Analyzer", f"development environment is already running or starting/stopping{suffix}.")
-        application_status()
+        if args.profile == "greenfield":
+            say("INFO", "Greenfield UUID", "use python3 scripts/dev.py status")
+        else:
+            application_status()
         print("Use python3 scripts/dev.py status or python3 scripts/dev.py stop.")
         return
     previous = {}

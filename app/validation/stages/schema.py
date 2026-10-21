@@ -18,6 +18,7 @@ from __future__ import annotations
 
 import json
 import logging
+from functools import lru_cache
 from importlib import (
     resources,  # nosemgrep: python.lang.compatibility.python37.python37-compatibility-importlib2 - project requires Python >=3.11 in pyproject.toml
 )
@@ -113,6 +114,14 @@ def _ensure_cyclonedx_spdx_license_schema(version: str) -> dict[str, Any] | None
     return schema
 
 
+@lru_cache(maxsize=1)
+def _cyclonedx_jsf_schema() -> dict[str, Any]:
+    # R3-DEF-004: the BOM schemas reference JSF for signed documents. Resolve
+    # only the vendored dependency; never retrieve schemas from the network.
+    path = resources.files("app.validation.schemas.cyclonedx").joinpath("jsf-0.82.schema.json")
+    return json.loads(path.read_text(encoding="utf-8"))
+
+
 def _build_json_validator(schema: dict[str, Any], spec: str, version: str):
     """Construct a jsonschema validator with vendored $ref targets pre-registered."""
     from jsonschema import FormatChecker  # type: ignore[import-untyped]
@@ -126,6 +135,8 @@ def _build_json_validator(schema: dict[str, Any], spec: str, version: str):
         registry = registry.with_resource(schema_id, Resource.from_contents(schema))
 
     if spec == "cyclonedx":
+        jsf_schema = _cyclonedx_jsf_schema()
+        registry = registry.with_resource(jsf_schema["$id"], Resource.from_contents(jsf_schema))
         spdx_schema = _ensure_cyclonedx_spdx_license_schema(version)
         if spdx_schema is not None:
             spdx_id = spdx_schema.get("$id") or "http://cyclonedx.org/schema/spdx.schema.json"

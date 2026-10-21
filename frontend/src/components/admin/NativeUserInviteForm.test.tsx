@@ -12,21 +12,21 @@ const state = vi.hoisted(() => ({ platform: true }));
 const list = vi.hoisted(() => vi.fn());
 vi.mock('@/hooks/useAuth', () => ({ useAuth: () => ({
   user: { userId: 1, permissions: [] },
-  activeTenantId: '12', activeTenant: { id: 12, name: 'Olympus Healthcare' },
+  activeTenantId: '00000000-0000-4000-8000-00000000000c', activeTenant: { id: "00000000-0000-4000-8000-00000000000c", name: 'Olympus Healthcare' },
   hasPermission: (permission: string) => permission === 'tenant:user:invite' || state.platform,
 }) }));
-vi.mock('@/lib/auth', () => ({ getActiveTenantId: () => '12' }));
+vi.mock('@/lib/auth', () => ({ getActiveTenantId: () => '00000000-0000-4000-8000-00000000000c' }));
 vi.mock('@/lib/api', () => ({ listPlatformTenants: list }));
 
 describe('Native invitation', () => {
   beforeEach(() => {
     state.platform = true;
-    list.mockResolvedValue([{ id: 12, name: 'Olympus Healthcare', slug: 'olympus', status: 'ACTIVE' }]);
+    list.mockResolvedValue([{ id: "00000000-0000-4000-8000-00000000000c", name: 'Olympus Healthcare', slug: 'olympus', status: 'ACTIVE' }]);
     vi.stubGlobal('fetch', vi.fn().mockResolvedValue({ ok: true, json: async () => ({ delivery: { status: 'PENDING' } }) }));
   });
   afterEach(() => vi.unstubAllGlobals());
 
-  it('selects tenants by name/slug and sends the selected internal identifier', async () => {
+  it('selects tenants by name/slug and sends the selected public UUID', async () => {
     const user = userEvent.setup();
     render(<NativeUserInviteForm />);
     expect(screen.queryByLabelText(/Tenant ID/)).not.toBeInTheDocument();
@@ -41,7 +41,7 @@ describe('Native invitation', () => {
     await waitFor(() => expect(fetch).toHaveBeenCalled());
     const [url, options] = vi.mocked(fetch).mock.calls[0];
     expect(url).toContain('/platform/native-users');
-    expect(JSON.parse(String(options?.body))).toMatchObject({ tenant_id: 12, role_codes: ['VIEWER'] });
+    expect(JSON.parse(String(options?.body))).toMatchObject({ tenant_id: "00000000-0000-4000-8000-00000000000c", role_codes: ['VIEWER'] });
     expect(await screen.findByRole('status')).toHaveTextContent('Invitation created');
   });
 
@@ -76,19 +76,19 @@ describe('Native invitation', () => {
 
 it.each([true, false])('invitation refreshes authoritative tenant membership/counts (platform=%s)', async platform => {
   state.platform = platform;
-  list.mockResolvedValue([{ id: 12, name: 'Olympus Healthcare', slug: 'olympus', status: 'ACTIVE' }]);
+  list.mockResolvedValue([{ id: "00000000-0000-4000-8000-00000000000c", name: 'Olympus Healthcare', slug: 'olympus', status: 'ACTIVE' }]);
   vi.stubGlobal('fetch', vi.fn().mockResolvedValue(Response.json({ user_id: 55, status: 'PENDING_EMAIL_VERIFICATION', delivery: { status: 'PENDING' } })));
   const user = userEvent.setup(); render(<NativeUserInviteForm />);
   testClient.setQueryData(['platform-summary'], { total_memberships: 1 });
-  testClient.setQueryData(['tenant-users', 12], []);
+  testClient.setQueryData(['tenant-users', "00000000-0000-4000-8000-00000000000c"], []);
   const summary = vi.fn().mockResolvedValue({ total_memberships: 2 });
   const members = vi.fn().mockResolvedValue([{ user_id: 55, status: 'PENDING_EMAIL_VERIFICATION' }]);
-  const stops = [new QueryObserver(testClient, { queryKey: ['platform-summary'], queryFn: summary }).subscribe(() => {}), new QueryObserver(testClient, { queryKey: ['tenant-users', 12], queryFn: members }).subscribe(() => {})];
+  const stops = [new QueryObserver(testClient, { queryKey: ['platform-summary'], queryFn: summary }).subscribe(() => {}), new QueryObserver(testClient, { queryKey: ['tenant-users', "00000000-0000-4000-8000-00000000000c"], queryFn: members }).subscribe(() => {})];
   if (platform) { await user.click(screen.getByRole('button', { name: 'Tenant' })); await user.click(await screen.findByRole('button', { name: 'Olympus Healthcare — olympus' })); }
   for (const [label, value] of [['first name', 'New'], ['last name', 'User'], ['email', 'new@example.test']]) await user.type(screen.getByLabelText(new RegExp(label, 'i')), value);
   await user.click(screen.getByRole('button', { name: /Create and send/ }));
   await waitFor(() => expect(testClient.getQueryData(['platform-summary'])).toEqual({ total_memberships: 2 }));
-  expect(testClient.getQueryData(['tenant-users', 12])).toEqual([{ user_id: 55, status: 'PENDING_EMAIL_VERIFICATION' }]);
+  expect(testClient.getQueryData(['tenant-users', "00000000-0000-4000-8000-00000000000c"])).toEqual([{ user_id: 55, status: 'PENDING_EMAIL_VERIFICATION' }]);
   expect(summary).toHaveBeenCalledTimes(1); expect(members).toHaveBeenCalledTimes(1); stops.forEach(stop => stop());
 });
 it('failed invitation preserves the form and leaves cached metrics fresh', async () => {

@@ -27,9 +27,10 @@ from sqlalchemy.sql import expression
 from .core.native_identity import canonicalize_email
 from .db import Base
 from .models_mixins import SoftDeleteMixin, TenantOwnedMixin
+from .public_identity import PublicIdentityMixin
 
 
-class Tenant(Base):
+class Tenant(PublicIdentityMixin, Base):
     __tablename__ = "tenants"
 
     id = Column(Integer, primary_key=True)
@@ -606,7 +607,7 @@ class TenantUserRoleAssignmentHistory(Base, TenantOwnedMixin):
     )
 
 
-class Projects(Base, SoftDeleteMixin, TenantOwnedMixin):
+class Projects(PublicIdentityMixin, Base, SoftDeleteMixin, TenantOwnedMixin):
     __tablename__ = "projects"
 
     id = Column(Integer, primary_key=True, index=True)
@@ -653,7 +654,7 @@ class Projects(Base, SoftDeleteMixin, TenantOwnedMixin):
 
 
 
-class Product(Base, SoftDeleteMixin, TenantOwnedMixin):
+class Product(PublicIdentityMixin, Base, SoftDeleteMixin, TenantOwnedMixin):
     __tablename__ = "products"
 
     id = Column(Integer, primary_key=True, index=True)
@@ -729,7 +730,7 @@ class SBOMType(Base):
     sboms = relationship("SBOMSource", back_populates="sbom_type_rel")
 
 
-class LogicalSBOM(Base, TenantOwnedMixin):
+class LogicalSBOM(PublicIdentityMixin, Base, TenantOwnedMixin):
     """A named SBOM identity; uploaded evidence lives on SBOMSource versions."""
     __tablename__ = "logical_sbom"
     id = Column(Integer, primary_key=True)
@@ -749,7 +750,7 @@ class LogicalSBOM(Base, TenantOwnedMixin):
     )
 
 
-class SBOMSource(Base, SoftDeleteMixin, TenantOwnedMixin):
+class SBOMSource(PublicIdentityMixin, Base, SoftDeleteMixin, TenantOwnedMixin):
     __tablename__ = "sbom_source"
 
     id = Column(Integer, primary_key=True, index=True)
@@ -1037,7 +1038,7 @@ class SBOMAnalysisReport(Base, SoftDeleteMixin, TenantOwnedMixin):
     sbom = relationship("SBOMSource", back_populates="analysis_reports")
 
 
-class SBOMComponent(Base, SoftDeleteMixin, TenantOwnedMixin):
+class SBOMComponent(PublicIdentityMixin, Base, SoftDeleteMixin, TenantOwnedMixin):
     __tablename__ = "sbom_component"
 
     id = Column(Integer, primary_key=True, index=True)

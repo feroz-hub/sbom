@@ -1,5 +1,5 @@
 export interface Project {
-  id: number;
+  id: (string | number);
   project_name: string;
   project_details: string | null;
   project_status: number;   // 1 = Active, 0 = Inactive
@@ -11,9 +11,9 @@ export interface Project {
 }
 
 export interface Product {
-  id: number;
-  tenant_id?: number;
-  project_id: number;
+  id: (string | number);
+  tenant_id?: (string | number);
+  project_id: (string | number);
   name: string;
   normalized_name?: string | null;
   slug?: string | null;
@@ -25,9 +25,9 @@ export interface Product {
   latest_version?: string | null;
   metadata_json?: Record<string, unknown> | null;
   sbom_count?: number;
-  latest_sbom_id?: number | null;
+  latest_sbom_id?: (string | number) | null;
   latest_sbom_version?: string | null;
-  current_sbom_id?: number | null;
+  current_sbom_id?: (string | number) | null;
   current_sbom_version?: string | null;
   current_sbom_mode?: 'AUTO' | 'MANUAL_PIN';
   created_at?: string | null;
@@ -96,28 +96,28 @@ export interface LatestAnalysisSummary {
 export type LatestAnalysis = LatestAnalysisSummary;
 
 export interface SbomLifecycleEvent {
-  id: number; sbom_id: number; tenant_id: number; actor: string | null; actor_id: number | null;
+  id: number; sbom_id: (string | number); tenant_id: (string | number); actor: string | null; actor_id: number | null;
   timestamp: string; old_status: 'ACTIVE' | 'INACTIVE'; new_status: 'ACTIVE' | 'INACTIVE'; reason: string;
 }
 
 export interface SBOMSource {
-  logical_sbom_id?: number | null;
+  logical_sbom_id?: (string | number) | null;
   lifecycle_status?: 'ACTIVE' | 'INACTIVE';
   lifecycle_revision?: number;
   analysis_requires_reanalysis?: boolean;
   processing_eligibility?: { eligible: boolean; reason_code: string | null; reason: string | null };
-  id: number;
+  id: (string | number);
   sbom_name: string;
   sbom_type: number | null;       // FK integer to SBOMType
   sbom_version: string | null;
-  parent_id?: number | null;
+  parent_id?: (string | number) | null;
   change_summary?: string | null;
   completeness_score?: number | null;
   completeness_report?: Record<string, unknown> | null;
-  projectid: number | null;
-  project_id?: number | null;
+  projectid: (string | number) | null;
+  project_id?: (string | number) | null;
   project_name?: string | null;
-  product_id?: number | null;
+  product_id?: (string | number) | null;
   product?: Product | null;
   component_count?: number;
   created_by: string | null;
@@ -156,8 +156,8 @@ export interface SBOMSource {
   original_format?: string | null;
   current_format?: string | null;
   converted_from_format?: string | null;
-  source_sbom_id?: number | null;
-  converted_sbom_id?: number | null;
+  source_sbom_id?: (string | number) | null;
+  converted_sbom_id?: (string | number) | null;
   conversion_status?: string | null;
   conversion_warnings_json?: Array<{ message?: string }> | null;
   conversion_report_json?: Record<string, unknown> | null;
@@ -200,7 +200,7 @@ export interface SBOMSource {
 }
 
 export interface Fda510kReportSelection {
-  sbom_id: number;
+  sbom_id: (string | number);
   findings_analysis_run_id?: number | null;
   lifecycle_analysis_run_id?: number | null;
 }
@@ -231,7 +231,7 @@ export interface Fda510kReportExportRequest {
 }
 
 export interface Fda510kReportBlocker {
-  sbom_id: number;
+  sbom_id: (string | number);
   sbom_name: string;
   analysis_type: 'findings' | 'lifecycle' | string;
   status: string;
@@ -260,7 +260,7 @@ export interface ValidationErrorEntry {
 }
 
 export interface ValidationReport {
-  sbom_id: number;
+  sbom_id: (string | number);
   filename: string;
   status: SbomValidationStatus;
   failed_stage: string | null;
@@ -287,7 +287,7 @@ export interface SbomValidationFailureDetail {
   code: 'sbom_validation_failed';
   status?: 'validation_failed' | SbomValidationStatus;
   message: string;
-  sbom_id: number | null;
+  sbom_id: (string | number) | null;
   workspace_id?: string | null;
   session_id?: string | null;
   validation_session_id?: string | null;
@@ -320,7 +320,7 @@ export interface ValidationRepairSession {
   id: string;
   workspace_id?: string;
   validation_session_id?: string;
-  project_id: number | null;
+  project_id: (string | number) | null;
   user_id: string | null;
   original_filename: string | null;
   sbom_name: string | null;
@@ -354,7 +354,7 @@ export interface ValidationRepairSession {
   created_at: string;
   updated_at: string;
   expires_at: string;
-  imported_sbom_id: number | null;
+  imported_sbom_id: (string | number) | null;
   repair_workspace_url?: string;
 }
 
@@ -436,8 +436,8 @@ export type ApplyPatchResponse = ValidationSession;
 export type ValidationSessionImportResponse = SBOMSource;
 
 export interface SBOMComponent {
-  id: number;
-  sbom_id: number;
+  id: (string | number);
+  sbom_id: (string | number);
   bom_ref?: string | null;
   name: string;
   version: string | null;
@@ -489,7 +489,7 @@ export interface SBOMComponent {
   dedupe_canonical_id?: string | null;
   dedupe_group_id?: string | null;
   is_duplicate?: boolean | null;
-  duplicate_of_component_id?: number | null;
+  duplicate_of_component_id?: (string | number) | null;
   dedupe_reason?: string | null;
   dedupe_confidence?: string | null;
   normalization_notes_json?: string[] | null;
@@ -731,8 +731,8 @@ export type VexStatus = 'affected' | 'not_affected' | 'fixed' | 'under_investiga
 export interface VexStatement {
   id: number;
   vex_document_id?: number | null;
-  sbom_id: number;
-  component_id?: number | null;
+  sbom_id: (string | number);
+  component_id?: (string | number) | null;
   component_name?: string | null;
   component_version?: string | null;
   vulnerability_id: string;
@@ -758,23 +758,23 @@ export interface ComponentVulnerability {
 }
 
 export interface ComponentVulnerabilitiesResponse {
-  tenant_id: number;
-  sbom_id: number;
-  component_id: number;
+  tenant_id: (string | number);
+  sbom_id: (string | number);
+  component_id: (string | number);
   component_name: string;
   component_version: string | null;
   vulnerabilities: ComponentVulnerability[];
 }
 
 export interface VexListResponse {
-  vulnerability_options?: { component_id: number; vulnerability_id: string }[];
-  sbom_id: number;
+  vulnerability_options?: { component_id: (string | number); vulnerability_id: string }[];
+  sbom_id: (string | number);
   statements: VexStatement[];
 }
 
 export interface VexImportResponse {
   document_id: number;
-  sbom_id: number;
+  sbom_id: (string | number);
   statements_imported: number;
   matched_statements?: number;
   unmatched_statements?: number;
@@ -807,13 +807,13 @@ export interface VexOverrideAuditEntry {
 export interface VexOverrideHistoryResponse {
   current_decision?: VexStatement | null;
   statements?: VexStatement[];
-  component_id: number;
+  component_id: (string | number);
   vulnerability_id: string;
   history: VexOverrideAuditEntry[];
 }
 
 export interface VexDiscoveryResponse {
-  sbom_id: number;
+  sbom_id: (string | number);
   discovered_documents: number;
   statements_imported: number;
   matched_statements: number;
@@ -822,7 +822,7 @@ export interface VexDiscoveryResponse {
 }
 
 export interface VexTopAffectedComponent {
-  component_id: number | null;
+  component_id: (string | number) | null;
   component_name: string | null;
   component_version: string | null;
   vulnerability_id: string;
@@ -865,7 +865,7 @@ export interface DashboardVex {
 }
 
 export interface LifecycleReport {
-  sbom_id: number;
+  sbom_id: (string | number);
   sbom_name: string;
   generated_at: string;
   summary: DashboardLifecycle;
@@ -873,7 +873,7 @@ export interface LifecycleReport {
 }
 
 export interface LifecycleRefreshSummary {
-  sbom_id: number;
+  sbom_id: (string | number);
   total_components: number;
   unique_identities: number;
   cache_hits: number;
@@ -928,7 +928,7 @@ export type RemediationStatus = 'Open' | 'In Progress' | 'Fixed' | 'Accepted Ris
 
 export interface VulnerabilityRemediation {
   id: number;
-  project_id: number;
+  project_id: (string | number);
   vuln_id: string;
   component_name: string | null;
   component_version: string | null;
@@ -946,10 +946,10 @@ export interface AnalysisRun {
   is_current?: boolean;
   processing_eligibility?: { eligible: boolean; reason_code: string | null; reason: string | null };
   id: number;
-  sbom_id: number | null;
+  sbom_id: (string | number) | null;
   sbom_name?: string | null;
-  project_id: number | null;
-  product_id?: number | null;
+  project_id: (string | number) | null;
+  product_id?: (string | number) | null;
   product_name?: string | null;
   // ADR-0001: OK / FINDINGS are canonical. PASS / FAIL accepted as legacy
   // aliases during the deprecation window — see docs/terminology.md.
@@ -1076,7 +1076,7 @@ export interface AnalysisFinding {
   vex_decision?: VexStatement | null;
   id: number;
   analysis_run_id: number;          // backend field name
-  component_id?: number | null;
+  component_id?: (string | number) | null;
   vuln_id: string | null;
   source: string | null;            // e.g. "NVD", "OSV", "NVD,OSV"
   title: string | null;
@@ -1409,15 +1409,15 @@ export interface UpdateProjectPayload {
 }
 
 export interface CreateSBOMPayload {
-  logical_sbom_id?: number;
+  logical_sbom_id?: (string | number);
   create_new_logical_sbom?: boolean;
   sbom_name: string;
   sbom_data: string;
   sbom_file?: File;
   sbom_type?: number;       // integer FK to SBOMType
-  projectid?: number;
-  project_id?: number;
-  product_id?: number;
+  projectid?: (string | number);
+  project_id?: (string | number);
+  product_id?: (string | number);
   sbom_version?: string;
   created_by?: string;
   product_version?: string;
@@ -1427,7 +1427,7 @@ export interface CreateSBOMPayload {
    * Version History, compare-versions and restore read. Omit for a standalone
    * SBOM — upload does not infer lineage from a matching name.
    */
-  parent_sbom_id?: number;
+  parent_sbom_id?: (string | number);
   set_as_current?: boolean;
 }
 
@@ -1436,12 +1436,12 @@ export interface UploadSBOMAcceptedResponse {
   workspace_id: string;
   validation_session_id: string;
   repair_workspace_url: string;
-  sbom_id: number;
+  sbom_id: (string | number);
   sbom_name: string;
   sbom_version?: string | null;
   product_version?: string | null;
-  project_id: number | null;
-  product_id?: number | null;
+  project_id: (string | number) | null;
+  product_id?: (string | number) | null;
   product_name?: string | null;
   is_current?: boolean;
   project_name?: string | null;
@@ -1466,8 +1466,8 @@ export interface UploadSBOMAcceptedResponse {
 }
 
 export interface UpdateSBOMPayload {
-  project_id?: number | null;
-  product_id?: number | null;
+  project_id?: (string | number) | null;
+  product_id?: (string | number) | null;
   name?: string | null;
   product_name?: string | null;
   product_version?: string | null;
@@ -1481,7 +1481,7 @@ export interface UpdateSBOMPayload {
 }
 
 export interface AnalyzeSBOMPayload {
-  sbom_id: number;
+  sbom_id: (string | number);
   sbom_name: string;
   nvd_api_key?: string;
   github_token?: string;
@@ -1495,7 +1495,7 @@ export interface PDFReportPayload {
 }
 
 export interface SBOMInfo {
-  sbom_id: number;
+  sbom_id: (string | number);
   format: string;
   spec_version: string | null;
   component_count: number;
@@ -1506,7 +1506,7 @@ export interface SBOMInfo {
 }
 
 export interface SbomDocumentStats {
-  sbom_id: number;
+  sbom_id: (string | number);
   sbom_name: string;
   format: string | null;
   spec_version: string | null;
@@ -1523,7 +1523,7 @@ export interface SbomDocumentStats {
 }
 
 export interface SbomRawChunk {
-  sbom_id: number;
+  sbom_id: (string | number);
   offset: number;
   limit: number;
   total_lines: number;
@@ -1533,8 +1533,8 @@ export interface SbomRawChunk {
 }
 
 export interface SbomConversionResponse {
-  source_sbom_id: number;
-  converted_sbom_id: number;
+  source_sbom_id: (string | number);
+  converted_sbom_id: (string | number);
   source_format: string;
   target_format: string;
   status: string;
@@ -1551,8 +1551,8 @@ export interface SbomConversionReport {
   target_format?: string | null;
   converted_at?: string | null;
   converted_by?: string | null;
-  source_sbom_id?: number | null;
-  converted_sbom_id?: number | null;
+  source_sbom_id?: (string | number) | null;
+  converted_sbom_id?: (string | number) | null;
   conversion_status?: string | null;
   enrichment_status?: string | null;
   package_count: number;
@@ -1602,7 +1602,7 @@ export interface RiskMethodology {
 }
 
 export interface SBOMRiskSummary {
-  sbom_id: number;
+  sbom_id: (string | number);
   run_id?: number;
   total_risk_score: number;
   risk_band: 'CRITICAL' | 'HIGH' | 'MEDIUM' | 'LOW';
@@ -1722,11 +1722,11 @@ export type ScheduleState = 'NONE' | 'INHERITED' | 'CUSTOM' | 'PAUSED' | 'EXCLUD
 
 export interface AnalysisSchedule {
   id: number;
-  tenant_id?: number | null;
-  product_id?: number | null;
+  tenant_id?: (string | number) | null;
+  product_id?: (string | number) | null;
   scope: ScheduleScope;
-  project_id: number | null;
-  sbom_id: number | null;
+  project_id: (string | number) | null;
+  sbom_id: (string | number) | null;
   cadence: ScheduleCadence;
   cron_expression: string | null;
   day_of_week: number | null;   // 0=Mon..6=Sun
@@ -1777,11 +1777,11 @@ export interface ScheduleUpsertPayload {
 }
 
 export interface ScheduleTarget {
-  project_id: number | null;
+  project_id: (string | number) | null;
   project_name: string | null;
-  product_id: number | null;
+  product_id: (string | number) | null;
   product_name: string | null;
-  sbom_id: number | null;
+  sbom_id: (string | number) | null;
   sbom_name: string | null;
   sbom_version: string | null;
   effective_schedule_id: number | null;
@@ -1800,7 +1800,7 @@ export interface ScheduleTargetPreview {
 
 export interface ConsolidatedAnalysisResult {
   runId: number;
-  sbom_id?: number;
+  sbom_id?: (string | number);
   sbom_name?: string;
   total_components?: number;
   components_with_cpe?: number;
@@ -1887,14 +1887,14 @@ export interface VexInvestigationRow {
   canonical_vulnerability_id: string;
   aliases: string[];
   severity: string | null;
-  component_id: number | null;
+  component_id: (string | number) | null;
   component_name: string | null;
   component_version: string | null;
-  project_id: number | null;
+  project_id: (string | number) | null;
   project_name: string | null;
-  product_id: number | null;
+  product_id: (string | number) | null;
   product_name: string | null;
-  sbom_id: number;
+  sbom_id: (string | number);
   sbom_name: string | null;
   analyzer_detection_state: string | null;
   analyzer_sources: string[];
@@ -1978,10 +1978,10 @@ export interface VexInvestigationCapabilities {
 
 export interface VexInvestigationDetail {
   sbom_version?: string | null;
-  previous_decisions?: Array<{ source_name?: string | null; impact_statement?: string | null; action_statement?: string | null; evidence?: Record<string, unknown> | null; investigation_id: number; statement_id: number; sbom_id: number; sbom_version: string; decision: string; justification: string | null; reviewer: string | null; decided_at: string | null; component_name: string; component_version: string; analysis_run_id: number | null; applicability: string; component_version_changed: boolean }>;
+  previous_decisions?: Array<{ source_name?: string | null; impact_statement?: string | null; action_statement?: string | null; evidence?: Record<string, unknown> | null; investigation_id: number; statement_id: number; sbom_id: (string | number); sbom_version: string; decision: string; justification: string | null; reviewer: string | null; decided_at: string | null; component_name: string; component_version: string; analysis_run_id: number | null; applicability: string; component_version_changed: boolean }>;
   capabilities?: VexInvestigationCapabilities;
   id: number;
-  sbom_id: number;
+  sbom_id: (string | number);
   project_name: string | null;
   product_name: string | null;
   sbom_name: string | null;
@@ -1994,7 +1994,7 @@ export interface VexInvestigationDetail {
     references: string[];
   };
   component: {
-    component_id: number | null;
+    component_id: (string | number) | null;
     name: string | null;
     version: string | null;
     purl: string | null;
@@ -2045,9 +2045,9 @@ export interface VexInvestigationListParams {
   my_work?: 'all' | 'me' | 'unassigned' | 'assigned' | 'attention';
   assignee?: string;
   unresolved_component?: boolean;
-  project_id?: number;
-  product_id?: number;
-  sbom_id?: number;
+  project_id?: (string | number);
+  product_id?: (string | number);
+  sbom_id?: (string | number);
   effective_status?: string;
   reconciliation_status?: string;
   severity?: string;
@@ -2078,7 +2078,7 @@ export interface VexInvestigationDecision {
 export * from './componentAdvisor';
 
 export interface LogicalSBOM {
-  id: number; tenant_id: number; product_id: number | null; name: string;
+  id: (string | number); tenant_id: (string | number); product_id: (string | number) | null; name: string;
   description: string | null; created_by: string | null; created_at: string; updated_at: string;
   version_count: number; latest_version: SBOMSource | null; version_ordering: string;
 }
@@ -2087,27 +2087,27 @@ export interface LogicalSBOMListResponse { items: LogicalSBOM[]; total: number; 
 
 export interface SbomPosture {
   application_name?: string | null;
-  target_sbom_id: number | null; posture_sbom_id: number | null; product_id: number | null;
-  current_sbom: {id: number; name: string; version: string | null} | null;
-  effective_current_sbom?: {id: number; name: string; version: string | null} | null;
+  target_sbom_id: (string | number) | null; posture_sbom_id: (string | number) | null; product_id: (string | number) | null;
+  current_sbom: {id: (string | number); name: string; version: string | null} | null;
+  effective_current_sbom?: {id: (string | number); name: string; version: string | null} | null;
   selection_mode?: 'AUTO' | 'MANUAL_PIN';
-  latest_analyzed?: {id: number; name: string; version: string | null} | null;
-  latest_uploaded: {id: number; name: string; version: string | null} | null;
-  posture_sbom: {id: number; name: string; version: string | null} | null;
+  latest_analyzed?: {id: (string | number); name: string; version: string | null} | null;
+  latest_uploaded: {id: (string | number); name: string; version: string | null} | null;
+  posture_sbom: {id: (string | number); name: string; version: string | null} | null;
   analysis_run_id: number | null; analysis_status: string; analysis_finding_rows?: number | null;
   last_known_posture: boolean; coverage_incomplete: boolean; warning: string | null;
   designation_required: boolean;
 }
 export interface VexVersionComparison {
-  previous_run_id: number; current_run_id: number; previous_sbom_id: number; current_sbom_id: number;
+  previous_run_id: number; current_run_id: number; previous_sbom_id: (string | number); current_sbom_id: (string | number);
   previous_version: string | null; current_version: string | null;
   previous_findings: number; current_findings: number; still_detected: number; new: number;
   no_longer_observed: number; unresolved_comparison: number; limitations: string[];
-  items: Array<{category: string; reason: string; current_component?: {id: number; name: string; version: string; purl: string | null; sbom_id: number} | null; previous: VexComparisonContext | null; current: VexComparisonContext | null}>;
+  items: Array<{category: string; reason: string; current_component?: {id: number; name: string; version: string; purl: string | null; sbom_id: (string | number)} | null; previous: VexComparisonContext | null; current: VexComparisonContext | null}>;
 }
 export interface VexComparisonContext {
-  vulnerability_id: string; component_id: number | null; component_name: string | null;
-  component_version: string | null; sbom_id: number; analysis_run_id: number; purl: string | null;
+  vulnerability_id: string; component_id: (string | number) | null; component_name: string | null;
+  component_version: string | null; sbom_id: (string | number); analysis_run_id: number; purl: string | null;
 }
 
 
@@ -2117,5 +2117,5 @@ export interface SbomPostureSummary {
 }
 export interface SbomPostureResponse {
   items: SbomPosture[]; summary?: SbomPostureSummary;
-  scope?: {tenant_id: number; project_id: number | null; product_id: number | null; sbom_id: number | null};
+  scope?: {tenant_id: (string | number); project_id: (string | number) | null; product_id: (string | number) | null; sbom_id: (string | number) | null};
 }

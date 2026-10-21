@@ -1,6 +1,7 @@
 """Functional recovery must retain database RBAC, audit identity and validation."""
 
 import json
+from uuid import uuid4
 
 import pytest
 from app.core.security import get_current_tenant_context
@@ -30,7 +31,7 @@ def test_database_roles_preserve_remediation_close_boundary(client, db, role, st
     project = Projects(project_name="Batch C remediation")
     db.add(project)
     db.commit()
-    project_id = project.id
+    project_id = str(project.public_id)
     assert not actor.has_permission("platform:user:manage_status")
     client.app.dependency_overrides[get_current_tenant_context] = scoped_context_override(lambda: actor)
     try:
@@ -54,7 +55,7 @@ def test_authenticated_writer_cannot_mutate_foreign_remediation(client, db):
         project = Projects(project_name="Foreign remediation")
         db.add(project)
         db.commit()
-        foreign_id = project.id
+        foreign_id = str(project.public_id)
     client.app.dependency_overrides[get_current_tenant_context] = scoped_context_override(lambda: actor)
     try:
         response = client.post("/api/remediation", params={"project_id": foreign_id, "user_id": "platform-admin"},
@@ -90,7 +91,7 @@ def test_invalid_edit_is_persisted_as_failed_and_cannot_be_compared(db):
 
 @pytest.mark.parametrize("params,expected", [
     ({"user_id": "actor@example.test"}, 422), ({"user_id": "' OR 1=1 --"}, 422),
-    ({"sbom_id": 123}, 400),
+    ({"sbom_id": 123}, 422),
 ])
 def test_list_error_contract_is_preserved_without_mutations(client, db, params, expected):
     before = db.scalar(select(func.count()).select_from(SBOMSource))
@@ -103,7 +104,6 @@ def test_list_error_contract_is_preserved_without_mutations(client, db, params, 
 def test_stream_foreign_sbom_is_hidden_and_cannot_create_run(client, db):
     from app.models import AnalysisRun
 
-    from tests.test_sboms_analyze_stream import _parse_sse_events
 
     declare_fixture_tenant(db, 2)
     db.commit()
@@ -111,15 +111,14 @@ def test_stream_foreign_sbom_is_hidden_and_cannot_create_run(client, db):
         sbom = SBOMSource(sbom_name="Foreign stream", sbom_data="{}", status="validated")
         db.add(sbom)
         db.commit()
-        foreign_id = sbom.id
-    # The existing SSE contract returns one terminal error for both foreign
-    # and missing records. Transport status is 200; business denial is 404.
-    for identifier in (foreign_id, 99999999):
+        foreign_id = str(sbom.public_id)
+    # The UUID boundary rejects both foreign and unknown IDs before streaming.
+    for identifier in (foreign_id, str(uuid4())):
         response = client.post(f"/api/sboms/{identifier}/analyze/stream", json={"sources": ["NVD"]})
-        assert response.status_code == 200
-        assert _parse_sse_events(response.text) == [{
-            "event": "error", "data": {"message": f"SBOM {identifier} not found", "code": 404},
-        }]
+        # UUID resolution denies unknown and foreign resources before the
+        # stream opens; it must not disclose an internal integer key.
+        assert response.status_code == 404
+        assert response.json() == {"detail": "Resource not found"}
     for owner in (1, 2):
         with verified_fixture_tenant(db, owner):
             assert db.scalar(select(func.count()).select_from(AnalysisRun)) == 0

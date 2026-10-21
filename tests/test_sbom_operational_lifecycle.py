@@ -70,7 +70,7 @@ def world(db, admin):
 
 
 def change(client, sbom, status, reason="Administrator lifecycle decision"):
-    return client.post(f"/api/sboms/{sbom.id}/lifecycle", json={"status": status, "reason": reason})
+    return client.post(f"/api/sboms/{sbom.public_id}/lifecycle", json={"status": status, "reason": reason})
 
 
 def test_transition_preserves_history_and_writes_atomic_audit(client, db, admin, world, revoke):
@@ -92,12 +92,12 @@ def test_transition_preserves_history_and_writes_atomic_audit(client, db, admin,
     assert audit.metadata_json["reason"] == "Retirement after product release"
     assert audit.metadata_json["sbom_id"] == sbom.id and audit.created_at
     assert revoke == [((lifecycle.analysis_task_id(1, sbom.id, 0),), {"terminate": False})]
-    assert client.get(f"/api/sboms/{sbom.id}").status_code == 200
-    history = client.get(f"/api/sboms/{sbom.id}/lifecycle-history").json()
+    assert client.get(f"/api/sboms/{sbom.public_id}").status_code == 200
+    history = client.get(f"/api/sboms/{sbom.public_id}/lifecycle-history").json()
     assert history[0]["old_status"] == "ACTIVE" and history[0]["new_status"] == "INACTIVE"
     assert history[0]["actor_id"] == admin.user_id
     assert change(client, sbom, "ACTIVE", "Product restored").status_code == 200
-    history = client.get(f"/api/sboms/{sbom.id}/lifecycle-history").json()
+    history = client.get(f"/api/sboms/{sbom.public_id}/lifecycle-history").json()
     assert len(history) == 2 and history[0]["reason"] == "Product restored"
 
 
@@ -106,7 +106,7 @@ def test_transition_preserves_history_and_writes_atomic_audit(client, db, admin,
                                      {"status": "INACTIVE", "reason": "why", "tenant_id": 2}])
 def test_invalid_transition_payload_rejected(client, db, world, payload):
     _, sbom, _ = world
-    assert client.post(f"/api/sboms/{sbom.id}/lifecycle", json=payload).status_code == 422
+    assert client.post(f"/api/sboms/{sbom.public_id}/lifecycle", json=payload).status_code == 422
     db.refresh(sbom)
     assert sbom.lifecycle_status == "ACTIVE"
     assert db.scalar(select(func.count()).select_from(AuditLog).where(AuditLog.action == "sbom.deactivate")) == 0
@@ -124,7 +124,7 @@ def test_only_administrator_can_change_lifecycle(client, admin, world, role):
     context = replace(admin, roles=frozenset({role}), permissions=ROLE_PERMISSIONS[role])
     client.app.dependency_overrides[get_current_tenant_context] = scoped_context_override(lambda: context)
     assert change(client, sbom, "INACTIVE").status_code == 403
-    assert client.get(f"/api/sboms/{sbom.id}/lifecycle-history").status_code == 200
+    assert client.get(f"/api/sboms/{sbom.public_id}/lifecycle-history").status_code == 200
 
 
 def test_cross_tenant_transition_and_history_denied(client, db, world):
@@ -133,7 +133,7 @@ def test_cross_tenant_transition_and_history_denied(client, db, world):
     other = builder.sbom(builder.product(tenant_id=2, name="other"))
     with verified_fixture_tenant(db, 2):
         db.commit()
-        other_id = other.id
+        other_id = str(other.public_id)
     assert client.post(f"/api/sboms/{other_id}/lifecycle", json={"status": "INACTIVE", "reason": "foreign"}).status_code == 404
     assert client.get(f"/api/sboms/{other_id}/lifecycle-history").status_code == 404
     with verified_fixture_tenant(db, 2):
@@ -156,7 +156,7 @@ def test_audit_failure_rolls_back_status(client, db, admin, world, monkeypatch):
 def test_inactive_direct_analysis_api_rejected(client, world, suffix):
     _, sbom, _ = world
     assert change(client, sbom, "INACTIVE").status_code == 200
-    response = client.post(f"/api/sboms/{sbom.id}{suffix}", json={} if suffix.endswith("stream") else None)
+    response = client.post(f"/api/sboms/{sbom.public_id}{suffix}", json={} if suffix.endswith("stream") else None)
     assert response.status_code == 409, response.text
     assert "SBOM_INACTIVE" in response.text
 
@@ -168,7 +168,7 @@ def test_inactive_comparison_rejected_before_cache(client, db, world):
     assert change(client, sbom, "INACTIVE").status_code == 200
     responses = [client.post("/api/v1/compare", json={"run_a_id": sbom.run.id, "run_b_id": other.run.id}),
                  client.get("/api/analysis-runs/compare", params={"run_a": sbom.run.id, "run_b": other.run.id}),
-                 client.get("/api/sboms/compare-versions", params={"version_a": sbom.id, "version_b": other.id})]
+                 client.get("/api/sboms/compare-versions", params={"version_a": str(sbom.public_id), "version_b": str(other.public_id)})]
     for response in responses:
         assert response.status_code == 409, response.text
         assert "SBOM_INACTIVE" in response.text
@@ -179,7 +179,7 @@ def test_inactive_new_report_rejected(client, world, route):
     _, sbom, _ = world
     assert change(client, sbom, "INACTIVE").status_code == 200
     response = client.post("/api/pdf-report", json={"runId": sbom.run.id}) if route == "pdf" else client.get(
-        f"/api/sboms/{sbom.id}/" + ("lifecycle/report?format=csv" if route == "csv" else "reports/lifecycle-pack"))
+        f"/api/sboms/{sbom.public_id}/" + ("lifecycle/report?format=csv" if route == "csv" else "reports/lifecycle-pack"))
     assert response.status_code == 409, response.text
     assert "SBOM_INACTIVE" in response.text
 
@@ -190,7 +190,7 @@ def test_centralized_validation_eligibility(client, db, world, status, errors, c
     _, sbom, _ = world
     sbom.status, sbom.error_count = status, errors
     db.commit()
-    response = client.post(f"/api/sboms/{sbom.id}/analyze")
+    response = client.post(f"/api/sboms/{sbom.public_id}/analyze")
     assert response.status_code == 409 and code in response.text
     assert lifecycle.processing_eligibility(sbom)["reason_code"] == code
 
@@ -310,7 +310,7 @@ def test_scheduled_inactive_and_old_generation_jobs_skipped(client, db, world):
 def test_legacy_direct_api_cannot_bypass_inactive_guard(client, world, endpoint):
     _, sbom, _ = world
     assert change(client, sbom, "INACTIVE").status_code == 200
-    response = client.post(endpoint, json={"sbom_id": sbom.id})
+    response = client.post(endpoint, json={"sbom_id": str(sbom.public_id)})
     assert response.status_code == 409, response.text
     assert "SBOM_INACTIVE" in response.text
 

@@ -9,7 +9,6 @@ returns sufficiently evidenced matches), T16 (AI purpose is marked/provenanced).
 from datetime import UTC, datetime, timedelta
 
 import pytest
-
 from app.parsing.cyclonedx import parse_cyclonedx_dict, parse_cyclonedx_xml
 from app.parsing.spdx import parse_spdx_dict
 from app.services.component_advisor.classification import ClassificationInput, RiskClassification, classify

@@ -182,7 +182,58 @@ def compose_report(db, preferences, *, tenant_id, cycle_start, cycle_end, sbom_i
         key=risk_rank,
         reverse=True,
     )[:10]
-    return report
+    return public_report_snapshot(db, report, tenant_id)
+
+
+def public_report_snapshot(db, report, tenant_id):
+    """Detach public resource references before email, spreadsheet or JSON rendering."""
+    from sqlalchemy import select
+
+    from ..models import Product, Projects, SBOMComponent, SBOMSource, Tenant
+
+    models = {
+        "tenant_id": Tenant,
+        "project_id": Projects,
+        "product_id": Product,
+        "sbom_id": SBOMSource,
+        "component_id": SBOMComponent,
+        "previous_sbom_id": SBOMSource,
+        "current_sbom_id": SBOMSource,
+    }
+    cache = {}
+
+    def identity(model, value):
+        if not isinstance(value, int):
+            return value
+        key = (model, value)
+        if key not in cache:
+            table = model.__table__
+            query = select(table.c.public_id).where(table.c.id == value)
+            query = (
+                query.where(table.c.id == tenant_id) if model is Tenant else query.where(table.c.tenant_id == tenant_id)
+            )
+            cache[key] = str(db.execute(query).scalar_one())
+        return cache[key]
+
+    def walk(value, sbom=False):
+        if isinstance(value, list):
+            return [walk(item, sbom) for item in value]
+        if isinstance(value, dict):
+            if "scheduled_outcomes" in value:
+                value = dict(value)
+                value["scheduled_outcomes"] = {
+                    identity(SBOMSource, int(key) if str(key).isdecimal() else key): walk(outcome)
+                    for key, outcome in value["scheduled_outcomes"].items()
+                }
+            return {
+                key: identity(SBOMSource if key == "id" and sbom else models[key], item)
+                if key in models or key == "id" and sbom
+                else walk(item, key == "sboms")
+                for key, item in value.items()
+            }
+        return value
+
+    return walk(report)
 
 
 def _visible(severity, floor):

@@ -138,7 +138,7 @@ def _post_export(client, project_id: int, sbom_id: int):
 def test_fda_510k_export_uses_template_and_removes_examples(client, db):
     project, sbom = _seed_ready_sbom(db)
 
-    response = _post_export(client, project.id, sbom.id)
+    response = _post_export(client, str(project.public_id), str(sbom.public_id))
 
     assert response.status_code == 200, response.text
     assert response.headers["content-type"] == EXCEL_MEDIA_TYPE
@@ -235,14 +235,14 @@ def test_fda_510k_export_returns_structured_409_for_incomplete_lifecycle(client,
     component.lifecycle_checked_at = None
     db.commit()
 
-    response = _post_export(client, project.id, sbom.id)
+    response = _post_export(client, str(project.public_id), str(sbom.public_id))
 
     assert response.status_code == 409
     detail = response.json()["detail"]
     assert detail["code"] == "fda_510k_report_incomplete_analysis"
     assert detail["blockers"] == [
         {
-            "sbom_id": sbom.id,
+            "sbom_id": str(sbom.public_id),
             "sbom_name": sbom.sbom_name,
             "analysis_type": "lifecycle",
             "status": "missing",

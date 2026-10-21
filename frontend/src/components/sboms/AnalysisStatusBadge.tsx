@@ -7,7 +7,7 @@ import type { AnalysisStatus as OptimisticAnalysisStatus } from '@/hooks/useBack
 import type { LatestAnalysisSummary } from '@/types';
 
 interface AnalysisStatusBadgeProps {
-  sbomId: number;
+  sbomId: (string | number);
   analysis?: LatestAnalysisSummary | null;
   optimisticStatus?: OptimisticAnalysisStatus;
   optimisticFindings?: number;

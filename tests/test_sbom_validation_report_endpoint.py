@@ -133,7 +133,7 @@ def test_validation_report_for_clean_upload(client, validated_sbom_id: int):
 
 
 def test_validation_report_404_on_unknown_id(client):
-    resp = client.get("/api/sboms/99999999/validation-report")
+    resp = client.get(f"/api/sboms/{uuid.uuid4()}/validation-report")
     assert resp.status_code == 404
 
 

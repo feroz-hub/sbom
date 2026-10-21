@@ -1,6 +1,7 @@
 """Provisioning transactions and direct HTTP authorization against PostgreSQL."""
 
 import base64
+from uuid import UUID
 
 import pytest
 from app.core.security import get_current_claims
@@ -14,6 +15,7 @@ from sqlalchemy import func, select
 from tests.phase6_helpers import identity_claims, seed_user
 from tests.phase7_helpers import seed_requester
 from tests.phase9_helpers import seed_role_membership
+from tests.tenant_fixture_scope import declare_fixture_tenant
 
 
 @pytest.fixture
@@ -50,15 +52,15 @@ def test_invited_admin_pending_atomic_outbox_then_activation(provisioning):
     tid, uid = result["tenant"]["id"], result["initial_administrator"]["user_id"]
     assert result["tenant"]["status"] == "PENDING"
     with SessionLocal() as db:
-        assert db.scalar(select(TenantUser.id).where(TenantUser.tenant_id == tid, TenantUser.user_id == actor_id)) is None
-        member = db.scalar(select(TenantUser).where(TenantUser.tenant_id == tid, TenantUser.user_id == uid))
+        assert db.scalar(select(TenantUser.id).where(TenantUser.tenant_id == select(Tenant.id).where(Tenant.public_id == UUID(tid)).scalar_subquery(), TenantUser.user_id == actor_id)) is None
+        member = db.scalar(select(TenantUser).where(TenantUser.tenant_id == select(Tenant.id).where(Tenant.public_id == UUID(tid)).scalar_subquery(), TenantUser.user_id == uid))
         assert effective_role_codes(db, member) == {"TENANT_ADMIN"}
         assert db.get(IAMUser, uid).status == "PENDING_EMAIL_VERIFICATION"
         raw = activation_secret(db, uid)
         assert raw not in response.text
         native_auth_service.activate(db, raw, "a long native test passphrase")
         db.commit()
-        assert db.get(Tenant, tid).status == "ACTIVE"
+        assert db.scalar(select(Tenant).where(Tenant.public_id == UUID(tid))).status == "ACTIVE"
         assert db.get(IAMUser, uid).email_verified
 
 
@@ -112,10 +114,10 @@ def test_pending_tenant_cannot_be_enabled_without_effective_admin(provisioning):
     assert client.patch(f"/api/platform/tenants/{tid}", json={"status": "ACTIVE"}).status_code == 409
     assert client.patch(f"/api/platform/tenants/{tid}", json={"status": "DISABLED"}).status_code == 200
     with SessionLocal() as db:
-        uid = db.scalar(select(TenantUser.user_id).where(TenantUser.tenant_id == tid))
+        uid = db.scalar(select(TenantUser.user_id).where(TenantUser.tenant_id == select(Tenant.id).where(Tenant.public_id == UUID(tid)).scalar_subquery()))
         native_auth_service.activate(db, activation_secret(db, uid), "a long native test passphrase")
         db.commit()
-        assert db.get(Tenant, tid).status == "DISABLED"
+        assert db.scalar(select(Tenant).where(Tenant.public_id == UUID(tid))).status == "DISABLED"
 
 
 def test_platform_can_resend_pending_tenant_activation_without_tenant_context(provisioning, monkeypatch):
@@ -161,20 +163,23 @@ def test_tenant_admin_http_scope_and_delegation(provisioning, role, expected):
     with SessionLocal() as db:
         actor, member, _ = seed_role_membership(db, role="TENANT_ADMIN")
         member_id = member.id
+        declare_fixture_tenant(db, 2)
+        tenant_ids = {key: str(db.get(Tenant, key).public_id) for key in (1, 2)}
+        db.commit()
         claims = identity_claims(actor)
     client.app.dependency_overrides[get_current_claims] = lambda: claims
     try:
-        invitation = {**payload()["initial_admin_invitation"], "tenant_id": 1, "role_codes": [role]}
-        response = client.post("/api/tenants/1/native-users", json=invitation, headers={"X-Tenant-ID": "1"})
+        invitation = {**payload()["initial_admin_invitation"], "tenant_id": tenant_ids[1], "role_codes": [role]}
+        response = client.post(f"/api/tenants/{tenant_ids[1]}/native-users", json=invitation, headers={"X-Tenant-ID": tenant_ids[1]})
         assert response.status_code == expected, response.text
-        invitation["tenant_id"] = 2
-        assert client.post("/api/tenants/2/native-users", json=invitation, headers={"X-Tenant-ID": "1"}).status_code == 403
+        invitation["tenant_id"] = tenant_ids[2]
+        assert client.post(f"/api/tenants/{tenant_ids[2]}/native-users", json=invitation, headers={"X-Tenant-ID": tenant_ids[1]}).status_code == 404
         assert client.post("/api/tenants", json=payload()).status_code == 403
         assert client.get("/api/platform/users/search?q=ajmer").status_code == 403
         with SessionLocal() as db:
             db.get(TenantUser, member_id).status = "DISABLED"
             db.commit()
-        invitation["tenant_id"] = 1
-        assert client.post("/api/tenants/1/native-users", json=invitation, headers={"X-Tenant-ID": "1"}).status_code == 403
+        invitation["tenant_id"] = tenant_ids[1]
+        assert client.post(f"/api/tenants/{tenant_ids[1]}/native-users", json=invitation, headers={"X-Tenant-ID": tenant_ids[1]}).status_code == 403
     finally:
         client.app.dependency_overrides.pop(get_current_claims, None)

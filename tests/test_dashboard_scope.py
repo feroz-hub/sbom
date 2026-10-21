@@ -16,7 +16,7 @@ from sqlalchemy import create_engine
 from sqlalchemy.orm import Session
 from sqlalchemy.pool import StaticPool
 
-from tests.tenant_fixture_scope import verified_fixture_tenant
+from tests.tenant_fixture_scope import scoped_context_override, verified_fixture_tenant
 
 
 @pytest.fixture
@@ -157,45 +157,52 @@ def test_dashboard_option_and_metric_routes_share_scope(scoped_db):
         tenant_id=1, external_tenant_id="one", roles=frozenset(),
         permissions=frozenset({"dashboard:read", "sbom:read"}),
     )
+    previous_overrides = app.dependency_overrides.copy()
     app.dependency_overrides[get_db] = lambda: scoped_db
-    app.dependency_overrides[get_current_tenant_context] = lambda: context
+    app.dependency_overrides[get_current_tenant_context] = scoped_context_override(lambda: context)
+    p1, p2 = [str(scoped_db.get(Projects, i).public_id) for i in (1,2)]
+    with verified_fixture_tenant(scoped_db, 2):
+        p3 = str(scoped_db.get(Projects, 3).public_id)
+    prod = str(scoped_db.get(Product, 1).public_id)
+    sbom = str(scoped_db.get(SBOMSource, 1).public_id)
     try:
         client = TestClient(app)
         projects = client.get("/dashboard/filter-options/projects")
         assert projects.status_code == 200
-        assert [item["id"] for item in projects.json()["items"]] == [1, 2]
-        applications = client.get("/dashboard/filter-options/applications?project_id=1")
+        assert [item["id"] for item in projects.json()["items"]] == [p1, p2]
+        applications = client.get(f"/dashboard/filter-options/applications?project_id={p1}")
         assert applications.status_code == 200
-        assert [item["id"] for item in applications.json()["items"]] == [1]
-        sboms = client.get("/dashboard/filter-options/sboms?project_id=1&product_id=1")
+        assert [item["id"] for item in applications.json()["items"]] == [prod]
+        sboms = client.get(f"/dashboard/filter-options/sboms?project_id={p1}&product_id={prod}")
         assert sboms.status_code == 200
-        assert [item["id"] for item in sboms.json()["items"]] == [1]
-        assert client.get("/dashboard/severity?project_id=1&product_id=1&sbom_id=1").json()["high"] == 1
+        assert [item["id"] for item in sboms.json()["items"]] == [sbom]
+        assert client.get(f"/dashboard/severity?project_id={p1}&product_id={prod}&sbom_id={sbom}").json()["high"] == 1
         assert client.get("/dashboard/severity").json()["high"] == 2
-        summary = client.get("/dashboard/summary?project_id=1&product_id=1&sbom_id=1")
+        summary = client.get(f"/dashboard/summary?project_id={p1}&product_id={prod}&sbom_id={sbom}")
         assert summary.status_code == 200, summary.text
         body = summary.json()
         assert body["scope"]["level"] == "SBOM"
         assert body["posture"]["total_findings"] == 1
         assert body["posture"]["severity"]["high"] == 1
         assert len(body["risk_map"]["items"]) == 1
-        scanned = client.get("/dashboard/scanned-project-ids?project_id=1&product_id=1&sbom_id=1")
+        scanned = client.get(f"/dashboard/scanned-project-ids?project_id={p1}&product_id={prod}&sbom_id={sbom}")
         assert scanned.status_code == 200, scanned.text
         assert len(scanned.json()["ids"]) == body["posture"]["total_applications_scanned"]
-        detail = client.get("/api/vulnerabilities?severity=high&project_id=1&product_id=1&sbom_id=1")
+        detail = client.get(f"/api/vulnerabilities?severity=high&project_id={p1}&product_id={prod}&sbom_id={sbom}")
         assert detail.status_code == 200, detail.text
         assert detail.json()["total"] == body["posture"]["severity"]["high"]
-        sbom_list = client.get("/api/sboms?project_id=1&product_id=1&sbom_id=1")
+        sbom_list = client.get(f"/api/sboms?project_id={p1}&product_id={prod}&sbom_id={sbom}")
         assert sbom_list.status_code == 200, sbom_list.text
-        assert [item["id"] for item in sbom_list.json()] == [1]
-        analysed = client.get("/api/sboms?project_id=1&product_id=1&sbom_id=1&analysed=true")
+        assert [item["id"] for item in sbom_list.json()] == [sbom]
+        analysed = client.get(f"/api/sboms?project_id={p1}&product_id={prod}&sbom_id={sbom}&analysed=true")
         assert analysed.status_code == 200, analysed.text
         assert len(analysed.json()) == body["posture"]["total_sboms_analysed"]
-        latest_runs = client.get("/dashboard/runs?project_id=1&product_id=1&latest_only=true")
+        latest_runs = client.get(f"/dashboard/runs?project_id={p1}&product_id={prod}&latest_only=true")
         assert latest_runs.status_code == 200, latest_runs.text
-        assert [run["sbom_id"] for run in latest_runs.json()] == [1]
+        assert [run["sbom_id"] for run in latest_runs.json()] == [sbom]
         assert "raw_report" not in latest_runs.json()[0]
-        assert client.get("/dashboard/severity?project_id=3").status_code == 404
-        assert client.get("/dashboard/severity?product_id=1").status_code == 400
+        assert client.get(f"/dashboard/severity?project_id={p3}").status_code == 404
+        assert client.get(f"/dashboard/severity?product_id={prod}").status_code == 400
     finally:
         app.dependency_overrides.clear()
+        app.dependency_overrides.update(previous_overrides)

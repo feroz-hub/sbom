@@ -6,11 +6,12 @@ import json
 import uuid
 from pathlib import Path
 
-from app.models import SBOMComponent
+from app.models import SBOMComponent, SBOMSource
 from app.services.sbom_conversion_service import convert_spdx_to_cyclonedx
 from app.validation import run as run_validation
 from sqlalchemy import select
 
+from tests.public_id_fixture import public_row
 from tests.tenant_fixture_scope import verified_fixture_tenant
 
 FIXTURES = Path(__file__).resolve().parent / "fixtures" / "sboms" / "valid"
@@ -237,7 +238,7 @@ class TestSpdxToCyclonedxConversionApi:
             with verified_fixture_tenant(db, 1):
                 component = db.execute(
                     select(SBOMComponent).where(
-                        SBOMComponent.sbom_id == converted_id,
+                        SBOMComponent.sbom_id == public_row(db, SBOMSource, converted_id).id,
                         SBOMComponent.name == "foo",
                     )
                 ).scalar_one_or_none()

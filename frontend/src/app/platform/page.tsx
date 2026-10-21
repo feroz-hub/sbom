@@ -24,6 +24,7 @@ import { TopBar } from '@/components/layout/TopBar';
 import { TenantStatusBadge } from '@/components/admin/StatusBadges';
 import { InfoTooltip } from '@/components/ui/InfoTooltip';
 import { cn } from '@/lib/utils';
+import { PlatformKevSync } from '@/components/admin/PlatformKevSync';
 
 const tenantsHref = '/settings/platform/tenants';
 const focus =
@@ -202,6 +203,7 @@ export default function PlatformDashboard() {
         action={<div className="hidden md:block">{createAction}</div>}
       />
       <main className="mx-auto w-full min-w-0 max-w-[1440px] space-y-6 p-4 md:p-6 xl:p-8">
+        <PlatformKevSync />
         <div className="flex flex-wrap items-center justify-between gap-3">
           <p className="text-sm text-foreground/70">
             Monitor tenant provisioning, platform configuration and governance.

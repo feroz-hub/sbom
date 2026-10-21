@@ -9,7 +9,7 @@ import { Dialog, DialogBody } from '@/components/ui/Dialog';
 import { PermissionButton as Button } from '@/components/ui/PermissionButton';
 
 export function ComponentVexManager({ sbomId, component, canEdit, onClose, onDecision }: {
-  sbomId: number; component: SBOMComponent; canEdit: boolean; onClose: () => void;
+  sbomId: (string | number); component: SBOMComponent; canEdit: boolean; onClose: () => void;
   onDecision: (vulnerability: string, statement?: VexStatement, manual?: boolean) => void;
 }) {
   const [search, setSearch] = useState('');

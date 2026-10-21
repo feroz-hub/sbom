@@ -14,11 +14,11 @@ export default function TenantAuditPage() {
 
 function TenantAuditLog() {
   const { activeTenantId, hasPermission, isLoading } = useAuth();
-  const tenantId = Number(activeTenantId);
+  const tenantId = activeTenantId;
   const [filters, setFilters] = useState({ page: 1, page_size: 25, q: '', category: '', outcome: '', from_time: '', to_time: '' });
   const [detail, setDetail] = useState<TenantAuditEvent | null>(null);
-  const allowed = hasPermission('tenant:user:read') && tenantId > 0;
-  const events = useQuery({ queryKey: ['tenant-audit-history', tenantId, filters], queryFn: () => getTenantAuditPage(tenantId, filters), enabled: !isLoading && allowed });
+  const allowed = hasPermission('tenant:user:read') && Boolean(tenantId);
+  const events = useQuery({ queryKey: ['tenant-audit-history', tenantId, filters], queryFn: () => getTenantAuditPage(tenantId!, filters), enabled: !isLoading && allowed });
   const change = (key: string, value: string | number) => setFilters(previous => ({ ...previous, [key]: value, page: 1 }));
   if (isLoading) return <p>Verifying tenant access…</p>;
   if (!allowed) return <p role="alert">Select an authorized tenant to view audit logs.</p>;

@@ -2,11 +2,13 @@ from __future__ import annotations
 
 import pytest
 from app.core.identity_states import AuthorizationState, NextAction
-from app.models import TenantUser
+from app.models import Tenant, TenantUser
 from app.services.auth_context_service import resolve_authorization_state
 from app.services.tenant_service import ensure_not_last_active_tenant_admin
 from fastapi import HTTPException
 from sqlalchemy import select
+
+from tests.public_id_fixture import public_row, tenant_uuid
 
 from .phase6_helpers import identity_claims, seed_membership
 from .phase7_helpers import seed_eligible_admin, seed_requester, tenant_payload
@@ -71,7 +73,7 @@ def test_existing_roles_do_not_block_eligible_admin_and_context_selects_new_tena
         state = resolve_authorization_state(db, stored_user)
         assert state.status == AuthorizationState.READY
         assert state.next_action == NextAction.OPEN_DASHBOARD
-        assert state.active_tenant.id == tenant_id
+        assert str(state.active_tenant.public_id) == tenant_id
         assert state.selection_source == "AUTO_SINGLE"
 
         seed_membership(db, stored_user, tenant_id=1, role="VIEWER")
@@ -94,7 +96,7 @@ def test_initial_admin_receives_existing_last_admin_protection(client):
     with SessionLocal() as db:
         membership = db.scalar(
             select(TenantUser).where(
-                TenantUser.tenant_id == created.json()["tenant"]["id"]
+                TenantUser.tenant_id == public_row(db, Tenant, created.json()["tenant"]["id"]).id
             )
         )
         with pytest.raises(HTTPException) as exc:
@@ -183,7 +185,7 @@ def test_unrelated_user_cannot_select_or_list_new_tenant_and_jwt_hint_is_ignored
 
         token_hint = client.get("/api/auth/context")
         assert token_hint.status_code == 200
-        assert token_hint.json()["tenant_context"]["active_tenant"]["id"] == 1
+        assert token_hint.json()["tenant_context"]["active_tenant"]["id"] == tenant_uuid(1)
         assert (
             token_hint.json()["tenant_context"]["selection_source"]
             == "AUTO_SINGLE"
@@ -191,6 +193,6 @@ def test_unrelated_user_cannot_select_or_list_new_tenant_and_jwt_hint_is_ignored
 
         listed = client.get("/api/tenants")
         assert listed.status_code == 200
-        assert [tenant["id"] for tenant in listed.json()] == [1]
+        assert [tenant["id"] for tenant in listed.json()] == [tenant_uuid(1)]
     finally:
         app.dependency_overrides.pop(get_current_user, None)

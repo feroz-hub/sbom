@@ -12,6 +12,11 @@ import json
 import uuid
 
 import pytest
+from app.db import SessionLocal
+from app.models import SBOMSource
+
+from tests.public_id_fixture import public_row
+from tests.tenant_fixture_scope import verified_fixture_tenant
 
 
 @pytest.fixture
@@ -330,7 +335,8 @@ def test_run_now_for_project_fans_out_to_member_sboms(client, project_id, produc
     body = resp.json()
     assert sbom_id in body["sbom_ids"]
     # Stub recorded the per-SBOM enqueue
-    assert (sbom_id, sched_id) in _stub_celery
+    with SessionLocal() as db, verified_fixture_tenant(db, 1):
+        assert (public_row(db, SBOMSource, sbom_id).id, sched_id) in _stub_celery
 
 
 def test_run_now_for_sbom_enqueues_only_that_sbom(client, sbom_id, _stub_celery):
@@ -343,7 +349,8 @@ def test_run_now_for_sbom_enqueues_only_that_sbom(client, sbom_id, _stub_celery)
     resp = client.post(f"/api/schedules/{sched_id}/run-now")
     assert resp.status_code == 202
     assert resp.json()["sbom_ids"] == [sbom_id]
-    assert _stub_celery == [(sbom_id, sched_id)]
+    with SessionLocal() as db, verified_fixture_tenant(db, 1):
+        assert _stub_celery == [(public_row(db, SBOMSource, sbom_id).id, sched_id)]
 
 
 def test_run_now_for_product_fans_out_to_product_sboms(
@@ -365,7 +372,8 @@ def test_run_now_for_product_fans_out_to_product_sboms(
     resp = client.post(f"/api/schedules/{sched_id}/run-now")
     assert resp.status_code == 202, resp.text
     assert resp.json()["sbom_ids"] == [sbom_id]
-    assert _stub_celery == [(sbom_id, sched_id)]
+    with SessionLocal() as db, verified_fixture_tenant(db, 1):
+        assert _stub_celery == [(public_row(db, SBOMSource, sbom_id).id, sched_id)]
 
 
 def test_run_now_returns_502_when_broker_drops_every_enqueue(client, sbom_id, monkeypatch):

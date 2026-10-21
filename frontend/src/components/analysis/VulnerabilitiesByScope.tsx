@@ -24,7 +24,7 @@ const SEVERITY_OPTIONS = [
 interface ProductGroup {
   key: string;
   productName: string;
-  productId: number | null;
+  productId: (string | number) | null;
   rows: VulnerabilityRow[];
 }
 

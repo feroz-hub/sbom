@@ -1,9 +1,13 @@
 """Platform defaults are protected, versioned, audited and inherited independently."""
 import pytest
-from sqlalchemy import select
 from app.db import SessionLocal
 from app.models import AdvisorPolicy, AuthorizationAuditLog
-from tests.test_scoped_configuration import configured_actors
+from sqlalchemy import select
+
+from tests.test_scoped_configuration import configured_actors as _configured_actors
+
+# Register the shared pytest fixture without shadowing an unused import.
+configured_actors = _configured_actors
 
 BASE = '/api/platform/configuration/advisor-policies'
 TENANT = '/api/component-advisor/policies'
@@ -74,6 +78,7 @@ def test_platform_other_policy_kinds_are_inherited(configured_actors, kind, rule
 def test_platform_permission_migration_is_idempotent(configured_actors):
     import importlib.util
     from pathlib import Path
+
     from app.core.permissions import ROLE_PERMISSIONS
     from app.services.authorization_catalog_service import database_permissions_for_roles
     path = Path(__file__).resolve().parents[1] / 'alembic/versions/075_platform_advisor_policies.py'

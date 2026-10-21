@@ -243,6 +243,7 @@ def delete_project(
     if not project:
         raise HTTPException(status_code=404, detail="Project not found")
 
+    public_identity = str(project.public_id)
     user_id = context.actor_label()
 
     if (confirm or "").strip().lower() not in {"yes", "y"}:
@@ -252,7 +253,7 @@ def delete_project(
                 "This will delete the Project. Re-send with confirm=yes "
                 "to proceed (and add permanent=true to bypass soft delete)."
             ),
-            "example": f"/api/projects/{project_id}?confirm=yes",
+            "example": f"/api/projects/{public_identity}?confirm=yes",
         }
 
     service = SoftDeleteService(db)
@@ -386,7 +387,7 @@ def delete_project(
         return {
             "status": "deleted",
             "permanent": True,
-            "message": f"Project {project_id} permanently deleted.",
+            "message": f"Project {public_identity} permanently deleted.",
         }
 
     # Soft delete with cascade through the ownership tree.
@@ -411,7 +412,7 @@ def delete_project(
         "status": "deleted",
         "permanent": False,
         "cascaded_count": cascaded_count,
-        "message": f"Project {project_id} moved to deleted (recoverable).",
+        "message": f"Project {public_identity} moved to deleted (recoverable).",
     }
 
 

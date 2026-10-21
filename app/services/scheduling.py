@@ -29,9 +29,8 @@ from __future__ import annotations
 from dataclasses import dataclass
 from datetime import UTC, datetime, timedelta
 
-# Optional dependency — only used when cadence='CUSTOM'. The standard
-# library has no cron parser, so cron presets work even if croniter
-# isn't installed; full cron expressions raise a friendly error.
+# CUSTOM is supported and croniter is pinned in the deployment dependencies.
+# Keep a controlled configuration error if an incomplete installation omits it.
 try:
     from croniter import croniter as _croniter
 except ImportError:  # pragma: no cover - optional
@@ -83,7 +82,9 @@ def validate_spec(spec: ScheduleSpec) -> None:
             raise ScheduleValidationError("CUSTOM cadence requires cron_expression")
         if _croniter is None:
             raise ScheduleValidationError("CUSTOM cadence needs the 'croniter' package; pip install croniter")
-        if not _croniter.is_valid(spec.cron_expression):
+        if len(spec.cron_expression.split()) != 5:
+            raise ScheduleValidationError("CUSTOM cron_expression must contain exactly five fields")
+        if not _croniter.is_valid(spec.cron_expression, strict=True):
             raise ScheduleValidationError(f"invalid cron expression: {spec.cron_expression!r}")
 
 

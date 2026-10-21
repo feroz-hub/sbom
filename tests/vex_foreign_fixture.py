@@ -31,7 +31,8 @@ def foreign_vex_fixture(db, tenant_id=2, vuln_id="CVE-2026-5001"):
                             VexInvestigation.canonical_vulnerability_id == vuln_id))
         assert context is not None
         return {"sbom_id": sbom.id, "component_id": component.id, "context_id": context.id,
-                "row_version": context.row_version}
+                "row_version": context.row_version, "sbom_public_id": str(sbom.public_id),
+                "component_public_id": str(component.public_id)}
 
 
 def foreign_vex_snapshot(db, tenant_id, context_id):

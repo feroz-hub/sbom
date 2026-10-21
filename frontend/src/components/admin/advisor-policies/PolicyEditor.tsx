@@ -28,7 +28,7 @@ import { PolicyHistory } from './PolicyHistory';
 
 function initialDraft(
   state: AdvisorPolicyState,
-  tenantId: number | null,
+  tenantId: (string | number) | null,
   definition: PolicyDefinition,
 ) {
   const owned =
@@ -73,7 +73,7 @@ export function PolicyEditor({
   canUpdate,
   reload,
 }: {
-  tenantId: number | null;
+  tenantId: (string | number) | null;
   definition: PolicyDefinition;
   state: AdvisorPolicyState;
   canUpdate: boolean;

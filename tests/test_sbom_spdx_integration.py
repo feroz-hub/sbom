@@ -1,3 +1,5 @@
+
+from tests.public_id_fixture import public_row
 from tests.tenant_fixture_scope import scoped_context_override
 
 """SPDX uses the existing tenant-scoped session/job/approval API and native storage."""
@@ -53,7 +55,7 @@ def test_native_spdx_approve_quality_history_and_original(client, version):
     assert accepted.status_code == 200, accepted.text
     accepted_id = accepted.json()['imported_sbom_id']
     with SessionLocal() as db, verified_fixture_tenant(db, 1):
-        stored = db.get(SBOMSource, accepted_id)
+        stored = public_row(db, SBOMSource, accepted_id)
         assert stored.sbom_data.encode() == candidate
         assert json.loads(stored.sbom_data)['spdxVersion'] == 'SPDX-' + version
         original = db.get(SBOMValidationSession, session)
@@ -123,7 +125,7 @@ def test_valid_spdx_stays_native_and_creates_no_repair_job(client):
     response = client.post('/api/sboms', json={'sbom_name': 'valid-spdx-' + str(uuid.uuid4()), 'sbom_data': source.decode()})
     assert response.status_code == 201, response.text
     with SessionLocal() as db, verified_fixture_tenant(db, 1):
-        stored = db.get(SBOMSource, response.json()['id'])
+        stored = public_row(db, SBOMSource, response.json()['id'])
         assert stored.sbom_data.encode() == source
         from sqlalchemy import func, select
         assert db.scalar(select(func.count()).select_from(SBOMRepairJob)) == 0

@@ -126,7 +126,7 @@ export function SbomsTable({ sboms, isLoading, error }: SbomsTableProps) {
   const [productFilter, setProductFilter] = useState('');
   const [analysisFilter, setAnalysisFilter] = useState('');
   const [validationFilter, setValidationFilter] = useState('');
-  const [selectedIds, setSelectedIds] = useState<Set<number>>(() => new Set());
+  const [selectedIds, setSelectedIds] = useState<Set<string | number>>(() => new Set());
   const [fdaDialogOpen, setFdaDialogOpen] = useState(false);
 
   const impactQuery = useQuery({
@@ -272,7 +272,7 @@ export function SbomsTable({ sboms, isLoading, error }: SbomsTableProps) {
     });
   };
 
-  const toggleRowSelection = (sbomId: number, checked: boolean) => {
+  const toggleRowSelection = (sbomId: (string | number), checked: boolean) => {
     setSelectedIds((current) => {
       const next = new Set(current);
       if (checked) next.add(sbomId);

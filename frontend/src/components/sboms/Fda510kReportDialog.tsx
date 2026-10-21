@@ -58,7 +58,7 @@ function initialMetadata(sboms: SBOMSource[]): Fda510kReportMetadata {
   };
 }
 
-function sameProjectId(sboms: SBOMSource[]): number | null {
+function sameProjectId(sboms: SBOMSource[]): string | number | null {
   const ids = Array.from(new Set(sboms.map((sbom) => sbom.projectid ?? sbom.project_id ?? null)));
   return ids.length === 1 && ids[0] !== null ? ids[0] : null;
 }

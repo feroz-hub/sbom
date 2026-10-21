@@ -1,3 +1,5 @@
+
+from tests.public_id_fixture import public_row
 from tests.tenant_fixture_scope import scoped_context_override
 
 """Phase 2 API/hash/history/role boundaries over the existing PostgreSQL fixtures."""
@@ -66,7 +68,7 @@ def test_quality_comparison_and_accepted_snapshot_use_actual_candidate(client):
     }
     with SessionLocal() as db, verified_fixture_tenant(db, 1):
         stored = db.get(SBOMRepairJob, job["repair_job_id"])
-        source = db.get(SBOMSource, accepted_id)
+        source = public_row(db, SBOMSource, accepted_id)
         assert hashlib.sha256(source.sbom_data.encode()).hexdigest() == stored.candidate_sha256
 
 
@@ -107,7 +109,7 @@ def test_cross_tenant_and_invalid_ids_do_not_expose_quality(client):
         response = client.get(url(session))
         assert response.status_code == 404
         assert "overall_score" not in response.text and "artifact_hash" not in response.text
-        assert client.get("/api/sboms/987654/quality").status_code == 404
+        assert client.get(f"/api/sboms/{__import__('uuid').uuid4()}/quality").status_code == 404
     finally:
         client.app.dependency_overrides.pop(get_current_tenant_context, None)
     assert client.get(url("00000000-0000-4000-8000-000000000000")).status_code == 404
@@ -329,7 +331,7 @@ def test_deletion_cascades_quality_history_and_denies_deleted_quality_without_to
     approved = client.post(f"/api/sbom-validation-sessions/{deleted}/repair/{job['repair_job_id']}/approve").json()
     sbom_id = approved['imported_sbom_id']
     with SessionLocal() as db, verified_fixture_tenant(db, 1):
-        SBOMDeleteService(db, tenant_id=1).permanently_delete_sbom(sbom_id, 'phase2-release', True)
+        SBOMDeleteService(db, tenant_id=1).permanently_delete_sbom(public_row(db, SBOMSource, sbom_id).id, 'phase2-release', True)
         assert db.get(SBOMValidationSession, deleted) is None
         assert db.scalar(select(SBOMValidationSessionEvent.id).where(
             SBOMValidationSessionEvent.session_id == deleted)) is None

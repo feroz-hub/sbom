@@ -271,6 +271,7 @@ class SBOMDeleteService:
         sbom = self.get_sbom(sbom_id)
         if sbom is None:
             raise LookupError("SBOM not found")
+        public_identity = str(sbom.public_id)
         tree_ids, _, _ = self._dependency_tree(sbom_id)
         try:
             cleared_current_products = self.db.execute(
@@ -307,7 +308,7 @@ class SBOMDeleteService:
             "cascaded_count": cascaded_count,
             "sbom_id": sbom_id,
             "requested_by": user_id,
-            "message": f"SBOM {sbom_id} moved to deleted (recoverable).",
+            "message": f"SBOM {public_identity} moved to deleted (recoverable).",
         }
 
     @workflow_event("sbom_permanent_deletion", result_kind="delete", completed_event="sbom_deleted", expected_errors=(SBOMDeleteConflict, LookupError))
@@ -328,6 +329,7 @@ class SBOMDeleteService:
         here, so the caller only has to translate the raised error.
         """
         impact = self.get_delete_impact(sbom_id)
+        public_identity = str(self.get_sbom(sbom_id).public_id)
         if not confirm:
             raise SBOMDeleteConflict(
                 "Permanent deletion requires confirm=yes.",
@@ -491,7 +493,7 @@ class SBOMDeleteService:
         return {
             "status": "deleted",
             "permanent": True,
-            "message": f"SBOM {sbom_id} and related data have been permanently deleted.",
+            "message": f"SBOM {public_identity} and related data have been permanently deleted.",
             "sbom_id": sbom_id,
             "deleted_sbom_ids": sorted(tree_ids),
             "requested_by": user_id,

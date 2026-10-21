@@ -329,6 +329,7 @@ def _verify_schema_is_current() -> None:
     # Check Alembic migrations status if alembic_version table exists
     if "alembic_version" in table_names:
         config = Config(str(Path(__file__).resolve().parent.parent / "alembic.ini"))
+        config.set_main_option("script_location", str(Path(__file__).resolve().parent.parent / "alembic"))
         expected_heads = set(ScriptDirectory.from_config(config).get_heads())
         try:
             alembic_version = Table("alembic_version", MetaData(), autoload_with=engine)
@@ -829,3 +830,11 @@ app.include_router(
 
 # NVD mirror operations require explicit platform authority in the route catalog.
 app.include_router(nvd_mirror_admin_router, dependencies=_protected)
+
+
+# Public UUIDs terminate at the HTTP boundary; internal services retain integer FKs.
+from .public_api import install_public_boundary, install_public_openapi
+
+install_public_boundary(app)
+
+install_public_openapi(app)

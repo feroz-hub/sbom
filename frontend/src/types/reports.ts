@@ -1,9 +1,9 @@
 export type ReportScope = 'TENANT' | 'PROJECT' | 'PRODUCT' | 'SBOM';
 export interface ReportPreferences {
   scope: ReportScope;
-  project_id: number | null;
-  product_id: number | null;
-  sbom_id: number | null;
+  project_id: (string | number) | null;
+  product_id: (string | number) | null;
+  sbom_id: (string | number) | null;
   cadence: 'ON_EVERY_RUN' | 'DAILY' | 'WEEKLY' | 'MONTHLY';
   parts: Array<'A' | 'B' | 'C' | 'D'>;
   formats: Array<'PDF' | 'XLSX'>;
@@ -15,7 +15,7 @@ export interface ReportPreferences {
   enabled: boolean;
 }
 export interface ReportSubscription extends ReportPreferences {
-  id: number; tenant_id: number; iam_user_id: number;
+  id: number; tenant_id: (string | number); iam_user_id: number;
   created_on: string; modified_on: string | null; last_delivered_at: string | null;
 }
 export interface ReportDelivery {
@@ -28,7 +28,7 @@ export interface ReportDelivery {
 export interface ReportConfig {
   enabled: boolean; delivery_enabled: boolean; diagnostics: string[]; max_sboms: number;
   retention_days: number; is_tenant_admin: boolean; tenant_scope_allowed: boolean;
-  recipient_email: string | null; tenant_id: number;
+  recipient_email: string | null; tenant_id: (string | number);
 }
 export interface ReportPreview {
   subject: string; text_body: string; html_body: string;

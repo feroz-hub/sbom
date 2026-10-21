@@ -409,7 +409,11 @@ def test_legacy_membership_endpoint_cannot_bypass_role_delegation(client):
         user = seed_user(db)
         target_id = user.id
         db.commit()
-    response = client.post("/api/tenants/1/users", json={"user_id": target_id, "role": "TENANT_ADMIN"})
+    from app.models import Tenant
+
+    with SessionLocal() as db:
+        tenant_id = str(db.get(Tenant, 1).public_id)
+    response = client.post(f"/api/tenants/{tenant_id}/users", json={"user_id": target_id, "role": "TENANT_ADMIN"})
     assert response.status_code == 403, response.text
 
 
@@ -427,8 +431,11 @@ def test_database_checks_reject_unknown_status_and_noncanonical_native_identifie
     with SessionLocal() as db:
         user = native_user(db)
         with pytest.raises(IntegrityError), db.begin_nested():
-            db.execute(update(UserIdentity).where(UserIdentity.user_id == user.id)
-                       .values(provider_identifier="Foo@Example.com"))
+            db.execute(
+                update(UserIdentity)
+                .where(UserIdentity.user_id == user.id)
+                .values(provider_identifier="Foo@Example.com")
+            )
         with pytest.raises(IntegrityError), db.begin_nested():
             db.execute(update(IAMUser).where(IAMUser.id == user.id).values(status="UNKNOWN"))
 

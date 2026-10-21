@@ -15,12 +15,12 @@ interface SbomDetailPageProps {
 
 export default function SbomDetailPage({ params }: SbomDetailPageProps) {
   const { id: idParam } = use(params);
-  const id = Number(idParam);
+  const id = String(idParam);
 
   const { data: sbom, isLoading, error } = useQuery({
     queryKey: ['sbom', id],
     queryFn: ({ signal }) => getSbom(id, signal),
-    enabled: !isNaN(id),
+    enabled: Boolean(id),
   });
 
   if (isLoading) {

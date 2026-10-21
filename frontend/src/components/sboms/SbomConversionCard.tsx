@@ -41,7 +41,7 @@ export function SbomConversionCard({ sbom, formatLabel }: SbomConversionCardProp
   const { showSuccess, showError } = useNotifications();
   const [message, setMessage] = useState<string | null>(null);
   const [showReport, setShowReport] = useState(false);
-  const [convertedId, setConvertedId] = useState<number | null>(sbom.converted_sbom_id ?? null);
+  const [convertedId, setConvertedId] = useState<string | number | null>(sbom.converted_sbom_id ?? null);
   const [enrichmentStatus, setEnrichmentStatus] = useState<string | null>(
     sbom.enrichment_status ?? null,
   );

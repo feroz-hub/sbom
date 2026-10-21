@@ -256,7 +256,7 @@ export function SbomDetail({ sbom }: SbomDetailProps) {
   const [editError, setEditError] = useState('');
   const [isOpeningWorkspace, setIsOpeningWorkspace] = useState(false);
   const [isRefreshingLifecycle, setIsRefreshingLifecycle] = useState(false);
-  const [refreshingComponentId, setRefreshingComponentId] = useState<number | null>(null);
+  const [refreshingComponentId, setRefreshingComponentId] = useState<string | number | null>(null);
   const [lifecycleMessage, setLifecycleMessage] = useState('');
   const [vexDocumentText, setVexDocumentText] = useState('');
   const [vexMessage, setVexMessage] = useState('');
@@ -287,7 +287,7 @@ export function SbomDetail({ sbom }: SbomDetailProps) {
   const canManageEvidence = can("vex:write");
 
   // Version Comparison State
-  const [selectedVersions, setSelectedVersions] = useState<number[]>([]);
+  const [selectedVersions, setSelectedVersions] = useState<(string | number)[]>([]);
   const [compareData, setCompareData] = useState<any>(null);
   const [isComparing, setIsComparing] = useState(false);
   const [restoreMessage, setRestoreMessage] = useState('');
@@ -305,19 +305,19 @@ export function SbomDetail({ sbom }: SbomDetailProps) {
   const [isEditDetailsModalOpen, setIsEditDetailsModalOpen] = useState(false);
   
   // Assign Project Form State
-  const [selectedProjectId, setSelectedProjectId] = useState<number | null>(null);
-  const [selectedProductId, setSelectedProductId] = useState<number | null>(null);
+  const [selectedProjectId, setSelectedProjectId] = useState<string | number | null>(null);
+  const [selectedProductId, setSelectedProductId] = useState<string | number | null>(null);
   const [assignChangeReason, setAssignChangeReason] = useState('');
   const [isSavingAssign, setIsSavingAssign] = useState(false);
   const [assignError, setAssignError] = useState('');
 
   // Edit Details Form State
   const [detailName, setDetailName] = useState('');
-  const [detailProductId, setDetailProductId] = useState<number | null>(null);
+  const [detailProductId, setDetailProductId] = useState<string | number | null>(null);
   const [detailProductVersion, setDetailProductVersion] = useState('');
   const [detailSbomVersion, setDetailSbomVersion] = useState('');
   const [detailDescription, setDetailDescription] = useState('');
-  const [detailProjectId, setDetailProjectId] = useState<number | null>(null);
+  const [detailProjectId, setDetailProjectId] = useState<string | number | null>(null);
   const [detailChangeReason, setDetailChangeReason] = useState('');
   const [isSavingDetails, setIsSavingDetails] = useState(false);
   const [detailsError, setDetailsError] = useState('');
@@ -564,7 +564,7 @@ export function SbomDetail({ sbom }: SbomDetailProps) {
       getVexInvestigationByTriple(
         {
           sbom_id: sbom.id,
-          component_id: Number(vexOverrideComponentId),
+          component_id: vexOverrideComponentId,
           vulnerability_id: vexOverrideVulnerability,
         },
         signal,
@@ -573,8 +573,8 @@ export function SbomDetail({ sbom }: SbomDetailProps) {
   });
 
   const componentVex = useQuery({
-    queryKey: ['component-vulnerabilities', sbom.id, Number(vexOverrideComponentId)],
-    queryFn: ({ signal }) => getComponentVulnerabilities(sbom.id, Number(vexOverrideComponentId), signal),
+    queryKey: ['component-vulnerabilities', sbom.id, vexOverrideComponentId],
+    queryFn: ({ signal }) => getComponentVulnerabilities(sbom.id, vexOverrideComponentId, signal),
     enabled: isVexOverrideOpen && Boolean(vexOverrideComponentId),
   });
   const vulnerabilityOptions = useMemo(
@@ -653,7 +653,7 @@ export function SbomDetail({ sbom }: SbomDetailProps) {
 
   const handleRunAnalysis = () => {
     if (processingUnavailable) return;
-    startAnalysis({ sources: ['NVD', 'OSV', 'GITHUB'] });
+    startAnalysis();
   };
 
   const handleReset = () => {
@@ -778,7 +778,7 @@ export function SbomDetail({ sbom }: SbomDetailProps) {
   };
 
   // Handle checkbox select for version comparison
-  const handleSelectVersion = (versionId: number) => {
+  const handleSelectVersion = (versionId: string | number) => {
     setSelectedVersions(prev => {
       if (prev.includes(versionId)) {
         return prev.filter(id => id !== versionId);
@@ -799,7 +799,7 @@ export function SbomDetail({ sbom }: SbomDetailProps) {
     setCompareData(null);
     try {
       // Sort so A is earlier than B (using index or database order)
-      const sorted = [...selectedVersions].sort((a, b) => a - b);
+      const sorted = (versions ?? []).filter(version => selectedVersions.includes(version.id)).map(version => version.id).reverse();
       const res = await compareSbomVersions(sorted[0], sorted[1]);
       setCompareData(res);
     } catch (err: any) {
@@ -810,7 +810,7 @@ export function SbomDetail({ sbom }: SbomDetailProps) {
   };
 
   // Restore previous version
-  const handleRestore = async (versionId: number) => {
+  const handleRestore = async (versionId: string | number) => {
     setRestoreMessage('');
     try {
       const restoredVersion = await restoreSbomVersion(sbom.id, versionId, sbom.created_by ?? undefined);
@@ -2159,7 +2159,7 @@ export function SbomDetail({ sbom }: SbomDetailProps) {
           {vexOverrideComponentId && vexOverrideVulnerability ? (
           <VexDecisionEditor
             sbomId={sbom.id}
-            componentId={Number(vexOverrideComponentId)}
+            componentId={vexOverrideComponentId}
             componentLabel={
               selectedOverrideComponent
                 ? `${selectedOverrideComponent.name}${selectedOverrideComponent.version ? ` ${selectedOverrideComponent.version}` : ''}`
@@ -2565,7 +2565,7 @@ export function SbomDetail({ sbom }: SbomDetailProps) {
 	            required
 	            value={selectedProjectId || ''}
 	            onChange={(e) => {
-	              setSelectedProjectId(e.target.value ? Number(e.target.value) : null);
+	              setSelectedProjectId(e.target.value || null);
 	              setSelectedProductId(null);
 	            }}
 	          >
@@ -2582,7 +2582,7 @@ export function SbomDetail({ sbom }: SbomDetailProps) {
 	            required
 	            value={selectedProductId || ''}
 	            disabled={!selectedProjectId || selectedProductsQuery.isLoading}
-	            onChange={(e) => setSelectedProductId(e.target.value ? Number(e.target.value) : null)}
+	            onChange={(e) => setSelectedProductId(e.target.value || null)}
 	          >
 	            {selectedProductsQuery.data?.items.map((p) => (
 	              <option key={p.id} value={p.id}>
@@ -2638,7 +2638,7 @@ export function SbomDetail({ sbom }: SbomDetailProps) {
               placeholder="Select project..."
               value={detailProjectId || ''}
 	              onChange={(e) => {
-	                setDetailProjectId(e.target.value ? Number(e.target.value) : null);
+	                setDetailProjectId(e.target.value || null);
 	                setDetailProductId(null);
 	              }}
 	            >
@@ -2656,7 +2656,7 @@ export function SbomDetail({ sbom }: SbomDetailProps) {
 	              placeholder="Select product..."
 	              value={detailProductId || ''}
 	              disabled={!detailProjectId || detailProductsQuery.isLoading}
-	              onChange={(e) => setDetailProductId(e.target.value ? Number(e.target.value) : null)}
+	              onChange={(e) => setDetailProductId(e.target.value || null)}
 	            >
 	              {detailProductsQuery.data?.items.map((p) => (
 	                <option key={p.id} value={p.id}>

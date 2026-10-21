@@ -75,9 +75,8 @@ const DEFAULT_FILTERS: Filters = {
   q: '', facet: 'all', sortBy: 'risk', sortOrder: 'desc',
 };
 
-function positiveOrNull(value: string | null): number | null {
-  const id = Number(value);
-  return value && Number.isSafeInteger(id) && id > 0 ? id : null;
+function positiveOrNull(value: string | null): string | null {
+  return value || null;
 }
 
 function readFilters(params: URLSearchParams | Readonly<URLSearchParams>): Filters {

@@ -131,6 +131,8 @@ engine = create_engine(DATABASE_URL, hide_parameters=True, **engine_options(DATA
 def _set_sqlite_pragma(dbapi_connection, connection_record):
     if engine.dialect.name != "sqlite":
         return
+    import uuid
+    dbapi_connection.create_function("gen_random_uuid", 0, lambda: uuid.uuid4().hex)
     cursor = dbapi_connection.cursor()
     cursor.execute("PRAGMA foreign_keys=ON")
     cursor.close()

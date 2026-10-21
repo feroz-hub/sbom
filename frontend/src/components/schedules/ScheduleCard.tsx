@@ -43,7 +43,7 @@ import type { AnalysisSchedule, SbomScheduleResolved, ScheduleCadence } from '@/
 
 interface ScheduleCardProps {
   scope: 'PROJECT' | 'PRODUCT' | 'SBOM';
-  targetId: number;
+  targetId: (string | number);
   processingReason?: string | null;
 }
 

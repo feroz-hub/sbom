@@ -126,10 +126,10 @@ interface ProjectsTableProps {
   projects: Project[] | undefined;
   isLoading: boolean;
   error: Error | null;
-  initialProjectId?: number | null;
-  selectedId?: number | null;
+  initialProjectId?: (string | number) | null;
+  selectedId?: string | number | null;
   onSelect?: (project: Project) => void;
-  onVisibleIdsChange?: (ids: number[]) => void;
+  onVisibleIdsChange?: (ids: (string | number)[]) => void;
   onCreate?: () => void;
 }
 
@@ -152,7 +152,7 @@ export function ProjectsTable({ projects, isLoading, error, initialProjectId, se
   });
 
   const deleteMutation = useMutation({
-    mutationFn: ({ id, permanent }: { id: number; permanent: boolean }) =>
+    mutationFn: ({ id, permanent }: { id: string | number; permanent: boolean }) =>
       deleteProject(id, { permanent }),
     onSuccess: (_data, { permanent }) => {
       // Project delete cascades to its SBOMs (and their runs/schedules);
@@ -213,7 +213,7 @@ export function ProjectsTable({ projects, isLoading, error, initialProjectId, se
   const { sort, sortedRows, toggle: toggleSort } = useTableSort<Project, ProjectSortKey>(
     filteredProjects,
     sortAccessors,
-    { initialKey: 'id', initialDirection: 'desc' },
+    { initialKey: 'created_on', initialDirection: 'desc' },
   );
 
   const pagination = usePagination<Project>(sortedRows, {
@@ -226,7 +226,7 @@ export function ProjectsTable({ projects, isLoading, error, initialProjectId, se
     // eslint-disable-next-line react-hooks/exhaustive-deps
   }, [search, statusFilter]);
 
-  const positionedProject = useRef<number | null | undefined>(undefined);
+  const positionedProject = useRef<string | number | null | undefined>(undefined);
   useEffect(() => {
     if (isLoading || error) return;
     if (initialProjectId !== positionedProject.current) {

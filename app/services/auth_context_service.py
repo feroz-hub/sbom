@@ -84,7 +84,7 @@ def _audit_state(
 
 
 def _tenant_matches(tenant: Tenant, value: str) -> bool:
-    return value in {str(tenant.id), tenant.slug, tenant.external_iam_tenant_id}
+    return value.lower() == str(tenant.public_id) or value in {str(tenant.id), tenant.slug, tenant.external_iam_tenant_id}
 
 
 def resolve_authorization_state(
@@ -100,6 +100,9 @@ def resolve_authorization_state(
 ) -> ResolvedAuthorizationState:
     """Resolve authorization state in the required security precedence."""
     requested = (selected_tenant or "").strip()
+    if requested and request is not None:
+        from ..public_api import canonical
+        canonical(requested)
     hinted = (selector_hint or "").strip()
 
     if user.status == "DISABLED":
@@ -303,7 +306,7 @@ def _available_tenant(
     from .identity_mapping_service import build_identity_mapping
 
     return AvailableTenant(
-        id=tenant.id,
+        id=str(tenant.public_id),
         name=tenant.name,
         slug=tenant.slug,
         external_iam_tenant_id=tenant.external_iam_tenant_id,

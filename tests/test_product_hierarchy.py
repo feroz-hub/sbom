@@ -7,6 +7,7 @@ from app.db import SessionLocal
 from app.models import AnalysisRun, Product, Projects, SBOMSource
 from app.services.analysis_service import persist_analysis_run
 from scripts.backfill_products_for_existing_sboms import run_backfill
+from sqlalchemy import select
 
 from tests.tenant_fixture_scope import verified_fixture_tenant
 
@@ -177,7 +178,7 @@ def test_analysis_run_inherits_product_id(client):
     product = _product(client, project["id"], "Run Product")
     accepted = _upload(client, project_id=project["id"], product_id=product["id"])
     with SessionLocal() as db, verified_fixture_tenant(db, 1):
-        sbom = db.get(SBOMSource, accepted["sbom_id"])
+        sbom = db.scalar(select(SBOMSource).where(SBOMSource.public_id == uuid.UUID(accepted["sbom_id"])))
         run = persist_analysis_run(
             db,
             sbom,
@@ -190,7 +191,7 @@ def test_analysis_run_inherits_product_id(client):
             1,
         )
         db.commit()
-        assert run.product_id == product["id"]
+        assert str(db.get(Product, run.product_id).public_id) == product["id"]
 
 
 def test_product_sbom_list_carries_latest_analysis(client):
@@ -209,7 +210,7 @@ def test_product_sbom_list_carries_latest_analysis(client):
     assert listed.json()[0]["latest_analysis"] is None
 
     with SessionLocal() as db, verified_fixture_tenant(db, 1):
-        sbom = db.get(SBOMSource, sbom_id)
+        sbom = db.scalar(select(SBOMSource).where(SBOMSource.public_id == uuid.UUID(sbom_id)))
         run = AnalysisRun(
             sbom_id=sbom.id,
             project_id=sbom.projectid,

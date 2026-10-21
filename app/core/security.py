@@ -474,6 +474,8 @@ async def get_current_tenant_context(
 
     if request is not None and "/stream" in request.url.path:
         db.close()
+    if request is not None:
+        request.state.current_context = context
     token = bind_context(context)
     try:
         yield context

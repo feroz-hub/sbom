@@ -14,11 +14,11 @@ vi.mock('@/components/admin/UserSearchCombobox', () => ({ UserSearchCombobox: ({
 
 beforeEach(() => {
   vi.clearAllMocks(); state.allowed = true;
-  state.get.mockResolvedValue({ id: 7, name: 'Olympus', status: 'ACTIVE', member_count: 10, current_administrators: [{ user_id: 2, display_name: 'Current Admin', email: 'current@example.test' }] });
+  state.get.mockResolvedValue({ id: "00000000-0000-4000-8000-000000000007", name: 'Olympus', status: 'ACTIVE', member_count: 10, current_administrators: [{ user_id: 2, display_name: 'Current Admin', email: 'current@example.test' }] });
   state.recover.mockResolvedValue({}); state.status.mockResolvedValue({});
 });
 async function renderPage() {
-  const params = Promise.resolve({ tenantId: '7' });
+  const params = Promise.resolve({ tenantId: "00000000-0000-4000-8000-000000000007" });
   await act(async () => { render(<QueryClientProvider client={new QueryClient({ defaultOptions: { queries: { retry: false } } })}><Suspense fallback={<p>Loading</p>}><Page params={params} /></Suspense></QueryClientProvider>); });
 }
 it('shows summary and governance, not a generic tenant member editor', async () => {
@@ -29,10 +29,10 @@ it('shows summary and governance, not a generic tenant member editor', async () 
   expect(screen.queryByText('Tenant Members')).not.toBeInTheDocument();
   expect(screen.queryByText('Generic member editor')).not.toBeInTheDocument();
   expect(screen.queryByText('Add existing member')).not.toBeInTheDocument();
-  expect(state.get).toHaveBeenCalledWith(7);
+  expect(state.get).toHaveBeenCalledWith("00000000-0000-4000-8000-000000000007");
 });
 it('renders one shared breadcrumb with ancestor links and a non-linked current tenant', async () => {
-  state.get.mockResolvedValue({ id: 7, name: 'Wellysis', slug: 'wellysis', status: 'ACTIVE', member_count: 0, current_administrators: [] });
+  state.get.mockResolvedValue({ id: "00000000-0000-4000-8000-000000000007", name: 'Wellysis', slug: 'wellysis', status: 'ACTIVE', member_count: 0, current_administrators: [] });
   await renderPage();
   await screen.findByRole('heading', { name: 'Wellysis', level: 1 });
   const trails = screen.getAllByRole('navigation', { name: 'Breadcrumb' });
@@ -50,7 +50,7 @@ it('uses a dedicated administrator recovery API with fixed role semantics', asyn
   expect(save).toBeDisabled();
   await user.click(screen.getByRole('button', { name: 'Select New Admin' }));
   await user.click(save);
-  await waitFor(() => expect(state.recover).toHaveBeenCalledWith(7, 8));
+  await waitFor(() => expect(state.recover).toHaveBeenCalledWith("00000000-0000-4000-8000-000000000007", 8));
 });
 it('requires actual platform-context permission', async () => {
   state.allowed = false; await renderPage();

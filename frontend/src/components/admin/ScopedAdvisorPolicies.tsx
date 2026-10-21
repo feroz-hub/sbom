@@ -27,7 +27,7 @@ function PolicyPanel({
   definition,
   canUpdate,
 }: {
-  tenantId: number | null;
+  tenantId: (string | number) | null;
   definition: PolicyDefinition;
   canUpdate: boolean;
 }) {
@@ -86,7 +86,7 @@ function PolicyConsole({
   tenantId,
   canUpdate,
 }: {
-  tenantId: number | null;
+  tenantId: (string | number) | null;
   canUpdate: boolean;
 }) {
   const [selected, setSelected] = useState(0);
@@ -179,7 +179,7 @@ export function ScopedAdvisorPolicies({
         Policy configuration access is not permitted in this context.
       </p>
     );
-  const tenantId = scope === 'platform' ? null : Number(activeTenantId);
+  const tenantId = scope === 'platform' ? null : activeTenantId;
   const scopeName =
     scope === 'platform'
       ? 'platform defaults'

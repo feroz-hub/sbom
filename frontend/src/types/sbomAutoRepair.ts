@@ -50,6 +50,6 @@ export interface DeterministicRepairJob {
   repairs_applied: number;
   validation_status: 'FAILED' | 'PASSED';
   changes: DeterministicRepairChange[];
-  imported_sbom_id: number | null;
+  imported_sbom_id: (string | number) | null;
   capabilities: RepairCapabilities;
 }

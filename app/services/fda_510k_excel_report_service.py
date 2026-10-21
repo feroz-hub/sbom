@@ -849,7 +849,7 @@ class Fda510kExcelReportService:
     @staticmethod
     def _blocker(sbom: SBOMSource, analysis_type: str, status: str) -> dict[str, Any]:
         return {
-            "sbom_id": sbom.id,
+            "sbom_id": str(sbom.public_id),
             "sbom_name": sbom.sbom_name,
             "analysis_type": analysis_type,
             "status": status,

@@ -1467,7 +1467,7 @@ def delete_sbom(
                 "To proceed, resend the request with confirm=yes "
                 "(and add permanent=true to bypass soft delete)."
             ),
-            "example": f"/api/sboms/{sbom_id}?confirm=yes",
+            "example": f"/api/sboms/{sbom.public_id}?confirm=yes",
         }
 
     if permanent:

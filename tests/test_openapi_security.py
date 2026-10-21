@@ -1,8 +1,10 @@
 """Documentation security must match the existing method/path access policy."""
 
 from copy import deepcopy
+from types import SimpleNamespace
 
 from app.core.route_policies import ROUTE_POLICIES
+from app.public_api import install_public_openapi
 from fastapi import FastAPI
 from fastapi.openapi.models import OpenAPI
 from starlette.routing import compile_path
@@ -27,7 +29,17 @@ def test_openapi_security_and_parameters(client, app):
         original = deepcopy(FastAPI.openapi(app))
     finally:
         app.openapi_schema = cached
-    expected = deepcopy(original)
+    # Security decorates the already-published UUID wire contract. Testing it
+    # against FastAPI's internal integer-domain schema predates that boundary.
+    # UUID correctness is independently asserted below and through HTTP tests.
+    public_contract = SimpleNamespace(openapi=lambda raw=original: deepcopy(raw))
+    install_public_openapi(public_contract)
+    expected = public_contract.openapi()
+    project_id = schema['components']['schemas']['ProjectOut']['properties']['id']
+    run_id = schema['components']['schemas']['AnalysisRunOut']['properties']['id']
+    assert project_id['type'] == 'string' and project_id['format'] == 'uuid'
+    assert run_id['type'] == 'integer'
+
     expected['components'].setdefault('securitySchemes', {})['BearerAuth'] = {
         'type': 'http', 'scheme': 'bearer', 'bearerFormat': 'JWT',
     }

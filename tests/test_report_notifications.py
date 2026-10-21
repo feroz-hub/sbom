@@ -113,7 +113,7 @@ def fixture(client, monkeypatch, tmp_path):
                     component_id=component.id if source.id == sbom.id else None,
                     component_version=source.sbom_version,
                     severity="HIGH",
-                    score=9.0,
+                    score=8.0,
                     fixed_versions='["3"]',
                 )
             )
@@ -235,7 +235,7 @@ def test_all_parts_and_real_artifact_renderers(fixture):
 
 def test_preview_crud_unique_and_no_delivery(fixture):
     f = fixture
-    payload = ReportPreferences(scope="SBOM", sbom_id=f.sbom.id).model_dump()
+    payload = {**ReportPreferences(scope="SBOM", sbom_id=f.sbom.id).model_dump(), "sbom_id": str(f.sbom.public_id)}
     response = f.client.post("/api/report-subscriptions/preview", json=payload)
     assert response.status_code == 200, response.text
     assert "html_body" in response.json()
@@ -265,7 +265,7 @@ def test_tenant_scope_restricted_and_foreign_target_denied(fixture):
         sbom = SBOMSource(tenant_id=2, sbom_name="Secret")
         f.db.add(sbom)
         f.db.commit()
-        foreign_id = sbom.id
+        foreign_id = str(sbom.public_id)
     response = f.client.post("/api/report-subscriptions", json={"scope": "SBOM", "sbom_id": foreign_id})
     assert response.status_code == 404
 
@@ -545,7 +545,7 @@ def test_preview_is_rate_limited(fixture):
         ]
     )
     f.db.commit()
-    response = f.client.post("/api/report-subscriptions/preview", json={"scope": "SBOM", "sbom_id": f.sbom.id})
+    response = f.client.post("/api/report-subscriptions/preview", json={"scope": "SBOM", "sbom_id": str(f.sbom.public_id)})
     assert response.status_code == 429
 
 
@@ -576,7 +576,7 @@ def test_read_only_member_cannot_subscribe_without_export(fixture):
     context = replace(f.context, roles=frozenset({"VIEWER"}))
     f.client.app.dependency_overrides[get_current_tenant_context] = lambda: context
     try:
-        response = f.client.post("/api/report-subscriptions", json={"scope": "PROJECT", "project_id": f.project.id})
+        response = f.client.post("/api/report-subscriptions", json={"scope": "PROJECT", "project_id": str(f.project.public_id)})
         assert response.status_code == 403, response.text
         assert f.db.scalar(select(func.count(ReportSubscription.id))) == 0
     finally:
@@ -832,7 +832,7 @@ def test_report_reference_load(fixture, sbom_count, record_testsuite_property):
     assert measurement["total_findings"] == (sbom_count - 1) * 100 + 1
     assert measurement["elapsed_seconds"] < (120 if sbom_count == 50 else 300)
     assert measurement["peak_mb"] < 512
-    assert measurement["peak_method"] == "linux-exec-VmHWM"
+    assert measurement["peak_method"] == ("darwin-exec-ru_maxrss" if sys.platform == "darwin" else "linux-exec-VmHWM")
     assert measurement["pdf_bytes"] > 0 and measurement["xlsx_bytes"] > 0
 
 

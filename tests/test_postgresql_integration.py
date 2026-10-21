@@ -12,6 +12,8 @@ import pytest
 import sqlalchemy as sa
 from fastapi.testclient import TestClient
 
+from tests.public_id_fixture import public_row
+
 pytestmark = pytest.mark.postgres
 ROOT = Path(__file__).resolve().parent.parent
 
@@ -306,10 +308,10 @@ def test_postgresql_feature_smoke(
 
         from app.core.context import minimal_background_context, tenant_scope
         from app.db import SessionLocal
-        from app.models import SBOMComponent
+        from app.models import SBOMComponent, SBOMSource
         with tenant_scope(minimal_background_context(1)), SessionLocal() as session:
             component = (
-                session.execute(sa.select(SBOMComponent).where(SBOMComponent.sbom_id == sbom_id)).scalars().first()
+                session.execute(sa.select(SBOMComponent).where(SBOMComponent.sbom_id == public_row(session, SBOMSource, sbom_id).id)).scalars().first()
             )
             assert component is not None
             component.lifecycle_status = "EOL"

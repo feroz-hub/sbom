@@ -98,7 +98,7 @@ async function openAndFillForm() {
     /Search existing SBOM users/,
   );
   await user.type(userSearch, 'Feroze');
-  const option = await screen.findByRole('button', { name: /Feroze Basha/ });
+  const option = await screen.findByRole('option', { name: /Feroze Basha/ });
   await user.click(option);
   return { user, form };
 }

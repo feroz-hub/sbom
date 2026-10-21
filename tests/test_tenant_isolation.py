@@ -120,10 +120,10 @@ def two_tenant_setup():
             db.add_all([finding_b, remediation_b])
             db.commit()
             yield {
-                "tenant_b_id": t2.id,
-                "project_b_id": project_b.id,
-                "product_b_id": product_b.id,
-                "sbom_b_id": sbom_b.id,
+                "tenant_b_id": str(t2.public_id),
+                "project_b_id": str(project_b.public_id),
+                "product_b_id": str(product_b.public_id),
+                "sbom_b_id": str(sbom_b.public_id),
                 "run_b_id": run_b.id,
                 "finding_b_id": finding_b.id,
                 "remediation_b_id": remediation_b.id,
@@ -137,20 +137,13 @@ def two_tenant_setup():
 def test_tenant_a_cannot_access_tenant_b_sbom(client, two_tenant_setup):
     sbom_id = two_tenant_setup["sbom_b_id"]
     resp = client.get(f"/api/sboms/{sbom_id}")
-    if resp.status_code == 200:
-        # Same numeric id may exist in tenant A — must not return tenant B's row.
-        assert resp.json().get("sbom_name") != "sbom-b"
-    else:
-        assert resp.status_code == 404
+    assert resp.status_code == 404
 
 
 def test_tenant_a_cannot_access_tenant_b_project(client, two_tenant_setup):
     project_id = two_tenant_setup["project_b_id"]
     resp = client.get(f"/api/projects/{project_id}")
-    if resp.status_code == 200:
-        assert resp.json().get("project_name") != "Project B"
-    else:
-        assert resp.status_code == 404
+    assert resp.status_code == 404
 
 
 def test_tenant_a_cannot_update_or_delete_tenant_b_project(client, two_tenant_setup):

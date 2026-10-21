@@ -1,6 +1,9 @@
 'use client';
 
-import { useState, FormEvent } from 'react';
+import { useRef, useState, useId, FormEvent } from 'react';
+import { Search, X, UserPlus, MailPlus, Users } from 'lucide-react';
+import { Button } from '@/components/ui/Button';
+import { ROLE_DESCRIPTIONS } from './StatusBadges';
 import { useMutation, useQuery, useQueryClient } from '@tanstack/react-query';
 import { useRouter } from 'next/navigation';
 import { usePermissions } from '@/hooks/usePermission';
@@ -22,7 +25,7 @@ import {
 } from '@/lib/api';
 import { useNotifications } from '@/hooks/useNotifications';
 import { getApiErrorMessage } from '@/lib/notifications';
-import { TenantContextHeader } from '@/components/admin/TenantContextHeader';
+import { TenantContextHeader, TenantAccessInformation } from '@/components/admin/TenantContextHeader';
 import { UserSearchCombobox } from '@/components/admin/UserSearchCombobox';
 import { TenantAuditHistory } from '@/components/admin/TenantAuditHistory';
 import { TenantMembersTable } from '@/components/admin/TenantMembersTable';
@@ -33,10 +36,18 @@ import { DisableMembershipDialog, EnableMembershipDialog, RemoveMemberDialog } f
 type MemberItem = Awaited<ReturnType<typeof getTenantMembers>>[number];
 
 export default function TenantUsersAccess() {
+  const { activeTenantId, user } = useAuth();
+  // Reset search, candidate selection and open dialogs on every tenant/account switch,
+  // including consumers that do not key this component at the route level.
+  return <TenantUsersAccessContent key={`${activeTenantId ?? user?.tenantId ?? 'none'}:${user?.userId ?? 'anonymous'}`} />;
+}
+
+function TenantUsersAccessContent() {
+  const addFormId = useId();
   const { user, tenants, activeTenant, activeTenantId, isTenantContextLoading, isLoading: authLoading,  refreshSession } = useAuth();
   const { can: hasPermission } = usePermissions();
   const router = useRouter();
-  const currentTenantId = activeTenantId ? Number(activeTenantId) : (user?.tenantId ? Number(user.tenantId) : null);
+  const currentTenantId = activeTenantId ? activeTenantId : (user?.tenantId ? user.tenantId : null);
   const tenantsList = Array.isArray(tenants) ? tenants : [];
   const activeTenantObj = activeTenant ?? tenantsList.find((t) => t.id === currentTenantId);
   const canRead = hasPermission('tenant:user:read');
@@ -46,6 +57,9 @@ export default function TenantUsersAccess() {
   const mutationScope = useMutationScope();
   const { showSuccess, showError } = useNotifications();
 
+  const memberSearchRef = useRef<HTMLInputElement>(null);
+  const [memberSearch, setMemberSearch] = useState('');
+  const [addOpen, setAddOpen] = useState(false);
   const [directoryRevision, setDirectoryRevision] = useState(0);
   const [selectedUser, setSelectedUser] = useState<UserSearchResult | null>(null);
   const [initialRoles, setInitialRoles] = useState<TenantRole[]>(['VIEWER']);
@@ -77,7 +91,7 @@ export default function TenantUsersAccess() {
       if (!selectedUser || !currentTenantId) return;
       await addTenantMember(currentTenantId, {
         user_id: selectedUser.id,
-        roles: initialRoles,
+        roles: assignableInitialRoles,
       });
     },
     onMutate: () => mutationScope.capture(),
@@ -86,15 +100,22 @@ export default function TenantUsersAccess() {
       showSuccess(`User “${selectedUser?.display_name || selectedUser?.email}” was added to the tenant.`);
       if (user?.userId === selectedUser?.id) await refreshSession({ authorizationChanged: true });
       setSelectedUser(null);
+      setAddOpen(false);
       await invalidateTenantMembershipSurfaces(qc, currentTenantId!);
       setDirectoryRevision(n => n + 1);
     },
-    onError: (error) => showError(getApiErrorMessage(error, 'Failed to add member to tenant.')),
+    onError: (error, _variables, isCurrent) => {
+      if (isCurrent?.()) showError(getApiErrorMessage(error, 'Failed to add member to tenant.'));
+    },
   });
+
+  const assignableRoles = roles.data?.roles ?? [];
+  const assignableInitialRoles = initialRoles.filter(role => assignableRoles.some(allowed => getRoleCode(allowed) === role));
+  const validInitialRoles = !roles.isPending && !roles.error && assignableInitialRoles.length > 0;
 
   const submitMember = (event: FormEvent) => {
     event.preventDefault();
-    if (!selectedUser || !currentTenantId) return;
+    if (!selectedUser || !currentTenantId || !canInvite || addMemberMutation.isPending || !validInitialRoles) return;
     addMemberMutation.mutate();
   };
 
@@ -232,8 +253,14 @@ export default function TenantUsersAccess() {
 
   const tenantName = activeTenantObj?.name || `Tenant #${currentTenantId}`;
 
+  const searchTerm = memberSearch.trim().toLocaleLowerCase();
+  const filteredMembers = searchTerm ? members.data?.filter(member =>
+    [member.display_name, member.email].some(value => value?.toLocaleLowerCase().includes(searchTerm)),
+  ) : members.data;
+  const closeAdd = () => { if (!addMemberMutation.isPending) setAddOpen(false); };
+
   return (
-    <div className="mx-auto max-w-6xl space-y-6 p-6">
+    <div className="min-w-0 space-y-5">
       <TenantContextHeader
         name={tenantName}
         slug={activeTenantObj?.slug || 'Unavailable'}
@@ -242,82 +269,39 @@ export default function TenantUsersAccess() {
         memberCount={members.data?.length}
       />
 
-      {canInvite && <>
-        <button className="rounded-lg bg-hcl-blue px-4 py-2 text-white" onClick={() => setInviteOpen(true)}>+ Invite new user</button>
-        <p className="text-sm text-hcl-muted">Invite a new account with tenant access, or add an existing SBOM Analyzer account below.</p>
-        <Dialog open={inviteOpen} title="Invite new user" maxWidth="xl" dismissOnBackdrop={!inviteBusy} onClose={() => { if (!inviteBusy) setInviteOpen(false); }}><DialogBody>
-          <NativeUserInviteForm onBusyChange={setInviteBusy} onCancel={() => setInviteOpen(false)} onCreated={() => {
-            setInviteOpen(false);
-            setDirectoryRevision(n => n + 1);
-          }} />
-        </DialogBody></Dialog>
-      </>}
-      {canInvite && (
-        <section aria-labelledby="add-member-heading" className="rounded-xl border border-border bg-surface p-5 shadow-elev-1 space-y-4">
-          <div>
-            <h2 id="add-member-heading" className="text-lg font-semibold text-foreground">Add existing member</h2>
-            <p className="mt-1 text-xs text-hcl-muted">Attach an existing SBOM Analyzer account to this tenant. This does not create a new account.</p>
-          </div>
-
-          <form onSubmit={submitMember} className="space-y-4">
-            <div>
-              <p className="block text-sm font-medium mb-1">Search existing user</p>
-              <UserSearchCombobox
-                tenantId={currentTenantId}
-                revision={directoryRevision}
-                onSelect={setSelectedUser}
-                selectedUser={selectedUser}
-                placeholder="Search by name or email…"
-              />
-            </div>
-
-            {selectedUser && (
-              <div className="grid gap-3 sm:grid-cols-[1fr_auto] items-end pt-2">
-                <label className="text-sm font-medium">
-                  Initial Roles
-                  <select
-                    aria-label="Initial roles"
-                    multiple
-                    value={initialRoles.map(getRoleCode)}
-                    onChange={(event) => {
-                      const selected = Array.from(
-                        event.target.selectedOptions,
-                        (option) => option.value as TenantRole,
-                      );
-                      if (selected.length > 0) setInitialRoles(selected);
-                    }}
-                    className="mt-1 w-full rounded-md border border-border bg-background px-3 py-2"
-                  >
-                    {(roles.data?.roles ?? ['VIEWER']).map((role) => {
-                      const code = getRoleCode(role);
-                      const label = getRoleLabel(role);
-                      const key = code || (role && typeof role === 'object' ? String(role.id ?? '') : String(role));
-                      return (
-                        <option key={key} value={code}>
-                          {label}
-                        </option>
-                      );
-                    })}
-                  </select>
-                </label>
-
-                <button
-                  type="submit"
-                  disabled={addMemberMutation.isPending}
-                  className="rounded-lg bg-[var(--btn-primary)] px-4 py-2 text-sm font-medium text-white hover:bg-[var(--btn-primary-hover)] disabled:opacity-50 transition-colors"
-                >
-                  {addMemberMutation.isPending ? 'Adding…' : 'Add Member'}
-                </button>
-              </div>
-            )}
-          </form>
-        </section>
-      )}
-
-      {/* Read-Only Table & Responsive Card View — shared with the platform
-          tenant detail page so the two surfaces cannot drift. */}
       <TenantMembersTable
-        members={members.data}
+        title="Member Directory"
+        totalMemberCount={members.data?.length}
+        toolbar={
+          <div className="space-y-4">
+            <div className="flex flex-col gap-3 xl:flex-row xl:items-center xl:justify-between">
+              <div className="relative w-full xl:max-w-sm">
+                <Search className="pointer-events-none absolute left-3 top-3 h-4 w-4 text-hcl-muted" aria-hidden="true" />
+                <input ref={memberSearchRef} type="search" aria-label="Search members" placeholder="Search members by name or email…"
+                  value={memberSearch} onChange={event => setMemberSearch(event.target.value)}
+                  className="h-11 w-full rounded-lg border border-border bg-background pl-9 pr-11 text-sm text-foreground placeholder:text-hcl-muted focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-hcl-blue [&::-webkit-search-cancel-button]:appearance-none" />
+                {memberSearch && <button type="button" aria-label="Clear member search" title="Clear member search"
+                  onClick={() => { setMemberSearch(''); memberSearchRef.current?.focus(); }}
+                  className="absolute right-0 top-0 flex h-11 w-11 items-center justify-center rounded-lg text-hcl-muted hover:bg-surface-muted focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-hcl-blue">
+                  <X className="h-4 w-4" aria-hidden="true" />
+                </button>}
+              </div>
+              {canInvite && <div className="flex flex-col gap-2 sm:flex-row">
+                <Button variant="secondary" className="min-h-11" onClick={() => {
+                  setSelectedUser(null); setInitialRoles(['VIEWER']); addMemberMutation.reset(); setAddOpen(true);
+                }}><UserPlus className="h-4 w-4" aria-hidden="true" />Add Existing Member</Button>
+                <Button className="min-h-11" onClick={() => setInviteOpen(true)}><MailPlus className="h-4 w-4" aria-hidden="true" />Invite New User</Button>
+              </div>}
+            </div>
+            {!members.isLoading && !members.error && members.data && (searchTerm || (!canUpdate && !canInvite)) && <p role="status" className="flex items-center gap-2 text-xs text-hcl-muted">
+              <Users className="h-4 w-4" aria-hidden="true" />
+              {searchTerm && `${filteredMembers?.length ?? 0} of ${members.data.length} members match your search`}
+              {!canUpdate && !canInvite && <span>{searchTerm ? '· ' : ''}Read-only access</span>}
+            </p>}
+          </div>
+        }
+        emptyMessage={searchTerm ? 'No matching members. Try another name or email, or clear your search.' : undefined}
+        members={filteredMembers}
         isLoading={members.isLoading}
         error={members.error}
         canUpdate={canUpdate}
@@ -327,21 +311,53 @@ export default function TenantUsersAccess() {
         onRemoveFromTenant={setRemoveModalMember}
       />
 
-      <section aria-labelledby="tenant-settings-heading" className="rounded-xl border border-border bg-surface p-5">
-        <h2 id="tenant-settings-heading" className="text-lg font-semibold">Tenant Settings</h2>
-        <dl className="mt-3 grid gap-2 text-sm sm:grid-cols-[14rem_1fr]">
-          <dt className="text-hcl-muted">Tenant</dt>
-          <dd>{tenantName}</dd>
-          <dt className="text-hcl-muted">Tenant status</dt>
-          <dd>{activeTenantObj?.status || 'ACTIVE'}</dd>
-          <dt className="text-hcl-muted">Current membership</dt>
-          <dd>{activeTenantObj?.membershipStatus || 'ACTIVE'}</dd>
-          <dt className="text-hcl-muted">Authentication</dt>
-          <dd>HCL.CS</dd>
-          <dt className="text-hcl-muted">Tenant access</dt>
-          <dd>Managed in SBOM</dd>
-        </dl>
-      </section>
+      <TenantAccessInformation />
+      <TenantAuditHistory tenantId={currentTenantId} />
+
+      {canInvite && <>
+        <Dialog open={addOpen} title="Add Existing Member" maxWidth="lg" dismissOnBackdrop={!addMemberMutation.isPending} onClose={closeAdd} footer={
+          <div className="flex justify-end gap-3 px-6 py-4">
+            <Button variant="secondary" onClick={closeAdd} disabled={addMemberMutation.isPending}>Cancel</Button>
+            <Button type="submit" form={addFormId} loading={addMemberMutation.isPending} loadingLabel="Adding member" disabled={!selectedUser || !validInitialRoles}>{addMemberMutation.isPending ? 'Adding…' : 'Add Member'}</Button>
+          </div>
+        }>
+          <form id={addFormId} onSubmit={submitMember}>
+            <DialogBody className="space-y-5">
+              <p className="text-sm leading-6 text-hcl-muted">Add an existing SBOM Analyzer account to <strong className="text-foreground">{tenantName}</strong>. This does not create a new user account.</p>
+              {addMemberMutation.error && <p role="alert" className="rounded-lg border border-red-200 bg-red-50 p-3 text-sm text-red-700 dark:border-red-900/50 dark:bg-red-950/20 dark:text-red-300">{getApiErrorMessage(addMemberMutation.error, 'Failed to add member to tenant.')}</p>}
+              <fieldset disabled={addMemberMutation.isPending} className="min-w-0 space-y-4">
+                <legend className="mb-2 text-sm font-semibold">Search existing user</legend>
+                <UserSearchCombobox tenantId={currentTenantId} revision={directoryRevision} onSelect={setSelectedUser} selectedUser={selectedUser} placeholder="Search existing users by name or email…" />
+              </fieldset>
+              {selectedUser && <fieldset disabled={addMemberMutation.isPending} className="space-y-3">
+                <legend className="text-sm font-semibold">Initial roles</legend>
+                <p className="text-xs text-hcl-muted">Select one or more tenant roles. Viewer is selected by default when assignable.</p>
+                {roles.isPending && <p role="status" className="text-sm text-hcl-muted">Loading assignable roles…</p>}
+                {roles.error && <p role="alert" className="text-sm text-red-700 dark:text-red-300">Could not load assignable roles. <button type="button" className="underline focus-visible:ring-2 focus-visible:ring-hcl-blue" onClick={() => void roles.refetch()}>Try again</button></p>}
+                <div className="grid gap-2 sm:grid-cols-2">
+                  {assignableRoles.map(role => {
+                    const code = getRoleCode(role);
+                    return <label key={code} className="flex cursor-pointer items-start gap-3 rounded-lg border border-border p-3 hover:bg-surface-muted has-[:checked]:border-hcl-blue/50 has-[:checked]:bg-hcl-blue/5">
+                      <input type="checkbox" checked={initialRoles.includes(code)}
+                        onChange={event => setInitialRoles(previous => event.target.checked ? [...previous, code] : previous.filter(item => item !== code))}
+                        className="mt-0.5 h-4 w-4 shrink-0 accent-hcl-blue focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-hcl-blue" />
+                      <span className="text-sm font-medium">{getRoleLabel(role)}<span className="mt-1 block text-xs font-normal leading-5 text-hcl-muted">{ROLE_DESCRIPTIONS[code]}</span></span>
+                    </label>;
+                  })}
+                </div>
+                {!roles.isPending && !roles.error && !validInitialRoles && <p className="text-xs text-amber-700 dark:text-amber-300">Select at least one assignable role. Unavailable roles cannot be assigned.</p>}
+              </fieldset>}
+            </DialogBody>
+
+          </form>
+        </Dialog>
+        <Dialog open={inviteOpen} title="Invite new user" maxWidth="xl" dismissOnBackdrop={!inviteBusy} onClose={() => { if (!inviteBusy) setInviteOpen(false); }}><DialogBody>
+          <NativeUserInviteForm onBusyChange={setInviteBusy} onCancel={() => setInviteOpen(false)} onCreated={() => {
+            setInviteOpen(false);
+            setDirectoryRevision(n => n + 1);
+          }} />
+        </DialogBody></Dialog>
+      </>}
 
       {/* Modals & Dialogs */}
       {rolesModalMember && (
@@ -395,7 +411,6 @@ export default function TenantUsersAccess() {
         />
       )}
 
-      <TenantAuditHistory tenantId={currentTenantId} />
     </div>
   );
 }

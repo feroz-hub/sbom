@@ -102,7 +102,7 @@ function AnalysisPageInner() {
   // project must not shrink this list. Products with no SBOM can have no runs,
   // so the SBOM list is the complete set of products worth offering.
   const productOptions = useMemo(() => {
-    const byId = new Map<number, string>();
+    const byId = new Map<string | number, string>();
     for (const sbom of sboms ?? []) {
       if (sbom.product_id != null && !byId.has(sbom.product_id)) {
         byId.set(sbom.product_id, sbom.product_name?.trim() || `Product #${sbom.product_id}`);
@@ -118,9 +118,9 @@ function AnalysisPageInner() {
     queryFn: ({ signal }) =>
       getRuns(
         {
-          project_id: projectFilter ? Number(projectFilter) : undefined,
-          product_id: productFilter ? Number(productFilter) : undefined,
-          sbom_id: sbomFilter ? Number(sbomFilter) : undefined,
+          project_id: projectFilter ? projectFilter : undefined,
+          product_id: productFilter ? productFilter : undefined,
+          sbom_id: sbomFilter ? sbomFilter : undefined,
           run_status: statusFilter || undefined,
           page: 1,
           page_size: 100,
@@ -139,9 +139,9 @@ function AnalysisPageInner() {
     queryFn: ({ signal }) =>
       getRunsAggregate(
         {
-          project_id: projectFilter ? Number(projectFilter) : undefined,
-          product_id: productFilter ? Number(productFilter) : undefined,
-          sbom_id: sbomFilter ? Number(sbomFilter) : undefined,
+          project_id: projectFilter ? projectFilter : undefined,
+          product_id: productFilter ? productFilter : undefined,
+          sbom_id: sbomFilter ? sbomFilter : undefined,
         },
         signal,
       ),
@@ -158,9 +158,9 @@ function AnalysisPageInner() {
   const handleExportJson = async () => {
     try {
       await exportRunsJson({
-        project_id: projectFilter ? Number(projectFilter) : undefined,
-        product_id: productFilter ? Number(productFilter) : undefined,
-        sbom_id: sbomFilter ? Number(sbomFilter) : undefined,
+        project_id: projectFilter ? projectFilter : undefined,
+        product_id: productFilter ? productFilter : undefined,
+        sbom_id: sbomFilter ? sbomFilter : undefined,
         run_status: statusFilter || undefined,
       });
       showToast('Analysis runs were exported successfully.', 'success');
@@ -198,7 +198,7 @@ function AnalysisPageInner() {
         }
       />
       <div className="p-6 space-y-5">
-        <SbomPostureNotice scope={{projectId: projectFilter ? Number(projectFilter) : null, applicationId: productFilter ? Number(productFilter) : null, sbomId: productFilter && sbomFilter ? Number(sbomFilter) : null}} />
+        <SbomPostureNotice scope={{projectId: projectFilter ? projectFilter : null, applicationId: productFilter ? productFilter : null, sbomId: productFilter && sbomFilter ? sbomFilter : null}} />
         <AnalysisHubTabs active={hubTab} onChange={setHubTab} />
 
         {hubTab === 'consolidated' && (
@@ -387,9 +387,9 @@ function AnalysisPageInner() {
               severity={severityFilter}
               onSeverityChange={setSeverityFilter}
               scope={projectFilter ? {
-                projectId: projectFilter ? Number(projectFilter) : null,
-                applicationId: productFilter ? Number(productFilter) : null,
-                sbomId: productFilter && sbomFilter ? Number(sbomFilter) : null,
+                projectId: projectFilter ? projectFilter : null,
+                applicationId: productFilter ? productFilter : null,
+                sbomId: productFilter && sbomFilter ? sbomFilter : null,
               } : undefined}
             />
           </div>

@@ -49,7 +49,7 @@ export function SbomQualityCard({ assessment, comparison, stale = false }: {
   </section>;
 }
 
-export function SbomQualityPanel({ sessionId, sbomId }: { sessionId?: string; sbomId?: number }) {
+export function SbomQualityPanel({ sessionId, sbomId }: { sessionId?: string; sbomId?: (string | number) }) {
   const quality = useQuery({ queryKey: ['sbom-quality', sessionId ? 'session' : 'sbom', sessionId ?? sbomId],
     queryFn: ({ signal }) => sessionId ? getSessionQuality(sessionId, signal) : getSbomQuality(sbomId!, signal),
     enabled: Boolean(sessionId || sbomId), retry: false });

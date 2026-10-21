@@ -59,7 +59,7 @@ export function DisableMembershipDialog({
 
         <p className="text-sm text-hcl-muted">
           <strong className="text-foreground">{displayName || 'This user'}</strong> will no longer be able to access{' '}
-          <strong className="text-foreground">{tenantName}</strong>. Their HCL.CS identity and SBOM user account will remain unchanged. Their tenant membership record and assigned roles will be retained.
+          <strong className="text-foreground">{tenantName}</strong>. Their sign-in identity and SBOM user account will remain unchanged. Their tenant membership record and assigned roles will be retained.
         </p>
 
         {isSelf && (
@@ -197,7 +197,7 @@ export function RemoveMemberDialog({
         <div className="rounded-xl border border-border bg-surface-elevated p-3 text-xs text-hcl-muted space-y-1">
           <span className="font-semibold text-foreground">This does not delete:</span>
           <ul className="list-disc list-inside space-y-0.5 ml-1">
-            <li>their HCL.CS identity</li>
+            <li>their sign-in identity</li>
             <li>their SBOM user account</li>
             <li>memberships in other tenants</li>
             <li>their platform-level role, when present</li>

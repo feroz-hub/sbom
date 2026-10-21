@@ -153,7 +153,20 @@ def test_scan_variant_forwards_component_constraint(client, monkeypatch):
         return CveDetailWithContext(**_stub_detail(cve_id).model_dump())
 
     monkeypatch.setattr("app.services.cve_service.CveDetailService.get_with_scan_context", fake)
-    response = client.get("/api/v1/scans/123/cves/CVE-2024-12345?component_id=42")
+    from app.db import SessionLocal
+    from app.models import SBOMComponent, SBOMSource
+
+    from tests.tenant_fixture_scope import verified_fixture_tenant
+
+    with SessionLocal() as db, verified_fixture_tenant(db, 1):
+        sbom = SBOMSource(sbom_name="scan-context-component", status="validated")
+        db.add(sbom)
+        db.flush()
+        component = SBOMComponent(sbom_id=sbom.id, name="left-pad", version="1.2.0")
+        db.add(component)
+        db.commit()
+        internal_id, public_id = component.id, str(component.public_id)
+    response = client.get(f"/api/v1/scans/123/cves/CVE-2024-12345?component_id={public_id}")
     assert response.status_code == 200
-    assert calls == [("CVE-2024-12345", 123, 42)]
+    assert calls == [("CVE-2024-12345", 123, internal_id)]
     assert client.get("/api/v1/scans/123/cves/CVE-2024-12345?component_id=0").status_code == 422

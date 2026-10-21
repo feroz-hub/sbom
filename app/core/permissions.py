@@ -2,12 +2,12 @@ from __future__ import annotations
 
 from enum import Enum
 
-from ..authorization_catalog_seed_v5 import PLATFORM_ADMIN_PERMISSIONS_V5
 from ..authorization_catalog_seed_v3 import (
     COMPONENT_ADVISOR_PERMISSIONS_V3,
     COMPONENT_ADVISOR_ROLE_PERMISSIONS_V3,
 )
 from ..authorization_catalog_seed_v4 import ADVISOR_POLICY_PERMISSIONS_V4, ADVISOR_POLICY_ROLE_PERMISSIONS_V4
+from ..authorization_catalog_seed_v5 import PLATFORM_ADMIN_PERMISSIONS_V5
 from .native_identity import AccountStatus
 
 TENANT_ROLES = frozenset({"TENANT_ADMIN", "SECURITY_ANALYST", "DEVELOPER", "VIEWER"})

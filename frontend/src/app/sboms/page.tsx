@@ -20,9 +20,9 @@ function SbomsContent() {
   const [showUpload, setShowUpload] = useState(false);
   const queryClient = useQueryClient();
   const params = useSearchParams();
-  const projectId = Number(params?.get('project')) || null;
-  const applicationId = projectId ? Number(params?.get('product')) || null : null;
-  const sbomId = applicationId ? Number(params?.get('sbom')) || null : null;
+  const projectId = params?.get('project') || null;
+  const applicationId = projectId ? params?.get('product') || null : null;
+  const sbomId = applicationId ? params?.get('sbom') || null : null;
   const analysed = params?.get('analysed') === '1';
   const scope: DashboardFilterScope = { projectId, applicationId, sbomId };
   const isScoped = projectId != null || analysed;

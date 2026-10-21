@@ -1,6 +1,8 @@
 from pathlib import Path
+
 from alembic.config import Config
 from alembic.script import ScriptDirectory
+
 
 def test_fresh_bootstrap_uses_dynamic_alembic_head_without_live_metadata_replay():
     source = Path("scripts/bootstrap_fresh_database.py").read_text() 

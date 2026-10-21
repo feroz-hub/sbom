@@ -13,6 +13,7 @@ from app.models import (
 )
 from sqlalchemy import func, select
 
+from tests.public_id_fixture import public_row
 from tests.tenant_fixture_scope import verified_fixture_tenant
 
 from .phase7_helpers import seed_eligible_admin, seed_requester, tenant_payload
@@ -57,7 +58,7 @@ def test_atomic_api_creation_returns_safe_nested_contract(client):
 
     with SessionLocal() as db:
         tenant = db.scalar(
-            select(Tenant).where(Tenant.id == body["tenant"]["id"])
+            select(Tenant).where(Tenant.id == public_row(db, Tenant, body["tenant"]["id"]).id)
         )
         with verified_fixture_tenant(db, tenant.id):
             memberships = db.scalars(
@@ -146,7 +147,7 @@ def test_wellysis_creation_omits_external_mapping_and_preserves_local_default(cl
     assert len(correlation_id) >= 12
     assert response.json()["tenant"]["external_iam_tenant_id"] is None
     with SessionLocal() as db:
-        tenant = db.get(Tenant, response.json()["tenant"]["id"])
+        tenant = public_row(db, Tenant, response.json()["tenant"]["id"])
         assert tenant.external_iam_tenant_id is None
         assert (
             db.scalar(

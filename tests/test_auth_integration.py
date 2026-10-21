@@ -4,13 +4,15 @@ from __future__ import annotations
 
 from datetime import UTC, datetime
 
+from tests.public_id_fixture import tenant_uuid
+
 
 def test_auth_me_dev_mode(client):
     resp = client.get("/api/auth/me")
     assert resp.status_code == 200
     body = resp.json()
     assert body["external_user_id"] == "dev-user"
-    assert body["tenant_id"] == 1
+    assert body["tenant_id"] == tenant_uuid(1)
     assert "permissions" in body
 
 

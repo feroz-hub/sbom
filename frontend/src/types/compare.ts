@@ -48,9 +48,9 @@ export type ComponentChangeKind =
 
 export interface RunSummary {
   id: number;
-  sbom_id: number | null;
+  sbom_id: (string | number) | null;
   sbom_name: string | null;
-  project_id: number | null;
+  project_id: (string | number) | null;
   project_name: string | null;
   run_status: string;
   completed_on: string | null;

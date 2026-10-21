@@ -115,7 +115,7 @@ describe('PlatformAdminsPage', () => {
       screen.getByPlaceholderText('Search existing SBOM users by email or name…'),
       'Candidate',
     );
-    await user.click(await screen.findByRole('button', { name: /Candidate Admin/ }));
+    await user.click(await screen.findByRole('option', { name: /Candidate Admin/ }));
     await user.click(screen.getByRole('button', { name: 'Grant Platform Administrator' }));
     await waitFor(() => expect(api.grantPlatformAdministrator).toHaveBeenCalledWith(3));
   });

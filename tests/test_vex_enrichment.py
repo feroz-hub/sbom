@@ -47,15 +47,15 @@ def test_vex_import_list_and_dashboard(client):
                     ],
                 }
             }
-            response = client.post(f"/api/sboms/{sbom.id}/vex", json=payload)
+            response = client.post(f"/api/sboms/{sbom.public_id}/vex", json=payload)
             assert response.status_code == 200
             assert response.json()["statements_imported"] == 1
 
-            listed = client.get(f"/api/sboms/{sbom.id}/vex")
+            listed = client.get(f"/api/sboms/{sbom.public_id}/vex")
             assert listed.status_code == 200
             statements = listed.json()["statements"]
             assert statements[0]["status"] == "not_affected"
-            assert statements[0]["component_id"] == component.id
+            assert statements[0]["component_id"] == str(component.public_id)
 
             dashboard = client.get("/dashboard/vex")
             assert dashboard.status_code == 200
@@ -75,7 +75,7 @@ def test_vex_not_affected_requires_justification(client):
             db.commit()
 
             response = client.post(
-                f"/api/sboms/{sbom.id}/vex",
+                f"/api/sboms/{sbom.public_id}/vex",
                 json={
                     "document": {
                         "bomFormat": "CycloneDX",
@@ -101,7 +101,7 @@ def test_manual_vex_override_is_audited(client):
             db.commit()
 
             response = client.patch(
-                f"/api/components/{component.id}/vulnerabilities/CVE-2023-1234/vex-override",
+                f"/api/components/{component.public_id}/vulnerabilities/CVE-2023-1234/vex-override",
                 json={
                     "status": "affected",
                     "reason": "Confirmed by product security review.",

@@ -148,6 +148,7 @@ def test_activation_single_use_and_audit():
 
 def test_same_token_tenant_isolation_and_live_roles():
     from app.core.context import minimal_background_context, tenant_scope
+
     with tenant_scope(minimal_background_context(1)), SessionLocal() as db:
         user = enrolled(db)
         actor = context(db)
@@ -560,7 +561,11 @@ def test_http_activation_login_and_shared_context():
         assert login.status_code == 200, login.text
         assert login.headers["cache-control"] == "no-store"
         token = login.json()["access_token"]
-        headers = {"Authorization": "Bearer " + token, "X-Tenant-ID": "1"}
+        from app.models import Tenant
+
+        with SessionLocal() as db:
+            tenant_id = str(db.get(Tenant, 1).public_id)
+        headers = {"Authorization": "Bearer " + token, "X-Tenant-ID": tenant_id}
         result = client.get("/api/auth/context", headers=headers)
         assert result.status_code == 200, result.text
         assert result.json()["user"]["id"] == user_id

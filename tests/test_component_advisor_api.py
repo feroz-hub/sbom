@@ -22,6 +22,7 @@ from app.models import (
     AnalysisFinding,
     SBOMComponent,
     SBOMSource,
+    Tenant,
     VexInvestigation,
 )
 from sqlalchemy import func, select
@@ -85,7 +86,7 @@ def seeded(db):
     world.component(s_other, "react", "18.2.0")
     db.commit()
     with verified_fixture_tenant(db, 2):
-        foreign_scope = {"project_id": other.project_id, "product_id": other.id}
+        foreign_scope = {"project_id": str(other.project.public_id), "product_id": str(other.public_id)}
     yield {"products": (p1, p2, p3), "sboms": (s1, s2, s3), "foreign_scope": foreign_scope, "log4j": log4j}
     reset_cache()
 
@@ -130,9 +131,9 @@ def test_T13_every_kpi_reconciles_with_its_drill_down__FR_SCA_002(client, seeded
     params = {}
     if scope_args:
         product = seeded["products"][0]
-        params["project_id"] = product.project_id
+        params["project_id"] = str(product.project.public_id)
         if scope_args.get("product"):
-            params["product_id"] = product.id
+            params["product_id"] = str(product.public_id)
     summary = client.get(f"{BASE}/summary", params=params).json()
     for card in summary["kpis"]:
         if card["value"] is None:
@@ -189,7 +190,7 @@ def test_component_detail_includes_usage_lifecycle_and_evidence__FR_SCA_001(clie
     assert body["usage"]["product_count"] == 2
     assert body["risk"]["classification"] == "CRITICAL"
     assert body["risk"]["cvss"]["max_score"] == 10.0
-    assert {e["sbom_id"] for e in body["evidence"]} == {s.id for s in seeded["sboms"][:2]}
+    assert {e["sbom_id"] for e in body["evidence"]} == {str(s.public_id) for s in seeded["sboms"][:2]}
     assert body["meta"]["freshness"]["latest_analysis_at"] == NOW
 
 
@@ -281,14 +282,14 @@ def test_search_with_no_match_is_explicit(client, seeded):
 # ---------------------------------------------------------------------------
 
 
-def test_T11_tenant_a_responses_never_include_tenant_b__FR_SCA_023(client, seeded):
+def test_T11_tenant_a_responses_never_include_tenant_b__FR_SCA_023(client, seeded, db):
     rows = client.get(f"{BASE}/components", params={"limit": 500}).json()
     assert "tenant-b-secret-lib" not in names(rows)
     react = next(item for item in rows["items"] if item["name"] == "react")
     assert react["usage"]["active_sbom_occurrences"] == 1
     assert client.get(f"{BASE}/search", params={"q": "tenant-b"}).json()["items"] == []
     summary = client.get(f"{BASE}/summary").json()
-    assert summary["meta"]["scope"]["tenant"]["id"] == 1
+    assert summary["meta"]["scope"]["tenant"]["id"] == str(db.get(Tenant, 1).public_id)
 
 
 def test_T12_cross_tenant_component_key_is_404__FR_SCA_023(client, seeded):
@@ -316,12 +317,12 @@ def test_T12_cross_tenant_scope_ids_are_404__FR_SCA_006(client, seeded, path):
 
 def test_child_scope_without_parent_is_400__US_SCA_05(client, seeded):
     product = seeded["products"][0]
-    assert client.get(f"{BASE}/summary", params={"product_id": product.id}).status_code == 400
+    assert client.get(f"{BASE}/summary", params={"product_id": str(product.public_id)}).status_code == 400
 
 
 def test_scope_narrowing_updates_every_widget__US_SCA_05(client, seeded):
     product = seeded["products"][2]  # gamma: lodash + react
-    params = {"project_id": product.project_id, "product_id": product.id}
+    params = {"project_id": str(product.project.public_id), "product_id": str(product.public_id)}
     summary = client.get(f"{BASE}/summary", params=params).json()
     rows = client.get(f"{BASE}/components", params=params).json()
     assert summary["meta"]["scope"]["level"] == "APPLICATION"
@@ -362,7 +363,7 @@ def test_tenant_b_actor_sees_only_tenant_b__FR_SCA_023(client, seeded):
     try:
         rows = client.get(f"{BASE}/components").json()
         assert names(rows) == ["react", "tenant-b-secret-lib"]
-        own_project = seeded["products"][0].project_id
+        own_project = str(seeded["products"][0].project.public_id)
         assert client.get(f"{BASE}/summary", params={"project_id": own_project}).status_code == 404
     finally:
         client.app.dependency_overrides.pop(get_current_tenant_context, None)

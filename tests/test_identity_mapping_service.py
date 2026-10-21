@@ -1,5 +1,5 @@
-import pytest
 from app.services.identity_mapping_service import build_identity_mapping
+
 
 def test_build_identity_mapping_connected():
     mapping = build_identity_mapping(external_iam_tenant_id="wellysis-iam-99")

@@ -58,7 +58,7 @@ const INITIAL_STATE: AnalysisStreamState = {
 
 // ─── Hook ────────────────────────────────────────────────────────────────────
 
-export function useAnalysisStream(sbomId: number) {
+export function useAnalysisStream(sbomId: (string | number)) {
   const [state, setState] = useState<AnalysisStreamState>(INITIAL_STATE);
   const queryClient = useQueryClient();
   const scope = useAnalysisScope();
@@ -68,7 +68,7 @@ export function useAnalysisStream(sbomId: number) {
   const timerRef = useRef<ReturnType<typeof setInterval> | null>(null);
   const startTimeRef = useRef<number>(0);
   const abortRef = useRef<AbortController | null>(null);
-  const runningAnalysisRef = useRef<Set<number>>(new Set());
+  const runningAnalysisRef = useRef<Set<string | number>>(new Set());
 
   const stopTimer = useCallback(() => {
     if (timerRef.current) {
@@ -127,11 +127,12 @@ export function useAnalysisStream(sbomId: number) {
       const controller = new AbortController();
       abortRef.current = controller;
 
-      const initialSources = (options.sources ?? ['NVD', 'OSV', 'GITHUB']).map((s) => s.toUpperCase());
+      // Omission delegates to the server's configured provider policy.
+      const initialSources = options.sources?.map((s) => s.toUpperCase());
 
       // Seed source entries so the UI can show all sources immediately
       const sourcesMap: Record<string, SourceProgress> = {};
-      for (const name of initialSources) {
+      for (const name of initialSources ?? []) {
         sourcesMap[name] = { name, status: 'pending', findings: 0, errors: 0, elapsedMs: 0, sourceMs: 0 };
       }
 

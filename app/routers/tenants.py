@@ -119,7 +119,7 @@ from ..services.identity_mapping_service import build_identity_mapping
 
 def _tenant_dict(tenant: Tenant, role: str | None = None) -> dict:
     return {
-        "id": tenant.id,
+        "id": str(tenant.public_id),
         "name": tenant.name,
         "slug": tenant.slug,
         "external_iam_tenant_id": tenant.external_iam_tenant_id,
@@ -269,7 +269,7 @@ def auth_me(
         "external_user_id": provisioned.user.external_iam_user_id,
         "email": provisioned.user.email,
         "display_name": provisioned.user.display_name,
-        "tenant_id": state.active_tenant.id if state.active_tenant else None,
+        "tenant_id": str(state.active_tenant.public_id) if state.active_tenant else None,
         "external_tenant_id": (
             state.active_tenant.external_iam_tenant_id if state.active_tenant else None
         ),

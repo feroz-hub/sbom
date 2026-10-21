@@ -306,11 +306,11 @@ def test_sbom_versions_use_strict_parent_lineage(client, db):
     db.add(child)
     db.commit()
 
-    response = client.get(f"/api/sboms/{child.id}/versions")
+    response = client.get(f"/api/sboms/{child.public_id}/versions")
     assert response.status_code == 200
     ids = [item["id"] for item in response.json()]
-    assert ids == [root.id, child.id]
-    assert unrelated.id not in ids
+    assert ids == [str(root.public_id), str(child.public_id)]
+    assert str(unrelated.public_id) not in ids
 
 
 def test_compare_versions_reports_metadata_dependency_and_lifecycle_changes(db):
@@ -417,12 +417,12 @@ def test_export_native_sbom_and_rejects_unsupported_conversion(client, db, sampl
     db.add(sbom)
     db.commit()
 
-    native = client.get(f"/api/sboms/{sbom.id}/export")
+    native = client.get(f"/api/sboms/{sbom.public_id}/export")
     assert native.status_code == 200
     assert native.headers["content-type"].startswith("application/vnd.cyclonedx+json")
     assert json.loads(native.text)["bomFormat"] == "CycloneDX"
 
-    unsupported = client.get(f"/api/sboms/{sbom.id}/export?format=spdx")
+    unsupported = client.get(f"/api/sboms/{sbom.public_id}/export?format=spdx")
     assert unsupported.status_code == 400
     assert "Unsupported SBOM conversion" in unsupported.json()["detail"]
 
@@ -483,50 +483,50 @@ def test_remediation_validation_and_audit_history(client, db):
     }
 
     invalid_status = client.post(
-        f"/api/remediation?project_id={proj.id}",
+        f"/api/remediation?project_id={proj.public_id}",
         json={**base_payload, "status": "Resolved"},
     )
     assert invalid_status.status_code == 400
 
     invalid_due_date = client.post(
-        f"/api/remediation?project_id={proj.id}",
+        f"/api/remediation?project_id={proj.public_id}",
         json={**base_payload, "status": "Open", "due_date": "06/30/2026"},
     )
     assert invalid_due_date.status_code == 400
 
     fixed_without_resolution = client.post(
-        f"/api/remediation?project_id={proj.id}",
+        f"/api/remediation?project_id={proj.public_id}",
         json={**base_payload, "status": "Fixed", "fixed_version": "3.0.9"},
     )
     assert fixed_without_resolution.status_code == 400
 
     fixed_without_fix_detail = client.post(
-        f"/api/remediation?project_id={proj.id}",
+        f"/api/remediation?project_id={proj.public_id}",
         json={**base_payload, "status": "Fixed", "resolution_date": "2026-06-11"},
     )
     assert fixed_without_fix_detail.status_code == 400
 
     accepted_without_reason = client.post(
-        f"/api/remediation?project_id={proj.id}",
+        f"/api/remediation?project_id={proj.public_id}",
         json={**base_payload, "status": "Accepted Risk"},
     )
     assert accepted_without_reason.status_code == 400
 
     created = client.post(
-        f"/api/remediation?project_id={proj.id}&user_id=alice",
+        f"/api/remediation?project_id={proj.public_id}&user_id=alice",
         json={**base_payload, "status": "Open", "owner": "security@example.com"},
     )
     assert created.status_code == 200
     remediation_id = created.json()["id"]
 
     in_progress = client.post(
-        f"/api/remediation?project_id={proj.id}&user_id=bob",
+        f"/api/remediation?project_id={proj.public_id}&user_id=bob",
         json={**base_payload, "status": "In Progress", "owner": "security@example.com"},
     )
     assert in_progress.status_code == 200
 
     fixed = client.post(
-        f"/api/remediation?project_id={proj.id}&user_id=carol",
+        f"/api/remediation?project_id={proj.public_id}&user_id=carol",
         json={
             **base_payload,
             "status": "Fixed",

@@ -10,7 +10,7 @@ export type { SeverityKey };
  * on.
  */
 export interface SbomBucket {
-  sbomId: number;
+  sbomId: (string | number);
   sbomName: string;
   critical: number;
   high: number;
@@ -35,7 +35,7 @@ export interface SbomBucket {
  * below the weighted top 5).
  */
 export function aggregateRuns(runs: AnalysisRun[]): SbomBucket[] {
-  const buckets = new Map<number, SbomBucket>();
+  const buckets = new Map<string | number, SbomBucket>();
   for (const run of runs) {
     if (run.sbom_id == null) continue;
     if (buckets.has(run.sbom_id)) continue; // first seen = latest (desc by id)

@@ -59,7 +59,7 @@ export function VexInvestigationPanel({
   const mapping = useMutation({
     mutationFn: () =>
       resolveVexInvestigationComponent(detail.id, {
-        component_id: Number(componentId),
+        component_id: componentId,
         row_version: detail.row_version,
         reason: `Bound to component ${componentId} by analyst review`,
       }),

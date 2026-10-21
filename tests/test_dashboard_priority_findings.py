@@ -8,7 +8,7 @@ from app.core.security import get_current_tenant_context
 from app.db import get_db
 from app.main import app
 from app.metrics.findings import dashboard_priority_findings, findings_latest_per_sbom_total
-from app.models import AnalysisFinding, AnalysisRun
+from app.models import AnalysisFinding, AnalysisRun, Projects
 from app.services.dashboard_scope import DashboardScope, dashboard_scope
 from fastapi.testclient import TestClient
 
@@ -61,7 +61,9 @@ def test_priority_endpoint_permission_ownership_and_bound(scoped_db):
         assert response.status_code == 200
         assert len(response.json()["items"]) == 1
         assert client.get("/dashboard/priority-findings?limit=21").status_code == 422
-        assert client.get("/dashboard/priority-findings?project_id=3").status_code == 404
+        with verified_fixture_tenant(scoped_db, 2):
+            foreign_project = str(scoped_db.get(Projects, 3).public_id)
+        assert client.get(f"/dashboard/priority-findings?project_id={foreign_project}").status_code == 404
         app.dependency_overrides[get_current_tenant_context] = lambda: replace(context, permissions=frozenset({"dashboard:read"}))
         assert client.get("/dashboard/priority-findings").status_code == 403
         app.dependency_overrides[get_current_tenant_context] = lambda: replace(context, permissions=frozenset())

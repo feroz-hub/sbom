@@ -847,7 +847,12 @@ def _detail_payload(db: Session, investigation: VexInvestigation, context: Curre
             or [s for s in [getattr(finding, "source", None)] if s],
             "analysis_run_id": investigation.last_analysis_run_id,
             "match_strategy": getattr(finding, "match_strategy", None),
-            "match_confidence": getattr(finding, "match_confidence", None),
+            # VEX-UI-003: findings store a numeric score; this evidence DTO
+            # retains its existing nullable text contract (including zero).
+            "match_confidence": (
+                str(finding.match_confidence)
+                if finding is not None and finding.match_confidence is not None else None
+            ),
             "matched_range": getattr(finding, "matched_range", None),
             "first_seen_at": investigation.first_seen_at,
             "last_seen_at": investigation.last_seen_at,

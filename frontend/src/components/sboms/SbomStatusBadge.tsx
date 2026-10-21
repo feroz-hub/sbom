@@ -3,7 +3,7 @@ import type { LatestAnalysis } from '@/types';
 import { AnalysisStatusBadge } from './AnalysisStatusBadge';
 
 interface SbomStatusBadgeProps {
-  sbomId: number;
+  sbomId: (string | number);
   initialStatus?: AnalysisStatus;
   initialFindings?: number;
   latestAnalysis?: LatestAnalysis | null;

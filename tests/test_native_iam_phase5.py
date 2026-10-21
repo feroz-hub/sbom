@@ -359,11 +359,23 @@ deliver_one(int(__import__('sys').argv[1]))
 
 
 def test_outbox_downgrade_refuses_pending_delivery():
-    from alembic import command
-    from alembic.config import Config
+    import importlib.util
+    from pathlib import Path
 
+    from alembic.migration import MigrationContext
+    from alembic.operations import Operations
+    from app.db import engine
+
+    path = Path(__file__).resolve().parents[1] / "alembic/versions/061_security_mail_outbox.py"
+    spec = importlib.util.spec_from_file_location("outbox_guard_under_test", path)
+    migration = importlib.util.module_from_spec(spec)
+    spec.loader.exec_module(migration)
     row_id, _ = activation()
-    with pytest.raises(RuntimeError, match="Refusing downgrade"):
-        command.downgrade(Config("alembic.ini"), "060_native_identity_foundation")
+    # Exercise the original historical guard directly; never downgrade unrelated
+    # later application schemas just to reach the guard under test.
+    with engine.begin() as connection:
+        migration.op = Operations(MigrationContext.configure(connection))
+        with pytest.raises(RuntimeError, match="Refusing downgrade"):
+            migration.downgrade()
     with SessionLocal() as db:
         assert db.get(SecurityMailOutbox, row_id).payload is not None

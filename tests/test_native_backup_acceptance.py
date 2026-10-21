@@ -14,6 +14,7 @@ from app.services import native_auth_service as auth
 from app.services import native_enrollment_service as enrollment
 from app.services import native_password_service as passwords
 from app.settings import get_settings
+from scripts.greenfield_uuid import REVISION
 from sqlalchemy import create_engine, inspect, select, text
 from sqlalchemy.engine import make_url
 
@@ -95,7 +96,7 @@ def test_backup_restore_preserves_iam_and_ciphertext(tmp_path, monkeypatch):
         assert result.returncode == 0, "pg_restore failed; diagnostics withheld"
         restored = create_engine(url.set(database=name), hide_parameters=True)
         with restored.connect() as conn:
-            assert conn.scalar(text("SELECT version_num FROM alembic_version")) == "062_native_platform_bootstrap"
+            assert conn.scalar(text("SELECT version_num FROM alembic_version")) == REVISION
             assert conn.scalar(text("SELECT count(*) FROM tenant_users WHERE user_id=:id"), {"id": uid}) == 1
             assert (
                 conn.scalar(text("SELECT payload FROM security_mail_outbox WHERE token_id=:id"), {"id": token.id})

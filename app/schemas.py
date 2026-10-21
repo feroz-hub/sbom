@@ -1,6 +1,7 @@
 # schemas.py
 
 from typing import Any, Literal
+from zoneinfo import ZoneInfo, ZoneInfoNotFoundError
 
 from pydantic import BaseModel, Field, field_validator, model_validator
 
@@ -600,6 +601,15 @@ class ScheduleUpsert(BaseModel):
         description="Skip a tick if a manual or prior run completed within this many minutes",
     )
     modified_by: str | None = None
+
+    @field_validator("timezone")
+    @classmethod
+    def _check_timezone(cls, value: str) -> str:
+        try:
+            ZoneInfo(value)
+        except (ZoneInfoNotFoundError, ValueError):
+            raise ValueError("Unknown IANA timezone") from None
+        return value
 
     @field_validator("cadence", mode="before")
     @classmethod

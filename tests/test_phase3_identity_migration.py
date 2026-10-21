@@ -2,6 +2,10 @@
 
 from __future__ import annotations
 
+from tests.historical_migration_fixture import historical_database as _historical_database
+
+historical_database = _historical_database
+
 import os
 
 import pytest
@@ -72,7 +76,7 @@ def test_fresh_head_has_phase3_columns_indexes_and_unique_constraint():
         engine.dispose()
 
 
-def test_upgrade_from_045_preserves_ids_access_and_audit_references(monkeypatch):
+def test_upgrade_from_045_preserves_ids_access_and_audit_references(historical_database, monkeypatch):
     engine = sa.create_engine(_database_url())
     command.downgrade(_config(), PREVIOUS_REVISION)
     try:
@@ -184,7 +188,7 @@ def test_upgrade_from_045_preserves_ids_access_and_audit_references(monkeypatch)
         engine.dispose()
 
 
-def test_missing_issuer_fails_without_fabricating_identity(monkeypatch):
+def test_missing_issuer_fails_without_fabricating_identity(historical_database, monkeypatch):
     engine = sa.create_engine(_database_url())
     command.downgrade(_config(), PREVIOUS_REVISION)
     try:
@@ -214,7 +218,7 @@ def test_missing_issuer_fails_without_fabricating_identity(monkeypatch):
         engine.dispose()
 
 
-def test_duplicate_legacy_identity_aborts_without_merging(monkeypatch):
+def test_duplicate_legacy_identity_aborts_without_merging(historical_database, monkeypatch):
     engine = sa.create_engine(_database_url())
     command.downgrade(_config(), PREVIOUS_REVISION)
     try:

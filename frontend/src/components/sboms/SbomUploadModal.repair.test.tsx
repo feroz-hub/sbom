@@ -39,7 +39,7 @@ vi.mock('@/lib/api', async () => {
     getLogicalSbomVersions: (...args: unknown[]) => getLogicalSbomVersions(...args),
     getProjects: vi.fn().mockResolvedValue([
       {
-        id: 42,
+        id: "00000000-0000-4000-8000-00000000002a",
         project_name: 'Payments',
         project_details: null,
         project_status: 1,
@@ -75,9 +75,9 @@ beforeEach(() => {
   getSbomTypes.mockResolvedValue([]);
   getProducts.mockResolvedValue([
     {
-      id: 77,
-      tenant_id: 1,
-      project_id: 42,
+      id: "00000000-0000-4000-8000-00000000004d",
+      tenant_id: "00000000-0000-4000-8000-000000000001",
+      project_id: "00000000-0000-4000-8000-00000000002a",
       name: 'Payments API',
       slug: 'payments-api',
       description: null,
@@ -90,9 +90,9 @@ beforeEach(() => {
 async function fillRequiredFieldsAndSubmit(name: string, content = '{"bomFormat":"CycloneDX","specVersion":"1.5","components":[]}') {
   expect(await screen.findByRole('option', { name: 'Payments' })).toBeInTheDocument();
   fireEvent.change(screen.getByLabelText(/SBOM Name/i), { target: { value: name } });
-  fireEvent.change(screen.getByLabelText(/Project/i), { target: { value: '42' } });
+  fireEvent.change(screen.getByLabelText(/Project/i), { target: { value: "00000000-0000-4000-8000-00000000002a" } });
   const productOption = await screen.findByRole('option', { name: 'Payments API' });
-  fireEvent.change(productOption.closest('select')!, { target: { value: '77' } });
+  fireEvent.change(productOption.closest('select')!, { target: { value: "00000000-0000-4000-8000-00000000004d" } });
   fireEvent.change(screen.getByPlaceholderText('Paste a small SPDX, CycloneDX, or XML SBOM preview'), {
     target: { value: content },
   });
@@ -120,10 +120,10 @@ describe('SbomUploadModal validation repair handoff', () => {
     await screen.findByRole('option', { name: 'Payments API' });
     const projectSelect = screen.getByRole('combobox', { name: /Project/i });
     const productSelect = screen.getByRole('combobox', { name: /^Application/i });
-    await waitFor(() => expect(projectSelect).toHaveValue('42'));
-    await waitFor(() => expect(productSelect).toHaveValue('77'));
+    await waitFor(() => expect(projectSelect).toHaveValue("00000000-0000-4000-8000-00000000002a"));
+    await waitFor(() => expect(productSelect).toHaveValue("00000000-0000-4000-8000-00000000004d"));
 
-    fireEvent.change(productSelect, { target: { value: '77' } });
+    fireEvent.change(productSelect, { target: { value: "00000000-0000-4000-8000-00000000004d" } });
     expect(screen.queryByText('Application is required')).not.toBeInTheDocument();
   });
 
@@ -173,9 +173,9 @@ describe('SbomUploadModal validation repair handoff', () => {
 
     expect(await screen.findByRole('option', { name: 'Payments' })).toBeInTheDocument();
     fireEvent.change(screen.getByLabelText(/SBOM Name/i), { target: { value: 'unknown-sbom' } });
-    fireEvent.change(screen.getByLabelText(/Project/i), { target: { value: '42' } });
+    fireEvent.change(screen.getByLabelText(/Project/i), { target: { value: "00000000-0000-4000-8000-00000000002a" } });
     const productOption = await screen.findByRole('option', { name: 'Payments API' });
-    fireEvent.change(productOption.closest('select')!, { target: { value: '77' } });
+    fireEvent.change(productOption.closest('select')!, { target: { value: "00000000-0000-4000-8000-00000000004d" } });
     fireEvent.change(screen.getByPlaceholderText('Paste a small SPDX, CycloneDX, or XML SBOM preview'), {
       target: { value: '{"ok":false}' },
     });
@@ -193,9 +193,9 @@ describe('SbomUploadModal validation repair handoff', () => {
 
     expect(await screen.findByRole('option', { name: 'Payments' })).toBeInTheDocument();
     fireEvent.change(screen.getByLabelText(/SBOM Name/i), { target: { value: 'manual-metadata' } });
-    fireEvent.change(screen.getByLabelText(/Project/i), { target: { value: '42' } });
+    fireEvent.change(screen.getByLabelText(/Project/i), { target: { value: "00000000-0000-4000-8000-00000000002a" } });
     const productOption = await screen.findByRole('option', { name: 'Payments API' });
-    fireEvent.change(productOption.closest('select')!, { target: { value: '77' } });
+    fireEvent.change(productOption.closest('select')!, { target: { value: "00000000-0000-4000-8000-00000000004d" } });
     fireEvent.change(screen.getByLabelText(/SBOM Version/i), { target: { value: '1.1.1' } });
     fireEvent.change(screen.getByLabelText(/Product Version/i), { target: { value: '1.0.0' } });
     fireEvent.change(screen.getByPlaceholderText('Paste a small SPDX, CycloneDX, or XML SBOM preview'), {
@@ -224,10 +224,10 @@ describe('SbomUploadModal validation repair handoff', () => {
     const invalidateSpy = vi.spyOn(QueryClient.prototype, 'invalidateQueries');
     useUploadSbomMutate.mockImplementation((_payload, handlers) => {
       handlers.onSuccess({
-        id: 7,
+        id: "00000000-0000-4000-8000-000000000007",
         sbom_name: 'good-sbom',
-        projectid: 42,
-        project_id: 42,
+        projectid: "00000000-0000-4000-8000-00000000002a",
+        project_id: "00000000-0000-4000-8000-00000000002a",
         project_name: 'Payments',
         component_count: 1,
         status: 'validated',
@@ -251,7 +251,7 @@ describe('SbomUploadModal validation repair handoff', () => {
       );
     });
     expect(onClose).toHaveBeenCalledTimes(1);
-    expect(onSuccess).toHaveBeenCalledWith(expect.objectContaining({ id: 7, enrichment_status: 'pending' }));
+    expect(onSuccess).toHaveBeenCalledWith(expect.objectContaining({ id: "00000000-0000-4000-8000-000000000007", enrichment_status: 'pending' }));
     expect(invalidateSpy).toHaveBeenCalledWith({ queryKey: ['sboms'] });
     expect(invalidateSpy).toHaveBeenCalledWith({ queryKey: ['dashboard-posture'] });
     expect(push).not.toHaveBeenCalled();
@@ -263,10 +263,10 @@ describe('SbomUploadModal validation repair handoff', () => {
     const invalidateSpy = vi.spyOn(QueryClient.prototype, 'invalidateQueries');
     useUploadSbomMutate.mockImplementation((_payload, handlers) => {
       handlers.onSuccess({
-        id: 8,
+        id: "00000000-0000-4000-8000-000000000008",
         sbom_name: 'warning-sbom',
-        projectid: 42,
-        project_id: 42,
+        projectid: "00000000-0000-4000-8000-00000000002a",
+        project_id: "00000000-0000-4000-8000-00000000002a",
         project_name: 'Payments',
         component_count: 1,
         status: 'validated',
@@ -345,7 +345,7 @@ describe('SbomUploadModal validation repair handoff', () => {
     await fillRequiredFieldsAndSubmit('bad-sbom', '{"bad":true}');
 
     await waitFor(() => expect(useUploadSbomMutate).toHaveBeenCalledWith(
-      expect.objectContaining({ projectid: 42, project_id: 42 }),
+      expect.objectContaining({ projectid: "00000000-0000-4000-8000-00000000002a", project_id: "00000000-0000-4000-8000-00000000002a" }),
       expect.any(Object),
     ));
     expect(showToast).toHaveBeenCalledWith(
@@ -443,10 +443,10 @@ describe('SbomUploadModal validation repair handoff', () => {
     const onClose = vi.fn();
     useUploadSbomMutate.mockImplementation((_payload, handlers) => {
       const result = {
-        id: 9,
+        id: "00000000-0000-4000-8000-000000000009",
         sbom_name: 'single-result-sbom',
-        projectid: 42,
-        project_id: 42,
+        projectid: "00000000-0000-4000-8000-00000000002a",
+        project_id: "00000000-0000-4000-8000-00000000002a",
         project_name: 'Payments',
         component_count: 1,
         status: 'validated',
@@ -505,9 +505,9 @@ describe('SbomUploadModal validation repair handoff', () => {
 
     expect(await screen.findByRole('option', { name: 'Payments' })).toBeInTheDocument();
     fireEvent.change(screen.getByLabelText(/SBOM Name/i), { target: { value: 'blocked-sbom' } });
-    fireEvent.change(screen.getByLabelText(/Project/i), { target: { value: '42' } });
+    fireEvent.change(screen.getByLabelText(/Project/i), { target: { value: "00000000-0000-4000-8000-00000000002a" } });
     const productOption = await screen.findByRole('option', { name: 'Payments API' });
-    fireEvent.change(productOption.closest('select')!, { target: { value: '77' } });
+    fireEvent.change(productOption.closest('select')!, { target: { value: "00000000-0000-4000-8000-00000000004d" } });
     fireEvent.change(screen.getByPlaceholderText('Paste a small SPDX, CycloneDX, or XML SBOM preview'), { target: { value: '{"bad":true}' } });
     await waitFor(() => expect(screen.getByRole('button', { name: /Upload SBOM/i })).toBeEnabled());
   fireEvent.click(screen.getByRole('button', { name: /Upload SBOM/i }));
@@ -530,29 +530,29 @@ describe('SbomUploadModal validation repair handoff', () => {
 
 describe('Logical SBOM upload selection', () => {
   it('adds a revision to an existing master without a new name', async () => {
-    getLogicalSbomChoices.mockResolvedValue([{ id: 9, name: 'Backend SBOM', version_count: 1 }]);
+    getLogicalSbomChoices.mockResolvedValue([{ id: "00000000-0000-4000-8000-000000000009", name: 'Backend SBOM', version_count: 1 }]);
     getLogicalSbomVersions.mockResolvedValue([{ id: 1, sbom_version: '1.0' }]);
     render(wrap(<SbomUploadModal open onClose={vi.fn()} initialProjectId={42} initialProductId={77} />));
     await screen.findByRole('option', { name: 'Backend SBOM (1 versions)' });
-    fireEvent.change(screen.getByRole('combobox', { name: /^SBOM$/ }), { target: { value: '9' } });
+    fireEvent.change(screen.getByRole('combobox', { name: /^SBOM$/ }), { target: { value: "00000000-0000-4000-8000-000000000009" } });
     expect(screen.queryByLabelText(/SBOM Name/)).not.toBeInTheDocument();
     fireEvent.change(screen.getByLabelText('SBOM Version'), { target: { value: '1.1' } });
     fireEvent.change(screen.getByLabelText('Product Version'), { target: { value: '3.2.0' } });
     fireEvent.change(screen.getByPlaceholderText('Paste a small SPDX, CycloneDX, or XML SBOM preview'), { target: { value: '{"bomFormat":"CycloneDX","specVersion":"1.5","components":[]}' } });
     await waitFor(() => expect(screen.getByRole('button', { name: /Upload SBOM/i })).toBeEnabled());
     fireEvent.click(screen.getByRole('button', { name: /Upload SBOM/i }));
-    await waitFor(() => expect(useUploadSbomMutate).toHaveBeenCalledWith(expect.objectContaining({ logical_sbom_id: 9, create_new_logical_sbom: false, sbom_name: 'Backend SBOM', sbom_version: '1.1', product_version: '3.2.0' }), expect.anything()));
+    await waitFor(() => expect(useUploadSbomMutate).toHaveBeenCalledWith(expect.objectContaining({ logical_sbom_id: "00000000-0000-4000-8000-000000000009", create_new_logical_sbom: false, sbom_name: 'Backend SBOM', sbom_version: '1.1', product_version: '3.2.0' }), expect.anything()));
   });
   it('blocks duplicate revisions only within the selected logical SBOM', async () => {
-    getLogicalSbomChoices.mockResolvedValue([{ id: 9, name: 'Backend SBOM', version_count: 1 }, { id: 10, name: 'Frontend SBOM', version_count: 0 }]);
-    getLogicalSbomVersions.mockImplementation((id: number) => Promise.resolve(id === 9 ? [{ id: 1, sbom_version: '1.0' }] : []));
+    getLogicalSbomChoices.mockResolvedValue([{ id: "00000000-0000-4000-8000-000000000009", name: 'Backend SBOM', version_count: 1 }, { id: "00000000-0000-4000-8000-00000000000a", name: 'Frontend SBOM', version_count: 0 }]);
+    getLogicalSbomVersions.mockImplementation((id: (string | number)) => Promise.resolve(id === "00000000-0000-4000-8000-000000000009" ? [{ id: 1, sbom_version: '1.0' }] : []));
     render(wrap(<SbomUploadModal open onClose={vi.fn()} initialProjectId={42} initialProductId={77} />));
     await screen.findByRole('option', { name: 'Backend SBOM (1 versions)' });
-    fireEvent.change(screen.getByRole('combobox', { name: /^SBOM$/ }), { target: { value: '9' } });
+    fireEvent.change(screen.getByRole('combobox', { name: /^SBOM$/ }), { target: { value: "00000000-0000-4000-8000-000000000009" } });
     fireEvent.change(screen.getByLabelText('SBOM Version'), { target: { value: '1.0' } });
     expect(await screen.findByRole('alert')).toHaveTextContent('already exists');
     expect(screen.getByRole('button', { name: /Upload SBOM/i })).toBeDisabled();
-    fireEvent.change(screen.getByRole('combobox', { name: /^SBOM$/ }), { target: { value: '10' } });
+    fireEvent.change(screen.getByRole('combobox', { name: /^SBOM$/ }), { target: { value: "00000000-0000-4000-8000-00000000000a" } });
     await waitFor(() => expect(screen.queryByText('This SBOM version already exists. Choose a different revision.')).not.toBeInTheDocument());
   });
 });

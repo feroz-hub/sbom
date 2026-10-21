@@ -8,7 +8,7 @@ import { Select } from '@/components/ui/Select';
 import { Alert } from '@/components/ui/Alert';
 import { Button } from '@/components/ui/Button';
 
-export function VexRunHistoryPanel({sbomId}: {sbomId: number}) {
+export function VexRunHistoryPanel({sbomId}: {sbomId: (string | number)}) {
   const {activeTenantId} = useAuth();
   const [runId, setRunId] = useState(0);
   const [offset, setOffset] = useState(0);

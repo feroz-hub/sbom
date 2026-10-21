@@ -1,4 +1,8 @@
 """Exercise the additive migration on the disposable PostgreSQL test database."""
+
+from tests.historical_migration_fixture import historical_database as _historical_database
+
+historical_database = _historical_database
 import pytest
 from alembic import command
 from alembic.config import Config
@@ -15,7 +19,7 @@ def preserve_test_logging(monkeypatch):
     monkeypatch.setattr("logging.config.fileConfig", lambda *args, **kwargs: None)
 
 
-def test_upgrade_preserves_existing_providers_and_downgrade_protects_entra():
+def test_upgrade_preserves_existing_providers_and_downgrade_protects_entra(historical_database):
     config = Config("alembic.ini")
     with SessionLocal() as db:
         hcl = seed_user(db)
@@ -45,7 +49,7 @@ def test_upgrade_preserves_existing_providers_and_downgrade_protects_entra():
         command.upgrade(config, "head")
 
 
-def test_downgrade_preserves_suspended_accounts():
+def test_downgrade_preserves_suspended_accounts(historical_database):
     with SessionLocal() as db:
         seed_user(db, status="SUSPENDED")
         db.commit()

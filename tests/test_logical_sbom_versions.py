@@ -1,6 +1,7 @@
 """Multiple independently versioned SBOMs per Product, with stable evidence IDs."""
 
 import json
+from uuid import UUID
 
 from app.db import SessionLocal
 from app.models import AnalysisRun, SBOMComponent, SBOMSource
@@ -104,14 +105,14 @@ def test_versions_keep_distinct_components_and_analysis_results(client, mock_ext
         analyzed = client.post(f"/api/sboms/{value['sbom_id']}/analyze")
         assert analyzed.status_code in (200, 201), analyzed.text
     with SessionLocal() as db, verified_fixture_tenant(db, 1):
-        assert {c.name for c in db.scalars(select(SBOMComponent).where(SBOMComponent.sbom_id == first["sbom_id"]))} == {
+        assert {c.name for c in db.scalars(select(SBOMComponent).where(SBOMComponent.sbom_id == select(SBOMSource.id).where(SBOMSource.public_id == UUID(first["sbom_id"])).scalar_subquery()))} == {
             "alpha"
         }
         assert {
-            c.name for c in db.scalars(select(SBOMComponent).where(SBOMComponent.sbom_id == second["sbom_id"]))
+            c.name for c in db.scalars(select(SBOMComponent).where(SBOMComponent.sbom_id == select(SBOMSource.id).where(SBOMSource.public_id == UUID(second["sbom_id"])).scalar_subquery()))
         } == {"beta"}
         for value in (first, second):
-            assert db.scalar(select(AnalysisRun.id).where(AnalysisRun.sbom_id == value["sbom_id"]))
+            assert db.scalar(select(AnalysisRun.id).where(AnalysisRun.sbom_id == select(SBOMSource.id).where(SBOMSource.public_id == UUID(value["sbom_id"])).scalar_subquery()))
 
 
 def test_empty_master_first_upload_and_other_product_cannot_reuse_it(client):
@@ -136,7 +137,7 @@ def test_database_constraint_enforces_duplicates_even_when_bypassing_api(client)
     product = _product(client, project["id"])
     first = upload(client, project, product, "1.0").json()
     with SessionLocal() as db, verified_fixture_tenant(db, 1):
-        original = db.get(SBOMSource, first["sbom_id"])
+        original = db.scalar(select(SBOMSource).where(SBOMSource.public_id == UUID(first["sbom_id"])))
         db.add(
             SBOMSource(
                 tenant_id=original.tenant_id,

@@ -2,6 +2,7 @@ from __future__ import annotations
 
 from datetime import UTC, date, datetime, timedelta
 from typing import Any
+from uuid import uuid4
 
 import pytest
 from app.db import SessionLocal
@@ -651,7 +652,7 @@ def test_lifecycle_refresh_override_report_and_dashboard_endpoints(client, db):
     )
     db.commit()
 
-    refresh_response = client.post(f"/api/sboms/{sbom.id}/lifecycle/refresh?force=false")
+    refresh_response = client.post(f"/api/sboms/{sbom.public_id}/lifecycle/refresh?force=false")
     assert refresh_response.status_code == 200
     assert refresh_response.json()["components_enriched"] == 1
 
@@ -659,7 +660,7 @@ def test_lifecycle_refresh_override_report_and_dashboard_endpoints(client, db):
     assert component.lifecycle_status == EOL
     assert component.unsupported is True
 
-    report_response = client.get(f"/api/sboms/{sbom.id}/lifecycle/report")
+    report_response = client.get(f"/api/sboms/{sbom.public_id}/lifecycle/report")
     assert report_response.status_code == 200
     report = report_response.json()
     assert report["summary"]["eol_count"] == 1
@@ -672,7 +673,7 @@ def test_lifecycle_refresh_override_report_and_dashboard_endpoints(client, db):
     assert dashboard["eol_count"] >= 1
 
     override_response = client.patch(
-        f"/api/components/{component.id}/lifecycle-override",
+        f"/api/components/{component.public_id}/lifecycle-override",
         json={
             "lifecycle_status": "Unsupported",
             "reason": "Vendor support contract ended.",
@@ -689,7 +690,7 @@ def test_lifecycle_refresh_override_report_and_dashboard_endpoints(client, db):
     assert body["lifecycle_manual_override"] is True
 
     invalid_response = client.patch(
-        f"/api/components/{component.id}/lifecycle-override",
+        f"/api/components/{component.public_id}/lifecycle-override",
         json={"lifecycle_status": "Totally Invalid"},
     )
     assert invalid_response.status_code == 422
@@ -716,7 +717,7 @@ def test_lifecycle_diagnostics_endpoint(client, db):
     db.add(component)
     db.commit()
 
-    diag_response = client.get(f"/api/sboms/{sbom.id}/lifecycle/diagnostics")
+    diag_response = client.get(f"/api/sboms/{sbom.public_id}/lifecycle/diagnostics")
     assert diag_response.status_code == 200
     diag = diag_response.json()
     assert diag["component_count"] == 1
@@ -744,7 +745,7 @@ def test_manual_lifecycle_override_validation_and_audit(client, db):
     start_time = time.time()
 
     override_res = client.patch(
-        f"/api/components/{component.id}/lifecycle-override",
+        f"/api/components/{component.public_id}/lifecycle-override",
         json={
             "lifecycle_status": "EOL",
             "maintenance_status": "Unsupported",
@@ -802,21 +803,21 @@ def test_manual_lifecycle_override_validation_and_audit(client, db):
 
     # 4. Invalid status returns 422
     invalid_status = client.patch(
-        f"/api/components/{component.id}/lifecycle-override",
+        f"/api/components/{component.public_id}/lifecycle-override",
         json={"lifecycle_status": "Not A Status", "reason": "Test reason"},
     )
     assert invalid_status.status_code == 422
 
     # 5. Invalid date format returns 422
     invalid_date = client.patch(
-        f"/api/components/{component.id}/lifecycle-override",
+        f"/api/components/{component.public_id}/lifecycle-override",
         json={"lifecycle_status": "EOL", "eos_date": "2026/06/30", "reason": "Test reason"},
     )
     assert invalid_date.status_code == 422
 
     # 6. Missing component returns 404
     missing_comp = client.patch(
-        "/api/components/999999/lifecycle-override", json={"lifecycle_status": "EOL", "reason": "Test reason"}
+        f"/api/components/{uuid4()}/lifecycle-override", json={"lifecycle_status": "EOL", "reason": "Test reason"}
     )
     assert missing_comp.status_code == 404
 

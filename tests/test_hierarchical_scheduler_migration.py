@@ -9,7 +9,8 @@ from sqlalchemy import inspect, text
 def test_hierarchical_scheduler_is_single_head():
     scripts = ScriptDirectory.from_config(Config("alembic.ini"))
     heads = scripts.get_heads()
-    assert heads == ["077_sbom_selection_mode"]
+    assert heads == ["100_greenfield_uuid_final"]
+    assert scripts.get_revision(heads[0]).down_revision == "079_lifecycle_provider_verification"
     assert "054_hierarchical_scheduler" in {revision.revision for revision in scripts.walk_revisions()}
 
 

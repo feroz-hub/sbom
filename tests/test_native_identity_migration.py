@@ -1,5 +1,9 @@
 """Upgrade populated revision 059 and prove downgrade refuses native data loss."""
 
+from tests.historical_migration_fixture import historical_database as _historical_database
+
+historical_database = _historical_database
+
 import os
 
 import pytest
@@ -12,7 +16,7 @@ PREVIOUS = "059_vex_analyzer_sources"
 REVISION = ScriptDirectory.from_config(Config("alembic.ini")).get_current_head()
 
 
-def test_compatibility_migration_preserves_duplicates_pending_and_membership():
+def test_compatibility_migration_preserves_duplicates_pending_and_membership(historical_database):
     engine = create_engine(os.environ["TEST_POSTGRES_DATABASE_URL"])
     config = Config("alembic.ini")
     command.downgrade(config, PREVIOUS)
@@ -56,7 +60,7 @@ def test_compatibility_migration_preserves_duplicates_pending_and_membership():
         engine.dispose()
 
 
-def test_downgrade_refuses_native_records_without_deleting_anything():
+def test_downgrade_refuses_native_records_without_deleting_anything(historical_database):
     engine = create_engine(os.environ["TEST_POSTGRES_DATABASE_URL"])
     with engine.begin() as connection:
         connection.execute(

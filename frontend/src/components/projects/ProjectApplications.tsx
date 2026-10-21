@@ -25,7 +25,7 @@ import { Select } from '@/components/ui/Select';
 import { InventoryActionMenu } from './InventoryActionMenu';
 import { usePagination } from '@/hooks/usePagination';
 import { Pagination } from '@/components/ui/Pagination';
-function ProductScheduleStatus({ productId }: { productId: number }) {
+function ProductScheduleStatus({ productId }: { productId: (string | number) }) {
   const canRead = usePermission("schedule:read");
   const query = useQuery({
     queryKey: ['schedule', 'PRODUCT', productId],

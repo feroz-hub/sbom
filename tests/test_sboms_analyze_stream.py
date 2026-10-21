@@ -28,6 +28,7 @@ import pytest
 from app.models import AnalysisRun, SBOMComponent, SBOMSource
 from sqlalchemy import literal, select
 
+from tests.public_id_fixture import public_row
 from tests.tenant_fixture_scope import verified_fixture_tenant
 
 
@@ -74,7 +75,7 @@ def test_analyze_stream_uses_registry_emits_progress_and_persists_run(client, se
     sbom_id = seeded_sbom["id"]
     before_ids = {
         row.id
-        for row in db.query(AnalysisRun).filter(AnalysisRun.sbom_id == sbom_id).all()
+        for row in db.query(AnalysisRun).filter(AnalysisRun.sbom_id == public_row(db, SBOMSource, sbom_id).id).all()
     }
 
     resp = client.post(
@@ -129,7 +130,7 @@ def test_analyze_stream_uses_registry_emits_progress_and_persists_run(client, se
     persisted = db.get(AnalysisRun, final["runId"])
     assert persisted is not None
     assert persisted.id not in before_ids
-    assert persisted.sbom_id == sbom_id
+    assert persisted.sbom_id == public_row(db, SBOMSource, sbom_id).id
     assert persisted.run_status == "FINDINGS"
     assert persisted.started_on
     assert persisted.completed_on
@@ -166,7 +167,7 @@ def test_analyze_stream_parse_failure_persists_failed_run(client, db):
     db.refresh(sbom)
 
     resp = client.post(
-        f"/api/sboms/{sbom.id}/analyze/stream",
+        f"/api/sboms/{sbom.public_id}/analyze/stream",
         json={"sources": ["NVD"]},
     )
 
@@ -188,7 +189,7 @@ def test_analyze_stream_parse_failure_persists_failed_run(client, db):
     assert run.completed_on
     assert "SBOM parse failed" in (run.raw_report or "")
 
-    detail = client.get(f"/api/sboms/{sbom.id}").json()
+    detail = client.get(f"/api/sboms/{sbom.public_id}").json()
     assert detail["latest_analysis"]["run_id"] == run.id
     assert detail["latest_analysis"]["status"] == "failed"
     assert detail["latest_analysis"]["result"] == "failed"
@@ -197,7 +198,7 @@ def test_analyze_stream_parse_failure_persists_failed_run(client, db):
 
 def test_analyze_stream_zero_persisted_components_marks_run_failed(client, seeded_sbom, db, monkeypatch):
     sbom_id = seeded_sbom["id"]
-    db.query(SBOMComponent).filter(SBOMComponent.sbom_id == sbom_id).delete()
+    db.query(SBOMComponent).filter(SBOMComponent.sbom_id == public_row(db, SBOMSource, sbom_id).id).delete()
     db.commit()
 
     def fake_sync_components(_db, _sbom):
@@ -232,7 +233,7 @@ def test_startup_reconciliation_interrupts_stale_running_run(db, seeded_sbom):
 
     started = (datetime.now(UTC) - timedelta(minutes=10)).replace(microsecond=0).isoformat()
     active = AnalysisRun(
-        sbom_id=seeded_sbom["id"],
+        sbom_id=public_row(db, SBOMSource, seeded_sbom["id"]).id,
         run_status="RUNNING",
         sbom_name=seeded_sbom["sbom_name"],
         source="NVD,OSV,GITHUB",
@@ -261,7 +262,7 @@ def test_startup_reconciliation_preserves_recent_running_run(db, seeded_sbom):
 
     started = datetime.now(UTC).replace(microsecond=0).isoformat()
     active = AnalysisRun(
-        sbom_id=seeded_sbom["id"],
+        sbom_id=public_row(db, SBOMSource, seeded_sbom["id"]).id,
         run_status="RUNNING",
         sbom_name=seeded_sbom["sbom_name"],
         source="NVD,OSV,GITHUB",
@@ -288,7 +289,7 @@ def test_startup_reconciliation_preserves_recent_running_run(db, seeded_sbom):
 
 def test_analyze_stream_returns_existing_active_run_without_duplicate(client, seeded_sbom, db):
     active = AnalysisRun(
-        sbom_id=seeded_sbom["id"],
+        sbom_id=public_row(db, SBOMSource, seeded_sbom["id"]).id,
         run_status="RUNNING",
         sbom_name=seeded_sbom["sbom_name"],
         source="NVD,OSV,GITHUB",
@@ -300,7 +301,7 @@ def test_analyze_stream_returns_existing_active_run_without_duplicate(client, se
     db.add(active)
     db.commit()
     db.refresh(active)
-    before_count = db.query(AnalysisRun).filter(AnalysisRun.sbom_id == seeded_sbom["id"]).count()
+    before_count = db.query(AnalysisRun).filter(AnalysisRun.sbom_id == public_row(db, SBOMSource, seeded_sbom["id"]).id).count()
 
     resp = client.post(
         f"/api/sboms/{seeded_sbom['id']}/analyze/stream",
@@ -317,7 +318,7 @@ def test_analyze_stream_returns_existing_active_run_without_duplicate(client, se
     assert final["already_running"] is True
 
     db.expire_all()
-    after_count = db.query(AnalysisRun).filter(AnalysisRun.sbom_id == seeded_sbom["id"]).count()
+    after_count = db.query(AnalysisRun).filter(AnalysisRun.sbom_id == public_row(db, SBOMSource, seeded_sbom["id"]).id).count()
     assert after_count == before_count
     db.query(AnalysisRun).filter(AnalysisRun.id == active.id).delete()
     db.commit()

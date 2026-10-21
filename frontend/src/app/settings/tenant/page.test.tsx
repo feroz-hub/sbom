@@ -2,13 +2,19 @@
 
 import { invalidateTenantMembershipSurfaces } from '@/lib/queryInvalidation';
 import { QueryClient, QueryClientProvider, useQueryClient } from '@tanstack/react-query';
-import { render, screen, waitFor } from '@testing-library/react';
+import { act, render, screen, waitFor, within } from '@testing-library/react';
 import userEvent from '@testing-library/user-event';
 import { beforeEach, describe, expect, it, vi } from 'vitest';
 import { ToastProvider } from '@/hooks/useToast';
 
 let mockPlatform = true;
 let mockReadOnly = false;
+let mockCanRead = true;
+let mockCanInvite = true;
+let mockCanUpdate = true;
+let mockTenantId = 1;
+let mockUserId = 999;
+const refreshSession = vi.fn();
 vi.mock('@/components/admin/NativeUserInviteForm', () => ({ default: ({ onCreated }: { onCreated: () => void }) => { const qc = useQueryClient(); return <button onClick={async () => { await invalidateTenantMembershipSurfaces(qc, 1); onCreated(); }}>Complete invitation</button>; } }));
 
 const api = vi.hoisted(() => ({
@@ -34,14 +40,20 @@ vi.mock('next/navigation', () => ({
 
 vi.mock('@/hooks/useAuth', () => ({
   useAuth: () => ({
-    user: { tenantId: 1, externalUserId: 'subject-1', userId: 999, isPlatformAdmin: mockPlatform },
-    activeTenantId: 1,
-    activeTenant: { id: 1, name: 'Default Tenant', slug: 'default', externalIamTenantId: 'local-default', status: 'ACTIVE', role: 'TENANT_ADMIN', membershipStatus: 'ACTIVE' },
+    user: { tenantId: mockTenantId, externalUserId: 'subject-1', userId: mockUserId, isPlatformAdmin: mockPlatform },
+    activeTenantId: mockTenantId,
+    activeTenant: { id: mockTenantId, name: `Tenant ${mockTenantId}`, slug: 'default', externalIamTenantId: 'local-default', status: 'ACTIVE', role: 'TENANT_ADMIN', membershipStatus: 'ACTIVE' },
     tenants: [{ id: 1, name: 'Default Tenant', slug: 'default', externalIamTenantId: 'local-default', status: 'ACTIVE', role: 'TENANT_ADMIN', membershipStatus: 'ACTIVE' }],
-    hasPermission: (permission: string) => !mockReadOnly || permission === 'tenant:user:read',
+    hasPermission: (permission: string) => {
+      if (permission === 'tenant:user:read') return mockCanRead;
+      if (mockReadOnly) return false;
+      if (permission === 'tenant:user:invite') return mockCanInvite;
+      if (permission === 'tenant:user:update') return mockCanUpdate;
+      return true;
+    },
     isLoading: false,
     isTenantContextLoading: false,
-    refreshSession: vi.fn(),
+    refreshSession,
   }),
 }));
 vi.mock('@/hooks/usePermission', async original => ({ ...(await original<typeof import('@/hooks/usePermission')>()), usePermission: () => true }));
@@ -69,11 +81,18 @@ const member = {
 
 function renderPage() {
   const client = new QueryClient({ defaultOptions: { queries: { retry: false }, mutations: { retry: false } } });
-  return render(<QueryClientProvider client={client}><ToastProvider><TenantUsersPage /></ToastProvider></QueryClientProvider>);
+  const tree = () => <QueryClientProvider client={client}><ToastProvider><TenantUsersPage /></ToastProvider></QueryClientProvider>;
+  const result = render(tree());
+  return { ...result, client, switchTenant: (id: number) => { mockTenantId = id; result.rerender(tree()); } };
 }
 
 describe('TenantUsersPage', () => {
   beforeEach(() => {
+    mockCanRead = true;
+    mockCanInvite = true;
+    mockCanUpdate = true;
+    mockTenantId = 1;
+    mockUserId = 999;
     mockReadOnly = false;
   mockPlatform = true;
     vi.clearAllMocks();
@@ -103,8 +122,8 @@ describe('TenantUsersPage', () => {
     expect(screen.getAllByText('Viewer')[0]).toBeInTheDocument();
     expect(screen.getAllByRole('button', { name: 'Open actions for Example User' })[0]).toBeInTheDocument();
 
-    expect(screen.getAllByText('HCL.CS')[0]).toBeInTheDocument();
-    expect(screen.getAllByText('Managed in SBOM')[0]).toBeInTheDocument();
+    expect(screen.getByText('Access Information')).toBeInTheDocument();
+    expect(screen.getByRole('heading', { name: 'Member Directory' })).toBeInTheDocument();
     expect(screen.queryByText(/External tenant mapping/i)).not.toBeInTheDocument();
     expect(screen.queryByText(/Technical identity details/i)).not.toBeInTheDocument();
   });
@@ -113,21 +132,21 @@ describe('TenantUsersPage', () => {
     const invalidate = vi.spyOn(QueryClient.prototype, 'invalidateQueries');
     const user = userEvent.setup();
     renderPage();
-    await user.click(screen.getByRole('button', { name: '+ Invite new user' }));
+    await user.click(screen.getByRole('button', { name: 'Invite New User' }));
     expect(screen.getByRole('dialog', { name: 'Invite new user' })).toBeInTheDocument();
     await user.click(screen.getByRole('button', { name: 'Complete invitation' }));
     await waitFor(() => expect(screen.queryByRole('dialog')).not.toBeInTheDocument());
     expect(invalidate).toHaveBeenCalledWith({ queryKey: ['tenant-users', 1] });
     expect(invalidate).toHaveBeenCalledWith({ queryKey: ['tenant-audit-history', 1] });
-    expect(screen.getByRole('heading', { name: 'Add existing member' })).toBeInTheDocument();
+    expect(screen.getByRole('button', { name: 'Add Existing Member' })).toBeInTheDocument();
     invalidate.mockRestore();
   });
   it('does not show mutation controls with tenant read permission alone', async () => {
     mockReadOnly = true;
     renderPage();
     await screen.findAllByText('Example User');
-    expect(screen.queryByRole('button', { name: '+ Invite new user' })).not.toBeInTheDocument();
-    expect(screen.queryByRole('heading', { name: 'Add existing member' })).not.toBeInTheDocument();
+    expect(screen.queryByRole('button', { name: 'Invite New User' })).not.toBeInTheDocument();
+    expect(screen.queryByRole('button', { name: 'Add Existing Member' })).not.toBeInTheDocument();
     expect(screen.queryByRole('button', { name: 'Open actions for Example User' })).not.toBeInTheDocument();
   });
 
@@ -140,9 +159,11 @@ describe('TenantUsersPage', () => {
     expect(screen.queryByLabelText('Existing user ID')).not.toBeInTheDocument();
     expect(screen.queryByRole('spinbutton')).not.toBeInTheDocument();
     expect(screen.queryByRole('button', { name: 'Add Member' })).not.toBeInTheDocument();
-    await user.type(screen.getByRole('textbox', { name: 'Search existing user' }), query);
+    await user.click(screen.getByRole('button', { name: 'Add Existing Member' }));
+    await waitFor(() => expect(screen.getByRole('dialog', { name: 'Add Existing Member' })).toHaveFocus());
+    await user.type(screen.getByRole('combobox', { name: 'Search existing user' }), query);
     await user.click(await screen.findByText('New User'));
-    expect(screen.getByLabelText('Initial roles')).toBeInTheDocument();
+    expect(screen.getByRole('group', { name: 'Initial roles' })).toBeInTheDocument();
     await user.click(screen.getByRole('button', { name: 'Add Member' }));
     await waitFor(() => expect(api.addTenantMember).toHaveBeenCalledWith(1, { user_id: 99, roles: ['VIEWER'] }));
     expect(api.searchPlatformUsers).not.toHaveBeenCalled();
@@ -165,15 +186,17 @@ describe('TenantUsersPage', () => {
     ]);
     renderPage();
     await screen.findAllByText('Example User');
-    const input = screen.getByPlaceholderText('Search by name or email…');
+    await user.click(screen.getByRole('button', { name: 'Add Existing Member' }));
+    await waitFor(() => expect(screen.getByRole('dialog', { name: 'Add Existing Member' })).toHaveFocus());
+    const input = screen.getByRole('combobox', { name: 'Search existing user' });
     await user.type(input, 'New');
     const foundUser = await screen.findByText('New User');
     await user.click(foundUser);
     expect(screen.queryByText('Show technical details')).not.toBeInTheDocument();
-    await user.selectOptions(screen.getByLabelText('Initial roles'), 'SECURITY_ANALYST');
+    await user.click(screen.getByRole('checkbox', { name: /Security Analyst/ }));
     await user.click(screen.getByRole('button', { name: 'Add Member' }));
     await waitFor(() => expect(api.addTenantMember).toHaveBeenCalledWith(1, {
-      user_id: 99, roles: ['SECURITY_ANALYST', 'VIEWER'],
+      user_id: 99, roles: ['VIEWER', 'SECURITY_ANALYST'],
     }));
   });
 
@@ -262,4 +285,207 @@ describe('TenantUsersPage', () => {
     renderPage();
     expect(await screen.findByRole('alert')).toHaveTextContent('Your session has expired. Please sign in again.');
   });
+  it('filters only fetched members by display name or email, announces matches and clears search', async () => {
+    const user = userEvent.setup();
+    api.getTenantMembers.mockResolvedValue([member, { ...member, membership_id: 10, user_id: 13, display_name: 'Another Person', email: 'second@example.test' }]);
+    renderPage();
+    await screen.findAllByText('Another Person');
+    const search = screen.getByRole('searchbox', { name: 'Search members' });
+    await user.type(search, ' EXAMPLE USER ');
+    expect(screen.getAllByText('Example User')).toHaveLength(2);
+    expect(screen.queryByText('Another Person')).not.toBeInTheDocument();
+    expect(screen.getByText('1 of 2 members match your search')).toBeInTheDocument();
+    await user.clear(search);
+    await user.type(search, 'second@');
+    expect(screen.getAllByText('Another Person')).toHaveLength(2);
+    expect(screen.queryByText('Example User')).not.toBeInTheDocument();
+    await user.clear(search);
+    await user.type(search, 'no matching person');
+    expect(screen.getByText(/No matching members/)).toBeInTheDocument();
+    expect(screen.getByText('0 of 2 members match your search')).toBeInTheDocument();
+    await user.click(screen.getByRole('button', { name: 'Clear member search' }));
+    expect(search).toHaveValue('');
+    expect(search).toHaveFocus();
+    expect(screen.getAllByText('Example User')).toHaveLength(2);
+    expect(api.searchTenantUserCandidates).not.toHaveBeenCalled();
+    expect(api.searchPlatformUsers).not.toHaveBeenCalled();
+    expect(api.getTenantMembers).toHaveBeenCalledTimes(1);
+  });
+
+  it('renders an explicit loading state and the fetched empty directory', async () => {
+    let resolve!: (members: unknown[]) => void;
+    api.getTenantMembers.mockReturnValue(new Promise(done => { resolve = done; }));
+    renderPage();
+    expect(screen.getByText('Loading members…')).toBeInTheDocument();
+    expect(screen.queryByText('No tenant memberships currently exist.')).not.toBeInTheDocument();
+    await act(async () => resolve([]));
+    expect(await screen.findByText('No tenant memberships currently exist.')).toBeInTheDocument();
+    expect(screen.queryByRole('table')).not.toBeInTheDocument();
+  });
+
+  it('cancels member addition, restores toolbar focus and resets selection on reopening', async () => {
+    const user = userEvent.setup();
+    api.searchTenantUserCandidates.mockResolvedValue([{ id: 99, display_name: 'New User', email: 'new@example.test', status: 'ACTIVE', email_verified: true }]);
+    renderPage();
+    const open = screen.getByRole('button', { name: 'Add Existing Member' });
+    await user.click(open);
+    await waitFor(() => expect(screen.getByRole('dialog', { name: 'Add Existing Member' })).toHaveFocus());
+    await user.type(screen.getByRole('combobox', { name: 'Search existing user' }), 'New');
+    await user.click(await screen.findByText('New User'));
+    expect(screen.getByRole('checkbox', { name: /Viewer/ })).toBeChecked();
+    await user.click(screen.getByRole('button', { name: 'Cancel' }));
+    expect(screen.queryByRole('dialog')).not.toBeInTheDocument();
+    expect(open).toHaveFocus();
+    await user.click(open);
+    await waitFor(() => expect(screen.getByRole('dialog', { name: 'Add Existing Member' })).toHaveFocus());
+    expect(screen.queryByText('New User')).not.toBeInTheDocument();
+    expect(screen.getByRole('button', { name: 'Add Member' })).toBeDisabled();
+    await user.keyboard('{Escape}');
+    expect(screen.queryByRole('dialog')).not.toBeInTheDocument();
+    expect(api.addTenantMember).not.toHaveBeenCalled();
+  });
+
+  it('keeps addition pending, surfaces errors, retries and invalidates tenant caches after success', async () => {
+    const user = userEvent.setup();
+    let reject!: (reason: Error) => void;
+    api.addTenantMember.mockReturnValueOnce(new Promise((_, fail) => { reject = fail; }));
+    api.searchTenantUserCandidates.mockResolvedValue([{ id: 99, display_name: 'New User', email: 'new@example.test', status: 'ACTIVE', email_verified: true }]);
+    const { client } = renderPage();
+    const invalidate = vi.spyOn(client, 'invalidateQueries');
+    await user.click(screen.getByRole('button', { name: 'Add Existing Member' }));
+    await waitFor(() => expect(screen.getByRole('dialog', { name: 'Add Existing Member' })).toHaveFocus());
+    await user.type(screen.getByRole('combobox', { name: 'Search existing user' }), 'New');
+    await user.click(await screen.findByText('New User'));
+    await user.click(screen.getByRole('checkbox', { name: /Viewer/ }));
+    expect(screen.getByRole('button', { name: 'Add Member' })).toBeDisabled();
+    await user.click(screen.getByRole('checkbox', { name: /Viewer/ }));
+    await user.click(screen.getByRole('button', { name: 'Add Member' }));
+    expect(screen.getByRole('button', { name: 'Cancel' })).toBeDisabled();
+    await user.keyboard('{Escape}');
+    expect(screen.getByRole('dialog', { name: 'Add Existing Member' })).toBeInTheDocument();
+    await act(async () => reject(new Error('Addition failed')));
+    expect(await within(screen.getByRole('dialog')).findByRole('alert')).toHaveTextContent('Failed to add member to tenant.');
+    await user.click(screen.getByRole('button', { name: 'Add Member' }));
+    await waitFor(() => expect(screen.queryByRole('dialog')).not.toBeInTheDocument());
+    expect(invalidate).toHaveBeenCalledWith({ queryKey: ['tenant-users', 1] });
+    expect(invalidate).toHaveBeenCalledWith({ queryKey: ['tenant-audit-history', 1] });
+    expect(screen.getByText(/was added to the tenant/)).toBeInTheDocument();
+  });
+
+  it('offers only returned assignable roles and never submits an unavailable default role', async () => {
+    const user = userEvent.setup();
+    api.getAssignableTenantRoles.mockResolvedValue({ roles: ['DEVELOPER'] });
+    api.searchTenantUserCandidates.mockResolvedValue([{ id: 99, display_name: 'New User', status: 'ACTIVE' }]);
+    renderPage();
+    await user.click(screen.getByRole('button', { name: 'Add Existing Member' }));
+    await waitFor(() => expect(screen.getByRole('dialog', { name: 'Add Existing Member' })).toHaveFocus());
+    await user.type(screen.getByRole('combobox', { name: 'Search existing user' }), 'New');
+    await user.click(await screen.findByText('New User'));
+    expect(screen.queryByRole('checkbox', { name: /Viewer/ })).not.toBeInTheDocument();
+    expect(screen.queryByRole('checkbox', { name: /Tenant Admin/ })).not.toBeInTheDocument();
+    expect(screen.getByRole('button', { name: 'Add Member' })).toBeDisabled();
+    await user.click(screen.getByRole('checkbox', { name: /Developer/ }));
+    await user.click(screen.getByRole('button', { name: 'Add Member' }));
+    await waitFor(() => expect(api.addTenantMember).toHaveBeenCalledWith(1, { user_id: 99, roles: ['DEVELOPER'] }));
+  });
+
+  it('resets search and open dialogs on tenant switching and ignores an old mutation completion', async () => {
+    const user = userEvent.setup();
+    let resolve!: (value: unknown) => void;
+    api.addTenantMember.mockReturnValue(new Promise(done => { resolve = done; }));
+    api.searchTenantUserCandidates.mockResolvedValue([{ id: 99, display_name: 'New User', status: 'ACTIVE' }]);
+    api.getTenantMembers.mockImplementation((id: number) => Promise.resolve(id === 1 ? [member] : [{ ...member, membership_id: 20, display_name: 'Second Tenant Member' }]));
+    const { switchTenant, client } = renderPage();
+    const invalidate = vi.spyOn(client, 'invalidateQueries');
+    await screen.findAllByText('Example User');
+    await user.type(screen.getByRole('searchbox', { name: 'Search members' }), 'Example');
+    await user.click(screen.getByRole('button', { name: 'Add Existing Member' }));
+    await waitFor(() => expect(screen.getByRole('dialog', { name: 'Add Existing Member' })).toHaveFocus());
+    await user.type(screen.getByRole('combobox', { name: 'Search existing user' }), 'New');
+    await user.click(await screen.findByText('New User'));
+    await user.click(screen.getByRole('button', { name: 'Add Member' }));
+    switchTenant(2);
+    expect(screen.queryByRole('dialog')).not.toBeInTheDocument();
+    expect(screen.getByRole('searchbox', { name: 'Search members' })).toHaveValue('');
+    await screen.findAllByText('Second Tenant Member');
+    expect(screen.queryByText('Example User')).not.toBeInTheDocument();
+    await act(async () => resolve(member));
+    expect(invalidate).not.toHaveBeenCalled();
+    expect(screen.queryByText(/was added to the tenant/)).not.toBeInTheDocument();
+    expect(api.getTenantMembers).toHaveBeenCalledWith(2);
+    expect(api.getAssignableTenantRoles).toHaveBeenCalledWith(2);
+    await user.click(screen.getByRole('button', { name: 'Add Existing Member' }));
+    await waitFor(() => expect(screen.getByRole('dialog', { name: 'Add Existing Member' })).toHaveFocus());
+    await user.type(screen.getByRole('combobox', { name: 'Search existing user' }), 'Other');
+    await screen.findByText('New User');
+    expect(api.searchTenantUserCandidates).toHaveBeenLastCalledWith(2, 'Other');
+  });
+
+  it.each(['Disable membership', 'Remove from tenant'])('preserves the self-membership warning for %s', async action => {
+    mockUserId = member.user_id;
+    const user = userEvent.setup();
+    renderPage();
+    await screen.findAllByText('Example User');
+    await user.click(screen.getAllByRole('button', { name: 'Open actions for Example User' })[0]);
+    await user.click(screen.getByRole('menuitem', { name: action }));
+    expect(within(screen.getByRole('dialog')).getByText(/Warning: You are/)).toBeInTheDocument();
+    expect(api.deactivateTenantMember).not.toHaveBeenCalled();
+    expect(api.removeTenantMember).not.toHaveBeenCalled();
+  });
+
+  it('does not fetch tenant data when member read permission is absent', () => {
+    mockCanRead = false;
+    renderPage();
+    expect(screen.getByRole('alert')).toHaveTextContent('You do not have permission to view tenant members.');
+    expect(api.getTenantMembers).not.toHaveBeenCalled();
+    expect(api.getAssignableTenantRoles).not.toHaveBeenCalled();
+    expect(api.getTenantAuditHistory).not.toHaveBeenCalled();
+  });
+
+  it('gates invite and member-update actions independently', async () => {
+    mockCanInvite = false;
+    renderPage();
+    await screen.findAllByText('Example User');
+    expect(screen.queryByRole('button', { name: 'Add Existing Member' })).not.toBeInTheDocument();
+    expect(screen.queryByRole('button', { name: 'Invite New User' })).not.toBeInTheDocument();
+    expect(screen.getAllByRole('button', { name: 'Open actions for Example User' })).toHaveLength(2);
+  });
+
+  it('blocks addition while roles cannot load and lets the user retry the role query', async () => {
+    api.getAssignableTenantRoles.mockRejectedValueOnce(new Error('offline'));
+    api.searchTenantUserCandidates.mockResolvedValue([{ id: 99, display_name: 'New User', status: 'ACTIVE' }]);
+    const user = userEvent.setup();
+    renderPage();
+    await user.click(screen.getByRole('button', { name: 'Add Existing Member' }));
+    await waitFor(() => expect(screen.getByRole('dialog')).toHaveFocus());
+    await user.type(screen.getByRole('combobox', { name: 'Search existing user' }), 'New');
+    await user.click(await screen.findByText('New User'));
+    expect(await screen.findByRole('alert')).toHaveTextContent('Could not load assignable roles.');
+    expect(screen.getByRole('button', { name: 'Add Member' })).toBeDisabled();
+    expect(screen.queryByRole('checkbox')).not.toBeInTheDocument();
+    await user.click(screen.getByRole('button', { name: 'Try again' }));
+    expect(await screen.findByRole('checkbox', { name: /Viewer/ })).toBeChecked();
+    expect(screen.getByRole('button', { name: 'Add Member' })).toBeEnabled();
+  });
+
+  it('refreshes the session when adding the current account', async () => {
+    mockUserId = 99;
+    api.searchTenantUserCandidates.mockResolvedValue([{ id: 99, display_name: 'My Account', status: 'ACTIVE' }]);
+    const user = userEvent.setup();
+    renderPage();
+    await user.click(screen.getByRole('button', { name: 'Add Existing Member' }));
+    await waitFor(() => expect(screen.getByRole('dialog')).toHaveFocus());
+    await user.type(screen.getByRole('combobox', { name: 'Search existing user' }), 'My');
+    await user.click(await screen.findByText('My Account'));
+    await user.click(screen.getByRole('button', { name: 'Add Member' }));
+    await waitFor(() => expect(refreshSession).toHaveBeenCalledWith({ authorizationChanged: true }));
+  });
+
+  it('keeps members without a name or email in the unfiltered directory', async () => {
+    api.getTenantMembers.mockResolvedValue([{ ...member, display_name: null, email: null }]);
+    renderPage();
+    expect(await screen.findAllByText('User #12')).toHaveLength(2);
+    expect(screen.getByLabelText('1 total members')).toBeInTheDocument();
+  });
+
 });
