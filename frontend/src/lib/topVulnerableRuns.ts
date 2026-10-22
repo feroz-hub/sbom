@@ -17,7 +17,7 @@ export interface SbomBucket {
   medium: number;
   low: number;
   totalFindings: number;
-  latestRunId: number;
+  latestRunId: string;
   weighted: number;
 }
 

@@ -161,7 +161,11 @@ def _ensure_seed_data() -> None:
             with maintenance_tenant(tenant_id, "startup.sbom_status_repair"):
                 db.execute(
                     update(SBOMSource)
-                    .where(SBOMSource.tenant_id == tenant_id, SBOMSource.validated_at.is_(None), SBOMSource.status == "validated")
+                    .where(
+                        SBOMSource.tenant_id == tenant_id,
+                        SBOMSource.validated_at.is_(None),
+                        SBOMSource.status == "validated",
+                    )
                     .values(status="pending")
                 )
                 # Release this tenant's write transaction before the separate
@@ -237,6 +241,7 @@ def _ensure_seed_data() -> None:
                 membership.role = "TENANT_ADMIN"
                 membership.status = "ACTIVE"
             from .core.context import minimal_background_context, tenant_scope
+
             with tenant_scope(minimal_background_context(membership.tenant_id)):
                 assignment_exists = db.scalar(
                     select(TenantUserRoleAssignment.id).where(
@@ -254,9 +259,11 @@ def _ensure_seed_data() -> None:
                     source="SYSTEM",
                 )
         else:
-            bootstrap = db.execute(
-                select(IAMUser).where(IAMUser.external_iam_user_id.in_(("local-dev-admin", "dev-user")))
-            ).scalars().all()
+            bootstrap = (
+                db.execute(select(IAMUser).where(IAMUser.external_iam_user_id.in_(("local-dev-admin", "dev-user"))))
+                .scalars()
+                .all()
+            )
             if any(user.status == "ACTIVE" for user in bootstrap):
                 log.warning("Authenticated deployment contains an active local bootstrap identity; disable it")
         db.commit()
@@ -369,11 +376,7 @@ def _load_active_tenant_ids() -> list[int]:
 
     with SessionLocal() as lookup_db:
         return list(
-            lookup_db.execute(
-                select(Tenant.id)
-                .where(Tenant.status == "ACTIVE")
-                .order_by(Tenant.id.asc())
-            ).scalars()
+            lookup_db.execute(select(Tenant.id).where(Tenant.status == "ACTIVE").order_by(Tenant.id.asc())).scalars()
         )
 
 
@@ -516,9 +519,7 @@ def _log_ai_configuration_readiness() -> None:
         loader = get_loader()
         configs, effective = loader.resolve()
         configured_names = sorted({cfg.name for cfg in configs if cfg.enabled})
-        unavailable = sorted(
-            {cfg.config_error for cfg in configs if cfg.config_error is not None}
-        )
+        unavailable = sorted({cfg.config_error for cfg in configs if cfg.config_error is not None})
         try:
             default_config = get_registry().get_default_config()
         except Exception:  # noqa: BLE001 — summarized below without secrets
@@ -568,6 +569,7 @@ async def lifespan(app: FastAPI):
     # for the remainder of the process.
     setup_logging()
     from .core.route_policy import validate_route_policies
+
     validate_route_policies(app)
     validate_auth_setup()
     await init_async_http_client()
@@ -585,6 +587,7 @@ async def lifespan(app: FastAPI):
         log.error("Failed to parse database URL for logging: %s", e)
 
     from .services.native_operations import validate_configuration
+
     validate_configuration()
     _ensure_seed_data()
     _backfill_analytics_per_tenant()
@@ -593,9 +596,14 @@ async def lifespan(app: FastAPI):
     _reconcile_stale_analysis_runs()
     _log_ai_configuration_readiness()
     from .services.report_storage import configuration_errors
-    log.info("reports.startup enabled=%s authenticated=%s smtp_enabled=%s diagnostics=%s",
-             settings.report_notifications_enabled, settings.auth_enabled, settings.email_delivery_enabled,
-             ",".join(configuration_errors(settings)) or "ready")
+
+    log.info(
+        "reports.startup enabled=%s authenticated=%s smtp_enabled=%s diagnostics=%s",
+        settings.report_notifications_enabled,
+        settings.auth_enabled,
+        settings.email_delivery_enabled,
+        ",".join(configuration_errors(settings)) or "ready",
+    )
     log.info("Startup complete. API ready.")
     yield
     await close_async_http_client()
@@ -631,7 +639,8 @@ def custom_openapi():
             operation["security"] = [{"BearerAuth": []}]
             if "parameters" in operation:
                 operation["parameters"] = [
-                    parameter for parameter in operation["parameters"]
+                    parameter
+                    for parameter in operation["parameters"]
                     if not (parameter.get("in") == "header" and parameter.get("name", "").lower() == "authorization")
                 ]
     return schema
@@ -683,6 +692,7 @@ app.add_middleware(
 
 app.add_middleware(GZipMiddleware, minimum_size=1000)
 
+
 # --- Request / response logging middleware ------------------------------
 @app.middleware("http")
 async def log_requests(request: Request, call_next):
@@ -701,8 +711,23 @@ async def log_requests(request: Request, call_next):
     if context is not None and audit_action and response.status_code < 400:
         try:
             from .core.context import tenant_scope
-            from .models import AuditLog
+            from .models import AuditLog, AuthorizationAuditLog
 
+            if context.tenant_id is None:
+                # Platform operations have no tenant. Use the global security
+                # audit stream rather than attempting a tenant-owned insert.
+                with SessionLocal() as audit_db:
+                    audit_db.add(
+                        AuthorizationAuditLog(
+                            actor_user_id=context.user_id,
+                            action=audit_action,
+                            outcome="SUCCESS",
+                            detail=f"{request.method} {request.url.path}"[:240],
+                            created_at=datetime.now(UTC),
+                        )
+                    )
+                    audit_db.commit()
+                return response
             with tenant_scope(context), SessionLocal() as audit_db:
                 audit_db.add(
                     AuditLog(

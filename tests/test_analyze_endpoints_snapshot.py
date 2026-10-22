@@ -115,6 +115,7 @@ def test_legacy_consolidated_returns_existing_active_run(client, seeded_sbom):
             db.commit()
             db.refresh(active)
             active_id = active.id
+            active_public_id = str(active.public_id)
             before_count = db.query(AnalysisRun).filter(AnalysisRun.sbom_id == public_row(db, SBOMSource, seeded_sbom["id"]).id).count()
     finally:
         db.close()
@@ -128,7 +129,7 @@ def test_legacy_consolidated_returns_existing_active_run(client, seeded_sbom):
     _assert_deprecated(resp, seeded_sbom["id"])
     body = resp.json()
     assert body["status"] == "already_running"
-    assert body["run_id"] == active_id
+    assert body["run_id"] == active_public_id
     assert body["message"] == "Analysis is already running for this SBOM."
 
     db = SessionLocal()

@@ -296,7 +296,7 @@ class EmailVerificationToken(Base):
     )
 
 
-class TenantUser(Base):
+class TenantUser(PublicIdentityMixin, Base):
     __tablename__ = "tenant_users"
 
     id = Column(Integer, primary_key=True)
@@ -332,7 +332,7 @@ class TenantUser(Base):
     )
 
 
-class PlatformUserRole(Base):
+class PlatformUserRole(PublicIdentityMixin, Base):
     """Explicit database authority for platform-wide SBOM administration."""
 
     __tablename__ = "platform_user_roles"
@@ -1564,7 +1564,7 @@ class VexOverrideAudit(Base, TenantOwnedMixin):
     changed_at = Column(String, nullable=False, index=True)
 
 
-class AnalysisRun(Base, SoftDeleteMixin, TenantOwnedMixin):
+class AnalysisRun(PublicIdentityMixin, Base, SoftDeleteMixin, TenantOwnedMixin):
     __tablename__ = "analysis_run"
 
     id = Column(Integer, primary_key=True, index=True)

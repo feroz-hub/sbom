@@ -20,6 +20,7 @@ from starlette.concurrency import run_in_threadpool
 from starlette.datastructures import QueryParams
 from starlette.routing import request_response
 
+from . import resource_public_api as resources
 from .core.context import get_bound_context
 from .db import SessionLocal, get_db
 from .iam_public_api import (
@@ -34,6 +35,7 @@ from .iam_public_api import (
 from .models import IAMUser, LogicalSBOM, Product, Projects, SBOMComponent, SBOMSource, Tenant
 
 MODELS = {
+    **resources.MODELS,
     "iam_users": IAMUser,
     "tenants": Tenant,
     "projects": Projects,
@@ -145,6 +147,8 @@ def schema_entity(schema):
     # their separate identities. Never infer identity from a name substring.
     if schema.get("title") in USER_SCHEMAS:
         return "iam_users"
+    if schema.get("title") in resources.SCHEMAS:
+        return resources.SCHEMAS[schema["title"]]
     return {
         "CreatedTenantResponse": "tenants",
         "AvailableTenant": "tenants",
@@ -174,10 +178,12 @@ def route_entity(path):
 def field_entity(key, path):
     if key == "version_id" and path == "/api/sboms/{id}/restore/{version_id}":
         return "sbom_source"
-    return iam_field(key, path) or FIELDS.get(key)
+    return resources.resource_field(key, path) or iam_field(key, path) or FIELDS.get(key)
 
 
 def scoped_table(db, entity, context):
+    if entity in resources.MODELS:
+        return resources.resource_statement(entity, context)
     table = MODELS[entity].__table__
     statement = select(table.c.id, table.c.public_id)
     if entity == "iam_users":
@@ -209,6 +215,10 @@ def scoped_table(db, entity, context):
 
 
 async def decode_request(request: Request, db=Depends(get_db)):
+    effective = request.scope.get("fastapi", {}).get("effective_route_context")
+    # Included routers keep the unprefixed APIRoute in scope on current
+    # FastAPI. Match the server-selected template used by authorization.
+    path = getattr(effective, "path", None) or request.scope["route"].path
     context = getattr(request.state, "current_context", None) or get_bound_context()
     request.state.public_identity_session = db
     with nullcontext(db):
@@ -216,16 +226,23 @@ async def decode_request(request: Request, db=Depends(get_db)):
         def resolve(entity, value):
             # A 32-digit JSON integer can otherwise be parsed by UUID(str(value)).
             # Public IAM selectors must be actual hyphenated UUID strings.
-            if entity == "iam_users" and (not isinstance(value, str) or len(value) != 36):
-                raise HTTPException(422, "User identifier must be a UUIDv4 string")
+            if entity in {"iam_users", *resources.MODELS} and (not isinstance(value, str) or len(value) != 36):
+                raise HTTPException(422, "Resource identifier must be a UUIDv4 string")
+            if entity in resources.MODELS and not resources.valid_selector(value):
+                raise HTTPException(422, "Resource identifier must be a canonical UUIDv4 string")
             public = canonical(value)
-            table, statement = (
-                user_lookup(context, request) if entity == "iam_users" else scoped_table(db, entity, context)
-            )
+            if entity == "iam_users":
+                table, statement = user_lookup(context, request)
+            elif entity in resources.MODELS:
+                table, statement = resources.resource_statement(entity, context, request=True, path=path)
+            else:
+                table, statement = scoped_table(db, entity, context)
             row = db.execute(statement.where(table.c.public_id == public)).first()
             if row is None:
                 if entity == "iam_users":
                     missing_user(db, context, request)
+                if entity == "analysis_run":
+                    resources.missing_run(path, public)
                 raise HTTPException(404, "Resource not found")
             if not hasattr(request.state, "public_identity_cache"):
                 request.state.public_identity_cache = {}
@@ -233,9 +250,9 @@ async def decode_request(request: Request, db=Depends(get_db)):
             return row.id
 
         for key, value in list(request.path_params.items()):
-            entity = field_entity(key, request.scope["route"].path)
+            entity = field_entity(key, path)
             if key == "id":
-                entity = route_entity(request.scope["route"].path)
+                entity = route_entity(path)
             if entity:
                 request.path_params[key] = resolve(entity, value)
         if (
@@ -256,11 +273,15 @@ async def decode_request(request: Request, db=Depends(get_db)):
         for key, value in request.query_params.multi_items():
             if key in BATCH_FIELDS and value:
                 value = ",".join(str(resolve(BATCH_FIELDS[key], part)) for part in value.split(","))
-            entity = field_entity(key, request.scope["route"].path)
-            if request.scope["route"].path.endswith("/compare-versions") and key in ("version_a", "version_b"):
+            entity = field_entity(key, path)
+            if path.endswith("/compare-versions") and key in ("version_a", "version_b"):
                 entity = "sbom_source"
-            if request.scope["route"].path.rstrip("/") == "/api/sboms" and key == "cursor":
+            if path.rstrip("/") == "/api/sboms" and key == "cursor":
                 entity = "sbom_source"
+            if path.rstrip("/") == "/api/runs" and key == "cursor":
+                entity = "analysis_run"
+            if resources.namespace_field(key, path) and isinstance(value, str) and value.startswith("membership:"):
+                value = "membership:" + str(resolve("tenant_users", value[11:]))
             if entity and value not in ("", "all"):
                 value = str(resolve(entity, value))
             pairs.append((key, value))
@@ -271,7 +292,7 @@ async def decode_request(request: Request, db=Depends(get_db)):
             form = await request.form()
             pairs = []
             for key, value in form.multi_items():
-                entity = field_entity(key, request.scope["route"].path)
+                entity = field_entity(key, path)
                 if entity and value not in ("", None):
                     value = str(resolve(entity, value))
                 pairs.append((key, value))
@@ -289,12 +310,12 @@ async def decode_request(request: Request, db=Depends(get_db)):
             if isinstance(body, dict) and request.method in ("PATCH", "PUT"):
                 if "public_id" in body:
                     raise HTTPException(422, "public_id is immutable; the public wire field is id")
-                if "id" in body and route_entity(request.scope["route"].path):
+                if "id" in body and route_entity(path):
                     expected_ids = set(getattr(request.state, "public_identity_cache", {}).values())
                     if str(body["id"]).lower() not in expected_ids:
                         raise HTTPException(422, "Public identity is immutable")
 
-            if request.scope["route"].path == "/api/sboms/{sbom_id}/vex" and request.method == "POST":
+            if path == "/api/sboms/{sbom_id}/vex" and request.method == "POST":
                 # This endpoint accepts a source-native VEX document, either
                 # wrapped in "document" or directly. CSAF product_id/product_ids
                 # and OpenVEX identifiers belong to that document, not our DB.
@@ -304,8 +325,22 @@ async def decode_request(request: Request, db=Depends(get_db)):
             def convert(obj):
                 if isinstance(obj, dict):
                     for key, value in obj.items():
-                        entity = field_entity(key, request.scope["route"].path)
+                        entity = field_entity(key, path)
                         if key in ("metadata_json", "evidence_json", "sbom_data", "validation_report", "raw_document"):
+                            continue
+                        if (
+                            key == "assigned_to"
+                            and resources.namespace_field(key, path)
+                            and value is not None
+                            and (not isinstance(value, str) or not value.startswith("membership:"))
+                        ):
+                            raise HTTPException(422, "Assignee must be a namespaced Membership UUIDv4")
+                        if (
+                            resources.namespace_field(key, path)
+                            and isinstance(value, str)
+                            and value.startswith("membership:")
+                        ):
+                            obj[key] = "membership:" + str(resolve("tenant_users", value[11:]))
                             continue
                         if key in BATCH_FIELDS and value is not None:
                             obj[key] = [resolve(BATCH_FIELDS[key], item) for item in value]
@@ -341,7 +376,11 @@ def install_public_boundary(app):
             route.dependant.dependencies.insert(position, get_dependant(path=route.path_format, call=decode_request))
         else:
             # Tenant endpoints declare their own authorization dependencies.
-            if any(field_entity(k, route.path) for k in route.param_convertors) or route.body_field is not None:
+            if (
+                any(field_entity(k, route.path) for k in route.param_convertors)
+                or any(field_entity(p.name, route.path) or p.name in BATCH_FIELDS for p in route.dependant.query_params)
+                or route.body_field is not None
+            ):
                 route.dependant.dependencies.append(get_dependant(path=route.path_format, call=decode_request))
         if id(original) in wrapped:
             continue
@@ -363,7 +402,7 @@ def install_public_boundary(app):
 
                     response = await http_exception_handler(request, exc)
                 except RequestValidationError as exc:
-                    if not iam_route(path):
+                    if not iam_route(path) and not resources.run_route(path):
                         raise
                     # Model-level errors can echo the already-decoded body.
                     # Apply the same explicit User projection to error inputs.
@@ -387,6 +426,17 @@ def install_public_boundary(app):
                     and 200 <= response.status_code < 300
                 ):
                     return response
+                if response.headers.get("content-type", "").startswith("text/event-stream") and path.startswith(
+                    "/api/v1/runs/"
+                ):
+                    from .resource_stream import translate_run_stream
+
+                    cache = dict(getattr(request.state, "public_identity_cache", {}))
+                    session = getattr(request.state, "public_identity_session", None)
+                    if session is not None:
+                        session.close()  # AI streams own no database work after return.
+                    response.body_iterator = translate_run_stream(response.body_iterator, cache)
+                    return response
                 if not response.headers.get("content-type", "").startswith("application/json"):
                     return response
                 try:
@@ -398,16 +448,21 @@ def install_public_boundary(app):
                 with nullcontext(shared) if shared is not None else SessionLocal() as db:
                     cache = dict(getattr(request.state, "public_identity_cache", {}))
                     references = {}
+                    optional_memberships = set()
                     collecting = True
 
-                    def outward(entity, value):
+                    def outward(entity, value, *, optional=False):
                         if value is None or not isinstance(value, int):
                             return value
                         cache_key = (entity, value)
                         if cache_key not in cache:
                             if collecting:
                                 references.setdefault(entity, set()).add(value)
+                                if optional:
+                                    optional_memberships.add(value)
                                 return value
+                            raise HTTPException(500, "Unresolvable public resource reference")
+                        if cache[cache_key] is None and not optional:
                             raise HTTPException(500, "Unresolvable public resource reference")
                         return cache[cache_key]
 
@@ -425,8 +480,25 @@ def install_public_boundary(app):
                             result = {}
                             for key, item in value.items():
                                 target = field_entity(key, path)
+                                if key == "input" and isinstance(value.get("loc"), list) and value["loc"]:
+                                    # Pydantic field errors otherwise echo the decoded
+                                    # integer selector. Registered redaction stays intact.
+                                    target = field_entity(str(value["loc"][-1]), path)
                                 if key == "id":
                                     target = entity
+                                if (
+                                    resources.namespace_field(key, path)
+                                    and isinstance(item, str)
+                                    and item.startswith("membership:")
+                                    and item[11:].isdigit()
+                                ):
+                                    identity = outward("tenant_users", int(item[11:]), optional=True)
+                                    result[key] = "membership:" + str(identity) if identity is not None else None
+                                    if identity is None:
+                                        result[
+                                            "identity_unavailable" if key == "id" else key + "_identity_unavailable"
+                                        ] = True
+                                    continue
                                 if iam_route(path) and key == "user" and isinstance(item, dict):
                                     result[key] = walk(item, node.get("properties", {}).get(key, {}), "iam_users")
                                     continue
@@ -437,6 +509,13 @@ def install_public_boundary(app):
                                     result[key] = [outward(batch, x) for x in item]
                                 elif target and isinstance(item, int):
                                     result[key] = outward(target, item)
+                                elif key == "raw_report" and isinstance(item, str) and resources.run_route(path):
+                                    try:
+                                        report = json.loads(item)
+                                    except (ValueError, TypeError):
+                                        result[key] = item
+                                    else:
+                                        result[key] = json.dumps(walk(report, {}, None), separators=(",", ":"))
                                 elif key in (
                                     "metadata_json",
                                     "evidence_json",
@@ -449,7 +528,13 @@ def install_public_boundary(app):
                                     result[key] = walk(
                                         item,
                                         node.get("properties", {}).get(key, {}),
-                                        CONTEXT.get(key, entity if key in ("items", "data", "results") else None),
+                                        (
+                                            "analysis_run"
+                                            if key in ("run_a", "run_b") and resources.run_route(path)
+                                            else CONTEXT.get(
+                                                key, entity if key in ("items", "data", "results") else None
+                                            )
+                                        ),
                                     )
                             return result
                         return value
@@ -478,6 +563,7 @@ def install_public_boundary(app):
                         root = "iam_users"
                     if path.endswith("/user-candidates"):
                         root = "iam_users"
+                    root = resources.response_entity(path) or root
                     if response.status_code >= 400:
                         root = None
                     if schema.get("title") and not schema_entity(schema):
@@ -501,10 +587,22 @@ def install_public_boundary(app):
                             rows = db.execute(statement.where(table.c.id.in_(chunk))).all()
                             for row in rows:
                                 cache[(entity, row.id)] = str(row.public_id)
-                            if any((entity, identifier) not in cache for identifier in chunk):
-                                raise HTTPException(500, "Unresolvable public resource reference")
+                            for identifier in chunk:
+                                if (entity, identifier) not in cache:
+                                    if entity == "tenant_users" and identifier in optional_memberships:
+                                        # A legacy VEX string is not an FK: removed members
+                                        # have no remaining public identity to resolve.
+                                        # Expose unavailability explicitly; never invent a UUID,
+                                        # expose an integer, or change stored authorization keys.
+                                        cache[(entity, identifier)] = None
+                                    else:
+                                        raise HTTPException(500, "Unresolvable public resource reference")
                     collecting = False
                     data = walk(data, schema, root)
+                    if response.status_code >= 400 and resources.run_route(path):
+                        from .resource_public_api import public_run_error
+
+                        data = public_run_error(data, cache)
                     if (
                         path in LEGACY_ANALYSIS_PATHS
                         and response.headers.get("Deprecation") == "true"
@@ -515,6 +613,10 @@ def install_public_boundary(app):
                     if path.rstrip("/") == "/api/sboms" and response.headers.get("X-Next-Cursor"):
                         response.headers["X-Next-Cursor"] = outward(
                             "sbom_source", int(response.headers["X-Next-Cursor"])
+                        )
+                    if path.rstrip("/") == "/api/runs" and response.headers.get("X-Next-Cursor"):
+                        response.headers["X-Next-Cursor"] = outward(
+                            "analysis_run", int(response.headers["X-Next-Cursor"])
                         )
                 response.body = json.dumps(data, separators=(",", ":")).encode()
                 response.headers["content-length"] = str(len(response.body))
@@ -542,7 +644,11 @@ def install_public_openapi(app):
             if nullable:
                 result["anyOf"] = [{"type": "string", "format": "uuid"}, {"type": "null"}]
             else:
-                result.update(type="string", format="uuid")
+                result.update(
+                    type="string",
+                    format="uuid",
+                    pattern=r"^[0-9a-fA-F]{8}-[0-9a-fA-F]{4}-4[0-9a-fA-F]{3}-[89abAB][0-9a-fA-F]{3}-[0-9a-fA-F]{12}$",
+                )
             return result
 
         for name, node in doc.get("components", {}).get("schemas", {}).items():
@@ -550,6 +656,7 @@ def install_public_openapi(app):
             for field, value in list(node.get("properties", {}).items()):
                 if (
                     field in FIELDS
+                    or field in resources.SCHEMA_FIELDS.get(name, ())
                     or (field in USER_FIELDS and (name in IAM_SCHEMA_FIELDS or entity == "iam_users"))
                     or (field == "id" and entity)
                     or (field == "parent_id" and entity == "sbom_source")
@@ -579,8 +686,11 @@ def install_public_openapi(app):
                         or (key == "id" and route_entity(path))
                         or (path.endswith("/compare-versions") and key in ("version_a", "version_b"))
                         or (path.rstrip("/") == "/api/sboms" and key == "cursor")
+                        or (path.rstrip("/") == "/api/runs" and key == "cursor")
                     ):
                         parameter["schema"] = uuid_field(parameter.get("schema", {}))
-        return doc
+        from .resource_openapi import augment
+
+        return augment(doc)
 
     app.openapi = generate

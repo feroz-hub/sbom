@@ -28,7 +28,7 @@ export interface AnalysisStreamState {
   components: number;
   sources: Record<string, SourceProgress>;
   elapsedMs: number;
-  runId: number | null;
+  runId: string | null;
   summary: {
     total: number;
     critical: number;
@@ -62,7 +62,7 @@ export function useAnalysisStream(sbomId: (string | number)) {
   const [state, setState] = useState<AnalysisStreamState>(INITIAL_STATE);
   const queryClient = useQueryClient();
   const scope = useAnalysisScope();
-  const runIdRef = useRef<number | null>(null);
+  const runIdRef = useRef<string | null>(null);
 
   // Elapsed wall-clock timer, updated every 500ms
   const timerRef = useRef<ReturnType<typeof setInterval> | null>(null);
@@ -237,7 +237,7 @@ export function useAnalysisStream(sbomId: (string | number)) {
 
       const handleEvent = (eventType: string, data: Record<string, unknown>) => {
         if (!isCurrent()) return;
-        if (typeof data.runId === 'number') {
+        if (typeof data.runId === 'string') {
           runIdRef.current = data.runId;
           addPendingAnalysis(sbomId, `SBOM #${sbomId}`, scope.key, data.runId);
         }
@@ -273,13 +273,13 @@ export function useAnalysisStream(sbomId: (string | number)) {
           }
         } else if (eventType === 'complete') {
           stopTimer();
-          void reconcileAnalysisTerminal(queryClient, { scope: scope.key, runId: Number(data.runId), sbomId,
+          void reconcileAnalysisTerminal(queryClient, { scope: scope.key, runId: String(data.runId), sbomId,
             status: String(data.status ?? ''), isCurrent });
           removePendingAnalysis(sbomId, scope.key);
           setState((prev) => ({
             ...prev,
             phase: 'done',
-            runId: data.runId as number,
+            runId: data.runId as string,
             elapsedMs: (data.duration_ms as number) ?? prev.elapsedMs,
             summary: {
               total: (data.total as number) ?? 0,

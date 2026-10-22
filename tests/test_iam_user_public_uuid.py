@@ -1,5 +1,4 @@
 """Real PostgreSQL IAM public-identity and authorized HTTP boundary acceptance."""
-
 from concurrent.futures import ThreadPoolExecutor
 from uuid import NAMESPACE_DNS, RFC_4122, UUID, uuid1, uuid4, uuid5
 
@@ -10,7 +9,7 @@ from sqlalchemy import event, select, text
 from sqlalchemy.exc import IntegrityError
 
 from tests.phase6_helpers import seed_membership, seed_user
-from tests.public_id_fixture import tenant_uuid
+from tests.public_id_fixture import membership_uuid, tenant_uuid
 from tests.tenant_fixture_scope import verified_fixture_tenant
 
 
@@ -153,7 +152,8 @@ def test_member_search_add_roles_membership_detail_and_remove(client):
     response = client.post(f"/api/tenants/{tenant}/users", json={"user_id": identity, "roles": ["VIEWER"]})
     assert response.status_code == 201, response.text
     member = response.json()
-    assert type(member["membership_id"]) is int and member["user_id"] == identity
+    assert_uuid(member["membership_id"])
+    assert member["user_id"] == identity
     response = client.get(f"/api/tenants/{tenant}/users/{identity}/roles")
     assert response.status_code == 200, response.text
     state = response.json()
@@ -167,9 +167,9 @@ def test_member_search_add_roles_membership_detail_and_remove(client):
         },
     )
     assert response.status_code == 200, response.text
-    response = client.get(f"/api/tenants/{tenant}/users/{member['membership_id']}")
+    response = client.get(f"/api/tenants/{tenant}/users/{membership_uuid(member['membership_id'])}")
     assert response.status_code == 200 and response.json()["user_id"] == identity
-    assert client.delete(f"/api/tenants/{tenant}/users/{member['membership_id']}").status_code == 204
+    assert client.delete(f"/api/tenants/{tenant}/users/{membership_uuid(member['membership_id'])}").status_code == 204
 
 
 @pytest.mark.parametrize(
@@ -204,7 +204,7 @@ def test_platform_policy_is_not_widened_to_discover_users(client):
     assert client.get(f"/api/platform/users/{uuid4()}").status_code == 403
 
 
-def test_user_serialization_is_batched_and_other_ids_stay_integer(client):
+def test_user_and_membership_serialization_is_batched(client):
     with SessionLocal() as db, verified_fixture_tenant(db, 1):
         for _ in range(12):
             seed_membership(db, seed_user(db))
@@ -223,11 +223,11 @@ def test_user_serialization_is_batched_and_other_ids_stay_integer(client):
     assert response.status_code == 200, response.text
     for member in response.json():
         assert_uuid(member["user_id"])
-        assert isinstance(member["membership_id"], int)
+        assert_uuid(member["membership_id"])
     assert len(queries) == 1
 
 
-def test_openapi_contract_is_user_uuid_but_analysis_and_membership_stay_integer(client):
+def test_openapi_user_and_membership_contract_is_uuid(client):
     doc = client.get("/openapi.json").json()
     for name in ("AuthContextUser", "PlatformUserSummary", "UserSearchResult", "TenantUserCandidate"):
         assert doc["components"]["schemas"][name]["properties"]["id"]["format"] == "uuid"
@@ -235,7 +235,7 @@ def test_openapi_contract_is_user_uuid_but_analysis_and_membership_stay_integer(
     fields = paths["/api/tenants/{tenant_id}/users/{user_id}/roles"]["get"]["parameters"]
     assert next(x for x in fields if x["name"] == "user_id")["schema"]["format"] == "uuid"
     fields = paths["/api/tenants/{tenant_id}/users/{membership_id}"]["get"]["parameters"]
-    assert next(x for x in fields if x["name"] == "membership_id")["schema"]["type"] == "integer"
+    assert next(x for x in fields if x["name"] == "membership_id")["schema"]["format"] == "uuid"
 
 
 def test_numeric_uuid_shaped_json_integer_refuses_before_lookup(client):

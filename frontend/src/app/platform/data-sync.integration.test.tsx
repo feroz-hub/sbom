@@ -41,7 +41,7 @@ import Administrators from '../settings/platform/page';
 const initialSummary = { total_tenants: 4, active_tenants: 2, pending_tenants: 1, disabled_tenants: 1,
   total_memberships: 7, tenants_without_admin: 0, platform_admins: 1 };
 const tenant: TenantSummary = { id: "00000000-0000-4000-8000-000000000007", name: 'Test Tenant', slug: 'test-tenant', external_iam_tenant_id: null, status: 'PENDING', created_at: '2026-10-01T00:00:00Z', member_count: 2, current_administrators: [] };
-const admin: PlatformAdministrator = { grant_id: 3, user_id: '00000000-0000-4000-8000-000000000003', email: 'candidate@example.test', display_name: 'Candidate',
+const admin: PlatformAdministrator = { grant_id: "00000000-0000-4000-8000-000000000003", user_id: '00000000-0000-4000-8000-000000000003', email: 'candidate@example.test', display_name: 'Candidate',
   role: 'PLATFORM_ADMIN', grant_status: 'ACTIVE', local_status: 'ACTIVE', email_verified: true,
   verification_required: false, is_effective: true, created_at: '2026-10-01T00:00:00Z' };
 let client: QueryClient;
@@ -168,7 +168,7 @@ describe('platform control-plane cache integration', () => {
     await screen.findByLabelText('Platform Administrators: 1');
     expect(await screen.findByText('No platform administrators found.')).toBeInTheDocument();
     expect(state.summary).toHaveBeenCalledTimes(2); expect(state.admins).toHaveBeenCalledTimes(2);
-    expect(state.grant).toHaveBeenCalledWith('00000000-0000-4000-8000-000000000003'); expect(state.revoke).toHaveBeenCalledWith(3);
+    expect(state.grant).toHaveBeenCalledWith('00000000-0000-4000-8000-000000000003'); expect(state.revoke).toHaveBeenCalledWith('00000000-0000-4000-8000-000000000003');
     expect(state.tenants).not.toHaveBeenCalled();
     expect(client.getQueryState(['sboms', 'tenant-7'])?.isInvalidated).toBe(false);
   });

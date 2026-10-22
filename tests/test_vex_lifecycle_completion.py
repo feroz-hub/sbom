@@ -1,5 +1,4 @@
 """B5/B6/M1/M2/M3: version-aware posture and retained VEX evidence."""
-
 import json
 
 import pytest
@@ -8,6 +7,7 @@ from app.services.dashboard_scope import DashboardScope
 from app.services.vex.reconciliation import MANUAL_SOURCE_NAME
 from sqlalchemy import event, select
 
+from tests.public_id_fixture import public_membership_key
 from tests.test_vex_version_lifecycle import NOW, queue, tiles, two_versions
 
 pytest_plugins = ["tests.test_vex_version_lifecycle"]
@@ -443,7 +443,7 @@ def test_real_assignment_and_decision_audit_survive_promotion(client, app_line, 
     try:
         assigned = client.put(
             f"/api/vex/investigations/{row.id}/assignment",
-            json={"assigned_to": membership_key(developer), "reason": "triage", "row_version": row.row_version},
+            json={"assigned_to": public_membership_key(membership_key(developer)), "reason": "triage", "row_version": row.row_version},
         )
         assert assigned.status_code == 200, assigned.text
         decided = client.put(
@@ -462,7 +462,7 @@ def test_real_assignment_and_decision_audit_survive_promotion(client, app_line, 
         app_line.reconcile(b)
         old = client.get(f"/api/vex/investigations/{row.id}").json()
         assert {"assignment", "decision"} <= {event["kind"] for event in old["history"]}
-        assert old["internal_decision"]["assigned_to"] == membership_key(developer)
+        assert old["internal_decision"]["assigned_to"] == public_membership_key(developer)
         new = db.scalar(select(VexInvestigation).where(VexInvestigation.sbom_id == b.id))
         assert new.assigned_to is None and new.effective_status == "UNDER_INVESTIGATION"
         assert client.get(f"/api/vex/investigations/{new.id}").json()["previous_decisions"]

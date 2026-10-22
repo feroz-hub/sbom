@@ -57,7 +57,7 @@ describe('CompareView accessibility', () => {
   }, 10_000);
 
   it('same-run state has zero axe violations', async () => {
-    currentParams = new URLSearchParams('run_a=5&run_b=5');
+    currentParams = new URLSearchParams('run_a=00000000-0000-4000-8000-000000000005&run_b=00000000-0000-4000-8000-000000000005');
     const { container } = renderWithCompareProviders(<CompareView />);
     // heading-order is a page-level rule; the compare view sits inside a
     // layout that supplies <h1> in production. Skip it for component-isolated
@@ -69,7 +69,7 @@ describe('CompareView accessibility', () => {
   }, 10_000);
 
   it('error state has zero axe violations', async () => {
-    currentParams = new URLSearchParams('run_a=1&run_b=2');
+    currentParams = new URLSearchParams('run_a=00000000-0000-4000-8000-000000000001&run_b=00000000-0000-4000-8000-000000000002');
     compareRunsV2.mockRejectedValue(
       new HttpError('not ready', 409, 'COMPARE_E002_RUN_NOT_READY'),
     );
@@ -85,7 +85,7 @@ describe('CompareView accessibility', () => {
   }, 10_000);
 
   it('loaded state has zero axe violations', async () => {
-    currentParams = new URLSearchParams('run_a=1&run_b=2');
+    currentParams = new URLSearchParams('run_a=00000000-0000-4000-8000-000000000001&run_b=00000000-0000-4000-8000-000000000002');
     compareRunsV2.mockResolvedValue(SAMPLE_COMPARE_RESULT);
     const { container, getAllByRole } = renderWithCompareProviders(<CompareView />);
     await waitFor(() => expect(getAllByRole('tab')).toHaveLength(3));
@@ -99,7 +99,7 @@ describe('CompareView accessibility', () => {
   }, 10_000);
 
   it('identical-runs state (the most common production case) has zero axe violations', async () => {
-    currentParams = new URLSearchParams('run_a=1&run_b=2');
+    currentParams = new URLSearchParams('run_a=00000000-0000-4000-8000-000000000001&run_b=00000000-0000-4000-8000-000000000002');
     compareRunsV2.mockResolvedValue({
       ...SAMPLE_COMPARE_RESULT,
       posture: {

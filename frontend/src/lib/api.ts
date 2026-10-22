@@ -208,7 +208,7 @@ export type TenantRole = 'TENANT_ADMIN' | 'SECURITY_ANALYST' | 'DEVELOPER' | 'VI
 export type MembershipStatus = 'ACTIVE' | 'PENDING' | 'DISABLED';
 
 export interface TenantMember {
-  membership_id: number;
+  membership_id: string;
   user_id: string;
   external_iam_user_id: string;
   email: string | null;
@@ -223,7 +223,7 @@ export interface TenantMember {
 }
 
 export interface PlatformAdministrator {
-  grant_id: number;
+  grant_id: string;
   user_id: string;
   email: string | null;
   display_name: string | null;
@@ -480,7 +480,7 @@ export function addTenantMember(
 }
 
 export interface TenantRoleState {
-  membership_id: number;
+  membership_id: string;
   user_id: string;
   membership_status: MembershipStatus;
   role_assignment_version: number;
@@ -569,7 +569,7 @@ export function replaceTenantMemberRoles(
 
 export function updateTenantMemberRole(
   tenantId: (string | number),
-  membershipId: number,
+  membershipId: string,
   role: TenantRole,
 ): Promise<TenantMember> {
   const roleCode = getRoleCode(role);
@@ -580,21 +580,21 @@ export function updateTenantMemberRole(
   });
 }
 
-export function activateTenantMember(tenantId: (string | number), membershipId: number): Promise<TenantMember> {
+export function activateTenantMember(tenantId: (string | number), membershipId: string): Promise<TenantMember> {
   return request<TenantMember>(`/api/tenants/${tenantId}/users/${membershipId}/activate`, {
     ...tenantRequestOptions(tenantId),
     method: 'POST',
   });
 }
 
-export function deactivateTenantMember(tenantId: (string | number), membershipId: number): Promise<TenantMember> {
+export function deactivateTenantMember(tenantId: (string | number), membershipId: string): Promise<TenantMember> {
   return request<TenantMember>(`/api/tenants/${tenantId}/users/${membershipId}/deactivate`, {
     ...tenantRequestOptions(tenantId),
     method: 'POST',
   });
 }
 
-export function removeTenantMember(tenantId: (string | number), membershipId: number): Promise<void> {
+export function removeTenantMember(tenantId: (string | number), membershipId: string): Promise<void> {
   return requestVoid(`/api/tenants/${tenantId}/users/${membershipId}`, {
     ...tenantRequestOptions(tenantId),
     method: 'DELETE',
@@ -634,7 +634,7 @@ export function grantPlatformAdministrator(userId: string): Promise<PlatformAdmi
   });
 }
 
-export function revokePlatformAdministrator(grantId: number): Promise<void> {
+export function revokePlatformAdministrator(grantId: string): Promise<void> {
   return requestVoid(`/api/platform/administrators/${grantId}`, {
     ...adminRequestOptions,
     method: 'DELETE',
@@ -1330,7 +1330,7 @@ export interface VulnerabilityRow {
   /** JSON array stored as text, e.g. '["4.17.21"]'. */
   fixed_versions: string | null;
   source: string | null;
-  run_id: number;
+  run_id: string;
   sbom_id: (string | number) | null;
   sbom_name: string | null;
   project_id: (string | number) | null;
@@ -1361,12 +1361,12 @@ export function getVulnerabilities(
   return request<VulnerabilitiesResponse>(`/api/vulnerabilities?${params.toString()}`, { signal });
 }
 
-export function getRun(id: number, signal?: AbortSignal) {
+export function getRun(id: string, signal?: AbortSignal) {
   return request<AnalysisRun>(`/api/runs/${id}`, { signal });
 }
 
 export function getRunFindings(
-  id: number,
+  id: string,
   opts: { severity?: string; page?: number; page_size?: number } = {},
   signal?: AbortSignal
 ) {
@@ -1390,7 +1390,7 @@ const RUN_FINDINGS_MAX_PAGES = 500;
  * the same CVEs are served in-memory.
  */
 export function getEnrichedRunFindings(
-  id: number,
+  id: string,
   opts: { severity?: string; page?: number; page_size?: number } = {},
   signal?: AbortSignal,
 ) {
@@ -1406,7 +1406,7 @@ export function getEnrichedRunFindings(
 
 /** Paginate every enriched finding for a run, mirroring `getAllRunFindings`. */
 export async function getAllEnrichedRunFindings(
-  id: number,
+  id: string,
   opts: { severity?: string } = {},
   signal?: AbortSignal,
 ): Promise<{ findings: EnrichedFinding[]; totalCount: number }> {
@@ -2034,7 +2034,7 @@ export function askCopilot(question: string, signal?: AbortSignal) {
 }
 
 // ─── Analysis-runs export & compare ──────────────────────────────────────────
-export function compareRuns(runA: number, runB: number, signal?: AbortSignal) {
+export function compareRuns(runA: string, runB: string, signal?: AbortSignal) {
   return request<CompareRunsResult>(
     `/api/analysis-runs/compare?run_a=${runA}&run_b=${runB}`,
     { signal },
@@ -2116,11 +2116,11 @@ export function downloadReportArtifact(deliveryId: number, artifactId: number) {
   return downloadBinary(`/api/report-deliveries/${deliveryId}/artifacts/${artifactId}`, 'security-report');
 }
 
-export function exportRunCsv(runId: number) {
+export function exportRunCsv(runId: string) {
   return downloadBinary(`/api/analysis-runs/${runId}/export/csv`, `sbom_findings_${runId}.csv`);
 }
 
-export function exportRunSarif(runId: number) {
+export function exportRunSarif(runId: string) {
   return downloadBinary(`/api/analysis-runs/${runId}/export/sarif`, `sbom_findings_${runId}.sarif`);
 }
 
@@ -2437,7 +2437,7 @@ export function regenerateFindingAiFix(
 
 /** Trigger batch AI fix generation for an entire run. */
 export function triggerRunAiFixes(
-  runId: number,
+  runId: string,
   payload: AiTriggerBatchRequest = {},
   signal?: AbortSignal,
 ): Promise<AiTriggerBatchResponse> {
@@ -2451,9 +2451,9 @@ export function triggerRunAiFixes(
 
 /** Cooperative cancel — sets a flag the worker checks before each LLM call. */
 export function cancelRunAiFixes(
-  runId: number,
+  runId: string,
   signal?: AbortSignal,
-): Promise<{ run_id: number; cancel_requested: boolean }> {
+): Promise<{ run_id: string; cancel_requested: boolean }> {
   return request(`/api/v1/runs/${runId}/ai-fixes/cancel`, {
     method: 'POST',
     signal,
@@ -2467,7 +2467,7 @@ export function cancelRunAiFixes(
  * Callers must treat ``null`` as "nothing to track" (don't subscribe/poll).
  */
 export function getRunAiFixProgress(
-  runId: number,
+  runId: string,
   signal?: AbortSignal,
 ): Promise<AiBatchProgress | null> {
   return requestOrNull<AiBatchProgress>(`/api/v1/runs/${runId}/ai-fixes/progress`, {
@@ -2477,7 +2477,7 @@ export function getRunAiFixProgress(
 
 /** List cached fix bundles for a run (table view). */
 export function listRunAiFixes(
-  runId: number,
+  runId: string,
   signal?: AbortSignal,
 ): Promise<AiFindingFixListResponse> {
   return request<AiFindingFixListResponse>(`/api/v1/runs/${runId}/ai-fixes`, { signal });
@@ -2488,19 +2488,19 @@ export function listRunAiFixes(
  *
  *  Legacy run-scoped stream — yields the most-recent batch's progress.
  *  Use ``aiFixBatchStreamUrl`` for per-batch SSE in the multi-batch flow. */
-export function aiFixStreamUrl(runId: number): string {
+export function aiFixStreamUrl(runId: string): string {
   return `${BASE_URL}/api/v1/runs/${runId}/ai-fixes/stream`;
 }
 
 /** Per-batch SSE URL. Pin a stream to one batch_id so concurrent batches
  *  on the same run don't share an event source. */
-export function aiFixBatchStreamUrl(runId: number, batchId: string): string {
+export function aiFixBatchStreamUrl(runId: string, batchId: string): string {
   return `${BASE_URL}/api/v1/runs/${runId}/ai-fixes/batches/${batchId}/stream`;
 }
 
 /** List every batch (active + historical) for a run, newest-first. */
 export function listRunAiBatches(
-  runId: number,
+  runId: string,
   signal?: AbortSignal,
 ): Promise<import('@/types/ai').AiBatchListResponse> {
   return request(`/api/v1/runs/${runId}/ai-fixes/batches`, { signal });
@@ -2508,7 +2508,7 @@ export function listRunAiBatches(
 
 /** One batch's durable record + live progress envelope. */
 export function getRunAiBatch(
-  runId: number,
+  runId: string,
   batchId: string,
   signal?: AbortSignal,
 ): Promise<import('@/types/ai').AiBatchDetailResponse> {
@@ -2517,10 +2517,10 @@ export function getRunAiBatch(
 
 /** Cooperative per-batch cancel. */
 export function cancelRunAiBatch(
-  runId: number,
+  runId: string,
   batchId: string,
   signal?: AbortSignal,
-): Promise<{ run_id: number; batch_id: string; cancel_requested: boolean }> {
+): Promise<{ run_id: string; batch_id: string; cancel_requested: boolean }> {
   return request(`/api/v1/runs/${runId}/ai-fixes/batches/${batchId}/cancel`, {
     method: 'POST',
     signal,
@@ -2533,7 +2533,7 @@ export function cancelRunAiBatch(
  *  via a single SQL join, and returns the duration / cost projection
  *  along with the multi-batch contention signal. */
 export function estimateRunAiFixesScoped(
-  runId: number,
+  runId: string,
   scope: import('@/types/ai').AiFixGenerationScope | null = null,
   signal?: AbortSignal,
 ): Promise<import('@/types/ai').AiScopedEstimateResponse> {
@@ -2736,7 +2736,7 @@ export function getAiProviderCatalogEntry(
 
 /** Free-tier batch duration estimate (Phase 1 endpoint, used by FreeTierWarningDialog). */
 export function getRunBatchEstimate(
-  runId: number,
+  runId: string,
   signal?: AbortSignal,
 ): Promise<AiBatchDurationEstimate> {
   return request<AiBatchDurationEstimate>(
@@ -2756,7 +2756,7 @@ import type { CveDetail, CveDetailWithContext } from '@/types';
  * call the global endpoint.
  */
 export function getCveDetail(
-  args: { cveId: string; scanId?: number | null; componentId?: (string | number) | null },
+  args: { cveId: string; scanId?: string | null; componentId?: (string | number) | null },
   signal?: AbortSignal,
 ): Promise<CveDetail | CveDetailWithContext> {
   const id = encodeURIComponent(args.cveId.trim().toUpperCase());
@@ -3260,7 +3260,7 @@ export function getVexVersionComparison(sbomId: (string | number), signal?: Abor
 export interface DashboardPriorityFinding {
   component_id: (string | number) | null;
   id: number;
-  analysis_run_id: number;
+  analysis_run_id: string;
   vuln_id: string;
   component_name: string | null;
   component_version: string | null;
@@ -3276,11 +3276,11 @@ export function getDashboardPriorityFindings(scope: DashboardFilterScope, signal
 }
 
 export function getVexAnalysisRuns(sbomId: (string | number), signal?: AbortSignal) {
-  return request<{items: Array<{id: number; run_status: string; completed_on: string | null; is_current: boolean}>}>(
+  return request<{items: Array<{id: string; run_status: string; completed_on: string | null; is_current: boolean}>}>(
     `/api/vex/investigations/analysis-runs?sbom_id=${sbomId}`, {signal});
 }
 
-export function getVexRunSnapshot(sbomId: (string | number), runId: number, offset: number, signal?: AbortSignal) {
+export function getVexRunSnapshot(sbomId: (string | number), runId: string, offset: number, signal?: AbortSignal) {
   return request<{total: number; snapshot_available: boolean; obsolete: boolean; items: Array<{
     investigation_id: number; canonical_vulnerability_id: string; component_name: string | null;
     component_version: string | null; effective_status: string; reconciliation_status: string;

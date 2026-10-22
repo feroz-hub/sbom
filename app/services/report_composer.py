@@ -189,7 +189,7 @@ def public_report_snapshot(db, report, tenant_id):
     """Detach public resource references before email, spreadsheet or JSON rendering."""
     from sqlalchemy import select
 
-    from ..models import Product, Projects, SBOMComponent, SBOMSource, Tenant
+    from ..models import AnalysisRun, Product, Projects, SBOMComponent, SBOMSource, Tenant
 
     models = {
         "tenant_id": Tenant,
@@ -199,40 +199,56 @@ def public_report_snapshot(db, report, tenant_id):
         "component_id": SBOMComponent,
         "previous_sbom_id": SBOMSource,
         "current_sbom_id": SBOMSource,
+        "run_id": AnalysisRun,
+        "analysis_run_id": AnalysisRun,
+        "previous_run_id": AnalysisRun,
+        "current_run_id": AnalysisRun,
     }
-    cache = {}
+    cache, references = {}, {}
+    collecting = True
 
     def identity(model, value):
-        if not isinstance(value, int):
+        if type(value) is not int:
             return value
         key = (model, value)
         if key not in cache:
-            table = model.__table__
-            query = select(table.c.public_id).where(table.c.id == value)
+            if collecting:
+                references.setdefault(model, set()).add(value)
+                return value
+            raise RuntimeError("Unresolvable public report identity")
+        return cache[key]
+
+    def walk(value, entity=None):
+        if isinstance(value, list):
+            return [walk(item, entity) for item in value]
+        if isinstance(value, dict):
+            result = {}
+            for key, item in value.items():
+                if key == "scheduled_outcomes":
+                    result[key] = {
+                        identity(SBOMSource, int(k) if str(k).isdecimal() else k): walk(v) for k, v in item.items()
+                    }
+                elif key in models or key == "id" and entity is not None:
+                    result[key] = identity(entity if key == "id" else models[key], item)
+                else:
+                    result[key] = walk(
+                        item, SBOMSource if key == "sboms" else AnalysisRun if key in {"run_a", "run_b"} else None
+                    )
+            return result
+        return value
+
+    walk(report)
+    for model, identifiers in references.items():
+        table = model.__table__
+        ids = sorted(identifiers)
+        for offset in range(0, len(ids), 500):
+            query = select(table.c.id, table.c.public_id).where(table.c.id.in_(ids[offset : offset + 500]))
             query = (
                 query.where(table.c.id == tenant_id) if model is Tenant else query.where(table.c.tenant_id == tenant_id)
             )
-            cache[key] = str(db.execute(query).scalar_one())
-        return cache[key]
-
-    def walk(value, sbom=False):
-        if isinstance(value, list):
-            return [walk(item, sbom) for item in value]
-        if isinstance(value, dict):
-            if "scheduled_outcomes" in value:
-                value = dict(value)
-                value["scheduled_outcomes"] = {
-                    identity(SBOMSource, int(key) if str(key).isdecimal() else key): walk(outcome)
-                    for key, outcome in value["scheduled_outcomes"].items()
-                }
-            return {
-                key: identity(SBOMSource if key == "id" and sbom else models[key], item)
-                if key in models or key == "id" and sbom
-                else walk(item, key == "sboms")
-                for key, item in value.items()
-            }
-        return value
-
+            for row in db.execute(query):
+                cache[(model, row.id)] = str(row.public_id)
+    collecting = False
     return walk(report)
 
 

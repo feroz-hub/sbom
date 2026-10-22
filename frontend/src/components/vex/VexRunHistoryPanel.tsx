@@ -10,15 +10,15 @@ import { Button } from '@/components/ui/Button';
 
 export function VexRunHistoryPanel({sbomId}: {sbomId: (string | number)}) {
   const {activeTenantId} = useAuth();
-  const [runId, setRunId] = useState(0);
+  const [runId, setRunId] = useState('');
   const [offset, setOffset] = useState(0);
   const runs = useQuery({queryKey: ['vex-run-history', activeTenantId, sbomId],
     queryFn: ({signal}) => getVexAnalysisRuns(sbomId, signal), enabled: !!activeTenantId});
   const snapshot = useQuery({queryKey: ['vex-run-snapshot', activeTenantId, sbomId, runId, offset],
     queryFn: ({signal}) => getVexRunSnapshot(sbomId, runId, offset, signal), enabled: !!activeTenantId && !!runId});
   return <section aria-label="Historical analysis snapshots" className="space-y-3 rounded border border-border p-4">
-    <Select label="Historical analysis run" value={runId} onChange={event => {setRunId(Number(event.target.value)); setOffset(0);}}>
-      <option value={0}>Select run evidence…</option>
+    <Select label="Historical analysis run" value={runId} onChange={event => {setRunId(event.target.value); setOffset(0);}}>
+      <option value="">Select run evidence…</option>
       {runs.data?.items.map(run => <option key={run.id} value={run.id}>Run {run.id} · {run.run_status} · {run.completed_on ?? 'Incomplete'}{!run.is_current ? ' · Obsolete' : ''}</option>)}
     </Select>
     {runs.isError || snapshot.isError ? <Alert variant="error">Historical run evidence could not be loaded.</Alert> : null}

@@ -6,8 +6,10 @@ import pytest
 from app.ai.config_loader import reset_loader
 from app.ai.rollout import _canary_bucket, evaluate_access
 from app.db import SessionLocal
-from app.models import AiSettings
+from app.models import AiSettings, AnalysisRun, SBOMSource
 from app.settings import reset_settings
+
+from tests.tenant_fixture_scope import verified_fixture_tenant
 
 
 @pytest.fixture
@@ -189,24 +191,45 @@ def test_canary_bucket_empty_key_is_zero():
 # ============================================================ Router integration
 
 
-def test_router_kill_switch_returns_409(client, _env):
+@pytest.fixture
+def rollout_run(client):
+    # A public selector resolves before rollout evaluation. Use a real scoped
+    # Run instead of relying on a nonexistent internal integer placeholder.
+    with SessionLocal() as db, verified_fixture_tenant(db, 1):
+        source = SBOMSource(tenant_id=1, sbom_name="Synthetic rollout gate", sbom_data="{}")
+        db.add(source)
+        db.flush()
+        run = AnalysisRun(
+            tenant_id=1,
+            sbom_id=source.id,
+            source="OSV",
+            run_status="OK",
+            started_on="2026-10-21",
+            completed_on="2026-10-21",
+        )
+        db.add(run)
+        db.commit()
+        return str(run.public_id)
+
+
+def test_router_kill_switch_returns_409(client, _env, rollout_run):
     _env(AI_FIXES_KILL_SWITCH="true", AI_FIXES_ENABLED="true", AI_CANARY_PERCENTAGE="100")
-    resp = client.post("/api/v1/runs/1/ai-fixes")
+    resp = client.post(f"/api/v1/runs/{rollout_run}/ai-fixes")
     assert resp.status_code == 409
     body = resp.json()["detail"]
     assert body["error_code"] == "AI_FIXES_KILL_SWITCH"
 
 
-def test_router_canary_excluded_returns_409(client, _env):
+def test_router_canary_excluded_returns_409(client, _env, rollout_run):
     _env(AI_FIXES_KILL_SWITCH="false", AI_FIXES_ENABLED="true", AI_CANARY_PERCENTAGE="0")
-    resp = client.post("/api/v1/runs/1/ai-fixes")
+    resp = client.post(f"/api/v1/runs/{rollout_run}/ai-fixes")
     assert resp.status_code == 409
     assert resp.json()["detail"]["error_code"] == "AI_FIXES_CANARY_EXCLUDED"
 
 
-def test_router_master_flag_off_returns_409(client, _env):
+def test_router_master_flag_off_returns_409(client, _env, rollout_run):
     _env(AI_FIXES_KILL_SWITCH="false", AI_FIXES_ENABLED="false", AI_CANARY_PERCENTAGE="100")
-    resp = client.post("/api/v1/runs/1/ai-fixes")
+    resp = client.post(f"/api/v1/runs/{rollout_run}/ai-fixes")
     assert resp.status_code == 409
     assert resp.json()["detail"]["error_code"] == "AI_FIXES_DISABLED"
 

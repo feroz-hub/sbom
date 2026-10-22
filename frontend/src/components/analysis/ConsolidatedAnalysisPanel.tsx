@@ -21,7 +21,7 @@ export interface ConsolidatedAnalysisPanelProps {
   selectedSources: SourceKey[];
   onSelectedSourcesChange: (next: SourceKey[]) => void;
   /** Called once a run completes so the parent can refetch the runs list. */
-  onComplete?: (runId: number) => void;
+  onComplete?: (runId: string) => void;
 }
 
 export function ConsolidatedAnalysisPanel({
@@ -44,7 +44,7 @@ export function ConsolidatedAnalysisPanel({
     state.phase === 'connecting' || state.phase === 'parsing' || state.phase === 'running';
 
   // Notify parent exactly once per completed run.
-  const lastNotifiedRunIdRef = useRef<number | null>(null);
+  const lastNotifiedRunIdRef = useRef<string | null>(null);
   useEffect(() => {
     if (state.phase === 'done' && state.runId != null && state.runId !== lastNotifiedRunIdRef.current) {
       lastNotifiedRunIdRef.current = state.runId;

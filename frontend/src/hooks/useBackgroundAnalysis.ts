@@ -57,7 +57,7 @@ export function useBackgroundAnalysis() {
                 _analysisStatus: 'ANALYSING',
                 _findingsCount: undefined,
                 latest_analysis: {
-                  run_id: s.latest_analysis?.run_id ?? 0,
+                  run_id: s.latest_analysis?.run_id ?? '',
                   status: 'RUNNING',
                   result: 'running',
                   finding_count: s.latest_analysis?.finding_count ?? 0,
@@ -87,7 +87,7 @@ export function useBackgroundAnalysis() {
           if (!isCurrent()) return;
           const status = result.run_status;
           const raw = result as unknown as Record<string, unknown>;
-          const runId = Number(raw.runId ?? raw.run_id ?? raw.id);
+          const runId = String(raw.runId ?? raw.run_id ?? raw.id ?? '');
           const total = result.total_findings ?? Number((raw.summary as { findings?: { total?: number } })?.findings?.total ?? 0);
           if (isActiveAnalysis(status)) {
             addPendingAnalysis(sbomId, sbomName, scope.key, runId || undefined);

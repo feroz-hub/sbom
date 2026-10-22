@@ -14,6 +14,8 @@ from app.sources.component_observation import applicable_osv_record
 from app.sources.cvss_assessment import assessment, numeric_score, osv_assessment
 from app.sources.reconciliation import reconcile
 
+from tests.public_id_fixture import run_uuid
+
 LOG4J = "pkg:maven/org.apache.logging.log4j/log4j-core@2.14.1"
 VECTOR = "CVSS:3.1/AV:N/AC:L/PR:N/UI:N/S:C/C:H/I:H/A:H"
 
@@ -402,10 +404,10 @@ def test_persistence_api_evidence_metrics_vex_and_pagination(client, reconciliat
     persisted = db.query(AnalysisFinding).filter_by(analysis_run_id=run.id).all()
     assert len(persisted) == 2
     assert db.query(SBOMComponent).filter_by(sbom_id=sbom.id).count() == 1
-    response = client.get(f"/api/runs/{run.id}/findings-enriched?page_size=1")
+    response = client.get(f"/api/runs/{run_uuid(run.id)}/findings-enriched?page_size=1")
     assert response.status_code == 200, response.text
     assert response.headers["X-Total-Count"] == "2"
-    all_rows = client.get(f"/api/runs/{run.id}/findings-enriched").json()
+    all_rows = client.get(f"/api/runs/{run_uuid(run.id)}/findings-enriched").json()
     finding = next(r for r in all_rows if r["vuln_id"] == "CVE-2021-44228")
     assert finding["component_id"] == str(stored.public_id)
     assert finding["component_name"] == "log4j-core" and finding["component_version"] == "2.14.1"
@@ -416,10 +418,10 @@ def test_persistence_api_evidence_metrics_vex_and_pagination(client, reconciliat
     assert finding["risk_score"] == 10 * (1 + 5 * 0.2) * (2 if finding["in_kev"] else 1)
     unscored = next(r for r in all_rows if r["vuln_id"] == "CVE-2021-45105")
     assert unscored["score"] is None and unscored["risk_input_estimated"]
-    metrics = client.get(f"/api/runs/{run.id}").json()["metrics"]
+    metrics = client.get(f"/api/runs/{run_uuid(run.id)}").json()["metrics"]
     assert (metrics["raw_observation_count"], metrics["total_findings"], metrics["unique_vulnerabilities"]) == (3, 2, 2)
     assert metrics["cvss_coverage"] == 0.5 and metrics["cvss_unknown_findings"] == 1
-    filtered = client.get(f"/api/runs/{run.id}/findings-enriched?severity=CRITICAL")
+    filtered = client.get(f"/api/runs/{run_uuid(run.id)}/findings-enriched?severity=CRITICAL")
     assert len(filtered.json()) == 1 and filtered.headers["X-Unfiltered-Total-Count"] == "2"
 
 

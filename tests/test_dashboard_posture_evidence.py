@@ -29,9 +29,11 @@ def response(client, **params):
     # Positive domain fixtures supply internal IDs to the metric layer. The
     # HTTP boundary requires the corresponding public UUIDs.
     from app.db import SessionLocal
+
     models = {"project_id": Projects, "product_id": Product, "sbom_id": SBOMSource}
     with SessionLocal() as db:
         from tests.tenant_fixture_scope import verified_fixture_tenant
+
         with verified_fixture_tenant(db, 1):
             wire_params = {key: str(db.get(models[key], value).public_id) for key, value in params.items()}
     r = client.get(URL, params=wire_params)
@@ -90,12 +92,14 @@ def test_two_analyzed_applications_agree_with_metrics_at_every_scope(client, app
     data = response(client, **params)
     assert data["summary"]["evidence_status"] == "AVAILABLE"
     assert data["summary"]["missing_targets"] == 0
-    assert {i["analysis_run_id"] for i in data["items"]} == ({ra.id, rb.id} if level == "tenant" else {ra.id})
+    assert {i["analysis_run_id"] for i in data["items"]} == (
+        {str(ra.public_id), str(rb.public_id)} if level == "tenant" else {str(ra.public_id)}
+    )
     scope = DashboardScope(1, params.get("project_id"), params.get("product_id"), params.get("sbom_id"))
     with dashboard_scope(db, scope):
         assert sum(i["analysis_finding_rows"] for i in data["items"]) == findings_latest_per_sbom_total(db) == 2
     zero = response(client, project_id=project.id, product_id=product.id, sbom_id=b.id)
-    assert zero["items"][0]["analysis_run_id"] == rb.id and zero["items"][0]["analysis_finding_rows"] == 0
+    assert zero["items"][0]["analysis_run_id"] == str(rb.public_id) and zero["items"][0]["analysis_finding_rows"] == 0
     assert zero["summary"]["evidence_status"] == "AVAILABLE"
 
 
@@ -112,7 +116,11 @@ def test_pending_and_failed_replacement_have_available_last_known_evidence(clien
     data = response(client)
     assert data["summary"]["evidence_status"] == "AVAILABLE"
     item = data["items"][0]
-    assert item["target_sbom_id"] == str(b.public_id) and item["posture_sbom_id"] == str(a.public_id) and item["analysis_run_id"] == run.id
+    assert (
+        item["target_sbom_id"] == str(b.public_id)
+        and item["posture_sbom_id"] == str(a.public_id)
+        and item["analysis_run_id"] == str(run.public_id)
+    )
     assert item["last_known_posture"] and item["analysis_finding_rows"] == 1
 
 
@@ -135,7 +143,7 @@ def test_legacy_metadata_and_missing_parent_do_not_hide_valid_analysis(client, a
     run.raw_report = json.dumps({"source_summary": [{"source": "NVD", "status": "success"}]})
     db.commit()
     item = response(client)["items"][0]
-    assert item["analysis_run_id"] == run.id and not item["last_known_posture"]
+    assert item["analysis_run_id"] == str(run.public_id) and not item["last_known_posture"]
     assert item["current_sbom"]["version"] is None and item["current_sbom"]["name"] == sbom.sbom_name
     assert not item["coverage_incomplete"]
 
@@ -173,7 +181,12 @@ def test_dashboard_posture_is_tenant_isolated_and_permission_protected(client, a
         assert response(client)["items"] == []
         assert (
             client.get(
-                URL, params={"project_id": str(app_line.project.public_id), "product_id": str(app_line.product.public_id), "sbom_id": str(sbom.public_id)}
+                URL,
+                params={
+                    "project_id": str(app_line.project.public_id),
+                    "product_id": str(app_line.product.public_id),
+                    "sbom_id": str(sbom.public_id),
+                },
             ).status_code
             == 404
         )

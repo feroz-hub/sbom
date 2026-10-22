@@ -1,3 +1,4 @@
+from tests.public_id_fixture import public_membership_key
 from tests.tenant_fixture_scope import verified_fixture_tenant
 
 """PR-6 tests — audit completeness, concurrency, RBAC and tenant isolation.
@@ -195,12 +196,12 @@ def test_assignment_conflicts_on_a_stale_version__VEX_AUD_002(client, seeded, db
     context = context_for(db, "CVE-2026-5001")
     first = client.put(
         f"{BASE}/{context.id}/assignment",
-        json={"assigned_to": assignee, "row_version": context.row_version, "reason": "triage"},
+        json={"assigned_to": public_membership_key(assignee), "row_version": context.row_version, "reason": "triage"},
     )
     assert first.status_code == 200, first.text
     stale = client.put(
         f"{BASE}/{context.id}/assignment",
-        json={"assigned_to": assignee, "row_version": 1, "reason": "triage"},
+        json={"assigned_to": public_membership_key(assignee), "row_version": 1, "reason": "triage"},
     )
     assert stale.status_code == 409
 
@@ -241,7 +242,7 @@ def test_assignment_is_recorded_and_audited(client, seeded, db):
     context = context_for(db, "CVE-2026-5001")
     response = client.put(
         f"{BASE}/{context.id}/assignment",
-        json={"assigned_to": assignee, "row_version": context.row_version, "reason": "triage"},
+        json={"assigned_to": public_membership_key(assignee), "row_version": context.row_version, "reason": "triage"},
     )
     assert response.status_code == 200, response.text
     db.refresh(context)
@@ -257,7 +258,7 @@ def test_unassignment_is_audited(client, seeded, db):
     context = context_for(db, "CVE-2026-5001")
     client.put(
         f"{BASE}/{context.id}/assignment",
-        json={"assigned_to": assignee, "row_version": context.row_version, "reason": "triage"},
+        json={"assigned_to": public_membership_key(assignee), "row_version": context.row_version, "reason": "triage"},
     )
     db.refresh(context)
     response = client.put(
@@ -366,9 +367,12 @@ def test_reconciliation_never_crosses_tenants__VEX_SEC_002(seeded, db):
 def test_cross_tenant_mutations_are_rejected__VEX_SEC_002(client, seeded, db):
     foreign = foreign_vex_fixture(db)
     before = foreign_vex_snapshot(db, 2, foreign["context_id"])
+    # Use a valid public local Membership so this tests foreign-context
+    # concealment rather than failing earlier on malformed assignee syntax.
+    assignee = public_membership_key(membership_key(make_member(db, "DEVELOPER")))
     for path, body in (
         ("decision", {"status": "AFFECTED", "row_version": foreign["row_version"], "reason": "x"}),
-        ("assignment", {"assigned_to": "mallory", "row_version": foreign["row_version"], "reason": "x"}),
+        ("assignment", {"assigned_to": assignee, "row_version": foreign["row_version"], "reason": "x"}),
         ("component", {"component_id": str(seeded["component"].public_id), "row_version": foreign["row_version"], "reason": "x"}),
     ):
         assert client.put(f"{BASE}/{foreign['context_id']}/{path}", json=body).status_code == 404

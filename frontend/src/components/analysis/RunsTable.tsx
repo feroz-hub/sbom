@@ -37,8 +37,8 @@ interface RunsTableProps {
   error: Error | null;
   /** Optional multi-select state for the Compare Runs flow. When provided,
    *  the table renders a checkbox in the first column. */
-  selectedIds?: Set<number>;
-  onToggleSelect?: (id: number) => void;
+  selectedIds?: Set<string>;
+  onToggleSelect?: (id: string) => void;
 }
 
 const STATUS_VALUES: AnalysisRun['run_status'][] = [
@@ -72,7 +72,7 @@ export function RunsTable({ runs, isLoading, error, selectedIds, onToggleSelect 
   const colCount = selectable ? 12 : 11;
   const router = useRouter();
   const { showToast } = useToast();
-  const [downloadingId, setDownloadingId] = useState<number | null>(null);
+  const [downloadingId, setDownloadingId] = useState<string | null>(null);
   const [search, setSearch] = useState('');
   const [statusFilter, setStatusFilter] = useState('');
   const [sourceFilter, setSourceFilter] = useState('');

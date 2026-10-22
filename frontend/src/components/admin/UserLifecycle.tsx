@@ -15,7 +15,7 @@ import { ConfirmationDialog } from '@/components/ui/ConfirmationDialog';
 import { type TenantSummary } from '@/lib/api';
 import { TenantSearchSelect } from './TenantSearchSelect';
 
-type Membership = { membership_id: number; tenant_id: (string | number); tenant_name: string; membership_status: string; roles: string[]; primary_role: string; role_assignment_version: number };
+type Membership = { membership_id: string; tenant_id: (string | number); tenant_name: string; membership_status: string; roles: string[]; primary_role: string; role_assignment_version: number };
 type Audit = { actor_user_id?: string | null; tenant_id?: (string | number) | null; id: number; action: string; outcome: string; timestamp: string };
 type User = Partial<Membership> & { is_platform_admin?: boolean; active_tenant_count?: number; id?: string; user_id?: string; display_name: string; first_name: string | null; last_name: string | null; email: string; phone: string | null; account_status: string; providers: string[]; email_verified: boolean; last_login_at: string | null; created_at: string; updated_at: string; tenant_memberships?: Membership[]; security?: { password_changed_at?: string | null; failed_login_count: number; locked_until: string | null } | null; activity?: { items: Audit[]; total: number } };
 const providerLabel = (value: string) => ({ NATIVE: 'Native', HCL_CS: 'HCL.CS', MICROSOFT_ENTRA: 'Microsoft Entra' }[value] || value);

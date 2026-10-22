@@ -14,6 +14,7 @@ IDENTITY = ("sbom_greenfield_uuid", "greenfield_setup", "160015", "synthetic-clu
 
 @pytest.fixture
 def flow(monkeypatch, tmp_path):
+    monkeypatch.setattr(migration.stack, "REVISION", migration.CURRENT)
     monkeypatch.setattr(migration.stack, "STATE", tmp_path)
     monkeypatch.setattr(migration.stack, "verify_resources", Mock())
     monkeypatch.setattr(migration, "verify_sources", Mock())
@@ -290,3 +291,12 @@ def test_restore_parity_rejects_nonliteral_expression_cast_changes():
     after = copy.deepcopy(before)
     after["catalog"]["constraints"][0][2] = "CHECK (ARRAY[(func())::text])"
     assert not migration.restored_snapshot_matches(before, after)
+
+
+def test_revision102_source_refuses_old_launcher_before_credentials_or_database(monkeypatch):
+    monkeypatch.setattr(migration.stack, "REVISION", "102_public_membership_grant_analysis_uuid")
+    sources = Mock(side_effect=AssertionError("must stop before preflight"))
+    monkeypatch.setattr(migration, "verify_sources", sources)
+    with pytest.raises(migration.SchemaUpgradeError, match="separately approved"):
+        migration.ensure_current()
+    sources.assert_not_called()

@@ -26,7 +26,7 @@ import type { AnalysisRun, RecentSbom } from '@/types';
 type FeedItem =
   | {
       kind: 'run';
-      id: number;
+      id: string;
       timestamp: string;
       run: AnalysisRun;
     }

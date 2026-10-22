@@ -18,6 +18,7 @@ from datetime import UTC, datetime
 
 import pytest
 
+from tests.public_id_fixture import run_uuid
 from tests.tenant_fixture_scope import verified_fixture_tenant
 
 
@@ -75,7 +76,7 @@ def test_v1_compare_response_carries_deprecation_headers(client, db):
     run_a = _seed(db, slug="dep-a")
     run_b = _seed(db, slug="dep-b")
 
-    resp = client.get(f"/api/analysis-runs/compare?run_a={run_a.id}&run_b={run_b.id}")
+    resp = client.get(f"/api/analysis-runs/compare?run_a={run_uuid(run_a.id)}&run_b={run_uuid(run_b.id)}")
     assert resp.status_code == 200
     assert resp.headers.get("Deprecation") == "true"
     assert "Sunset" in resp.headers
@@ -89,8 +90,8 @@ def test_v1_compare_increments_telemetry_counter(client, db):
     run_b = _seed(db, slug="cnt-b")
 
     before = get_compare_v1_call_count()
-    client.get(f"/api/analysis-runs/compare?run_a={run_a.id}&run_b={run_b.id}")
-    client.get(f"/api/analysis-runs/compare?run_a={run_a.id}&run_b={run_b.id}")
+    client.get(f"/api/analysis-runs/compare?run_a={run_uuid(run_a.id)}&run_b={run_uuid(run_b.id)}")
+    client.get(f"/api/analysis-runs/compare?run_a={run_uuid(run_a.id)}&run_b={run_uuid(run_b.id)}")
     after = get_compare_v1_call_count()
     assert after - before >= 2
 
@@ -98,7 +99,7 @@ def test_v1_compare_increments_telemetry_counter(client, db):
 def test_v1_compare_409_on_running_run(client, db):
     run_a = _seed(db, slug="rdy-a")
     run_b = _seed(db, slug="run-b", status="RUNNING")
-    resp = client.get(f"/api/analysis-runs/compare?run_a={run_a.id}&run_b={run_b.id}")
+    resp = client.get(f"/api/analysis-runs/compare?run_a={run_uuid(run_a.id)}&run_b={run_uuid(run_b.id)}")
     assert resp.status_code == 409
     body = resp.json()["detail"]
     assert body["error_code"] == "COMPARE_V1_E002_RUN_NOT_READY"
@@ -107,7 +108,7 @@ def test_v1_compare_409_on_running_run(client, db):
 def test_v1_compare_preserves_legacy_response_shape(client, db):
     run_a = _seed(db, slug="legacy-a")
     run_b = _seed(db, slug="legacy-b")
-    resp = client.get(f"/api/analysis-runs/compare?run_a={run_a.id}&run_b={run_b.id}")
+    resp = client.get(f"/api/analysis-runs/compare?run_a={run_uuid(run_a.id)}&run_b={run_uuid(run_b.id)}")
     assert resp.status_code == 200
     body = resp.json()
     # Legacy contract — DO NOT change without coordinating with external

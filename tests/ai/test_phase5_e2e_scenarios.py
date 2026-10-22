@@ -39,8 +39,10 @@ from app.models import (
     SBOMSource,
 )
 from app.settings import reset_settings
+from pydantic import UUID4
 
 from tests.ai.fixtures import EX1_CRITICAL_KEV_WITH_FIX_BUNDLE
+from tests.public_id_fixture import run_uuid
 
 # ---------------------------------------------------------------------------
 # Test scaffolding (mirrors test_scope_and_multi_batch.py — kept local so
@@ -199,7 +201,7 @@ def test_scenario1_filter_driven_critical_batch_returns_resolved_count(
     processes only the 2 Critical findings."""
     body = {"scope": {"severities": ["CRITICAL"], "label": "Critical findings"}}
     resp = client.post(
-        f"/api/v1/runs/{_seeded_run['run_id']}/ai-fixes",
+        f"/api/v1/runs/{run_uuid(_seeded_run['run_id'])}/ai-fixes",
         json=body,
     )
     assert resp.status_code == 200
@@ -222,11 +224,11 @@ def test_scenario2_two_concurrent_batches_have_distinct_ids_and_labels(
     their own scope labels."""
     run_id = _seeded_run["run_id"]
     r1 = client.post(
-        f"/api/v1/runs/{run_id}/ai-fixes",
+        f"/api/v1/runs/{run_uuid(run_id)}/ai-fixes",
         json={"scope": {"severities": ["CRITICAL"], "label": "Critical findings"}},
     )
     r2 = client.post(
-        f"/api/v1/runs/{run_id}/ai-fixes",
+        f"/api/v1/runs/{run_uuid(run_id)}/ai-fixes",
         json={"scope": {"kev_only": True, "label": "KEV findings"}},
     )
     assert r1.status_code == 200, r1.text
@@ -234,7 +236,7 @@ def test_scenario2_two_concurrent_batches_have_distinct_ids_and_labels(
     assert r1.json()["batch_id"] != r2.json()["batch_id"]
 
     # The list endpoint reflects both batches with correct labels.
-    listing = client.get(f"/api/v1/runs/{run_id}/ai-fixes/batches")
+    listing = client.get(f"/api/v1/runs/{run_uuid(run_id)}/ai-fixes/batches")
     assert listing.status_code == 200
     items = listing.json()["items"]
     assert len(items) == 2
@@ -253,7 +255,7 @@ def test_scenario3_selection_driven_uses_finding_ids(client, _seeded_run, _enabl
     run_id = _seeded_run["run_id"]
     selection = _seeded_run["finding_ids"][:3]
     body = {"scope": {"finding_ids": selection, "label": "Selected (3)"}}
-    resp = client.post(f"/api/v1/runs/{run_id}/ai-fixes", json=body)
+    resp = client.post(f"/api/v1/runs/{run_uuid(run_id)}/ai-fixes", json=body)
     assert resp.status_code == 200
     payload = resp.json()
     assert payload["total"] == 3
@@ -274,7 +276,7 @@ def test_scenario4_cache_overlap_reduces_second_batch_llm_calls(
     run_id = _seeded_run["run_id"]
     # Batch 1 — Critical only.
     r1 = client.post(
-        f"/api/v1/runs/{run_id}/ai-fixes",
+        f"/api/v1/runs/{run_uuid(run_id)}/ai-fixes",
         json={"scope": {"severities": ["CRITICAL"]}},
     )
     assert r1.status_code == 200
@@ -286,7 +288,7 @@ def test_scenario4_cache_overlap_reduces_second_batch_llm_calls(
 
     # Batch 2 — estimate for "High + Critical" should now report 2 cache hits.
     r2 = client.post(
-        f"/api/v1/runs/{run_id}/ai-fixes/estimate",
+        f"/api/v1/runs/{run_uuid(run_id)}/ai-fixes/estimate",
         json={"scope": {"severities": ["HIGH", "CRITICAL"]}},
     )
     assert r2.status_code == 200
@@ -321,7 +323,7 @@ def test_scenario6_fourth_concurrent_batch_returns_typed_409(
     finally:
         db.close()
 
-    resp = client.post(f"/api/v1/runs/{run_id}/ai-fixes")
+    resp = client.post(f"/api/v1/runs/{run_uuid(run_id)}/ai-fixes")
     assert resp.status_code == 409
     detail = resp.json()["detail"]
     assert detail["error_code"] == "TOO_MANY_ACTIVE_BATCHES"
@@ -376,7 +378,7 @@ def test_scenario8_cancel_one_batch_does_not_affect_others(
         db.close()
 
     resp = client.post(
-        f"/api/v1/runs/{run_id}/ai-fixes/batches/batch-a/cancel",
+        f"/api/v1/runs/{run_uuid(run_id)}/ai-fixes/batches/batch-a/cancel",
     )
     assert resp.status_code == 202
     assert store.is_cancel_requested(run_id, "batch-a") is True
@@ -398,7 +400,7 @@ def test_scenario9_selection_across_severities_resolves_to_supplied_ids(
     # 5 findings of mixed severities (every finding except the LOW one).
     selection = _seeded_run["finding_ids"][:5]
     resp = client.post(
-        f"/api/v1/runs/{run_id}/ai-fixes",
+        f"/api/v1/runs/{run_uuid(run_id)}/ai-fixes",
         json={"scope": {"finding_ids": selection, "label": "Selected (5)"}},
     )
     assert resp.status_code == 200
@@ -429,7 +431,7 @@ def test_scenario10_all_cached_scope_reports_zero_llm_calls(
     should report zero net-new LLM calls (every finding cached)."""
     run_id = _seeded_run["run_id"]
     r1 = client.post(
-        f"/api/v1/runs/{run_id}/ai-fixes",
+        f"/api/v1/runs/{run_uuid(run_id)}/ai-fixes",
         json={"scope": {"severities": ["CRITICAL"]}},
     )
     assert r1.status_code == 200
@@ -437,7 +439,7 @@ def test_scenario10_all_cached_scope_reports_zero_llm_calls(
         pytest.skip("Celery accepted; inline cache population not guaranteed.")
 
     r2 = client.post(
-        f"/api/v1/runs/{run_id}/ai-fixes/estimate",
+        f"/api/v1/runs/{run_uuid(run_id)}/ai-fixes/estimate",
         json={"scope": {"severities": ["CRITICAL"]}},
     )
     assert r2.status_code == 200
@@ -457,7 +459,7 @@ def test_legacy_get_estimate_endpoint_still_returns_full_run_count(client, _seed
     """Pre-Phase-4 frontends call ``GET /estimate`` and expect the
     legacy ``findings_total`` shape."""
     run_id = _seeded_run["run_id"]
-    resp = client.get(f"/api/v1/runs/{run_id}/ai-fixes/estimate")
+    resp = client.get(f"/api/v1/runs/{run_uuid(run_id)}/ai-fixes/estimate")
     assert resp.status_code == 200
     payload = resp.json()
     assert payload["findings_total"] == 6
@@ -475,7 +477,7 @@ def test_legacy_get_progress_endpoint_returns_latest_batch(
     pa.from_cache = 1
     _memory_store.write(pa)
 
-    resp = client.get(f"/api/v1/runs/{run_id}/ai-fixes/progress")
+    resp = client.get(f"/api/v1/runs/{run_uuid(run_id)}/ai-fixes/progress")
     assert resp.status_code == 200
     body = resp.json()
     assert body["batch_id"] == "latest"
@@ -487,7 +489,7 @@ def test_legacy_post_cancel_sets_run_level_flag(client, _seeded_run, _enable_ai,
     """The legacy run-scoped cancel endpoint sets the legacy flag,
     which halts every batch on the run."""
     run_id = _seeded_run["run_id"]
-    resp = client.post(f"/api/v1/runs/{run_id}/ai-fixes/cancel")
+    resp = client.post(f"/api/v1/runs/{run_uuid(run_id)}/ai-fixes/cancel")
     assert resp.status_code == 202
     body = resp.json()
     assert body["cancel_requested"] is True
@@ -499,7 +501,7 @@ def test_legacy_post_cancel_sets_run_level_flag(client, _seeded_run, _enable_ai,
 def test_trigger_without_scope_processes_all_findings(client, _seeded_run, _enable_ai, _fake_registry, _memory_store):
     """An empty body or no scope → run-wide batch (legacy behaviour)."""
     run_id = _seeded_run["run_id"]
-    resp = client.post(f"/api/v1/runs/{run_id}/ai-fixes")
+    resp = client.post(f"/api/v1/runs/{run_uuid(run_id)}/ai-fixes")
     assert resp.status_code == 200
     payload = resp.json()
     # All 6 findings in scope.
@@ -522,7 +524,7 @@ def test_progress_envelope_carries_batch_id_and_scope_label(
     fetch."""
     run_id = _seeded_run["run_id"]
     resp = client.post(
-        f"/api/v1/runs/{run_id}/ai-fixes",
+        f"/api/v1/runs/{run_uuid(run_id)}/ai-fixes",
         json={"scope": {"severities": ["HIGH"], "label": "High findings"}},
     )
     assert resp.status_code == 200
@@ -530,4 +532,11 @@ def test_progress_envelope_carries_batch_id_and_scope_label(
     progress = body["progress"]
     assert progress["batch_id"] == body["batch_id"]
     assert progress["scope_label"] == "High findings"
-    assert isinstance(BatchProgress.model_validate(progress), BatchProgress)
+
+    # The service/store DTO retains integer keys; the published HTTP projection
+    # has exactly the same fields with its Run resource reference as UUIDv4.
+    class PublicBatchProgress(BatchProgress):
+        run_id: UUID4
+
+    wire = PublicBatchProgress.model_validate(progress)
+    assert str(wire.run_id) == run_uuid(run_id)

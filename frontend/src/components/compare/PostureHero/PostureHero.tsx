@@ -22,7 +22,7 @@ interface Props {
   /** SBOM id for the sparkline; null when cross-SBOM (sparkline hides). */
   sharedSbomId: (string | number) | null;
   /** Run B id — the "current" data point on the sparkline. */
-  currentRunId?: number;
+  currentRunId?: string;
   /** Optional sbom name used in the sparkline aria-label. */
   sharedSbomName?: string | null;
 }

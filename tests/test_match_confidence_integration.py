@@ -15,6 +15,7 @@ import copy
 
 import pytest
 
+from tests.public_id_fixture import public_row
 from tests.tenant_fixture_scope import verified_fixture_tenant
 
 _LOG4SHELL_CVE = {
@@ -109,12 +110,13 @@ def test_nvd_finding_carries_confidence_dict_to_row(client, seeded_sbom, monkeyp
     run_id = resp.json()["id"]
 
     from app.db import SessionLocal
-    from app.models import AnalysisFinding
+    from app.models import AnalysisFinding, AnalysisRun
     from sqlalchemy import select
 
     db = SessionLocal()
     try:
         with verified_fixture_tenant(db, 1):
+            run_id = public_row(db, AnalysisRun, run_id).id
             rows = (
                 db.execute(
                     select(AnalysisFinding).where(

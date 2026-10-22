@@ -9,6 +9,7 @@ from app.models import AuditLog
 from app.services.sbom_selection import promote_successful_analysis
 from sqlalchemy import create_engine, select, text
 
+from tests.public_id_fixture import run_uuid
 from tests.test_vex_version_lifecycle import queue
 
 pytest_plugins = ["tests.test_vex_version_lifecycle"]
@@ -124,14 +125,14 @@ def test_run_snapshot_preserves_prior_assignment_and_decision(client, app_line, 
     context.effective_status = "AFFECTED"
     capture_run_snapshot(db, run)
     db.commit()
-    response = client.get("/api/vex/investigations/run-snapshot", params={"sbom_id": str(a.public_id), "analysis_run_id": run.id})
+    response = client.get("/api/vex/investigations/run-snapshot", params={"sbom_id": str(a.public_id), "analysis_run_id": run_uuid(run.id)})
     assert response.status_code == 200, response.text
     data = response.json()
     assert data["total"] == 1 and data["read_only"]
     assert data["items"][0]["assigned_to"] == "original-assignee"
     assert data["items"][0]["effective_status"] == "NOT_AFFECTED"
     other = app_line.version("unrelated")
-    assert client.get("/api/vex/investigations/run-snapshot", params={"sbom_id": str(other.public_id), "analysis_run_id": run.id}).status_code == 404
+    assert client.get("/api/vex/investigations/run-snapshot", params={"sbom_id": str(other.public_id), "analysis_run_id": run_uuid(run.id)}).status_code == 404
 
 
 def test_zero_context_snapshot_distinguishes_legacy_missing_snapshot(client, app_line, db):
@@ -140,7 +141,7 @@ def test_zero_context_snapshot_distinguishes_legacy_missing_snapshot(client, app
     run = app_line.run(a, [], status="OK")
     capture_run_snapshot(db, run)
     db.commit()
-    data = client.get("/api/vex/investigations/run-snapshot", params={"sbom_id": str(a.public_id), "analysis_run_id": run.id}).json()
+    data = client.get("/api/vex/investigations/run-snapshot", params={"sbom_id": str(a.public_id), "analysis_run_id": run_uuid(run.id)}).json()
     assert data["snapshot_available"] and data["total"] == 0
 
 
@@ -266,7 +267,6 @@ def test_imported_prior_assertion_is_evidence_for_only_its_vulnerability(client,
 
 def test_acceptance_auto_81_to_15_with_http_decisions_assignment_and_inactive_fallback(client, app_line, db):
     from app.models import VexInvestigation, VexOverrideAudit, VexStatement
-    from app.services.vex.authorization import membership_key
 
     from tests.test_vex_scoped_authorization import make_member
     a = app_line.version("1.0.0")
@@ -284,9 +284,10 @@ def test_acceptance_auto_81_to_15_with_http_decisions_assignment_and_inactive_fa
         })
         assert response.status_code == 200, response.text
     developer = make_member(db, "DEVELOPER")
+    public_assignee = f"membership:{developer.public_id}"
     assigned = rows[3]
     response = client.put(f'/api/vex/investigations/{assigned["id"]}/assignment', json={
-        "assigned_to": membership_key(developer), "reason": "Synthetic developer delegation",
+        "assigned_to": public_assignee, "reason": "Synthetic developer delegation",
         "row_version": assigned["row_version"],
     })
     assert response.status_code == 200, response.text
@@ -311,7 +312,7 @@ def test_acceptance_auto_81_to_15_with_http_decisions_assignment_and_inactive_fa
     assert all(row.assigned_to is None and row.effective_status == "UNDER_INVESTIGATION" for row in current)
     historical = client.get(f'/api/vex/investigations/{assigned["id"]}').json()
     assert not historical["capabilities"]["can_update"]
-    assert historical["internal_decision"]["assigned_to"] == membership_key(developer)
+    assert historical["internal_decision"]["assigned_to"] == public_assignee
     b.lifecycle_status = "INACTIVE"
     db.commit()
     assert queue(client)["total"] == 81

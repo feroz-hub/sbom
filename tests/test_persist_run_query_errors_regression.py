@@ -21,6 +21,7 @@ import json
 
 import pytest
 
+from tests.public_id_fixture import public_row
 from tests.tenant_fixture_scope import verified_fixture_tenant
 
 
@@ -60,7 +61,7 @@ def test_persist_analysis_run_records_query_error_count_and_raw_report(
     db = SessionLocal()
     try:
         with verified_fixture_tenant(db, 1):
-            run = db.get(AnalysisRun, run_id)
+            run = public_row(db, AnalysisRun, run_id)
             assert run is not None, f"AnalysisRun id={run_id} should exist"
 
             assert run.query_error_count >= 1, (

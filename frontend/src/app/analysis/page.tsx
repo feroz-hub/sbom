@@ -59,10 +59,10 @@ function AnalysisPageInner() {
     clearFilters,
   } = useAnalysisUrlState();
 
-  const [selectedForCompare, setSelectedForCompare] = useState<Set<number>>(new Set());
+  const [selectedForCompare, setSelectedForCompare] = useState<Set<string>>(new Set());
   const [selectedSources, setSelectedSources] = useState<SourceKey[]>(DEFAULT_SOURCES);
 
-  const toggleSelectForCompare = useCallback((id: number) => {
+  const toggleSelectForCompare = useCallback((id: string) => {
     setSelectedForCompare((prev) => {
       const next = new Set(prev);
       if (next.has(id)) {
@@ -148,7 +148,7 @@ function AnalysisPageInner() {
   });
 
   const handleAnalysisComplete = useCallback(
-    (runId: number) => {
+    (runId: string) => {
       showToast(`Analysis run #${runId} completed successfully.`, 'success');
       refetch();
     },

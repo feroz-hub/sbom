@@ -26,7 +26,7 @@ function wrap(children: ReactNode) {
 
 function sbomWithAnalysis(latestAnalysis: LatestAnalysis | null): SBOMSource {
   return {
-    id: Number(latestAnalysis?.run_id ?? 100),
+    id: String(latestAnalysis?.run_id ?? '00000000-0000-4000-8000-000000000064'),
     sbom_name: `sbom-${latestAnalysis?.result ?? 'none'}`,
     sbom_type: 1,
     sbom_version: '1.0.0',
@@ -90,7 +90,7 @@ describe('SbomsTable analysis column', () => {
         <SbomsTable
           sboms={[
             sbomWithAnalysis({
-              run_id: 77,
+              run_id: "00000000-0000-4000-8000-00000000004d",
               status,
               result,
               finding_count: result === 'completed' ? 5 : 0,
@@ -111,9 +111,9 @@ describe('SbomsTable analysis column', () => {
       ),
     );
 
-    const badge = screen.getByRole('link', { name: /SBOM 77:/i });
+    const badge = screen.getByRole('link', { name: /SBOM 00000000-0000-4000-8000-00000000004d:/i });
     expect(within(badge).getByText(label)).toBeInTheDocument();
-    expect(badge).toHaveAttribute('href', '/analysis/77');
+    expect(badge).toHaveAttribute('href', '/analysis/00000000-0000-4000-8000-00000000004d');
     if (result === 'completed') {
       expect(within(badge).getByText(/Critical 1/i)).toBeInTheDocument();
       expect(within(badge).getByText(/High 2/i)).toBeInTheDocument();
@@ -136,7 +136,7 @@ describe('SbomsTable analysis column', () => {
         <SbomsTable
           sboms={[
             sbomWithAnalysis({
-              run_id: 88,
+              run_id: "00000000-0000-4000-8000-000000000058",
               status: 'completed',
               result: 'pass',
               finding_count: 0,
@@ -157,7 +157,7 @@ describe('SbomsTable analysis column', () => {
       ),
     );
 
-    const badge = screen.getByRole('link', { name: /SBOM 88:/i });
+    const badge = screen.getByRole('link', { name: /SBOM 00000000-0000-4000-8000-000000000058:/i });
     expect(within(badge).getByText('Completed · 0 findings')).toBeInTheDocument();
     expect(badge).toHaveClass('text-green-700');
     expect(badge).toHaveAttribute('title', expect.stringContaining('No findings detected'));
@@ -172,7 +172,7 @@ describe('SbomsTable analysis column', () => {
               sbomWithAnalysis(null),
               {
                 ...sbomWithAnalysis({
-                  run_id: 101,
+                  run_id: "00000000-0000-4000-8000-000000000065",
                   status: 'completed',
                   result: 'pass',
                   finding_count: 0,
@@ -193,7 +193,7 @@ describe('SbomsTable analysis column', () => {
     expect(table).toHaveClass('[&_tbody_tr:nth-child(even)]:bg-row-alt');
     expect(table).toHaveClass('[&_tbody_tr]:hover:bg-row-hover');
 
-    const row = screen.getByText('#100').closest('tr');
+    const row = screen.getByText('#00000000-0000-4000-8000-000000000064').closest('tr');
     expect(row?.className).not.toMatch(/bg-(white|slate-50|gray-50|blue-50)/);
     expect(row?.className).not.toContain('hover:bg-hcl-light/40');
 

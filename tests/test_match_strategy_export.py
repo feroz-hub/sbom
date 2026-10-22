@@ -23,6 +23,8 @@ import json
 
 import pytest
 
+from tests.public_id_fixture import run_uuid
+
 _NVD_TAGGED_FINDING = {
     "vuln_id": "CVE-EXPORT-TEST-0001",
     "aliases": [],
@@ -80,7 +82,7 @@ def test_csv_export_includes_provenance_columns(client, run_with_tagged_finding)
     row produced by a tagged finding.
     """
     run_id = run_with_tagged_finding
-    resp = client.get(f"/api/analysis-runs/{run_id}/export/csv")
+    resp = client.get(f"/api/analysis-runs/{run_uuid(run_id)}/export/csv")
     assert resp.status_code == 200, resp.text
     body = resp.text
 
@@ -111,7 +113,7 @@ def test_sarif_export_includes_provenance_properties(client, run_with_tagged_fin
     them alongside the native fields.
     """
     run_id = run_with_tagged_finding
-    resp = client.get(f"/api/analysis-runs/{run_id}/export/sarif")
+    resp = client.get(f"/api/analysis-runs/{run_uuid(run_id)}/export/sarif")
     assert resp.status_code == 200, resp.text
     payload = json.loads(resp.text)
 

@@ -1734,7 +1734,7 @@ async def analyze_sbom_stream(
                 "complete",
                 {
                     "status": "already_running",
-                    "runId": existing.id,
+                    "runId": str(existing.public_id),
                     "message": "Analysis is already running for this SBOM.",
                     "total": existing.total_findings,
                     "critical": existing.critical_count,
@@ -1858,7 +1858,7 @@ async def analyze_sbom_stream(
             return {
                 "message": message,
                 "code": code,
-                "runId": run_id,
+                "runId": str(run.public_id),
                 "status": "ERROR",
                 "correlation_id": correlation_id,
             }
@@ -1871,7 +1871,7 @@ async def analyze_sbom_stream(
                 "progress",
                 {
                     "phase": "started",
-                    "runId": run.id,
+                    "runId": str(run.public_id),
                     "sources": sources,
                     "elapsed_ms": elapsed(),
                 },
@@ -2051,7 +2051,7 @@ async def analyze_sbom_stream(
             )
 
             complete_payload = {
-                "runId": run.id,
+                "runId": str(run.public_id),
                 "status": run_status,
                 "total": len(final_findings),
                 "critical": buckets["CRITICAL"],

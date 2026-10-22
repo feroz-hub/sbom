@@ -30,7 +30,7 @@ const STALE_TRACKING_TIMEOUT_MS = 60 * 60_000;
  *  variant; the new multi-batch flow keys by ``[run_id, batch_id]`` so
  *  two batches on one run live in two cache entries. */
 export function batchProgressQueryKey(
-  runId: number,
+  runId: string,
   batchId: string | null,
 ): readonly unknown[] {
   return batchId == null
@@ -207,7 +207,7 @@ function ScopedAiBatchProgressProvider({ children, enabled, identity }: Provider
     }
   }, [enabled, identity, setTracked]);
 
-  const unregister = useCallback((runId: number, batchId: string | null) => {
+  const unregister = useCallback((runId: string, batchId: string | null) => {
     const id = trackingKeyId({ runId, batchId });
     setTracked((prev) => {
       if (!prev.has(id)) return prev;

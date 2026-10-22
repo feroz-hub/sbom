@@ -45,7 +45,7 @@ function isTrackableStatus(status: AiBatchProgress['status'] | undefined): boole
 }
 
 export function useGlobalAiBatchProgress(
-  runId: number | null,
+  runId: string | null,
   args: {
     enabled?: boolean;
     batchId?: string | null;
@@ -66,12 +66,12 @@ export function useGlobalAiBatchProgress(
   const active = enabled && runId != null && scopeReady;
 
   const query = useQuery<AiBatchProgress | null>({
-    queryKey: batchProgressQueryKey(runId ?? -1, batchId),
+    queryKey: batchProgressQueryKey(runId ?? '', batchId),
     queryFn: ({ signal }) => {
       if (batchId == null) {
-        return getRunAiFixProgress(runId as number, signal);
+        return getRunAiFixProgress(runId as string, signal);
       }
-      return getRunAiBatch(runId as number, batchId, signal).then(
+      return getRunAiBatch(runId as string, batchId, signal).then(
         (detail) => detail.progress ?? null,
       );
     },
@@ -87,7 +87,7 @@ export function useGlobalAiBatchProgress(
   useEffect(() => {
     if (!shouldTrack || !register) return;
     register({
-      runId: runId as number,
+      runId: runId as string,
       batchId,
       scopeLabel,
     });

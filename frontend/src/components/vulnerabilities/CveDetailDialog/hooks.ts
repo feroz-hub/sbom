@@ -23,7 +23,7 @@ export function useCveDetail({
   enabled,
 }: {
   cveId: string | null;
-  scanId?: number | null;
+  scanId?: string | null;
   componentId?: (string | number) | null;
   enabled: boolean;
 }) {
@@ -64,7 +64,7 @@ export function useCveHoverPrefetch() {
   }, []);
 
   const onHoverStart = useCallback(
-    (cveId: string, scanId?: number | null) => () => {
+    (cveId: string, scanId?: string | null) => () => {
       onHoverEnd();
       timerRef.current = setTimeout(() => {
         queryClient.prefetchQuery({

@@ -20,14 +20,14 @@ export function useSbomsList(options?: { enabled?: boolean; scope?: DashboardFil
     refetchInterval: query => query.state.data?.some(row => isActiveAnalysis(row.latest_analysis?.status) || isActiveAnalysis(row._analysisStatus) || ['queued', 'running'].includes(row.latest_analysis?.result ?? '')) ? poll(query) : false,
     refetchOnWindowFocus: true,
   });
-  const previous = useRef(new Map<string, { runId: number; status: string }>());
+  const previous = useRef(new Map<string, { runId: string; status: string }>());
   useEffect(() => {
     for (const row of query.data ?? []) {
       const latest = row.latest_analysis; if (!latest?.run_id) continue;
       const key = `${auth.key}:${row.id}`, before = previous.current.get(key);
-      previous.current.set(key, { runId: Number(latest.run_id), status: latest.status });
+      previous.current.set(key, { runId: String(latest.run_id), status: latest.status });
       if (before && isActiveAnalysis(before.status) && auth.canReadAnalysis) {
-        void reconcileAnalysisTerminal(qc, { scope: auth.key, runId: Number(latest.run_id), sbomId: row.id,
+        void reconcileAnalysisTerminal(qc, { scope: auth.key, runId: String(latest.run_id), sbomId: row.id,
           status: latest.status, previousStatus: before.status, isCurrent: auth.capture() });
       }
     }

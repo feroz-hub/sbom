@@ -276,13 +276,13 @@ export function useProviderCatalog() {
 
 
 export function useRunBatchEstimate(
-  runId: number | null,
+  runId: string | null,
   args: { enabled?: boolean } = {},
 ) {
   const enabled = (args.enabled ?? true) && runId != null;
   return useQuery<AiBatchDurationEstimate>({
     queryKey: ['ai', 'run-batch-estimate', runId],
-    queryFn: ({ signal }) => getRunBatchEstimate(runId as number, signal),
+    queryFn: ({ signal }) => getRunBatchEstimate(runId as string, signal),
     enabled,
     staleTime: 30_000,
   });

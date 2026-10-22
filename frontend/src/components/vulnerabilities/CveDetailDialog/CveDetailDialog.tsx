@@ -25,7 +25,7 @@ export interface CveDetailDialogProps {
    * detected component context and the recommended-upgrade callout. When
    * absent, the global variant (``/api/v1/cves/{cveId}``) is used.
    */
-  scanId?: number | null;
+  scanId?: string | null;
   /** Constrain scan enrichment to the selected component, never the first CVE match. */
   componentId?: (string | number) | null;
   /** Wait for the host to resolve the precise scan/component context. */

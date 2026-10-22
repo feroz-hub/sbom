@@ -155,7 +155,7 @@ export type AiBatchStatus =
   | 'cancelled';
 
 export interface AiBatchProgress {
-  run_id: number;
+  run_id: string;
   /** Phase 4 multi-batch — null on legacy single-batch envelopes. */
   batch_id?: string | null;
   /** Human-readable scope description ("Critical findings", "Selected (12)"). */
@@ -214,7 +214,7 @@ export interface AiTriggerBatchResponse {
 
 export interface AiBatchListItem {
   batch_id: string;
-  run_id: number;
+  run_id: string;
   status: AiBatchStatus;
   scope_label?: string | null;
   provider_name: string;
@@ -230,7 +230,7 @@ export interface AiBatchListItem {
 }
 
 export interface AiBatchListResponse {
-  run_id: number;
+  run_id: string;
   items: AiBatchListItem[];
   total: number;
 }
@@ -246,7 +246,7 @@ export interface AiBatchDetailResponse {
  * signal so the CTA can render an honest ETA.
  */
 export interface AiScopedEstimateResponse {
-  run_id: number;
+  run_id: string;
   scope_label?: string | null;
   total_findings_in_scope: number;
   cached_count: number;
@@ -277,7 +277,7 @@ export interface AiFindingFixListItem {
 }
 
 export interface AiFindingFixListResponse {
-  run_id: number;
+  run_id: string;
   items: AiFindingFixListItem[];
   total: number;
 }
@@ -533,7 +533,7 @@ export interface AiProviderCatalogEntry {
 // Free-tier batch-duration estimate.
 
 export interface AiBatchDurationEstimate {
-  run_id: number;
+  run_id: string;
   findings_total: number;
   findings_to_generate: number;
   cached_count: number;

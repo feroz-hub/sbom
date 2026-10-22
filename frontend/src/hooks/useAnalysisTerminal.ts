@@ -3,7 +3,7 @@ import { useEffect, useRef } from 'react';
 import { useQueryClient } from '@tanstack/react-query';
 import { reconcileAnalysisTerminal } from '@/lib/analysisSync';
 import { useAnalysisScope } from './useAnalysisScope';
-export function useAnalysisTerminal(run?: { id: number; sbom_id: (string | number) | null; run_status: string }) {
+export function useAnalysisTerminal(run?: { id: string; sbom_id: (string | number) | null; run_status: string }) {
   const qc = useQueryClient(), scope = useAnalysisScope();
   const previous = useRef(new Map<string, string>());
   const id = run?.id, sbomId = run?.sbom_id, status = run?.run_status;

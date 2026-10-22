@@ -18,6 +18,24 @@ from datetime import UTC, datetime
 
 from app.schemas_cve import CveDetail, CveExploitation
 
+from tests.tenant_fixture_scope import verified_fixture_tenant
+
+
+def _scan(db, source):
+    from app.models import AnalysisRun
+
+    run = AnalysisRun(
+        tenant_id=1,
+        sbom_id=source.id,
+        source="OSV",
+        run_status="OK",
+        started_on="2026-10-21",
+        completed_on="2026-10-21",
+    )
+    db.add(run)
+    db.flush()
+    return run
+
 
 def _stub_detail(cve_id: str) -> CveDetail:
     return CveDetail(
@@ -76,9 +94,20 @@ def test_post_batch_rejects_all_garbage(client):
 
 
 def test_get_scan_variant_200(client, monkeypatch):
+    from app.db import SessionLocal
+    from app.models import SBOMSource
     from app.schemas_cve import CveDetailWithContext, CveScanContext
 
+    with SessionLocal() as db, verified_fixture_tenant(db, 1):
+        source = SBOMSource(tenant_id=1, sbom_name="Synthetic CVE scan", sbom_data="{}")
+        db.add(source)
+        db.flush()
+        run = _scan(db, source)
+        db.commit()
+        internal, public = run.id, str(run.public_id)
+
     async def _fake(self, cve_id, scan_id):  # noqa: ARG001
+        assert scan_id == internal
         base = _stub_detail(cve_id).model_dump()
         return CveDetailWithContext(
             **base,
@@ -88,7 +117,7 @@ def test_get_scan_variant_200(client, monkeypatch):
         )
 
     monkeypatch.setattr("app.services.cve_service.CveDetailService.get_with_scan_context", _fake)
-    resp = client.get("/api/v1/scans/123/cves/CVE-2024-12345")
+    resp = client.get(f"/api/v1/scans/{public}/cves/CVE-2024-12345")
     assert resp.status_code == 200, resp.text
     body = resp.json()
     assert body["component"]["name"] == "left-pad"
@@ -111,9 +140,7 @@ def test_get_cve_detail_accepts_debian_alias(client, monkeypatch):
         return _stub_detail(vid.normalized)
 
     monkeypatch.setattr("app.services.cve_service.aggregate", _fake_aggregate)
-    monkeypatch.setattr(
-        "app.services.cve_service.CveDetailService._read_cache", lambda self, key: None
-    )
+    monkeypatch.setattr("app.services.cve_service.CveDetailService._read_cache", lambda self, key: None)
     monkeypatch.setattr(
         "app.services.cve_service.CveDetailService._write_cache_with_db",
         lambda self, db, detail: None,
@@ -164,9 +191,11 @@ def test_scan_variant_forwards_component_constraint(client, monkeypatch):
         db.flush()
         component = SBOMComponent(sbom_id=sbom.id, name="left-pad", version="1.2.0")
         db.add(component)
+        run = _scan(db, sbom)
         db.commit()
         internal_id, public_id = component.id, str(component.public_id)
-    response = client.get(f"/api/v1/scans/123/cves/CVE-2024-12345?component_id={public_id}")
+        run_id, run_public_id = run.id, str(run.public_id)
+    response = client.get(f"/api/v1/scans/{run_public_id}/cves/CVE-2024-12345?component_id={public_id}")
     assert response.status_code == 200
-    assert calls == [("CVE-2024-12345", 123, internal_id)]
-    assert client.get("/api/v1/scans/123/cves/CVE-2024-12345?component_id=0").status_code == 422
+    assert calls == [("CVE-2024-12345", run_id, internal_id)]
+    assert client.get(f"/api/v1/scans/{run_public_id}/cves/CVE-2024-12345?component_id=0").status_code == 422

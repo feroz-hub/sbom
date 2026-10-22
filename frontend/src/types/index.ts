@@ -78,7 +78,7 @@ export type AnalysisStatus =
   | 'cancelled';
 
 export interface LatestAnalysisSummary {
-  run_id?: number | string;
+  run_id?: string | string;
   status: AnalysisStatus | string;
   result?: string | null;
   finding_count?: number | null;
@@ -201,8 +201,8 @@ export interface SBOMSource {
 
 export interface Fda510kReportSelection {
   sbom_id: (string | number);
-  findings_analysis_run_id?: number | null;
-  lifecycle_analysis_run_id?: number | null;
+  findings_analysis_run_id?: string | null;
+  lifecycle_analysis_run_id?: string | null;
 }
 
 export interface Fda510kReportMetadata {
@@ -753,7 +753,7 @@ export interface VexStatement {
 export interface ComponentVulnerability {
   vulnerability_id: string;
   severity: string | null;
-  findings: { id: number; run_id: number; source: string | null; match_reason: string | null; matched_range: string | null; title: string | null }[];
+  findings: { id: number; run_id: string; source: string | null; match_reason: string | null; matched_range: string | null; title: string | null }[];
   current_decision: VexStatement | null;
 }
 
@@ -945,7 +945,7 @@ export interface VulnerabilityRemediation {
 export interface AnalysisRun {
   is_current?: boolean;
   processing_eligibility?: { eligible: boolean; reason_code: string | null; reason: string | null };
-  id: number;
+  id: string;
   sbom_id: (string | number) | null;
   sbom_name?: string | null;
   project_id: (string | number) | null;
@@ -1075,7 +1075,7 @@ export interface AnalysisFinding {
   vex_status?: VexStatus | null;
   vex_decision?: VexStatement | null;
   id: number;
-  analysis_run_id: number;          // backend field name
+  analysis_run_id: string;          // backend field name
   component_id?: (string | number) | null;
   vuln_id: string | null;
   source: string | null;            // e.g. "NVD", "OSV", "NVD,OSV"
@@ -1489,7 +1489,7 @@ export interface AnalyzeSBOMPayload {
 }
 
 export interface PDFReportPayload {
-  runId: number;
+  runId: string;
   title?: string;
   filename?: string;
 }
@@ -1603,7 +1603,7 @@ export interface RiskMethodology {
 
 export interface SBOMRiskSummary {
   sbom_id: (string | number);
-  run_id?: number;
+  run_id?: string;
   total_risk_score: number;
   risk_band: 'CRITICAL' | 'HIGH' | 'MEDIUM' | 'LOW';
   components: RiskComponent[];
@@ -1698,8 +1698,8 @@ export interface DashboardTrend {
 }
 
 export interface CompareRunsResult {
-  run_a: { id: number; sbom_name: string | null; completed_on: string | null };
-  run_b: { id: number; sbom_name: string | null; completed_on: string | null };
+  run_a: { id: string; sbom_name: string | null; completed_on: string | null };
+  run_b: { id: string; sbom_name: string | null; completed_on: string | null };
   new_findings: string[];
   resolved_findings: string[];
   common_findings: string[];
@@ -1740,7 +1740,7 @@ export interface AnalysisSchedule {
   next_run_at: string | null;
   last_run_at: string | null;
   last_run_status: string | null;
-  last_run_id: number | null;
+  last_run_id: string | null;
   consecutive_failures: number;
   min_gap_minutes: number;
   created_on: string | null;
@@ -1799,7 +1799,7 @@ export interface ScheduleTargetPreview {
 }
 
 export interface ConsolidatedAnalysisResult {
-  runId: number;
+  runId: string;
   sbom_id?: (string | number);
   sbom_name?: string;
   total_components?: number;
@@ -1881,7 +1881,7 @@ export type VexInvestigationSortField =
 
 export interface VexInvestigationRow {
   sbom_version?: string | null;
-  analysis_run_id?: number | null;
+  analysis_run_id?: string | null;
   historical?: boolean;
   id: number;
   canonical_vulnerability_id: string;
@@ -1978,7 +1978,7 @@ export interface VexInvestigationCapabilities {
 
 export interface VexInvestigationDetail {
   sbom_version?: string | null;
-  previous_decisions?: Array<{ source_name?: string | null; impact_statement?: string | null; action_statement?: string | null; evidence?: Record<string, unknown> | null; investigation_id: number; statement_id: number; sbom_id: (string | number); sbom_version: string; decision: string; justification: string | null; reviewer: string | null; decided_at: string | null; component_name: string; component_version: string; analysis_run_id: number | null; applicability: string; component_version_changed: boolean }>;
+  previous_decisions?: Array<{ source_name?: string | null; impact_statement?: string | null; action_statement?: string | null; evidence?: Record<string, unknown> | null; investigation_id: number; statement_id: number; sbom_id: (string | number); sbom_version: string; decision: string; justification: string | null; reviewer: string | null; decided_at: string | null; component_name: string; component_version: string; analysis_run_id: string | null; applicability: string; component_version_changed: boolean }>;
   capabilities?: VexInvestigationCapabilities;
   id: number;
   sbom_id: (string | number);
@@ -2005,7 +2005,7 @@ export interface VexInvestigationDetail {
   analyzer_evidence: {
     detection_state: string | null;
     sources: string[];
-    analysis_run_id: number | null;
+    analysis_run_id: string | null;
     match_strategy: string | null;
     match_confidence: string | null;
     matched_range: string | null;
@@ -2094,12 +2094,12 @@ export interface SbomPosture {
   latest_analyzed?: {id: (string | number); name: string; version: string | null} | null;
   latest_uploaded: {id: (string | number); name: string; version: string | null} | null;
   posture_sbom: {id: (string | number); name: string; version: string | null} | null;
-  analysis_run_id: number | null; analysis_status: string; analysis_finding_rows?: number | null;
+  analysis_run_id: string | null; analysis_status: string; analysis_finding_rows?: number | null;
   last_known_posture: boolean; coverage_incomplete: boolean; warning: string | null;
   designation_required: boolean;
 }
 export interface VexVersionComparison {
-  previous_run_id: number; current_run_id: number; previous_sbom_id: (string | number); current_sbom_id: (string | number);
+  previous_run_id: string; current_run_id: string; previous_sbom_id: (string | number); current_sbom_id: (string | number);
   previous_version: string | null; current_version: string | null;
   previous_findings: number; current_findings: number; still_detected: number; new: number;
   no_longer_observed: number; unresolved_comparison: number; limitations: string[];
@@ -2107,7 +2107,7 @@ export interface VexVersionComparison {
 }
 export interface VexComparisonContext {
   vulnerability_id: string; component_id: (string | number) | null; component_name: string | null;
-  component_version: string | null; sbom_id: (string | number); analysis_run_id: number; purl: string | null;
+  component_version: string | null; sbom_id: (string | number); analysis_run_id: string; purl: string | null;
 }
 
 

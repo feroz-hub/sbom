@@ -14,7 +14,7 @@ import type { RunSummary } from '@/types/compare';
 
 const SAMPLE_RUNS: RunSummary[] = [
   {
-    id: 10,
+    id: "00000000-0000-4000-8000-00000000000a",
     sbom_id: 1,
     sbom_name: 'log4j-monorepo',
     project_id: 100,
@@ -26,7 +26,7 @@ const SAMPLE_RUNS: RunSummary[] = [
     total_components: 50,
   },
   {
-    id: 11,
+    id: "00000000-0000-4000-8000-00000000000b",
     sbom_id: 2,
     sbom_name: 'web-frontend',
     project_id: 100,
@@ -38,7 +38,7 @@ const SAMPLE_RUNS: RunSummary[] = [
     total_components: 30,
   },
   {
-    id: 12,
+    id: "00000000-0000-4000-8000-00000000000c",
     sbom_id: 3,
     sbom_name: 'mobile-android',
     project_id: 200,
@@ -117,7 +117,7 @@ describe('RunPicker', () => {
     // ArrowDown moves to the second (id 11), Enter fires onSelect.
     await user.keyboard('{ArrowDown}{Enter}');
     expect(onSelect).toHaveBeenCalledTimes(1);
-    expect(onSelect.mock.calls[0][0].id).toBe(11);
+    expect(onSelect.mock.calls[0][0].id).toBe('00000000-0000-4000-8000-00000000000b');
   });
 
   it('Escape closes the listbox', async () => {
@@ -161,7 +161,7 @@ describe('RunPicker', () => {
     // reads the canonical name from the compare API response.
     recentRuns.mockResolvedValue([]); // simulate empty recent list
     const summary: RunSummary = {
-      id: 999,
+      id: "00000000-0000-4000-8000-0000000003e7",
       sbom_id: 7,
       sbom_name: 'archived-service',
       project_id: 42,
@@ -175,13 +175,13 @@ describe('RunPicker', () => {
     renderWithCompareProviders(
       <RunPicker
         label="Run A · baseline"
-        selectedRunId={999}
+        selectedRunId="00000000-0000-4000-8000-0000000003e7"
         selectedRunSummary={summary}
         onSelect={() => {}}
       />,
     );
     expect(screen.getByRole('button')).toHaveTextContent(/archived-service/);
-    expect(screen.getByRole('button')).toHaveTextContent(/#999/);
+    expect(screen.getByRole('button')).toHaveTextContent(/#00000000-0000-4000-8000-0000000003e7/);
   });
 
   it('renders "Same project as Run A" filter chip when a paired run is given', async () => {
@@ -216,13 +216,13 @@ const MULTI_RUN_FIXTURE: RunSummary[] = [
   // Same SBOM as paired (log4j-monorepo @ project 100), older
   {
     ...SAMPLE_RUNS[0],
-    id: 9,
+    id: "00000000-0000-4000-8000-000000000009",
     completed_on: '2026-04-25T12:00:00Z',
   },
   // Same SBOM as paired, even older
   {
     ...SAMPLE_RUNS[0],
-    id: 8,
+    id: "00000000-0000-4000-8000-000000000008",
     completed_on: '2026-04-20T12:00:00Z',
   },
   // The paired run itself — should be excluded from the dropdown
@@ -268,20 +268,20 @@ describe('RunPicker — smart grouping', () => {
     await user.click(screen.getByRole('button', { name: /Choose a run/i }));
     await screen.findByText(/Other runs of log4j-monorepo/i);
 
-    // Only the OTHER log4j runs (#9, #8) should be visible — the paired
-    // run #10 must not appear as a selectable option.
+    // Only the OTHER log4j runs (#00000000-0000-4000-8000-000000000009, #00000000-0000-4000-8000-000000000008) should be visible — the paired
+    // run #00000000-0000-4000-8000-00000000000a must not appear as a selectable option.
     const listbox = screen.getByRole('listbox');
     const optionIds = within(listbox)
       .getAllByRole('option')
       .map((el) => el.textContent ?? '');
-    expect(optionIds.some((t) => t.includes('#10'))).toBe(false);
-    expect(optionIds.some((t) => t.includes('#9'))).toBe(true);
-    expect(optionIds.some((t) => t.includes('#8'))).toBe(true);
+    expect(optionIds.some((t) => t.includes('#00000000-0000-4000-8000-00000000000a'))).toBe(false);
+    expect(optionIds.some((t) => t.includes('#00000000-0000-4000-8000-000000000009'))).toBe(true);
+    expect(optionIds.some((t) => t.includes('#00000000-0000-4000-8000-000000000008'))).toBe(true);
   });
 
   it('shows the single-run hint when the paired SBOM has no other runs', async () => {
     // Drop the same-SBOM siblings — only the paired run plus unrelated
-    // SBOMs remain, mirroring the screenshot scenario where app-sbom #7
+    // SBOMs remain, mirroring the screenshot scenario where app-sbom #00000000-0000-4000-8000-000000000007
     // is the only run of its SBOM.
     recentRuns.mockResolvedValue([
       PAIRED_LOG4J,

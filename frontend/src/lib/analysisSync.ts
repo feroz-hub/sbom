@@ -1,3 +1,4 @@
+import { publicId } from './publicId';
 import type { QueryClient } from '@tanstack/react-query';
 import { canonicalRunStatus } from './analysisRunStatusLabels';
 import { invalidateAnalysisCompletion } from './queryInvalidation';
@@ -7,10 +8,10 @@ export const isTerminalAnalysis = (status?: string | null) => ['OK', 'FINDINGS',
 
 /** Bookkeeping lives in QueryClient so logout/tenant cache clearing also resets deduplication. */
 export async function reconcileAnalysisTerminal(qc: QueryClient, args: {
-  scope: string; runId: number; sbomId?: (string | number); status: string; previousStatus?: string;
+  scope: string; runId: string; sbomId?: (string | number); status: string; previousStatus?: string;
   isCurrent: () => boolean;
 }): Promise<boolean> {
-  if (!args.isCurrent() || !Number.isSafeInteger(args.runId) || args.runId <= 0 || !isTerminalAnalysis(args.status)) return false;
+  if (!args.isCurrent() || !publicId(args.runId) || !isTerminalAnalysis(args.status)) return false;
   if (args.previousStatus && !isActiveAnalysis(args.previousStatus) && !isTerminalAnalysis(args.previousStatus)) return false;
   const status = canonicalRunStatus(args.status);
   const key = ['analysis-terminal-sync', args.scope, args.runId];

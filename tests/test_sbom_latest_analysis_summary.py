@@ -137,7 +137,7 @@ def test_sbom_list_returns_latest_analysis_state(client, db, status, normalized_
     row = _listed_sbom(client, created_by=created_by, sbom_id=str(sbom.public_id))
     latest = row["latest_analysis"]
 
-    assert latest["run_id"] == run.id
+    assert latest["run_id"] == str(run.public_id)
     assert latest["status"] == normalized_status
     assert latest["result"] == result
     if status == "FINDINGS":
@@ -161,8 +161,8 @@ def test_sbom_list_selects_latest_run_when_multiple_exist(client, db):
 
     row = _listed_sbom(client, created_by=created_by, sbom_id=str(sbom.public_id))
 
-    assert row["latest_analysis"]["run_id"] == latest_run.id
-    assert row["latest_analysis"]["run_id"] != old_run.id
+    assert row["latest_analysis"]["run_id"] == str(latest_run.public_id)
+    assert row["latest_analysis"]["run_id"] != str(old_run.public_id)
     assert row["latest_analysis"]["status"] == "failed"
     assert row["latest_analysis"]["result"] == "failed"
     assert row["latest_analysis"]["error_message"] == "newer failed"

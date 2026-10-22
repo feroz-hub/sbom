@@ -217,7 +217,7 @@ def test_all_parts_and_real_artifact_renderers(fixture):
     assert report["summary"]["severity"]["HIGH"] == 1
     assert report["summary"]["epss_outlook"]["coverage"] == 1
     item = report["sboms"][0]
-    assert item["comparisons"]["B"]["run_a"]["id"] == f.runs[1].id
+    assert item["comparisons"]["B"]["run_a"]["id"] == str(f.runs[1].public_id)
     assert item["comparisons"]["C"]["persistent_findings"][0]["age_days"] > 0
     assert item["comparisons"]["D"]["relationship"]["classification"] == "SAME_LINEAGE_DIFFERENT_VERSION"
     assert item["comparisons"]["D"]["relationship"]["version_a"] == "1"

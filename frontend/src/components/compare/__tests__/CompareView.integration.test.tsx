@@ -66,7 +66,7 @@ describe('CompareView — empty selection', () => {
 
 describe('CompareView — same-run guard', () => {
   it('shows the same-run state when run_a === run_b', () => {
-    currentParams = new URLSearchParams('run_a=5&run_b=5');
+    currentParams = new URLSearchParams('run_a=00000000-0000-4000-8000-000000000005&run_b=00000000-0000-4000-8000-000000000005');
     renderWithCompareProviders(<CompareView />);
     expect(screen.getByText(/same run twice/i)).toBeInTheDocument();
   });
@@ -74,7 +74,7 @@ describe('CompareView — same-run guard', () => {
 
 describe('CompareView — loading', () => {
   it('renders the skeleton while compare is in flight', () => {
-    currentParams = new URLSearchParams('run_a=1&run_b=2');
+    currentParams = new URLSearchParams('run_a=00000000-0000-4000-8000-000000000001&run_b=00000000-0000-4000-8000-000000000002');
     compareRunsV2.mockReturnValue(new Promise(() => {})); // never resolves
     const { container } = renderWithCompareProviders(<CompareView />);
     // Skeleton uses a generic Spinner-style block — assert no real rows.
@@ -85,7 +85,7 @@ describe('CompareView — loading', () => {
 
 describe('CompareView — error envelopes', () => {
   it('maps run-not-ready (E002) into the warning banner', async () => {
-    currentParams = new URLSearchParams('run_a=1&run_b=2');
+    currentParams = new URLSearchParams('run_a=00000000-0000-4000-8000-000000000001&run_b=00000000-0000-4000-8000-000000000002');
     compareRunsV2.mockRejectedValue(
       new HttpError('not ready', 409, 'COMPARE_E002_RUN_NOT_READY'),
     );
@@ -99,18 +99,18 @@ describe('CompareView — error envelopes', () => {
     // B-5 — backend's error envelope carries run_id and status; without the
     // forward the banner used to render "Status: unknown" / "One of the
     // runs". Now it should render the actual values.
-    currentParams = new URLSearchParams('run_a=1&run_b=2');
+    currentParams = new URLSearchParams('run_a=00000000-0000-4000-8000-000000000001&run_b=00000000-0000-4000-8000-000000000002');
     compareRunsV2.mockRejectedValue(
       new HttpError(
         'run 2 status=RUNNING is not comparable',
         409,
         'COMPARE_E002_RUN_NOT_READY',
-        { run_id: 2, status: 'RUNNING', error_code: 'COMPARE_E002_RUN_NOT_READY' },
+        { run_id: '00000000-0000-4000-8000-000000000002', status: 'RUNNING', error_code: 'COMPARE_E002_RUN_NOT_READY' },
       ),
     );
     renderWithCompareProviders(<CompareView />);
     await waitFor(() =>
-      expect(screen.getByText(/Run #2 isn't ready yet/i)).toBeInTheDocument(),
+      expect(screen.getByText(/Run #00000000-0000-4000-8000-000000000002 isn't ready yet/i)).toBeInTheDocument(),
     );
     expect(screen.getByText(/RUNNING/)).toBeInTheDocument();
     // B-4 — the misleading "auto-retry shortly" copy is gone; a manual
@@ -122,13 +122,13 @@ describe('CompareView — error envelopes', () => {
   });
 
   it('maps run-not-found (E001) into the error banner', async () => {
-    currentParams = new URLSearchParams('run_a=1&run_b=2');
+    currentParams = new URLSearchParams('run_a=00000000-0000-4000-8000-000000000001&run_b=00000000-0000-4000-8000-000000000002');
     compareRunsV2.mockRejectedValue(
       new HttpError(
         'not found',
         404,
         'COMPARE_E001_RUN_NOT_FOUND',
-        { run_id: 99, error_code: 'COMPARE_E001_RUN_NOT_FOUND' },
+        { run_id: '00000000-0000-4000-8000-000000000063', error_code: 'COMPARE_E001_RUN_NOT_FOUND' },
       ),
     );
     renderWithCompareProviders(<CompareView />);
@@ -136,13 +136,13 @@ describe('CompareView — error envelopes', () => {
       expect(screen.getByText(/Run not found/i)).toBeInTheDocument(),
     );
     // B-5 — id from detail is rendered, not the placeholder "Run #?".
-    expect(screen.getByText(/Run #99 no longer exists/i)).toBeInTheDocument();
+    expect(screen.getByText(/Run #00000000-0000-4000-8000-000000000063 no longer exists/i)).toBeInTheDocument();
   });
 });
 
 describe('CompareView — loaded happy path', () => {
   it('renders posture region with three deltas; no risk score scalar', async () => {
-    currentParams = new URLSearchParams('run_a=1&run_b=2');
+    currentParams = new URLSearchParams('run_a=00000000-0000-4000-8000-000000000001&run_b=00000000-0000-4000-8000-000000000002');
     compareRunsV2.mockResolvedValue(SAMPLE_COMPARE_RESULT);
     renderWithCompareProviders(<CompareView />);
 
@@ -164,7 +164,7 @@ describe('CompareView — loaded happy path', () => {
   });
 
   it('renders three tabs and switches when clicked', async () => {
-    currentParams = new URLSearchParams('run_a=1&run_b=2');
+    currentParams = new URLSearchParams('run_a=00000000-0000-4000-8000-000000000001&run_b=00000000-0000-4000-8000-000000000002');
     compareRunsV2.mockResolvedValue(SAMPLE_COMPARE_RESULT);
     renderWithCompareProviders(<CompareView />);
     await waitFor(() =>

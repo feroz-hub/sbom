@@ -1,11 +1,12 @@
+import { publicId } from './publicId';
 /** Principal-scoped browser recovery markers. Legacy/unscoped markers cannot authorize recovery. */
-export interface PendingAnalysis { sbomId: (string | number); sbomName: string; scope: string; startedAt: number; checkedAt: number; runId?: number }
+export interface PendingAnalysis { sbomId: (string | number); sbomName: string; scope: string; startedAt: number; checkedAt: number; runId?: string }
 const KEY = 'pending_analyses', MAX_AGE_MS = 3 * 60 * 1000;
 function read(): Record<string, PendingAnalysis> {
   try { const value = JSON.parse(sessionStorage.getItem(KEY) ?? '{}'); return value && typeof value === 'object' && !Array.isArray(value) ? value : {}; } catch { return {}; }
 }
 function write(value: Record<string, PendingAnalysis>) { try { sessionStorage.setItem(KEY, JSON.stringify(value)); } catch { /* unavailable storage */ } }
-export function addPendingAnalysis(sbomId: (string | number), sbomName: string, scope = 'legacy', runId?: number) {
+export function addPendingAnalysis(sbomId: (string | number), sbomName: string, scope = 'legacy', runId?: string) {
   const value = read(); const key = `${scope}:${sbomId}`, previous = value[key];
   value[key] = { sbomId, sbomName, scope, startedAt: previous?.startedAt ?? Date.now(), checkedAt: Date.now(), runId: runId ?? previous?.runId }; write(value);
 }
@@ -15,5 +16,5 @@ export function getStillPendingAnalyses(scope?: string): PendingAnalysis[] {
 }
 export function pendingAnalysisExpired(entry: PendingAnalysis) { return Date.now() - entry.checkedAt > MAX_AGE_MS; }
 export function clearStalePendingAnalyses() {
-  const value = read(); for (const [key, entry] of Object.entries(value)) if (!entry?.scope || entry.scope === 'legacy' || !Number.isSafeInteger(entry.sbomId)) delete value[key]; write(value);
+  const value = read(); for (const [key, entry] of Object.entries(value)) if (!entry?.scope || entry.scope === 'legacy' || !publicId(entry.sbomId)) delete value[key]; write(value);
 }

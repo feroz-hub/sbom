@@ -52,7 +52,7 @@ const detail: VexInvestigationDetail = {
   analyzer_evidence: {
     detection_state: 'NOT_DETECTED',
     sources: [],
-    analysis_run_id: 7,
+    analysis_run_id: "00000000-0000-4000-8000-000000000007",
     match_strategy: null,
     match_confidence: null,
     matched_range: null,

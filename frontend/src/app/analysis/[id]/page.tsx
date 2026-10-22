@@ -1,5 +1,6 @@
 'use client';
 
+import { publicId } from '@/lib/publicId';
 import { Suspense, use, useState } from 'react';
 import { useQuery } from '@tanstack/react-query';
 import { useAnalysisTerminal } from '@/hooks/useAnalysisTerminal';
@@ -45,7 +46,7 @@ interface AnalysisDetailPageProps {
 
 function AnalysisDetailContent({ params }: AnalysisDetailPageProps) {
   const { id: idParam } = use(params);
-  const id = Number(idParam);
+  const id = idParam;
   const router = useRouter();
   const { showToast } = useToast();
 
@@ -108,7 +109,7 @@ function AnalysisDetailContent({ params }: AnalysisDetailPageProps) {
   const { data: run, isLoading: runLoading, error: runError } = useQuery({
     queryKey: ['run', id],
     queryFn: ({ signal }) => getRun(id, signal),
-    enabled: !isNaN(id),
+    enabled: !!publicId(id),
     refetchInterval: (query) => {
       const status = String(query.state.data?.run_status ?? '').toUpperCase();
       return isActiveAnalysis(status) ? ANALYSIS_POLL_MS : false;
@@ -120,7 +121,7 @@ function AnalysisDetailContent({ params }: AnalysisDetailPageProps) {
     queryKey: ['findings-enriched', id, severityFilter],
     queryFn: ({ signal }) =>
       getAllEnrichedRunFindings(id, { severity: severityFilter || undefined }, signal),
-    enabled: !isNaN(id),
+    enabled: !!publicId(id),
   });
   useAnalysisTerminal(run);
   const findings = findingsData?.findings;

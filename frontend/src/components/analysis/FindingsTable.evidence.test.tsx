@@ -15,7 +15,7 @@ vi.mock('@/components/vulnerabilities/CveDetailDialog', () => ({
 }));
 
 const finding: EnrichedFinding = {
-  id: 1, analysis_run_id: 1, component_id: 5, vuln_id: 'CVE-2021-45105',
+  id: 1, analysis_run_id: "00000000-0000-4000-8000-000000000001", component_id: 5, vuln_id: 'CVE-2021-45105',
   title: null, description: 'Log4j fixture', severity: 'MEDIUM', score: 5.9,
   vector: null, published_on: null, reference_url: null, cpe: null,
   component_name: 'log4j-core', component_version: '2.14.1', fixed_versions: null,

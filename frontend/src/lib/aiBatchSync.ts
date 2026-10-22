@@ -1,3 +1,4 @@
+import { publicId } from './publicId';
 import type { QueryClient } from '@tanstack/react-query';
 import type { AiBatchProgress } from '@/types/ai';
 import { invalidateAiBatchSurfaces } from './queryInvalidation';
@@ -12,7 +13,7 @@ export async function reconcileAiBatchTerminal(qc: QueryClient, args: {
   progress: AiBatchProgress; scope: string; batchId?: string | null; isCurrent: () => boolean;
 }): Promise<boolean> {
   const { progress: p } = args;
-  if (!args.isCurrent() || !Number.isInteger(p.run_id) || p.run_id <= 0 || !isAiBatchTerminal(p)) return false;
+  if (!args.isCurrent() || !publicId(p.run_id) || !isAiBatchTerminal(p)) return false;
   if (args.batchId != null && p.batch_id != null && args.batchId !== p.batch_id) return false;
   const batch = p.batch_id ?? args.batchId ?? `legacy:${p.started_at ?? 'unknown'}`;
   const key = ['ai-batch-terminal-sync', args.scope, p.run_id, batch];
@@ -26,7 +27,7 @@ export async function reconcileAiBatchTerminal(qc: QueryClient, args: {
 
 /** A successful cancel POST is an acknowledgment, not a terminal progress envelope. */
 export async function invalidateAiBatchCancellation(qc: QueryClient, args: {
-  scope: string; runId: number; batchId: string | null; isCurrent: () => boolean;
+  scope: string; runId: string; batchId: string | null; isCurrent: () => boolean;
 }): Promise<void> {
   if (!args.isCurrent()) return;
   const batch = args.batchId ?? qc.getQueryData<AiBatchProgress>(['ai-batch-progress', args.runId])?.started_at ?? 'legacy';

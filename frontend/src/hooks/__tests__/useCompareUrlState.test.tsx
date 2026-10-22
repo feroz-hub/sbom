@@ -44,11 +44,11 @@ describe('useCompareUrlState — defaults', () => {
 });
 
 describe('useCompareUrlState — parsing', () => {
-  it('parses run_a and run_b as positive ints; rejects garbage', () => {
-    nav = createNavigationState('run_a=5&run_b=8');
+  it('parses run_a and run_b as UUIDv4 strings; rejects garbage', () => {
+    nav = createNavigationState('run_a=00000000-0000-4000-8000-000000000005&run_b=00000000-0000-4000-8000-000000000008');
     const { result } = renderHook(() => useCompareUrlState());
-    expect(result.current.runA).toBe(5);
-    expect(result.current.runB).toBe(8);
+    expect(result.current.runA).toBe('00000000-0000-4000-8000-000000000005');
+    expect(result.current.runB).toBe('00000000-0000-4000-8000-000000000008');
 
     nav = createNavigationState('run_a=-3&run_b=abc');
     const { result: r2 } = renderHook(() => useCompareUrlState());
@@ -89,10 +89,10 @@ describe('useCompareUrlState — parsing', () => {
 describe('useCompareUrlState — setters', () => {
   it('setRuns PUSHES history (navigation event, not filter)', () => {
     const { result } = renderHook(() => useCompareUrlState());
-    act(() => result.current.setRuns(7, 9));
+    act(() => result.current.setRuns("00000000-0000-4000-8000-000000000007", "00000000-0000-4000-8000-000000000009"));
     expect(nav.calls.at(-1)?.method).toBe('push');
-    expect(nav.calls.at(-1)?.href).toContain('run_a=7');
-    expect(nav.calls.at(-1)?.href).toContain('run_b=9');
+    expect(nav.calls.at(-1)?.href).toContain('run_a=00000000-0000-4000-8000-000000000007');
+    expect(nav.calls.at(-1)?.href).toContain('run_b=00000000-0000-4000-8000-000000000009');
   });
 
   it('setTab PUSHES; filter toggles REPLACE', () => {
@@ -137,11 +137,11 @@ describe('useCompareUrlState — setters', () => {
   });
 
   it('swap reverses run_a and run_b', () => {
-    nav = createNavigationState('run_a=3&run_b=4');
+    nav = createNavigationState('run_a=00000000-0000-4000-8000-000000000003&run_b=00000000-0000-4000-8000-000000000004');
     const { result } = renderHook(() => useCompareUrlState());
     act(() => result.current.swap());
-    expect(nav.calls.at(-1)?.href).toContain('run_a=4');
-    expect(nav.calls.at(-1)?.href).toContain('run_b=3');
+    expect(nav.calls.at(-1)?.href).toContain('run_a=00000000-0000-4000-8000-000000000004');
+    expect(nav.calls.at(-1)?.href).toContain('run_b=00000000-0000-4000-8000-000000000003');
   });
 
   it('setQ writes the q param when non-empty, deletes it otherwise', () => {

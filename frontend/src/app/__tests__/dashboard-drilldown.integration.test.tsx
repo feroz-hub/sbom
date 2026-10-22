@@ -106,7 +106,7 @@ vi.mock('@/components/dashboard/advanced/RemediationPanel', () => ({
 import DashboardPage from '@/app/page';
 
 const RUN: AnalysisRun = {
-  id: 7,
+  id: "00000000-0000-4000-8000-000000000007",
   sbom_id: 100,
   sbom_name: 'demo-sbom',
   project_id: 1,
@@ -214,7 +214,7 @@ describe('dashboard hero — severity drill-down', () => {
     // Portfolio-scoped destination — no run id, no globalCount reconciliation
     // needed, because the list reports the same number the slice showed.
     expect(push).toHaveBeenCalledWith('/analysis?tab=vulnerabilities&severity=critical');
-    expect(push).not.toHaveBeenCalledWith(expect.stringContaining('/analysis/7'));
+    expect(push).not.toHaveBeenCalledWith(expect.stringContaining('/analysis/00000000-0000-4000-8000-000000000007'));
   });
 
   it('keeps a severity clickable when no single run carries it', async () => {
@@ -291,7 +291,7 @@ describe('dashboard hero — Phase 2 gated signals (EPSS tile + needs-review chi
       { timeout: 5000 },
     );
     fireEvent.click(epssBtn);
-    expect(push).toHaveBeenCalledWith('/analysis/7?epss=90&globalCount=5');
+    expect(push).toHaveBeenCalledWith('/analysis/00000000-0000-4000-8000-000000000007?epss=90&globalCount=5');
   });
 
   it('shows the needs-review chip and drills to ?review=1 when needs_review_count > 0', async () => {
@@ -304,7 +304,7 @@ describe('dashboard hero — Phase 2 gated signals (EPSS tile + needs-review chi
       { timeout: 5000 },
     );
     fireEvent.click(chip);
-    expect(push).toHaveBeenCalledWith('/analysis/7?review=1&globalCount=3');
+    expect(push).toHaveBeenCalledWith('/analysis/00000000-0000-4000-8000-000000000007?review=1&globalCount=3');
   });
 
   it('hides both gated signals when the posture fields are absent', async () => {

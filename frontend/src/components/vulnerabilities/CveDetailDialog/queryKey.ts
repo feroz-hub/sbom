@@ -10,10 +10,10 @@
  * fallback for plain ``GET /api/v1/cves/{id}`` calls.
  */
 export function cveQueryKey(
-  scanId: number | null | undefined,
+  scanId: string | null | undefined,
   cveId: string,
   componentId?: (string | number) | null,
-): readonly ['cve', number | 'global', string] | readonly ['cve', number, string, string | number] {
+): readonly ['cve', string, string] | readonly ['cve', string, string, string | number] {
   if (scanId != null && componentId != null) return ['cve', scanId, cveId.trim().toUpperCase(), componentId] as const;
   return ['cve', scanId ?? 'global', cveId.trim().toUpperCase()] as const;
 }

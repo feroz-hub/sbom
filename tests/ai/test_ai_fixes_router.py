@@ -29,6 +29,7 @@ from app.models import (
 from app.settings import reset_settings
 
 from tests.ai.fixtures import EX1_CRITICAL_KEV_WITH_FIX_BUNDLE
+from tests.public_id_fixture import run_uuid
 
 
 def _set_effective_ai_state(*, enabled: bool, kill_switch: bool) -> None:
@@ -192,7 +193,7 @@ def test_trigger_returns_409_when_ai_disabled(client, _seeded_run, monkeypatch):
     reset_settings()
     _set_effective_ai_state(enabled=False, kill_switch=False)
     try:
-        resp = client.post(f"/api/v1/runs/{_seeded_run['run_id']}/ai-fixes")
+        resp = client.post(f"/api/v1/runs/{run_uuid(_seeded_run['run_id'])}/ai-fixes")
         assert resp.status_code == 409
         body = resp.json()
         assert body["detail"]["error_code"] == "AI_FIXES_DISABLED"
@@ -207,7 +208,7 @@ def test_kill_switch_returns_409(client, _seeded_run, monkeypatch):
     reset_settings()
     _set_effective_ai_state(enabled=True, kill_switch=True)
     try:
-        resp = client.post(f"/api/v1/runs/{_seeded_run['run_id']}/ai-fixes")
+        resp = client.post(f"/api/v1/runs/{run_uuid(_seeded_run['run_id'])}/ai-fixes")
         assert resp.status_code == 409
         assert resp.json()["detail"]["error_code"] == "AI_FIXES_KILL_SWITCH"
     finally:
@@ -217,7 +218,7 @@ def test_kill_switch_returns_409(client, _seeded_run, monkeypatch):
 
 
 def test_404_on_unknown_run(client, _enable_ai):
-    resp = client.post("/api/v1/runs/9999999/ai-fixes")
+    resp = client.post(f"/api/v1/runs/{run_uuid(9999999)}/ai-fixes")
     assert resp.status_code == 404
 
 
@@ -225,12 +226,12 @@ def test_404_on_unknown_run(client, _enable_ai):
 
 
 def test_trigger_runs_inline_when_celery_unavailable(client, _seeded_run, _enable_ai, _fake_registry, _memory_store):
-    resp = client.post(f"/api/v1/runs/{_seeded_run['run_id']}/ai-fixes")
+    resp = client.post(f"/api/v1/runs/{run_uuid(_seeded_run['run_id'])}/ai-fixes")
     assert resp.status_code == 200, resp.text
     body = resp.json()
     # In tests the Celery broker is unreachable, so the router falls back
     # to inline execution. The progress envelope reflects a completed run.
-    assert body["progress"]["run_id"] == _seeded_run["run_id"]
+    assert body["progress"]["run_id"] == run_uuid(_seeded_run["run_id"])
     # Either path: enqueued=True (broker accepted but task hasn't run) OR
     # enqueued=False (inline fallback already finished). Test passes for either,
     # but in CI it's the inline path.
@@ -240,11 +241,11 @@ def test_trigger_runs_inline_when_celery_unavailable(client, _seeded_run, _enabl
 
 
 def test_progress_endpoint_round_trips(client, _seeded_run, _enable_ai, _fake_registry, _memory_store):
-    client.post(f"/api/v1/runs/{_seeded_run['run_id']}/ai-fixes")
-    resp = client.get(f"/api/v1/runs/{_seeded_run['run_id']}/ai-fixes/progress")
+    client.post(f"/api/v1/runs/{run_uuid(_seeded_run['run_id'])}/ai-fixes")
+    resp = client.get(f"/api/v1/runs/{run_uuid(_seeded_run['run_id'])}/ai-fixes/progress")
     assert resp.status_code == 200
     body = resp.json()
-    assert body["run_id"] == _seeded_run["run_id"]
+    assert body["run_id"] == run_uuid(_seeded_run["run_id"])
     # If inline ran, status is complete; otherwise pending. Either is fine.
     assert body["status"] in {"pending", "in_progress", "complete"}
 
@@ -258,19 +259,19 @@ def test_progress_endpoint_returns_204_when_no_batch(client, _seeded_run, _memor
     envelope, so a tab that registered on mount can tell "nothing here, don't
     subscribe" apart from a real "queued, waiting to start."
     """
-    resp = client.get(f"/api/v1/runs/{_seeded_run['run_id']}/ai-fixes/progress")
+    resp = client.get(f"/api/v1/runs/{run_uuid(_seeded_run['run_id'])}/ai-fixes/progress")
     assert resp.status_code == 204
     assert resp.content == b""  # No body on 204.
 
 
 def test_progress_endpoint_returns_404_when_run_missing(client, _memory_store):
     """404 is reserved for a missing *run* — the genuine not-found case."""
-    resp = client.get("/api/v1/runs/999999/ai-fixes/progress")
+    resp = client.get(f"/api/v1/runs/{run_uuid(999999)}/ai-fixes/progress")
     assert resp.status_code == 404
 
 
 def test_cancel_endpoint_sets_flag(client, _seeded_run, _enable_ai, _memory_store):
-    resp = client.post(f"/api/v1/runs/{_seeded_run['run_id']}/ai-fixes/cancel")
+    resp = client.post(f"/api/v1/runs/{run_uuid(_seeded_run['run_id'])}/ai-fixes/cancel")
     assert resp.status_code == 202
     body = resp.json()
     assert body["cancel_requested"] is True
@@ -283,7 +284,7 @@ def test_cancel_writes_terminal_envelope_for_phantom(client, _seeded_run, _enabl
     drives the client into unregister rather than re-rendering a stuck
     pending row."""
     run_id = _seeded_run["run_id"]
-    resp = client.post(f"/api/v1/runs/{run_id}/ai-fixes/cancel")
+    resp = client.post(f"/api/v1/runs/{run_uuid(run_id)}/ai-fixes/cancel")
     assert resp.status_code == 202
     snap = _memory_store.read(run_id)
     assert snap is not None
@@ -294,18 +295,18 @@ def test_legacy_stream_phantom_fast_path(client, _seeded_run, _memory_store):
     """No batch + no envelope ⇒ stream emits one terminal event and ends.
     Without this, the SSE generator would poll silently for 600s while
     the client banner stays parked."""
-    with client.stream("GET", f"/api/v1/runs/{_seeded_run['run_id']}/ai-fixes/stream") as resp:
+    with client.stream("GET", f"/api/v1/runs/{run_uuid(_seeded_run['run_id'])}/ai-fixes/stream") as resp:
         assert resp.status_code == 200
         body = resp.read().decode()
     assert "event: progress" in body
-    assert '"status": "cancelled"' in body
+    assert '"status":"cancelled"' in body
     assert "event: end" in body
 
 
 def test_list_run_fixes_after_generation(client, _seeded_run, _enable_ai, _fake_registry, _memory_store):
     # Trigger so the cache is populated.
-    client.post(f"/api/v1/runs/{_seeded_run['run_id']}/ai-fixes")
-    resp = client.get(f"/api/v1/runs/{_seeded_run['run_id']}/ai-fixes")
+    client.post(f"/api/v1/runs/{run_uuid(_seeded_run['run_id'])}/ai-fixes")
+    resp = client.get(f"/api/v1/runs/{run_uuid(_seeded_run['run_id'])}/ai-fixes")
     assert resp.status_code == 200
     body = resp.json()
     # Inline fallback path populates the cache; broker path may not have
@@ -394,7 +395,7 @@ def test_sse_stream_does_not_pin_db_connection(client, _seeded_run, _memory_stor
     monkeypatch.setattr(ai_router, "progress_events", _spy_progress_events)
 
     baseline = engine.pool.checkedout()
-    resp = client.get(f"/api/v1/runs/{run_id}/ai-fixes/stream")
+    resp = client.get(f"/api/v1/runs/{run_uuid(run_id)}/ai-fixes/stream")
     assert resp.status_code == 200
 
     # The fix: no pool connection is held while the stream is producing.

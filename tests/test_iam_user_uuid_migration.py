@@ -5,8 +5,9 @@ from uuid import UUID
 
 import pytest
 from app.greenfield_schema import application_metadata
-from app.iam_schema import apply_user_uuid_revision, revision100_metadata
+from app.iam_schema import apply_user_uuid_revision
 from app.public_identity import install_guards
+from app.resource_schema import revision100_metadata
 from sqlalchemy import create_engine, inspect, text
 from sqlalchemy.engine import make_url
 from sqlalchemy.orm import Session
@@ -20,7 +21,11 @@ def legacy():
     from app.services.password_service import hash_password
 
     target = os.environ["IAM_UUID_UPGRADE_DATABASE_URL"]
-    assert make_url(target).database == "sbom_iam_public_uuid_upgrade_test"
+    assert make_url(target).database in {
+        "sbom_iam_public_uuid_upgrade_test",
+        "sbom_public_resource_uuid_upgrade_test",
+        "sbom_public_resource_uuid_focused_upgrade_test",
+    }
     engine = create_engine(target, hide_parameters=True)
     with engine.begin() as c:
         # This exact, task-created database is reserved for upgrade fixtures only.

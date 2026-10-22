@@ -1,4 +1,4 @@
-from tests.public_id_fixture import user_uuid
+from tests.public_id_fixture import membership_uuid, user_uuid
 
 """Control-plane authority never substitutes for explicit customer membership."""
 
@@ -342,7 +342,7 @@ def test_existing_identity_memberships_are_independent(app, client):
         with SessionLocal() as db:
             member = db.query(TenantUser).filter_by(tenant_id=1, user_id=candidate_id).one()
             current_member_id = member.id
-        response = client.post(f"/api/tenants/{tenant_uuid(1)}/users/{current_member_id}/deactivate", headers=headers)
+        response = client.post(f"/api/tenants/{tenant_uuid(1)}/users/{membership_uuid(current_member_id)}/deactivate", headers=headers)
         assert response.status_code == 200, response.text
         with SessionLocal() as db:
             assert db.get(IAMUser, candidate_id).status == "ACTIVE"

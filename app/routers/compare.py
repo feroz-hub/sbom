@@ -140,7 +140,19 @@ def export_compare(
             },
         ) from exc
 
-    content, media_type, filename = export(result, body.format)
+    # The cache and diff service retain integer keys. Downloads are public
+    # references and require the same tenant-scoped UUID projection as JSON.
+    from ..core.context import get_bound_context
+    from ..resource_public_api import resource_statement
+
+    table, statement = resource_statement("analysis_run", get_bound_context())
+    identities = {
+        row.id: str(row.public_id)
+        for row in db.execute(statement.where(table.c.id.in_([result.run_a.id, result.run_b.id])))
+    }
+    if set(identities) != {result.run_a.id, result.run_b.id}:
+        raise HTTPException(404, "Analysis run not found")
+    content, media_type, filename = export(result, body.format, public_run_ids=identities)
     return Response(
         content=content,
         media_type=media_type,

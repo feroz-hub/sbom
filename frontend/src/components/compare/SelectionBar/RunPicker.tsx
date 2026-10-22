@@ -11,7 +11,7 @@ import { groupRunsForCompare } from './groupRunsForCompare';
 
 interface RunPickerProps {
   label: string;
-  selectedRunId: number | null;
+  selectedRunId: string | null;
   /**
    * Canonical summary for the currently-selected run. Comes from the parent
    * (compare query result, then the picker's own callback). Used for the

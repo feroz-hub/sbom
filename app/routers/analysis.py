@@ -304,7 +304,7 @@ def export_sarif(
     return Response(
         content=json.dumps(sarif, indent=2),
         media_type="application/json",
-        headers={"Content-Disposition": f'attachment; filename="sbom_findings_{run_id}.sarif"'},
+        headers={"Content-Disposition": f'attachment; filename="sbom_findings_{run.public_id}.sarif"'},
     )
 
 
@@ -422,5 +422,5 @@ def export_csv(
     return Response(
         content=content,
         media_type="text/csv",
-        headers={"Content-Disposition": f'attachment; filename="sbom_findings_{run_id}.csv"'},
+        headers={"Content-Disposition": f'attachment; filename="sbom_findings_{run.public_id}.csv"'},
     )

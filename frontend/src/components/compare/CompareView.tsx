@@ -49,7 +49,7 @@ export function CompareView() {
     queryKey: ['compare', 'v2', urlState.runA, urlState.runB],
     queryFn: ({ signal }) =>
       compareRunsV2(
-        { run_a_id: urlState.runA as number, run_b_id: urlState.runB as number },
+        { run_a_id: urlState.runA as string, run_b_id: urlState.runB as string },
         signal,
       ),
     enabled: canQuery,
@@ -95,11 +95,11 @@ export function CompareView() {
     if (error instanceof HttpError) {
       const code = error.code;
       const detail = (error.detail ?? {}) as {
-        run_id?: number;
+        run_id?: string;
         status?: string;
       };
       if (code === COMPARE_ERR_SAME_RUN) {
-        return <SameRunPickedState runId={detail.run_id ?? urlState.runA ?? 0} />;
+        return <SameRunPickedState runId={detail.run_id ?? urlState.runA ?? ''} />;
       }
       if (code === COMPARE_ERR_RUN_NOT_FOUND) {
         return <RunNotFoundState runId={detail.run_id ?? undefined} />;

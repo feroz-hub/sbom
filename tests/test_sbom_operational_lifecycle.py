@@ -1,3 +1,4 @@
+from tests.public_id_fixture import run_uuid
 from tests.tenant_fixture_scope import scoped_context_override
 
 """Operational lifecycle contracts: historical preservation and current-state fences."""
@@ -166,8 +167,8 @@ def test_inactive_comparison_rejected_before_cache(client, db, world):
     other = builder.sbom(builder.product(name="second"))
     db.commit()
     assert change(client, sbom, "INACTIVE").status_code == 200
-    responses = [client.post("/api/v1/compare", json={"run_a_id": sbom.run.id, "run_b_id": other.run.id}),
-                 client.get("/api/analysis-runs/compare", params={"run_a": sbom.run.id, "run_b": other.run.id}),
+    responses = [client.post("/api/v1/compare", json={"run_a_id": run_uuid(sbom.run.id), "run_b_id": run_uuid(other.run.id)}),
+                 client.get("/api/analysis-runs/compare", params={"run_a": run_uuid(sbom.run.id), "run_b": run_uuid(other.run.id)}),
                  client.get("/api/sboms/compare-versions", params={"version_a": str(sbom.public_id), "version_b": str(other.public_id)})]
     for response in responses:
         assert response.status_code == 409, response.text
@@ -178,7 +179,7 @@ def test_inactive_comparison_rejected_before_cache(client, db, world):
 def test_inactive_new_report_rejected(client, world, route):
     _, sbom, _ = world
     assert change(client, sbom, "INACTIVE").status_code == 200
-    response = client.post("/api/pdf-report", json={"runId": sbom.run.id}) if route == "pdf" else client.get(
+    response = client.post("/api/pdf-report", json={"runId": run_uuid(sbom.run.id)}) if route == "pdf" else client.get(
         f"/api/sboms/{sbom.public_id}/" + ("lifecycle/report?format=csv" if route == "csv" else "reports/lifecycle-pack"))
     assert response.status_code == 409, response.text
     assert "SBOM_INACTIVE" in response.text

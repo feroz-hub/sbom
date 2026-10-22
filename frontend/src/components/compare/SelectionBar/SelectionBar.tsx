@@ -8,8 +8,8 @@ import { RelationshipDescriptor } from './RelationshipDescriptor';
 import { RunPicker } from './RunPicker';
 
 interface SelectionBarProps {
-  runAId: number | null;
-  runBId: number | null;
+  runAId: string | null;
+  runBId: string | null;
   runASummary: RunSummary | null;
   runBSummary: RunSummary | null;
   relationship: RunRelationship | null;

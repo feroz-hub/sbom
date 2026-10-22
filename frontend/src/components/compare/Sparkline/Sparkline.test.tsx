@@ -88,7 +88,7 @@ describe('pointY', () => {
 
 function makeRun(id: number, total: number, status = 'FINDINGS'): AnalysisRun {
   return {
-    id,
+    id: `00000000-0000-4000-8000-${id.toString(16).padStart(12, '0')}`,
     sbom_id: 1,
     project_id: null,
     run_status: status as AnalysisRun['run_status'],

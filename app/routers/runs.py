@@ -226,8 +226,16 @@ def list_recent_runs(
     product_subq = db.query(Product.id.label("product_id"), Product.name.label("product_name")).subquery()
     stmt = (
         select(AnalysisRun, sbom_subq.c.sbom_name, proj_subq.c.project_name, product_subq.c.product_name)
-        .where(AnalysisRun.is_current.is_(True), AnalysisRun.sbom_id.in_(select(SBOMSource.id).where(
-            SBOMSource.lifecycle_status == "ACTIVE", SBOMSource.status == "validated", SBOMSource.error_count == 0)))
+        .where(
+            AnalysisRun.is_current.is_(True),
+            AnalysisRun.sbom_id.in_(
+                select(SBOMSource.id).where(
+                    SBOMSource.lifecycle_status == "ACTIVE",
+                    SBOMSource.status == "validated",
+                    SBOMSource.error_count == 0,
+                )
+            ),
+        )
         .outerjoin(sbom_subq, AnalysisRun.sbom_id == sbom_subq.c.sbom_id)
         .outerjoin(proj_subq, AnalysisRun.project_id == proj_subq.c.project_id)
         .outerjoin(product_subq, AnalysisRun.product_id == product_subq.c.product_id)
@@ -272,8 +280,16 @@ def search_runs(
     product_subq = db.query(Product.id.label("product_id"), Product.name.label("product_name")).subquery()
     stmt = (
         select(AnalysisRun, sbom_subq.c.sbom_name, proj_subq.c.project_name, product_subq.c.product_name)
-        .where(AnalysisRun.is_current.is_(True), AnalysisRun.sbom_id.in_(select(SBOMSource.id).where(
-            SBOMSource.lifecycle_status == "ACTIVE", SBOMSource.status == "validated", SBOMSource.error_count == 0)))
+        .where(
+            AnalysisRun.is_current.is_(True),
+            AnalysisRun.sbom_id.in_(
+                select(SBOMSource.id).where(
+                    SBOMSource.lifecycle_status == "ACTIVE",
+                    SBOMSource.status == "validated",
+                    SBOMSource.error_count == 0,
+                )
+            ),
+        )
         .outerjoin(sbom_subq, AnalysisRun.sbom_id == sbom_subq.c.sbom_id)
         .outerjoin(proj_subq, AnalysisRun.project_id == proj_subq.c.project_id)
         .outerjoin(product_subq, AnalysisRun.product_id == product_subq.c.product_id)
@@ -282,8 +298,11 @@ def search_runs(
         like = f"%{needle}%"
         run_id_clause: list = []
         try:
-            rid = int(needle)
-            run_id_clause.append(AnalysisRun.id == rid)
+            from uuid import RFC_4122, UUID
+
+            rid = UUID(needle)
+            if rid.version == 4 and rid.variant == RFC_4122:
+                run_id_clause.append(AnalysisRun.public_id == rid)
         except ValueError:
             pass
         stmt = stmt.where(

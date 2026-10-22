@@ -109,7 +109,9 @@ def test_upload_requires_matching_project_product_and_returns_product(client):
     mismatch = client.post(
         "/api/sboms/upload",
         data={"sbom_name": _name("bad"), "project_id": str(project_a["id"]), "product_id": str(product_b["id"])},
-        files={"file": ("sbom.cdx.json", json.dumps({"bomFormat": "CycloneDX", "specVersion": "1.5"}), "application/json")},
+        files={
+            "file": ("sbom.cdx.json", json.dumps({"bomFormat": "CycloneDX", "specVersion": "1.5"}), "application/json")
+        },
     )
     assert mismatch.status_code == 409
 
@@ -227,13 +229,13 @@ def test_product_sbom_list_carries_latest_analysis(client):
         )
         db.add(run)
         db.commit()
-        run_id = run.id
+        run_public_id = str(run.public_id)
 
     listed = client.get(f"/api/products/{product['id']}/sboms")
     assert listed.status_code == 200, listed.text
     latest = listed.json()[0]["latest_analysis"]
     assert latest is not None
-    assert latest["run_id"] == run_id
+    assert latest["run_id"] == run_public_id
     assert latest["status"] == "completed"
     assert latest["result"] == "findings"
     assert latest["finding_count"] == 2

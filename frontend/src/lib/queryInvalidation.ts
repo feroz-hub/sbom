@@ -354,7 +354,7 @@ export function invalidateFindings(qc: QueryClient): void {
  */
 export async function invalidateAnalysisCompletion(
   qc: QueryClient,
-  args: { sbomId?: (string | number); runId?: number } = {},
+  args: { sbomId?: (string | number); runId?: string } = {},
 ): Promise<void> {
   const keys: Array<readonly unknown[]> = [
     args.runId == null ? ['findings-enriched'] : ['findings-enriched', args.runId],
@@ -405,7 +405,7 @@ export function invalidateAiFixCaches(qc: QueryClient): void {
 }
 
 /** Enqueue refreshes execution/history; terminal/cancel also refresh partial output and usage. */
-export function invalidateAiBatchSurfaces(qc: QueryClient, runId: number, options: { results?: boolean } = {}): Promise<void> {
+export function invalidateAiBatchSurfaces(qc: QueryClient, runId: string, options: { results?: boolean } = {}): Promise<void> {
   const keys: Array<readonly unknown[]> = [['ai-batch-progress', runId], ['ai-batch-list', runId]];
   if (options.results) {
     // Progress contracts contain no finding IDs. The established per-finding

@@ -5,14 +5,14 @@ import * as sync from './queryInvalidation';
 
 type Operation = (qc: QueryClient) => void | Promise<void>;
 const operations: Record<string, Operation> = {
-  analysis: qc => sync.invalidateAnalysisCompletion(qc, { sbomId: 5, runId: 8 }),
+  analysis: qc => sync.invalidateAnalysisCompletion(qc, { sbomId: 5, runId: "00000000-0000-4000-8000-000000000008" }),
   upload: qc => sync.invalidateUploadSurfaces(qc, 1, 10),
   delete: qc => { sync.invalidateSbomSurfaces(qc, 5); sync.invalidateProjectSurfaces(qc, 1); sync.invalidateRunLists(qc); sync.invalidateScheduleLists(qc); sync.invalidateDashboardTiles(qc); },
   lifecycle: qc => sync.invalidateSbomLifecycle(qc, { id: 5, projectid: 1, product_id: 10 }),
   projectDelete: qc => { sync.invalidateProjectLists(qc); sync.invalidateSbomLists(qc); sync.invalidateRunLists(qc); sync.invalidateScheduleLists(qc); sync.invalidateDashboardTiles(qc); },
   product: qc => sync.invalidateProductSurfaces(qc, 10),
   vex: qc => sync.invalidateVexSurfaces(qc, 5, { investigationId: 3 }),
-  ai: qc => sync.invalidateAiBatchSurfaces(qc, 8, { results: true }),
+  ai: qc => sync.invalidateAiBatchSurfaces(qc, "00000000-0000-4000-8000-000000000008", { results: true }),
   membership: qc => sync.invalidateTenantMembershipSurfaces(qc, 1),
   advisor: qc => sync.invalidateComponentAdvisorSurfaces(qc, 7),
   policy: qc => sync.invalidateAdvisorPolicySurfaces(qc, 1),
@@ -20,16 +20,16 @@ const operations: Record<string, Operation> = {
 const activeKeys: readonly (readonly unknown[])[] = [
   ['dashboard-summary', '1', 1, 10, 5], ['dashboard-priority-findings', '1'], ['dashboard-operational-runs', '1'], ['portfolio-trend', '1', 30], ['vulnerability-age', '1'],
   ['sboms'], ['sbom', 5], ['sbom-info', 5], ['sbom-components-canonical', 5], ['product', 10], ['product-sboms', 10], ['project', 1], ['projects'],
-  ['reports', 'targets', 'SBOM', 'search'], ['runs'], ['run', 8], ['findings-enriched', 8, 'HIGH'], ['schedules'],
+  ['reports', 'targets', 'SBOM', 'search'], ['runs'], ['run', "00000000-0000-4000-8000-000000000008"], ['findings-enriched', "00000000-0000-4000-8000-000000000008", 'HIGH'], ['schedules'],
   ['component-advisor-summary', '1', {}], ['component-advisor-components', '1', {}], ['component-advisor-summary', '2', {}],
   ['component-advisor-recommendation', 7, '1'], ['component-advisor-candidate-evidence', 7, 4, '1'],
   ['vex-investigations', '1'], ['vex-investigation', 3], ['vex-investigation-by-triple', 5, 6, 'CVE-1'],
-  ['ai-fix-list', 8], ['ai-fix', 4], ['ai-batch-progress', 8, 9], ['ai-batch-list', 8], ['ai-settings', 'usage'], ['ai-usage-trend', 30],
+  ['ai-fix-list', "00000000-0000-4000-8000-000000000008"], ['ai-fix', 4], ['ai-batch-progress', "00000000-0000-4000-8000-000000000008", 9], ['ai-batch-list', "00000000-0000-4000-8000-000000000008"], ['ai-settings', 'usage'], ['ai-usage-trend', 30],
   ['platform-summary'], ['platform-tenant', 1], ['tenant-users', 1], ['vex-assignees', '1', 'search'],
 ];
-const inactiveKeys = [['sboms', 'dashboard-scope', 1], ['portfolio-trend', '1', 90], ['reports', 'targets', 'PRODUCT', 'other'], ['ai-batch-progress', 8]];
+const inactiveKeys = [['sboms', 'dashboard-scope', 1], ['portfolio-trend', '1', 90], ['reports', 'targets', 'PRODUCT', 'other'], ['ai-batch-progress', "00000000-0000-4000-8000-000000000008"]];
 const disabledKeys = [['dashboard-summary', 'denied'], ['vex-investigation-by-triple', 5, 9, 'denied']];
-const immutableKeys = [['vex-run-snapshot', '1', 5, 8], ['reports', 'deliveries', 1], ['lifecycle-providers', 'tenant:1']];
+const immutableKeys = [['vex-run-snapshot', '1', 5, "00000000-0000-4000-8000-000000000008"], ['reports', 'deliveries', 1], ['lifecycle-providers', 'tenant:1']];
 const settle = async (qc: QueryClient) => { await new Promise(resolve => setTimeout(resolve, 20)); await vi.waitFor(() => expect(qc.isFetching()).toBe(0)); };
 
 describe('Batch 6 actual queryFn performance measurements', () => {

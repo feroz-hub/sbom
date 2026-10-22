@@ -128,7 +128,7 @@ const POLL_INTERVAL_MS = 2_000;
  * Consumers don't need to know whether the data came from SSE or polling.
  */
 export function useAiBatchProgress(
-  runId: number | null,
+  runId: string | null,
   args: { enabled?: boolean } = {},
 ) {
   const { enabled = true } = args;
@@ -142,7 +142,7 @@ export function useAiBatchProgress(
   // first time we flip ``sseAvailable=true`` and stop polling.
   const query = useQuery<AiBatchProgress | null>({
     queryKey: ['ai-batch-progress', runId],
-    queryFn: ({ signal }) => getRunAiFixProgress(runId as number, signal),
+    queryFn: ({ signal }) => getRunAiFixProgress(runId as string, signal),
     enabled: active,
     refetchInterval: (qData) => {
       if (!active) return false;
@@ -166,7 +166,7 @@ export function useAiBatchProgress(
       setSseAvailable(false);
       return;
     }
-    const url = aiFixStreamUrl(runId as number);
+    const url = aiFixStreamUrl(runId as string);
     let es: EventSource | null = null;
     try {
       es = new EventSource(url, { withCredentials: true });
@@ -211,7 +211,7 @@ export function useAiBatchProgress(
 // ─── Trigger / cancel mutations ─────────────────────────────────────────────
 
 
-export function useTriggerAiFixes(runId: number) {
+export function useTriggerAiFixes(runId: string) {
   const qc = useQueryClient();
   const { key: scopeKey, capture } = useMutationScope();
   return useMutation({
@@ -229,7 +229,7 @@ export function useTriggerAiFixes(runId: number) {
 }
 
 
-export function useCancelAiFixes(runId: number) {
+export function useCancelAiFixes(runId: string) {
   const qc = useQueryClient();
   const { key: scopeKey, capture } = useMutationScope();
   return useMutation({
@@ -244,13 +244,13 @@ export function useCancelAiFixes(runId: number) {
 
 
 export function useRunAiFixList(
-  runId: number | null,
+  runId: string | null,
   args: { enabled?: boolean } = {},
 ) {
   const { enabled = true } = args;
   return useQuery<AiFindingFixListResponse>({
     queryKey: ['ai-fix-list', runId],
-    queryFn: ({ signal }) => listRunAiFixes(runId as number, signal),
+    queryFn: ({ signal }) => listRunAiFixes(runId as string, signal),
     enabled: enabled && runId != null,
   });
 }
@@ -268,7 +268,7 @@ export function useRunAiFixList(
  * cache entry.
  */
 export function useScopedRunBatchEstimate(
-  runId: number | null,
+  runId: string | null,
   scope: AiFixGenerationScope | null,
   args: { enabled?: boolean; debounceMs?: number } = {},
 ) {
@@ -290,7 +290,7 @@ export function useScopedRunBatchEstimate(
   return useQuery<AiScopedEstimateResponse>({
     queryKey: ['ai', 'run-batch-estimate', runId, debouncedKey],
     queryFn: ({ signal }) =>
-      estimateRunAiFixesScoped(runId as number, debouncedScope, signal),
+      estimateRunAiFixesScoped(runId as string, debouncedScope, signal),
     enabled: enabled && runId != null,
     staleTime: 30_000,
   });
@@ -302,7 +302,7 @@ export function useScopedRunBatchEstimate(
  * ``batch_id`` in ``onSuccess``; consumers register that with the
  * global progress provider so the banner picks it up.
  */
-export function useTriggerScopedAiFixes(runId: number) {
+export function useTriggerScopedAiFixes(runId: string) {
   const qc = useQueryClient();
   const { key: scopeKey, capture } = useMutationScope();
   return useMutation({
@@ -322,13 +322,13 @@ export function useTriggerScopedAiFixes(runId: number) {
 
 /** List every batch (active + historical) for a run. */
 export function useRunAiBatches(
-  runId: number | null,
+  runId: string | null,
   args: { enabled?: boolean; refetchIntervalMs?: number } = {},
 ) {
   const { enabled = true, refetchIntervalMs } = args;
   return useQuery<AiBatchListResponse>({
     queryKey: ['ai-batch-list', runId],
-    queryFn: ({ signal }) => listRunAiBatches(runId as number, signal),
+    queryFn: ({ signal }) => listRunAiBatches(runId as string, signal),
     enabled: enabled && runId != null,
     refetchInterval: refetchIntervalMs ?? false,
   });
@@ -336,7 +336,7 @@ export function useRunAiBatches(
 
 
 /** Cancel one specific batch. */
-export function useCancelAiBatch(runId: number) {
+export function useCancelAiBatch(runId: string) {
   const qc = useQueryClient();
   const { key: scopeKey, capture } = useMutationScope();
   return useMutation({

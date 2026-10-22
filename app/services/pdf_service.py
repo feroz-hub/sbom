@@ -249,6 +249,10 @@ def generate_pdf_report(
             raise ValueError(f"Run {run_id} not found in cache or database")
 
         try:
+            identity = db.get(AnalysisRun, run_id)
+            if identity is None:
+                raise ValueError("Persisted analysis run not found")
+            run = {**run, "runId": str(identity.public_id)}
             pdf_bytes = build_pdf_from_run_bytes(run, title=title)
             summary = run.get("summary") or {}
             severity = (summary.get("findings") or {}).get("bySeverity") or {}

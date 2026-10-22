@@ -32,7 +32,7 @@ export default function PlatformAdministratorsPage() {
 
   const [directoryRevision, setDirectoryRevision] = useState(0);
   const [selectedUser, setSelectedUser] = useState<UserSearchResult | null>(null);
-  const [revokeTarget, setRevokeTarget] = useState<{ id: number; name: string } | null>(null);
+  const [revokeTarget, setRevokeTarget] = useState<{ id: string; name: string } | null>(null);
 
   const administrators = useQuery({
     queryKey: ['platform-administrators'],
@@ -55,7 +55,7 @@ export default function PlatformAdministratorsPage() {
   });
 
   const revokeAdmin = useMutation({
-    mutationFn: (grantId: number) => revokePlatformAdministrator(grantId),
+    mutationFn: (grantId: string) => revokePlatformAdministrator(grantId),
     onMutate: () => scope.capture(),
     onSuccess: async (_res, grantId, isCurrent) => {
       if (!isCurrent?.()) return;

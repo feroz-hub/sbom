@@ -148,7 +148,7 @@ export interface AdvisorComponent {
   };
   lifecycle: { bucket: AdvisorLifecycleBucket; status: string; effective_date: string | null; source: string | null; manual_override: boolean };
   freshness: { latest_analysis_at: string | null; analysed_occurrences: number; total_occurrences: number; lifecycle_checked_at: string | null; lifecycle_is_stale: boolean };
-  evidence: Array<{ sbom_id: (string | number); analysis_run_id: number }>;
+  evidence: Array<{ sbom_id: (string | number); analysis_run_id: string }>;
   recommendation: { status: RecommendationStatus | 'NOT_EVALUATED'; id?: number; trigger_type?: RecommendationTrigger };
 }
 

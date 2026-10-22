@@ -21,6 +21,7 @@ from __future__ import annotations
 
 import pytest
 
+from tests.public_id_fixture import public_row
 from tests.tenant_fixture_scope import verified_fixture_tenant
 
 _NVD_FINDING_WITH_MATCH_TAGS = {
@@ -76,12 +77,13 @@ def test_persist_analysis_run_forwards_match_reason_and_range(client, seeded_sbo
     run_id = resp.json()["id"]
 
     from app.db import SessionLocal
-    from app.models import AnalysisFinding
+    from app.models import AnalysisFinding, AnalysisRun
     from sqlalchemy import select
 
     db = SessionLocal()
     try:
         with verified_fixture_tenant(db, 1):
+            run_id = public_row(db, AnalysisRun, run_id).id
             rows = (
                 db.execute(
                     select(AnalysisFinding).where(
@@ -132,12 +134,13 @@ def test_persist_analysis_run_tolerates_missing_match_keys(client, seeded_sbom, 
     run_id = resp.json()["id"]
 
     from app.db import SessionLocal
-    from app.models import AnalysisFinding
+    from app.models import AnalysisFinding, AnalysisRun
     from sqlalchemy import select
 
     db = SessionLocal()
     try:
         with verified_fixture_tenant(db, 1):
+            run_id = public_row(db, AnalysisRun, run_id).id
             rows = (
                 db.execute(
                     select(AnalysisFinding).where(

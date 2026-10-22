@@ -10,18 +10,18 @@ vi.mock('@/lib/api', async original => ({ ...(await original<typeof import('@/li
 let qc: QueryClient;
 const wrapper = ({ children }: { children: React.ReactNode }) => <QueryClientProvider client={qc}>{children}</QueryClientProvider>;
 function response(terminal: 'complete' | 'error') {
-  const text = `event: progress\ndata: {"phase":"started","runId":8}\n\nevent: ${terminal}\ndata: ${terminal === 'complete' ? '{"runId":8,"status":"PARTIAL","total":2}' : '{"message":"Scanner failed"}'}\n\n`;
+  const text = `event: progress\ndata: {"phase":"started","runId":"00000000-0000-4000-8000-000000000008"}\n\nevent: ${terminal}\ndata: ${terminal === 'complete' ? '{"runId":"00000000-0000-4000-8000-000000000008","status":"PARTIAL","total":2}' : '{"message":"Scanner failed"}'}\n\n`;
   return { ok: true, body: new ReadableStream({ start(controller) { controller.enqueue(new TextEncoder().encode(text)); controller.close(); } }) } as Response;
 }
 beforeEach(() => { vi.clearAllMocks(); state.tenant = '00000000-0000-4000-8000-000000000001'; sessionStorage.clear(); sessionStorage.setItem('sbom_active_tenant_id', '00000000-0000-4000-8000-000000000001'); qc = new QueryClient({ defaultOptions: { queries: { staleTime: 300_000, retry: false } } }); });
 afterEach(() => { qc.clear(); vi.unstubAllGlobals(); });
 it.each(['complete', 'error'] as const)('existing stream %s reconciles authoritative status and clears terminal tracking', async terminal => {
   vi.stubGlobal('fetch', vi.fn().mockResolvedValue(response(terminal)));
-  state.get.mockResolvedValue({ id: 8, run_status: 'ERROR', sbom_id: 5 }); qc.setQueryData(['findings-enriched', 8], []);
+  state.get.mockResolvedValue({ id: "00000000-0000-4000-8000-000000000008", run_status: 'ERROR', sbom_id: 5 }); qc.setQueryData(['findings-enriched', "00000000-0000-4000-8000-000000000008"], []);
   const hook = renderHook(() => useAnalysisStream(5), { wrapper });
   await act(async () => { await hook.result.current.startAnalysis(); });
-  await waitFor(() => expect(qc.getQueryData(['analysis-terminal-sync', '00000000-0000-4000-8000-000000000001:00000000-0000-4000-8000-000000000001', 8])).toBe(terminal === 'complete' ? 'PARTIAL' : 'ERROR'));
-  expect(qc.getQueryState(['findings-enriched', 8])?.isInvalidated).toBe(true);
+  await waitFor(() => expect(qc.getQueryData(['analysis-terminal-sync', '00000000-0000-4000-8000-000000000001:00000000-0000-4000-8000-000000000001', "00000000-0000-4000-8000-000000000008"])).toBe(terminal === 'complete' ? 'PARTIAL' : 'ERROR'));
+  expect(qc.getQueryState(['findings-enriched', "00000000-0000-4000-8000-000000000008"])?.isInvalidated).toBe(true);
   expect(getStillPendingAnalyses('00000000-0000-4000-8000-000000000001:00000000-0000-4000-8000-000000000001')).toHaveLength(0); hook.unmount();
 });
 it('late stream response cannot write into a different tenant context', async () => {

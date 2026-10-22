@@ -10,6 +10,7 @@ from app.settings import get_settings
 from sqlalchemy import select
 
 from tests import test_vex_scoped_authorization as fixtures
+from tests.public_id_fixture import public_membership_key
 from tests.test_vex_investigations_api import BASE, context_for, fetch
 from tests.test_vex_scoped_authorization import as_actor, make_member
 
@@ -55,10 +56,14 @@ def test_work_modes_combination_counts_and_pagination(client, db, people, queue)
     assert fetch(client, assignee="unassigned")["total"] == 1
     assert fetch(client, my_work="assigned")["total"] == 1
     as_actor(client, people["TENANT_ADMIN"])
-    response = client.put(f"{BASE}/{pending.id}/assignment", json={
-        "assigned_to": membership_key(people["DEVELOPER"]), "row_version": pending.row_version,
-        "reason": "Allocate backlog",
-    })
+    response = client.put(
+        f"{BASE}/{pending.id}/assignment",
+        json={
+            "assigned_to": public_membership_key(membership_key(people["DEVELOPER"])),
+            "row_version": pending.row_version,
+            "reason": "Allocate backlog",
+        },
+    )
     assert response.status_code == 200
     assert fetch(client, my_work="unassigned", needs_review=True)["total"] == 0
 
@@ -103,7 +108,7 @@ def test_assignee_discovery_search_pagination_and_cross_tenant_guard(client, db,
     people["DEVELOPER"].user.display_name = "AstraMed Developer"
     people["DEVELOPER"].user.email = "developer@astramed.example"
     db.commit()
-    allowed = {membership_key(people["DEVELOPER"]), membership_key(people["SECURITY_ANALYST"])}
+    allowed = {public_membership_key(people["DEVELOPER"]), public_membership_key(people["SECURITY_ANALYST"])}
     for role in ["TENANT_ADMIN", "SECURITY_ANALYST", "DEVELOPER", "VIEWER"]:
         as_actor(client, people[role])
         result = client.get(f"{BASE}/assignees", params={"limit": 1}).json()
@@ -111,14 +116,17 @@ def test_assignee_discovery_search_pagination_and_cross_tenant_guard(client, db,
         assert len(result["items"]) == 1
         second = client.get(f"{BASE}/assignees", params={"limit": 1, "offset": 1}).json()
         assert {result["items"][0]["id"], second["items"][0]["id"]} == allowed
-        assert client.get(BASE, params={"assignee": membership_key(outside)}).status_code == 404
-        assert client.get(BASE, params={"assignee": "membership:invalid"}).status_code == 404
+        assert client.get(BASE, params={"assignee": public_membership_key(membership_key(outside))}).status_code == 404
+        assert client.get(BASE, params={"assignee": "membership:invalid"}).status_code == 422
     for term in ["astramed", "DEVELOPER@"]:
         result = client.get(f"{BASE}/assignees", params={"q": term}).json()
-        assert [row["id"] for row in result["items"]] == [membership_key(people["DEVELOPER"])]
+        assert [row["id"] for row in result["items"]] == [public_membership_key(people["DEVELOPER"])]
     assert client.get(f"{BASE}/assignees", params={"limit": 101}).status_code == 422
     assert client.get(BASE, params={"my_work": "invalid"}).status_code == 422
-    assert all(member.id not in {people["DEVELOPER"].id, people["SECURITY_ANALYST"].id} for member in [outside, disabled, locked, unverified])
+    assert all(
+        member.id not in {people["DEVELOPER"].id, people["SECURITY_ANALYST"].id}
+        for member in [outside, disabled, locked, unverified]
+    )
 
 
 def test_inactive_and_legacy_ownership_remains_readable_without_being_active_assignment(client, db, people, queue):
@@ -149,11 +157,16 @@ def test_component_version_unresolved_and_unknown_severity_filters(client, db, s
     finding.severity = None
     db.commit()
     assert fetch(client, severity="UNKNOWN")["total"] == 2
-    db.add(AnalysisFinding(
-        analysis_run_id=seeded["run"].id, component_id=complete.component_id,
-        tenant_id=1, source="NVD", vuln_id=complete.canonical_vulnerability_id,
-        severity="CRITICAL",
-    ))
+    db.add(
+        AnalysisFinding(
+            analysis_run_id=seeded["run"].id,
+            component_id=complete.component_id,
+            tenant_id=1,
+            source="NVD",
+            vuln_id=complete.canonical_vulnerability_id,
+            severity="CRITICAL",
+        )
+    )
     complete.reconciliation_status = "UNRESOLVED_MAPPING"
     db.commit()
     result = fetch(client, severity="CRITICAL", reconciliation_status="UNRESOLVED_MAPPING")
@@ -168,18 +181,31 @@ def test_scope_and_owner_filters_intersect_before_pagination(client, db, seeded,
     project = Projects(project_name="Queue project", tenant_id=1)
     db.add(project)
     db.flush()
-    application = Product(project_id=project.id, tenant_id=1, name="Queue app", normalized_name="queue app",
-                          slug="queue-app", created_at="2026-09-30T00:00:00Z")
+    application = Product(
+        project_id=project.id,
+        tenant_id=1,
+        name="Queue app",
+        normalized_name="queue app",
+        slug="queue-app",
+        created_at="2026-09-30T00:00:00Z",
+    )
     db.add(application)
     db.flush()
     seeded["sbom"].projectid = project.id
     seeded["sbom"].product_id = application.id
     db.commit()
-    params = {"project_id": str(project.public_id), "product_id": str(application.public_id), "sbom_id": str(seeded["sbom"].public_id),
-              "assignee": membership_key(people["DEVELOPER"]), "q": "CVE-2026-5001", "component": "openssl 1.1.1"}
+    params = {
+        "project_id": str(project.public_id),
+        "product_id": str(application.public_id),
+        "sbom_id": str(seeded["sbom"].public_id),
+        "assignee": membership_key(people["DEVELOPER"]),
+        "q": "CVE-2026-5001",
+        "component": "openssl 1.1.1",
+    }
     result = fetch(client, **params, limit=1)
     assert result["total"] == 1
     assert result["items"][0]["project_name"] == "Queue project"
     assert result["items"][0]["product_name"] == "Queue app"
     from uuid import uuid4
+
     assert client.get(BASE, params={**params, "project_id": str(uuid4())}).status_code == 404

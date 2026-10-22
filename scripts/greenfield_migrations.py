@@ -439,6 +439,11 @@ def validate_after(c, before):
 
 def ensure_current(*, confirm=None):
     """Preflight every start. Upgrade only after this operator's exact confirmation."""
+    if stack.REVISION != CURRENT:
+        raise SchemaUpgradeError(
+            "Revision 102 requires a separately approved populated-database cutover; "
+            "no migration or service startup is permitted by this launcher."
+        )
     verify_sources()
     stack.verify_resources()
     pending = stack.STATE / "pending-schema-upgrade.json"

@@ -742,10 +742,10 @@ def test_runs_filter_matches_canonical_status_and_legacy_alias_rows(client, db):
     )
 
     clean = client.get(f"/api/runs?sbom_id={s1.public_id}&run_status=OK").json()
-    assert {item["id"] for item in clean} == {ok.id, legacy_pass.id}
+    assert {item["id"] for item in clean} == {str(ok.public_id), str(legacy_pass.public_id)}
 
     vulnerable = client.get(f"/api/runs?sbom_id={s1.public_id}&run_status=FINDINGS").json()
-    assert {item["id"] for item in vulnerable} == {findings.id, legacy_fail.id}
+    assert {item["id"] for item in vulnerable} == {str(findings.public_id), str(legacy_fail.public_id)}
 
 
 # ---------------------------------------------------------------------------
@@ -814,23 +814,29 @@ def _without_reviewed_lifecycle_mutation(content, relative_path):
         "runs = list(db.scalars(select(AnalysisRun).where(AnalysisRun.sbom_id == sbom.id, "
         "AnalysisRun.tenant_id == context.tenant_id)))"
     ).body[0]
-    matches = [node for function in ast.walk(ast.parse(content))
-               if isinstance(function, ast.FunctionDef) and function.name == "transition_lifecycle"
-               for node in function.body
-               if ast.dump(node) == ast.dump(expected)]
+    matches = [
+        node
+        for function in ast.walk(ast.parse(content))
+        if isinstance(function, ast.FunctionDef) and function.name == "transition_lifecycle"
+        for node in function.body
+        if ast.dump(node) == ast.dump(expected)
+    ]
     if len(matches) != 1:
         return content
     lines = content.splitlines(keepends=True)
-    del lines[matches[0].lineno - 1:matches[0].end_lineno]
+    del lines[matches[0].lineno - 1 : matches[0].end_lineno]
     return "".join(lines)
 
 
-@pytest.mark.parametrize("query", [
-    "select(AnalysisRun)",
-    "select(AnalysisFinding)",
-    "select(AnalysisRun).where(AnalysisRun.sbom_id == sbom.id)",
-    "select(AnalysisRun).group_by(AnalysisRun.sbom_id)",
-])
+@pytest.mark.parametrize(
+    "query",
+    [
+        "select(AnalysisRun)",
+        "select(AnalysisFinding)",
+        "select(AnalysisRun).where(AnalysisRun.sbom_id == sbom.id)",
+        "select(AnalysisRun).group_by(AnalysisRun.sbom_id)",
+    ],
+)
 def test_lifecycle_structural_exception_keeps_other_queries_visible(query):
     approved = (
         "def transition_lifecycle():\n"

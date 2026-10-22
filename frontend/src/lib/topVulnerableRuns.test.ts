@@ -4,7 +4,7 @@ import type { AnalysisRun } from '@/types';
 
 function run(overrides: Partial<AnalysisRun>): AnalysisRun {
   return {
-    id: 0,
+    id: "00000000-0000-4000-8000-000000000000",
     sbom_id: 0,
     sbom_name: null,
     project_id: null,
@@ -30,19 +30,19 @@ function run(overrides: Partial<AnalysisRun>): AnalysisRun {
 describe('aggregateRuns', () => {
   it('keeps the latest run per SBOM (first seen wins, desc-by-id input)', () => {
     const buckets = aggregateRuns([
-      run({ id: 20, sbom_id: 1, critical_count: 1, total_findings: 1 }), // latest
-      run({ id: 10, sbom_id: 1, critical_count: 9, total_findings: 9 }), // older — ignored
+      run({ id: "00000000-0000-4000-8000-000000000014", sbom_id: 1, critical_count: 1, total_findings: 1 }), // latest
+      run({ id: "00000000-0000-4000-8000-00000000000a", sbom_id: 1, critical_count: 9, total_findings: 9 }), // older — ignored
     ]);
     expect(buckets).toHaveLength(1);
-    expect(buckets[0]!.latestRunId).toBe(20);
+    expect(buckets[0]!.latestRunId).toBe('00000000-0000-4000-8000-000000000014');
     expect(buckets[0]!.critical).toBe(1);
   });
 
   it('drops runs with zero findings and sorts by weighted severity desc', () => {
     const buckets = aggregateRuns([
-      run({ id: 1, sbom_id: 1, low_count: 5, total_findings: 5 }),
-      run({ id: 2, sbom_id: 2, critical_count: 1, total_findings: 1 }),
-      run({ id: 3, sbom_id: 3, total_findings: 0 }), // clean — dropped
+      run({ id: "00000000-0000-4000-8000-000000000001", sbom_id: 1, low_count: 5, total_findings: 5 }),
+      run({ id: "00000000-0000-4000-8000-000000000002", sbom_id: 2, critical_count: 1, total_findings: 1 }),
+      run({ id: "00000000-0000-4000-8000-000000000003", sbom_id: 3, total_findings: 0 }), // clean — dropped
     ]);
     expect(buckets.map((b) => b.sbomId)).toEqual([2, 1]); // critical (100) > 5 lows (10)
   });
@@ -50,14 +50,14 @@ describe('aggregateRuns', () => {
 
 describe('topRunForSeverity', () => {
   const buckets = aggregateRuns([
-    run({ id: 1, sbom_id: 1, critical_count: 2, low_count: 1, total_findings: 3 }),
-    run({ id: 2, sbom_id: 2, critical_count: 5, low_count: 0, total_findings: 5 }),
-    run({ id: 3, sbom_id: 3, critical_count: 0, low_count: 9, total_findings: 9 }),
+    run({ id: "00000000-0000-4000-8000-000000000001", sbom_id: 1, critical_count: 2, low_count: 1, total_findings: 3 }),
+    run({ id: "00000000-0000-4000-8000-000000000002", sbom_id: 2, critical_count: 5, low_count: 0, total_findings: 5 }),
+    run({ id: "00000000-0000-4000-8000-000000000003", sbom_id: 3, critical_count: 0, low_count: 9, total_findings: 9 }),
   ]);
 
   it('returns the run with the most findings of the given severity', () => {
-    expect(topRunForSeverity(buckets, 'critical')!.latestRunId).toBe(2); // 5 > 2 > 0
-    expect(topRunForSeverity(buckets, 'low')!.latestRunId).toBe(3); // 9 > 1 — NOT the weighted top
+    expect(topRunForSeverity(buckets, 'critical')!.latestRunId).toBe('00000000-0000-4000-8000-000000000002'); // 5 > 2 > 0
+    expect(topRunForSeverity(buckets, 'low')!.latestRunId).toBe('00000000-0000-4000-8000-000000000003'); // 9 > 1 — NOT the weighted top
   });
 
   it('returns undefined when no run has that severity (→ non-clickable tile)', () => {

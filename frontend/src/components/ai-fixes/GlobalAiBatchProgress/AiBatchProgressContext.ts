@@ -11,7 +11,7 @@ import { createContext } from 'react';
  * yet.
  */
 export interface AiBatchTrackingKey {
-  runId: number;
+  runId: string;
   batchId: string | null;
   /** Banner copy. Pre-supplied at register time so the row can render
    *  without waiting for the first progress event. */
@@ -26,7 +26,7 @@ export interface AiBatchProgressContextValue {
   register(entry: AiBatchTrackingKey): void;
   /** Remove a tracked entry. Auto-called for terminal batches after
    *  the linger timer. */
-  unregister(runId: number, batchId: string | null): void;
+  unregister(runId: string, batchId: string | null): void;
 }
 
 export const AiBatchProgressContext =

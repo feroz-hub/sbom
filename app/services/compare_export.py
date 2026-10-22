@@ -25,14 +25,19 @@ from ..schemas_compare import (
 ExportFormat = Literal["markdown", "csv", "json"]
 
 
-def export(result: CompareResult, fmt: ExportFormat) -> tuple[str, str, str]:
+def export(
+    result: CompareResult, fmt: ExportFormat, *, public_run_ids: dict[int, str] | None = None
+) -> tuple[str, str, str]:
     """Return ``(content, media_type, filename)`` for ``fmt``.
 
     Filename uses the run ids: ``compare_<a>_vs_<b>.<ext>``.
     """
-    base = f"compare_{result.run_a.id}_vs_{result.run_b.id}"
+    identities = public_run_ids or {}
+    a = identities.get(result.run_a.id, result.run_a.id)
+    b = identities.get(result.run_b.id, result.run_b.id)
+    base = f"compare_{a}_vs_{b}"
     if fmt == "markdown":
-        return _to_markdown(result), "text/markdown", f"{base}.md"
+        return _to_markdown(result, public_run_ids=identities), "text/markdown", f"{base}.md"
     if fmt == "csv":
         return _to_csv(result), "text/csv", f"{base}.csv"
     if fmt == "json":
@@ -45,9 +50,12 @@ def export(result: CompareResult, fmt: ExportFormat) -> tuple[str, str, str]:
 # =============================================================================
 
 
-def _to_markdown(r: CompareResult) -> str:
+def _to_markdown(r: CompareResult, *, public_run_ids: dict[int, str] | None = None) -> str:
     lines: list[str] = []
-    lines.append(f"# Compare: Run #{r.run_a.id} → Run #{r.run_b.id}")
+    identities = public_run_ids or {}
+    lines.append(
+        f"# Compare: Run #{identities.get(r.run_a.id, r.run_a.id)} → Run #{identities.get(r.run_b.id, r.run_b.id)}"
+    )
     a_name = r.run_a.sbom_name or "(unknown SBOM)"
     b_name = r.run_b.sbom_name or "(unknown SBOM)"
     lines.append(f"_{a_name} ({r.run_a.completed_on}) → {b_name} ({r.run_b.completed_on})_")

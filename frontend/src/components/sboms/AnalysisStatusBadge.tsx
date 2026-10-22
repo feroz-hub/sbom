@@ -21,7 +21,7 @@ type AnalysisBadgeView = {
   severitySummary?: string;
   tooltip: string;
   tone: BadgeTone;
-  runId?: number | string | null;
+  runId?: string | null;
   showSpinner?: boolean;
 };
 

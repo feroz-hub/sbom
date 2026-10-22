@@ -164,8 +164,8 @@ export function GlobalAiBatchBanner() {
 
   // If the user is on /analysis/<id> for a tracked run, drop every
   // entry for that run so the page banner is the canonical surface.
-  const onRunDetailMatch = pathname?.match(/^\/analysis\/(\d+)/);
-  const currentRunId = onRunDetailMatch ? Number(onRunDetailMatch[1]) : null;
+  const onRunDetailMatch = pathname?.match(/^\/analysis\/([0-9a-f-]+)/i);
+  const currentRunId = onRunDetailMatch ? onRunDetailMatch[1] : null;
   const visible = tracked.filter((entry) => entry.runId !== currentRunId);
 
   if (visible.length === 0) return null;

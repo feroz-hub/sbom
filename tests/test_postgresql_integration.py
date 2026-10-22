@@ -91,12 +91,13 @@ def clean_postgres(postgres_url: str):
 def migration_postgres_url(postgres_url):
     """Copy acceptance owns a clean DB, independent of broker-test artifacts."""
     from app.greenfield_schema import application_metadata
-    from app.iam_schema import apply_user_uuid_revision, revision100_metadata
+    from app.iam_schema import apply_user_uuid_revision
     from app.public_identity import install_guards
+    from app.resource_schema import apply_resource_uuid_revision, revision100_metadata
 
     base = sa.engine.make_url(postgres_url)
     assert "_test" in base.database
-    name = "sbom_iam_copy_test_" + uuid.uuid4().hex
+    name = "sbom_resource_copy_test_" + uuid.uuid4().hex
     admin = sa.create_engine(base.set(database="postgres"), isolation_level="AUTOCOMMIT", hide_parameters=True)
     target = base.set(database=name).render_as_string(hide_password=False)
     engine = sa.create_engine(target, hide_parameters=True)
@@ -110,6 +111,7 @@ def migration_postgres_url(postgres_url):
             c.exec_driver_sql("CREATE TABLE alembic_version(version_num varchar(128) PRIMARY KEY)")
             c.exec_driver_sql("INSERT INTO alembic_version VALUES('100_greenfield_uuid_final')")
             apply_user_uuid_revision(c)
+            apply_resource_uuid_revision(c)
         yield target
     finally:
         engine.dispose()

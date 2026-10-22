@@ -117,13 +117,14 @@ def test_post_sbom_analyze_returns_existing_active_run(client, seeded_sbom):
             db.commit()
             db.refresh(active)
             active_id = active.id
+            active_public_id = str(active.public_id)
     finally:
         db.close()
 
     resp = client.post(f"/api/sboms/{seeded_sbom['id']}/analyze")
     assert resp.status_code == 200, resp.text
     body = resp.json()
-    assert body["id"] == active_id
+    assert body["id"] == active_public_id
     assert body["run_status"] == "RUNNING"
     assert body["trigger_source"] == "manual"
 

@@ -203,7 +203,7 @@ const detail: VexInvestigationDetail = {
   analyzer_evidence: {
     detection_state: 'NOT_DETECTED',
     sources: [],
-    analysis_run_id: 7,
+    analysis_run_id: "00000000-0000-4000-8000-000000000007",
     match_strategy: null,
     match_confidence: null,
     matched_range: null,
@@ -757,7 +757,7 @@ describe('shared CVE detail workflow', () => {
     expect(within(context).getByText('NOT_AFFECTED')).toBeVisible();
     expect(within(context).getByText('VEX ONLY')).toBeVisible();
     await waitFor(() => expect(api.getCveDetail).toHaveBeenCalledWith(
-      { cveId: 'CVE-2026-4001', scanId: 7, componentId: "00000000-0000-4000-8000-00000000000b" }, expect.any(AbortSignal),
+      { cveId: 'CVE-2026-4001', scanId: '00000000-0000-4000-8000-000000000007', componentId: "00000000-0000-4000-8000-00000000000b" }, expect.any(AbortSignal),
     ));
     const detailsTab = within(dialog).getByRole('tab', { name: 'Vulnerability Details' });
     detailsTab.focus();

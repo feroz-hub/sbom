@@ -13,6 +13,7 @@ from app.services.vex.authorization import membership_key
 from sqlalchemy import select
 
 from tests import test_vex_investigations_api as investigation_fixtures
+from tests.public_id_fixture import public_membership_key
 from tests.test_vex_investigations_api import BASE, context_for
 
 db = investigation_fixtures.db
@@ -73,7 +74,11 @@ def test_assignment_matrix_http(client, db, seeded, people):
                 version = client.get(f"{BASE}/{investigation.id}").json()["row_version"]
                 result = client.put(
                     f"{BASE}/{investigation.id}/assignment",
-                    json={"assigned_to": membership_key(target), "row_version": version, "reason": "delegation"},
+                    json={
+                        "assigned_to": public_membership_key(membership_key(target)),
+                        "row_version": version,
+                        "reason": "delegation",
+                    },
                 )
                 allowed = (actor_role == "TENANT_ADMIN" and target_role in {"SECURITY_ANALYST", "DEVELOPER"}) or (
                     actor_role == "SECURITY_ANALYST" and target_role == "DEVELOPER"
@@ -169,19 +174,30 @@ def test_candidates_invalid_targets_and_payload_bypass(client, db, seeded, peopl
             as_actor(client, people[role])
             detail = client.get(f"{BASE}/{investigation.id}").json()
             candidates = {c["id"] for c in detail["capabilities"]["candidates"]}
-            expected = {membership_key(people["DEVELOPER"])} if role in {"TENANT_ADMIN", "SECURITY_ANALYST"} else set()
+            expected = (
+                {public_membership_key(people["DEVELOPER"])} if role in {"TENANT_ADMIN", "SECURITY_ANALYST"} else set()
+            )
             if role == "TENANT_ADMIN":
-                expected |= {membership_key(people["SECURITY_ANALYST"]), membership_key(multi)}
+                expected |= {public_membership_key(people["SECURITY_ANALYST"]), public_membership_key(multi)}
             assert candidates == expected
             for candidate in detail["capabilities"]["candidates"]:
-                if candidate["id"] == membership_key(people["DEVELOPER"]):
+                if candidate["id"] == public_membership_key(people["DEVELOPER"]):
                     assert candidate["email"] == "developer@assignment.example"
             for target in [outside, inactive, locked]:
                 result = client.put(
                     f"{BASE}/{investigation.id}/assignment",
-                    json={"assigned_to": membership_key(target), "row_version": 1, "reason": "bad"},
+                    json={
+                        "assigned_to": public_membership_key(membership_key(target)),
+                        "row_version": 1,
+                        "reason": "bad",
+                    },
                 )
-                assert result.status_code == 403
+                # Route permissions are checked before resource resolution.
+                # Authorized assigners receive concealed 404 for another tenant;
+                # Developer/Viewer retain the earlier permission denial.
+                assert result.status_code == (
+                    404 if target is outside and role in {"TENANT_ADMIN", "SECURITY_ANALYST"} else 403
+                )
             assert (
                 client.put(
                     f"{BASE}/{investigation.id}/decision",
@@ -189,7 +205,7 @@ def test_candidates_invalid_targets_and_payload_bypass(client, db, seeded, peopl
                         "status": "AFFECTED",
                         "reason": "bypass",
                         "row_version": 1,
-                        "assigned_to": membership_key(people["DEVELOPER"]),
+                        "assigned_to": public_membership_key(membership_key(people["DEVELOPER"])),
                     },
                 ).status_code
                 == 422
@@ -198,7 +214,7 @@ def test_candidates_invalid_targets_and_payload_bypass(client, db, seeded, peopl
         assert (
             client.put(
                 f"{BASE}/{investigation.id}/assignment",
-                json={"assigned_to": membership_key(multi), "row_version": 1, "reason": "bad"},
+                json={"assigned_to": public_membership_key(membership_key(multi)), "row_version": 1, "reason": "bad"},
             ).status_code
             == 403
         )
@@ -226,7 +242,7 @@ def test_assignment_history_unassignment_and_separate_decision(client, db, seede
             result = client.put(
                 f"{BASE}/{investigation.id}/assignment",
                 json={
-                    "assigned_to": membership_key(target) if target else None,
+                    "assigned_to": public_membership_key(membership_key(target) if target else None),
                     "row_version": version,
                     "reason": "delegation",
                 },
@@ -288,7 +304,11 @@ def test_no_broad_developer_bypass_or_legacy_owner_authority(client, db, seeded,
         assert (
             client.put(
                 f"{BASE}/{investigation.id}/assignment",
-                json={"assigned_to": membership_key(developer), "row_version": 1, "reason": "forged"},
+                json={
+                    "assigned_to": public_membership_key(membership_key(developer)),
+                    "row_version": 1,
+                    "reason": "forged",
+                },
             ).status_code
             == 403
         )
@@ -327,7 +347,11 @@ def test_platform_override_stays_tenant_bound(client, db, seeded, people):
         assert all(c["label"] != user.display_name for c in detail["capabilities"]["candidates"])
         response = client.put(
             f"{BASE}/{investigation.id}/assignment",
-            json={"assigned_to": membership_key(people["DEVELOPER"]), "row_version": 1, "reason": "platform review"},
+            json={
+                "assigned_to": public_membership_key(membership_key(people["DEVELOPER"])),
+                "row_version": 1,
+                "reason": "platform review",
+            },
         )
         assert response.status_code == 200, response.text
     finally:

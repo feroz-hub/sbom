@@ -106,7 +106,7 @@ export interface RemediationSummary {
 
 export interface RiskMapItem {
   sbom_id: (string | number);
-  run_id: number;
+  run_id: string;
   name: string;
   project: string | null;
   findings_total: number;

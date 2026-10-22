@@ -67,7 +67,7 @@ export function EmptySelectionState() {
   );
 }
 
-export function SameRunPickedState({ runId }: { runId: number }) {
+export function SameRunPickedState({ runId }: { runId: string }) {
   return (
     <Alert variant="info" title="That's the same run twice">
       Run #{runId} is selected on both sides — there's nothing to diff. Pick a
@@ -82,7 +82,7 @@ export function RunNotReadyState({
   onRetry,
 }: {
   status?: string;
-  runId?: number;
+  runId?: string;
   onRetry?: () => void;
 }) {
   const runLabel = runId != null ? `Run #${runId}` : 'One of the runs';
@@ -112,7 +112,7 @@ export function PermissionDeniedState() {
   );
 }
 
-export function RunNotFoundState({ runId }: { runId?: number }) {
+export function RunNotFoundState({ runId }: { runId?: string }) {
   const idLabel = runId != null ? `Run #${runId}` : 'A run from this URL';
   return (
     <Alert variant="error" title="Run not found">

@@ -6,7 +6,7 @@ import type {SbomPosture} from '@/types';
 const item: SbomPosture={target_sbom_id:2,posture_sbom_id:1,product_id:1,
   current_sbom:{id:2,name:'TestApp',version:'A1.1.0'},latest_uploaded:{id:2,name:'TestApp',version:'A1.1.0'},
   latest_analyzed:{id:1,name:'TestApp',version:'A1.0.0'},posture_sbom:{id:1,name:'TestApp',version:'A1.0.0'},
-  analysis_run_id:10,analysis_status:'ANALYSIS_PENDING',analysis_finding_rows:81,last_known_posture:true,
+  analysis_run_id:"00000000-0000-4000-8000-00000000000a",analysis_status:'ANALYSIS_PENDING',analysis_finding_rows:81,last_known_posture:true,
   coverage_incomplete:false,designation_required:false,warning:'The newer SBOM has not completed analysis. Showing the last known security posture from A1.0.0.'};
 it('labels pending target and 81 last-known records from the correct version',()=>{
   render(<PostureEvidence items={[item]}/>);expect(screen.getByText(/Current SBOM: A1.1.0/)).toBeInTheDocument();
@@ -34,7 +34,7 @@ function notice(initial?: {items:SbomPosture[]}){
  return render(<QueryClientProvider client={client}><SbomPostureNotice scope={{projectId:null,applicationId:null,sbomId:null}}/></QueryClientProvider>);
 }
 it('shows two analyzed applications including genuine zero without missing-evidence warning',async()=>{
- api.mockResolvedValue({items:[{...item,application_name:'Pump',last_known_posture:false,warning:null,analysis_finding_rows:108},{...item,target_sbom_id:3,application_name:'Upload',analysis_run_id:11,last_known_posture:false,warning:null,analysis_finding_rows:0}]});
+ api.mockResolvedValue({items:[{...item,application_name:'Pump',last_known_posture:false,warning:null,analysis_finding_rows:108},{...item,target_sbom_id:3,application_name:'Upload',analysis_run_id:"00000000-0000-4000-8000-00000000000b",last_known_posture:false,warning:null,analysis_finding_rows:0}]});
  notice();await screen.findByText('Upload');expect(screen.getByText(/108 finding records/)).toBeInTheDocument();expect(screen.getByText(/0 finding records/)).toBeInTheDocument();expect(screen.queryByText(/unavailable|Partial posture/)).not.toBeInTheDocument();
 });
 it('identifies only missing lineages while preserving analyzed findings',()=>{

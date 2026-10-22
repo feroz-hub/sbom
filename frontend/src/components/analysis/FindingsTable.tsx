@@ -140,7 +140,7 @@ interface FindingsTableProps {
   selectedIds?: ReadonlySet<number>;
   onSelectionChange?: (next: ReadonlySet<number>) => void;
   /** Analysis run id — when present, the modal uses the scan-aware variant (component context + recommended upgrade). */
-  runId?: number;
+  runId?: string;
   projectId?: (string | number);
   /** Human-friendly scan label (typically the SBOM name) shown in the modal's component-context line. */
   scanName?: string | null;

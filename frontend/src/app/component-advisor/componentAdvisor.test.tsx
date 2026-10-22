@@ -117,7 +117,7 @@ function component(overrides: Partial<AdvisorComponent> = {}): AdvisorComponent 
     },
     lifecycle: { bucket: 'EOL', status: 'EOL', effective_date: '2025-01-01', source: 'endoflife.date', manual_override: false },
     freshness: { latest_analysis_at: '2026-10-01T00:00:00Z', analysed_occurrences: 2, total_occurrences: 2, lifecycle_checked_at: '2026-09-30T00:00:00Z', lifecycle_is_stale: false },
-    evidence: [{ sbom_id: 1, analysis_run_id: 9 }],
+    evidence: [{ sbom_id: 1, analysis_run_id: "00000000-0000-4000-8000-000000000009" }],
     recommendation: { status: 'NOT_EVALUATED' },
     ...overrides,
   };
