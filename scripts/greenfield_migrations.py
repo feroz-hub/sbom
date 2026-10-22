@@ -1,4 +1,4 @@
-"""Reviewed, explicitly confirmed local 100->101 upgrade before service startup.
+"""Explicitly confirmed local UUID upgrades before service startup.
 
 No application settings, engines, credentials or processes are loaded on import.
 An ordinary start never stamps, recreates, repairs or upgrades an unknown schema.
@@ -22,6 +22,8 @@ from . import greenfield_uuid as stack
 PREVIOUS = "100_greenfield_uuid_final"
 CURRENT = "101_iam_user_public_uuid"
 CONFIRMATION = "UPGRADE sbom_greenfield_uuid 100 TO 101"
+TABLES = ("iam_users",)
+ADVISORY_KEY = 7160085101
 PINS = {
     "alembic/versions/100_greenfield_uuid_final.py": "365f64b4561c5475a9ebbc2162c49bb147beb3e3796ce942adb303fc5c8835fc",
     "alembic/versions/101_iam_user_public_uuid.py": "8c97790e5341e10823933dc2372fe0c351b24c96f54328af10b2ec9992ae630d",
@@ -49,7 +51,7 @@ def engine(database=None, *, control=False):
         raise SchemaUpgradeError("Ambient PG* settings are not allowed for the fixed Greenfield migration target.")
     address = make_url(stack.url("greenfield_setup", "setup-password", "postgres" if control else stack.DB))
     if database is not None:
-        if not re.fullmatch(r"sbom_greenfield_uuid_pre101_[0-9a-f]{12}", database):
+        if not re.fullmatch(r"sbom_greenfield_uuid_pre10[12]_[0-9a-f]{12}", database):
             raise SchemaUpgradeError("Invalid task-owned backup rehearsal database.")
         address = address.set(database=database)
     if (address.host, address.port, address.username) != ("127.0.0.1", 56044, "greenfield_setup"):
@@ -92,7 +94,7 @@ def exclusive(c):
         raise SchemaUpgradeError("Other Greenfield database clients remain; stop writers before confirming migration.")
 
 
-def snapshot(c):
+def snapshot(c, *, omit_public_id_tables=("iam_users",)):
     """Semantic catalog plus per-table data digests; never persist rows/hashes of credentials."""
     catalog = {}
     queries = {
@@ -120,6 +122,8 @@ def snapshot(c):
         "WHERE datname=current_database()) ORDER BY 1",
         "roles": "SELECT rolname,rolcanlogin,rolsuper,rolinherit,rolcreatedb,rolcreaterole,rolreplication,"
         "rolbypassrls,rolconfig FROM pg_roles WHERE rolname IN ('greenfield_owner','greenfield_app') ORDER BY rolname",
+        "default_acls": "SELECT pg_get_userbyid(defaclrole),defaclnamespace::regnamespace::text,"
+        "defaclobjtype,defaclacl::text FROM pg_default_acl ORDER BY 1,2,3",
     }
     for key, sql in queries.items():
         catalog[key] = [list(row) for row in c.exec_driver_sql(sql)]
@@ -131,7 +135,7 @@ def snapshot(c):
         if name == "alembic_version":
             continue
         table = c.dialect.identifier_preparer.quote(name)
-        expression = "to_jsonb(t) - 'public_id'" if name == "iam_users" else "to_jsonb(t)"
+        expression = "to_jsonb(t) - 'public_id'" if name in omit_public_id_tables else "to_jsonb(t)"
         digest = hashlib.sha256()
         count = 0
         for (value,) in c.exec_driver_sql(
@@ -157,29 +161,33 @@ def inspect_current(e):
     return observed_identity, marker[0]
 
 
+def review_security(c):
+    exclusive(c)
+    # Do not import or restore catalog objects capable of external effects.
+    if c.exec_driver_sql(
+        "SELECT (SELECT count(*) FROM pg_event_trigger)+(SELECT count(*) FROM pg_foreign_server)"
+        "+(SELECT count(*) FROM pg_subscription)+(SELECT count(*) FROM pg_publication)"
+    ).scalar_one():
+        raise SchemaUpgradeError("Unreviewed external/replication objects; independent review required.")
+    roles = c.exec_driver_sql(
+        "SELECT rolname,rolcanlogin,rolsuper,rolcreatedb,rolcreaterole,rolreplication,rolbypassrls "
+        "FROM pg_roles WHERE rolname IN ('greenfield_owner','greenfield_app') ORDER BY rolname"
+    ).all()
+    if [tuple(row) for row in roles] != [
+        ("greenfield_app", True, False, False, False, False, False),
+        ("greenfield_owner", False, False, False, False, False, False),
+    ]:
+        raise SchemaUpgradeError("Unexpected Greenfield owner/runtime privileges.")
+    if c.exec_driver_sql(
+        "SELECT count(*) FROM pg_auth_members WHERE member IN "
+        "(SELECT oid FROM pg_roles WHERE rolname IN ('greenfield_owner','greenfield_app'))"
+    ).scalar_one():
+        raise SchemaUpgradeError("Unexpected Greenfield owner/runtime role membership.")
+
+
 def before_upgrade(e):
     with e.connect() as c:
-        exclusive(c)
-        # Do not import or restore catalog objects capable of external effects.
-        if c.exec_driver_sql(
-            "SELECT (SELECT count(*) FROM pg_event_trigger)+(SELECT count(*) FROM pg_foreign_server)"
-            "+(SELECT count(*) FROM pg_subscription)+(SELECT count(*) FROM pg_publication)"
-        ).scalar_one():
-            raise SchemaUpgradeError("Unreviewed external/replication objects; independent review required.")
-        roles = c.exec_driver_sql(
-            "SELECT rolname,rolcanlogin,rolsuper,rolcreatedb,rolcreaterole,rolreplication,rolbypassrls "
-            "FROM pg_roles WHERE rolname IN ('greenfield_owner','greenfield_app') ORDER BY rolname"
-        ).all()
-        if [tuple(row) for row in roles] != [
-            ("greenfield_app", True, False, False, False, False, False),
-            ("greenfield_owner", False, False, False, False, False, False),
-        ]:
-            raise SchemaUpgradeError("Unexpected Greenfield owner/runtime privileges.")
-        if c.exec_driver_sql(
-            "SELECT count(*) FROM pg_auth_members WHERE member IN "
-            "(SELECT oid FROM pg_roles WHERE rolname IN ('greenfield_owner','greenfield_app'))"
-        ).scalar_one():
-            raise SchemaUpgradeError("Unexpected Greenfield owner/runtime role membership.")
+        review_security(c)
         result = snapshot(c)
         if any(row[0] == "iam_users" and row[1] == "public_id" for row in result["catalog"]["columns"]):
             raise SchemaUpgradeError("Partial IAM UUID upgrade; no automatic repair permitted.")
@@ -233,7 +241,7 @@ def restored_snapshot_matches(before, restored):
     return True
 
 
-def backup_and_rehearse(e, before, observed_identity):
+def backup_and_rehearse(e, before, observed_identity, *, predecessor=PREVIOUS, snapshotter=None):
     """Full PG16 custom archive, encrypted locally, restored to a NEW retained DB.
 
     The verified container's explicit local Unix socket uses its existing local
@@ -241,6 +249,9 @@ def backup_and_rehearse(e, before, observed_identity):
     """
     from cryptography.fernet import Fernet
 
+    if predecessor not in (PREVIOUS, CURRENT):
+        raise SchemaUpgradeError("Unreviewed backup predecessor.")
+    snapshotter = snapshot if snapshotter is None else snapshotter
     stack.verify_resources()
     with e.connect() as c:
         if identity(c) != observed_identity:
@@ -256,7 +267,8 @@ def backup_and_rehearse(e, before, observed_identity):
     folder.mkdir(mode=0o700)
     container = json.loads(stack.read_private("docker-identities.json"))["sbom-greenfield-uuid-dev-postgres-1"]
     base = [*stack.DOCKER, "exec", "-i", container]
-    target = "sbom_greenfield_uuid_pre101_" + uuid.uuid4().hex[:12]
+    next_number = "101" if predecessor == PREVIOUS else "102"
+    target = "sbom_greenfield_uuid_pre" + next_number + "_" + uuid.uuid4().hex[:12]
     with tempfile.TemporaryFile(dir=folder) as temporary:
         result = subprocess.run(
             [
@@ -348,9 +360,9 @@ def backup_and_rehearse(e, before, observed_identity):
                 "Backup restore rehearsal failed: " + primary + "; resources retained; no migration performed."
             )
         with restored.connect() as c:
-            if c.exec_driver_sql("SELECT version_num FROM alembic_version").scalars().all() != [PREVIOUS]:
+            if c.exec_driver_sql("SELECT version_num FROM alembic_version").scalars().all() != [predecessor]:
                 raise SchemaUpgradeError("Backup revision verification failed.")
-            if not restored_snapshot_matches(before, snapshot(c)):
+            if not restored_snapshot_matches(before, snapshotter(c)):
                 raise SchemaUpgradeError("Backup data/schema/owner/ACL parity failed; no migration performed.")
             c.rollback()
     finally:
@@ -361,7 +373,7 @@ def backup_and_rehearse(e, before, observed_identity):
             {
                 "archive_sha256": hashlib.sha256(raw).hexdigest(),
                 "restored_database": target,
-                "restored_revision": PREVIOUS,
+                "restored_revision": predecessor,
                 "schema_data_owner_acl_parity": True,
             },
             indent=2,
@@ -391,6 +403,7 @@ def validate_after(c, before):
         "database": lambda r: False,
         "database_settings": lambda r: False,
         "roles": lambda r: False,
+        "default_acls": lambda r: False,
     }
     expected_added = {
         "relations": 1,
@@ -403,6 +416,7 @@ def validate_after(c, before):
         "database": 0,
         "database_settings": 0,
         "roles": 0,
+        "default_acls": 0,
     }
     for key, predicate in additions.items():
         old = [r for r in after["catalog"][key] if not predicate(r)]
@@ -437,14 +451,33 @@ def validate_after(c, before):
         raise SchemaUpgradeError("IAM guard owner/security mismatch.")
 
 
+def apply_revision(c):
+    from app.iam_schema import apply_user_uuid_revision
+
+    apply_user_uuid_revision(c)
+
+
+def describe_upgrade(before):
+    return (
+        f"{before['data']['iam_users'][0]} users. Existing integer keys/credentials/roles retained.\n"
+        "Exactly one transactional IAM UUID migration follows. Statement/lock/idle timeouts: 2s/250ms/5s.\n"
+        "Review docs/uat/user-public-uuid/DATABASE_MIGRATION_PLAN.md."
+    )
+
+
 def ensure_current(*, confirm=None):
-    """Preflight every start. Upgrade only after this operator's exact confirmation."""
-    if stack.REVISION != CURRENT:
-        raise SchemaUpgradeError(
-            "Revision 102 requires a separately approved populated-database cutover; "
-            "no migration or service startup is permitted by this launcher."
-        )
-    verify_sources()
+    """Choose a reviewed next-only unit; never chain upgrades or infer approval."""
+    if stack.REVISION == "102_public_membership_grant_analysis_uuid":
+        from . import greenfield_resource_migrations as unit
+    elif stack.REVISION == CURRENT:
+        unit = sys.modules[__name__]
+    else:
+        raise SchemaUpgradeError("Unreviewed application revision; no migration or service startup permitted.")
+    _ensure_unit(unit, confirm=confirm)
+
+
+def _ensure_unit(unit, *, confirm=None):
+    unit.verify_sources()
     stack.verify_resources()
     pending = stack.STATE / "pending-schema-upgrade.json"
     if pending.exists() or pending.is_symlink():
@@ -452,43 +485,39 @@ def ensure_current(*, confirm=None):
             "A prior schema-upgrade attempt needs manual reconciliation; inspect the private "
             "pending-schema-upgrade.json and upgrade-backups directory. No retry or service startup."
         )
-    e = engine()
+    e = unit.engine()
     phase = "read-only schema preflight"
     try:
-        observed_identity, marker = inspect_current(e)
-        if marker == CURRENT:
-            print("[OK] Schema             " + CURRENT, flush=True)
+        observed_identity, marker = unit.inspect_current(e)
+        if marker == unit.CURRENT:
+            print("[OK] Schema             " + unit.CURRENT, flush=True)
             return
-        before = before_upgrade(e)
+        before = unit.before_upgrade(e)
         print(
-            f"[REVIEW] {stack.DB} at 127.0.0.1:56044, cluster {observed_identity[3]}: 100 -> 101; "
-            f"{before['data']['iam_users'][0]} users. Existing integer keys/credentials/roles retained.\n"
+            f"[REVIEW] {stack.DB} at 127.0.0.1:56044, cluster {observed_identity[3]}: "
+            f"{unit.PREVIOUS} -> {unit.CURRENT}.\n" + unit.describe_upgrade(before) + "\n"
             "A full encrypted backup and a NEW retained restore-verification database will be created first.\n"
-            "Exactly one transactional IAM UUID migration follows, then an independent read-back before services.\n"
-            "Statement/lock/idle timeouts: 2s/250ms/5s. No automatic retry, downgrade or cleanup.\n"
-            "Review docs/uat/user-public-uuid/DATABASE_MIGRATION_PLAN.md.\n"
-            f"Type {CONFIRMATION!r} to authorize this local upgrade, or press Enter to cancel:",
+            "Then independent read-back before services. No automatic retry, downgrade or cleanup.\n"
+            f"Type {unit.CONFIRMATION!r} to authorize this local upgrade, or press Enter to cancel:",
             flush=True,
         )
         if confirm is None:
             if not sys.stdin.isatty():
-                raise SchemaUpgradeError(
-                    "Greenfield is at revision 100; interactive migration approval required before startup."
-                )
+                raise SchemaUpgradeError("Greenfield requires interactive migration approval before startup.")
             confirm = input
-        if confirm().strip() != CONFIRMATION:
+        if confirm().strip() != unit.CONFIRMATION:
             raise SchemaUpgradeError(
                 "Migration not approved; database unchanged; application services were not started."
             )
         phase = "backup/restore verification"
-        backup = backup_and_rehearse(e, before, observed_identity)
+        backup = unit.backup_and_rehearse(e, before, observed_identity)
         stack.verify_resources()
-        verify_sources()
-        if inspect_current(e) != (observed_identity, PREVIOUS) or before_upgrade(e) != before:
+        unit.verify_sources()
+        if unit.inspect_current(e) != (observed_identity, unit.PREVIOUS) or unit.before_upgrade(e) != before:
             raise SchemaUpgradeError("Source database changed after review/backup; no migration performed.")
-        from app.iam_schema import apply_user_uuid_revision
-
-        _private(pending, json.dumps({"identity": observed_identity, "backup": str(backup), "unit": CURRENT}).encode())
+        _private(
+            pending, json.dumps({"identity": observed_identity, "backup": str(backup), "unit": unit.CURRENT}).encode()
+        )
         _private(backup / "upgrade-events.jsonl", b"")
 
         def journal(event):
@@ -506,16 +535,17 @@ def ensure_current(*, confirm=None):
                 c.exec_driver_sql("SET TRANSACTION READ WRITE")
                 if identity(c) != observed_identity:
                     raise SchemaUpgradeError("Migration target changed.")
-                c.exec_driver_sql("SELECT pg_advisory_xact_lock(7160085101)")
+                c.exec_driver_sql(f"SELECT pg_advisory_xact_lock({unit.ADVISORY_KEY})")
                 c.exec_driver_sql("LOCK TABLE public.alembic_version IN EXCLUSIVE MODE NOWAIT")
-                c.exec_driver_sql("LOCK TABLE ONLY public.iam_users IN ACCESS EXCLUSIVE MODE NOWAIT")
+                for table in unit.TABLES:
+                    c.exec_driver_sql(f"LOCK TABLE ONLY public.{table} IN ACCESS EXCLUSIVE MODE NOWAIT")
                 exclusive(c)
-                verify_sources()
-                if snapshot(c) != before:
+                unit.verify_sources()
+                if unit.snapshot(c) != before:
                     raise SchemaUpgradeError("Database changed before locked migration.")
                 c.exec_driver_sql("SET LOCAL ROLE greenfield_owner")
-                apply_user_uuid_revision(c)
-                validate_after(c, before)
+                unit.apply_revision(c)
+                unit.validate_after(c, before)
                 journal("precommit_checks_passed")
                 phase = "COMMIT acknowledgement"
                 transaction.commit()
@@ -530,15 +560,17 @@ def ensure_current(*, confirm=None):
         with e.connect() as reader:
             if identity(reader) != observed_identity:
                 raise SchemaUpgradeError("Read-back target changed.")
-            validate_after(reader, before)
+            unit.validate_after(reader, before)
             reader.rollback()
         journal("independent_readback_rolled_back_and_closed")
         _private(
-            backup / "upgrade-accepted.json", json.dumps({"revision": CURRENT, "independent_readback": True}).encode()
+            backup / "upgrade-accepted.json",
+            json.dumps({"revision": unit.CURRENT, "independent_readback": True}).encode(),
         )
         pending.unlink()
         print(
-            "[OK] Schema             " + CURRENT + " committed, writer closed, independent read-back passed", flush=True
+            "[OK] Schema             " + unit.CURRENT + " committed, writer closed, independent read-back passed",
+            flush=True,
         )
     except BaseException as error:
         # Never emit driver arguments, SQL parameters, passwords or backup rows.

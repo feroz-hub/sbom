@@ -293,10 +293,20 @@ def test_restore_parity_rejects_nonliteral_expression_cast_changes():
     assert not migration.restored_snapshot_matches(before, after)
 
 
-def test_revision102_source_refuses_old_launcher_before_credentials_or_database(monkeypatch):
+def test_revision102_dispatches_only_to_the_reviewed_unit(monkeypatch):
+    from scripts import greenfield_resource_migrations as unit
+
     monkeypatch.setattr(migration.stack, "REVISION", "102_public_membership_grant_analysis_uuid")
-    sources = Mock(side_effect=AssertionError("must stop before preflight"))
-    monkeypatch.setattr(migration, "verify_sources", sources)
-    with pytest.raises(migration.SchemaUpgradeError, match="separately approved"):
+    execute = Mock()
+    monkeypatch.setattr(migration, "_ensure_unit", execute)
+    migration.ensure_current()
+    execute.assert_called_once_with(unit, confirm=None)
+
+
+def test_unknown_application_revision_refuses_before_credentials(monkeypatch):
+    monkeypatch.setattr(migration.stack, "REVISION", "103_unreviewed")
+    execute = Mock(side_effect=AssertionError("must stop before preflight"))
+    monkeypatch.setattr(migration, "_ensure_unit", execute)
+    with pytest.raises(migration.SchemaUpgradeError, match="Unreviewed application revision"):
         migration.ensure_current()
-    sources.assert_not_called()
+    execute.assert_not_called()

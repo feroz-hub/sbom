@@ -1,7 +1,7 @@
 """Run an already installed UUID development stack through dev.py's owned lifecycle.
 
 Start resumes only verified existing containers, then checks the schema before
-launching applications. The sole reviewed 100->101 upgrade requires explicit
+launching applications. Each supported next-only UUID upgrade requires explicit
 interactive confirmation and a verified backup. Never bootstraps or seeds.
 """
 
