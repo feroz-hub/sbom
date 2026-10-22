@@ -1,0 +1,29 @@
+{
+  "analysis_finding_count": 70,
+  "analysis_run_count": 40,
+  "baseline_difference_fields": [],
+  "cluster": "7698349709013049382",
+  "database": "sbom_greenfield_uuid",
+  "iam_users_count": 19,
+  "integer_foreign_key_count": 144,
+  "native_user_credentials_count": 18,
+  "new_public_columns": [
+    [
+      "iam_users",
+      "public_id"
+    ]
+  ],
+  "operator_confirmed_docker_stop_restart": true,
+  "operator_confirmed_stack_stop": true,
+  "platform_user_roles_count": 4,
+  "read_only_rollback_and_physical_close": true,
+  "revision": [
+    "101_iam_user_public_uuid"
+  ],
+  "task_applied_populated_migration": false,
+  "task_performed_original_service_restart": false,
+  "tenant_user_role_assignments_count": 21,
+  "tenant_users_count": 21,
+  "time": "2026-10-22T02:53:37.784535+00:00",
+  "user_identities_count": 19
+}

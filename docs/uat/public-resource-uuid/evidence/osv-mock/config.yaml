@@ -1,0 +1,9 @@
+version: 1
+protocol: http
+slug: public-resource-osv
+name: public-resource-osv
+port: 19400
+interceptRequests: true
+scenarios:
+  - name: default
+    path: default.js

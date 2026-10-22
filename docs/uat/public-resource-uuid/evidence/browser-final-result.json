@@ -1,0 +1,75 @@
+{
+  "api_boundary_sha256": "48c2bb0c4ae5fd695a025714914a332202b6e06dcf349a039dd602d884457429",
+  "cases": [
+    {
+      "name": "admin: login, UUID context, refresh, logout/login stability",
+      "observations": {},
+      "result": "PASS",
+      "time": "2026-10-21T17:10:14.655Z"
+    },
+    {
+      "name": "analyst: login, UUID context, refresh, logout/login stability",
+      "observations": {},
+      "result": "PASS",
+      "time": "2026-10-21T17:10:30.520Z"
+    },
+    {
+      "name": "developer: login, UUID context, refresh, logout/login stability",
+      "observations": {},
+      "result": "PASS",
+      "time": "2026-10-21T17:10:47.266Z"
+    },
+    {
+      "name": "viewer: login, UUID context, refresh, logout/login stability",
+      "observations": {},
+      "result": "PASS",
+      "time": "2026-10-21T17:11:10.535Z"
+    },
+    {
+      "name": "foreign: login, UUID context, refresh, logout/login stability",
+      "observations": {},
+      "result": "PASS",
+      "time": "2026-10-21T17:11:33.698Z"
+    },
+    {
+      "name": "platform: login, UUID context, refresh, logout/login stability",
+      "observations": {},
+      "result": "PASS",
+      "time": "2026-10-21T17:11:43.698Z"
+    },
+    {
+      "name": "Tenant Admin: actual Users & Access find/add/change roles/remove UUID user",
+      "observations": {},
+      "result": "PASS",
+      "time": "2026-10-21T17:11:53.512Z"
+    },
+    {
+      "name": "Platform Admin: purpose-limited UUID selection, actual grant/revoke UI",
+      "observations": {},
+      "result": "PASS",
+      "time": "2026-10-21T17:12:02.657Z"
+    },
+    {
+      "name": "Analyst: real SBOM upload, analysis SSE, persisted UUID polling and foreign isolation",
+      "observations": {
+        "foreign_status": 404,
+        "integer_status": 422,
+        "provider": "local Postman OSV simulation",
+        "run_id": "54470046-8c50-4965-a6e0-0631667661b0",
+        "sbom_id": "12c13e9f-e9d5-4f0b-affe-d45ce5b085c1"
+      },
+      "result": "PASS",
+      "time": "2026-10-21T17:12:34.829Z"
+    },
+    {
+      "name": "Admin UUID path syntax, missing identities and membership separation",
+      "observations": {},
+      "result": "PASS",
+      "time": "2026-10-21T17:12:44.636Z"
+    }
+  ],
+  "certificate_bypass": false,
+  "chrome_channel": "chrome",
+  "ignoreHTTPSErrors": false,
+  "source_sha256": "489448473d33c888091ee44962bc03667ac96f04fd34381d737d1e274ec4b854"
+}

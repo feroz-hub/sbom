@@ -1,0 +1,68 @@
+[
+  {
+    "name": "admin: login, UUID context, refresh, logout/login stability",
+    "result": "PASS",
+    "observations": {},
+    "time": "2026-10-21T16:41:12.995Z"
+  },
+  {
+    "name": "analyst: login, UUID context, refresh, logout/login stability",
+    "result": "PASS",
+    "observations": {},
+    "time": "2026-10-21T16:41:31.638Z"
+  },
+  {
+    "name": "developer: login, UUID context, refresh, logout/login stability",
+    "result": "PASS",
+    "observations": {},
+    "time": "2026-10-21T16:41:51.165Z"
+  },
+  {
+    "name": "viewer: login, UUID context, refresh, logout/login stability",
+    "result": "PASS",
+    "observations": {},
+    "time": "2026-10-21T16:42:11.760Z"
+  },
+  {
+    "name": "foreign: login, UUID context, refresh, logout/login stability",
+    "result": "PASS",
+    "observations": {},
+    "time": "2026-10-21T16:42:29.673Z"
+  },
+  {
+    "name": "platform: login, UUID context, refresh, logout/login stability",
+    "result": "PASS",
+    "observations": {},
+    "time": "2026-10-21T16:42:39.971Z"
+  },
+  {
+    "name": "Tenant Admin: actual Users & Access find/add/change roles/remove UUID user",
+    "result": "PASS",
+    "observations": {},
+    "time": "2026-10-21T16:42:49.743Z"
+  },
+  {
+    "name": "Platform Admin: purpose-limited UUID selection, actual grant/revoke UI",
+    "result": "PASS",
+    "observations": {},
+    "time": "2026-10-21T16:42:58.430Z"
+  },
+  {
+    "name": "Analyst: real SBOM upload, analysis SSE, persisted UUID polling and foreign isolation",
+    "result": "PASS",
+    "observations": {
+      "sbom_id": "76328d85-c033-4e1b-affa-ca097d4a5106",
+      "run_id": "04b84599-6a6d-4c54-9127-87c5133d28fa",
+      "provider": "local Postman OSV simulation",
+      "foreign_status": 404,
+      "integer_status": 422
+    },
+    "time": "2026-10-21T16:43:36.853Z"
+  },
+  {
+    "name": "Admin UUID path syntax, missing identities and membership separation",
+    "result": "PASS",
+    "observations": {},
+    "time": "2026-10-21T16:43:45.244Z"
+  }
+]

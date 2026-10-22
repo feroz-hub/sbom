@@ -1,0 +1,28 @@
+{
+  "provider": "local Postman OSV HTTP simulation",
+  "command": "postman simulation run <local specification> --port 19400 --output ndjson --no-history",
+  "requests": [
+    {
+      "ts": "2026-10-21T16:43:18.328Z",
+      "method": "POST",
+      "path": "/v1/querybatch",
+      "statusCode": 200,
+      "duration": 25
+    },
+    {
+      "ts": "2026-10-21T16:43:18.347Z",
+      "method": "GET",
+      "path": "/v1/vulns/GHSA-jfh8-c2jp-5v3q",
+      "statusCode": 200,
+      "duration": 0
+    },
+    {
+      "ts": "2026-10-21T16:43:18.355Z",
+      "method": "GET",
+      "path": "/v1/vulns/PYSEC-2018-28",
+      "statusCode": 200,
+      "duration": 0
+    }
+  ],
+  "live_provider_availability_proved": false
+}

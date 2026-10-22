@@ -1,0 +1,15 @@
+{
+  "backend_ast_compile_files": 950,
+  "backend_source_drift": [],
+  "backend_source_snapshot": "backend-final-source-v6.json",
+  "backend_source_snapshot_sha256": "b81ec82b52340e985f1d1aa4b6f91dd1a9db82b8a25c099e9b61cd0972821d74",
+  "eslint_errors": 0,
+  "eslint_historical_warnings": 52,
+  "frontend_frozen_source_files": 626,
+  "frontend_source_drift": [],
+  "production_build_copy_source_differences": [],
+  "production_build_copy_source_files": 623,
+  "production_build_exit_code": 0,
+  "scoped_ruff_exit_code": 0,
+  "typecheck_exit_code": 0
+}

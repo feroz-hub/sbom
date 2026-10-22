@@ -1,0 +1,12 @@
+{
+  "additional_functions_in_existing_modules": [
+    "tests/test_greenfield_startup_migrations.py::test_revision102_source_refuses_old_launcher_before_credentials_or_database"
+  ],
+  "changed_existing_test_modules": 43,
+  "removed_coverage_functions": [],
+  "review_note": "The two existing functions retain their original request, authorization, user-UUID and batching assertions; only Membership wire expectations change from integer to UUID as explicitly required. Names updated to describe the new contract. No test function coverage deleted.",
+  "reviewed_contract_renames": {
+    "tests/test_iam_user_public_uuid.py::test_openapi_contract_is_user_uuid_but_analysis_and_membership_stay_integer": "tests/test_iam_user_public_uuid.py::test_openapi_user_and_membership_contract_is_uuid",
+    "tests/test_iam_user_public_uuid.py::test_user_serialization_is_batched_and_other_ids_stay_integer": "tests/test_iam_user_public_uuid.py::test_user_and_membership_serialization_is_batched"
+  }
+}

@@ -1,0 +1,13 @@
+{
+  "result": {
+    "numTotalTests": 1820,
+    "numPassedTests": 1820,
+    "numFailedTests": 0,
+    "numPendingTests": 0,
+    "success": true
+  },
+  "source_files": 626,
+  "source_drift": [],
+  "tested_files": 201,
+  "run_note": "Retried from frontend working directory after initial root-CWD harness failures; source unchanged."
+}

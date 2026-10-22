@@ -1,0 +1,3764 @@
+[
+  {
+    "dependencies": [
+      "enforce_request_access",
+      "decode_request",
+      "get_db"
+    ],
+    "file": "app/routers/analysis.py",
+    "function": "compare_analysis_runs",
+    "line": 74,
+    "methods": [
+      "GET"
+    ],
+    "path": "/api/analysis-runs/compare",
+    "request_resource_fields": {
+      "run_a": "analysis_run",
+      "run_b": "analysis_run"
+    },
+    "response_model": "None",
+    "test_coverage": "Matching router/security suites in exact frozen inventory; focused and real Chrome scenarios recorded separately.",
+    "wire_policy": "Explicit named fields or DTO/route ownership only; UUIDv4 for public resources, integer persistence/worker/other event identities retained."
+  },
+  {
+    "dependencies": [
+      "enforce_request_access",
+      "decode_request",
+      "get_current_tenant_context",
+      "get_db"
+    ],
+    "file": "app/routers/analysis.py",
+    "function": "export_csv",
+    "line": 311,
+    "methods": [
+      "GET"
+    ],
+    "path": "/api/analysis-runs/{run_id}/export/csv",
+    "request_resource_fields": {
+      "run_id": "analysis_run"
+    },
+    "response_model": "None",
+    "test_coverage": "Matching router/security suites in exact frozen inventory; focused and real Chrome scenarios recorded separately.",
+    "wire_policy": "Explicit named fields or DTO/route ownership only; UUIDv4 for public resources, integer persistence/worker/other event identities retained."
+  },
+  {
+    "dependencies": [
+      "enforce_request_access",
+      "decode_request",
+      "get_current_tenant_context",
+      "get_db"
+    ],
+    "file": "app/routers/analysis.py",
+    "function": "export_sarif",
+    "line": 188,
+    "methods": [
+      "GET"
+    ],
+    "path": "/api/analysis-runs/{run_id}/export/sarif",
+    "request_resource_fields": {
+      "run_id": "analysis_run"
+    },
+    "response_model": "None",
+    "test_coverage": "Matching router/security suites in exact frozen inventory; focused and real Chrome scenarios recorded separately.",
+    "wire_policy": "Explicit named fields or DTO/route ownership only; UUIDv4 for public resources, integer persistence/worker/other event identities retained."
+  },
+  {
+    "dependencies": [
+      "enforce_request_access",
+      "decode_request",
+      "dashboard_scope_dependency",
+      "get_db",
+      "dependency"
+    ],
+    "file": "app/routers/component_advisor.py",
+    "function": "get_analytics",
+    "line": 808,
+    "methods": [
+      "GET"
+    ],
+    "path": "/api/component-advisor/analytics",
+    "request_resource_fields": {},
+    "response_model": "dict[str, typing.Any]",
+    "test_coverage": "Matching router/security suites in exact frozen inventory; focused and real Chrome scenarios recorded separately.",
+    "wire_policy": "Explicit named fields or DTO/route ownership only; UUIDv4 for public resources, integer persistence/worker/other event identities retained."
+  },
+  {
+    "dependencies": [
+      "enforce_request_access",
+      "decode_request",
+      "get_db",
+      "dependency"
+    ],
+    "file": "app/routers/component_advisor.py",
+    "function": "get_audit_events",
+    "line": 788,
+    "methods": [
+      "GET"
+    ],
+    "path": "/api/component-advisor/audit/events",
+    "request_resource_fields": {},
+    "response_model": "dict[str, typing.Any]",
+    "test_coverage": "Matching router/security suites in exact frozen inventory; focused and real Chrome scenarios recorded separately.",
+    "wire_policy": "Explicit named fields or DTO/route ownership only; UUIDv4 for public resources, integer persistence/worker/other event identities retained."
+  },
+  {
+    "dependencies": [
+      "enforce_request_access",
+      "decode_request",
+      "dashboard_scope_dependency",
+      "_filters",
+      "_as_of",
+      "get_db",
+      "dependency"
+    ],
+    "file": "app/routers/component_advisor.py",
+    "function": "advisor_components",
+    "line": 151,
+    "methods": [
+      "GET"
+    ],
+    "path": "/api/component-advisor/components",
+    "request_resource_fields": {},
+    "response_model": "typing.Any",
+    "test_coverage": "Matching router/security suites in exact frozen inventory; focused and real Chrome scenarios recorded separately.",
+    "wire_policy": "Explicit named fields or DTO/route ownership only; UUIDv4 for public resources, integer persistence/worker/other event identities retained."
+  },
+  {
+    "dependencies": [
+      "enforce_request_access",
+      "decode_request",
+      "dashboard_scope_dependency",
+      "_as_of",
+      "get_db",
+      "dependency"
+    ],
+    "file": "app/routers/component_advisor.py",
+    "function": "advisor_component_detail",
+    "line": 181,
+    "methods": [
+      "GET"
+    ],
+    "path": "/api/component-advisor/components/{canonical_key}",
+    "request_resource_fields": {},
+    "response_model": "dict[str, typing.Any]",
+    "test_coverage": "Matching router/security suites in exact frozen inventory; focused and real Chrome scenarios recorded separately.",
+    "wire_policy": "Explicit named fields or DTO/route ownership only; UUIDv4 for public resources, integer persistence/worker/other event identities retained."
+  },
+  {
+    "dependencies": [
+      "enforce_request_access",
+      "decode_request",
+      "dashboard_scope_dependency",
+      "_as_of",
+      "get_db",
+      "dependency"
+    ],
+    "file": "app/routers/component_advisor.py",
+    "function": "advisor_component_classification",
+    "line": 208,
+    "methods": [
+      "GET"
+    ],
+    "path": "/api/component-advisor/components/{canonical_key}/classification",
+    "request_resource_fields": {},
+    "response_model": "dict[str, typing.Any]",
+    "test_coverage": "Matching router/security suites in exact frozen inventory; focused and real Chrome scenarios recorded separately.",
+    "wire_policy": "Explicit named fields or DTO/route ownership only; UUIDv4 for public resources, integer persistence/worker/other event identities retained."
+  },
+  {
+    "dependencies": [
+      "enforce_request_access",
+      "decode_request",
+      "get_db",
+      "dependency"
+    ],
+    "file": "app/routers/component_advisor.py",
+    "function": "get_policy",
+    "line": 335,
+    "methods": [
+      "GET"
+    ],
+    "path": "/api/component-advisor/policies/{kind}",
+    "request_resource_fields": {},
+    "response_model": "dict[str, typing.Any]",
+    "test_coverage": "Matching router/security suites in exact frozen inventory; focused and real Chrome scenarios recorded separately.",
+    "wire_policy": "Explicit named fields or DTO/route ownership only; UUIDv4 for public resources, integer persistence/worker/other event identities retained."
+  },
+  {
+    "dependencies": [
+      "enforce_request_access",
+      "decode_request",
+      "get_db",
+      "dependency"
+    ],
+    "file": "app/routers/component_advisor.py",
+    "function": "get_policy_versions",
+    "line": 345,
+    "methods": [
+      "GET"
+    ],
+    "path": "/api/component-advisor/policies/{kind}/versions",
+    "request_resource_fields": {},
+    "response_model": "dict[str, typing.Any]",
+    "test_coverage": "Matching router/security suites in exact frozen inventory; focused and real Chrome scenarios recorded separately.",
+    "wire_policy": "Explicit named fields or DTO/route ownership only; UUIDv4 for public resources, integer persistence/worker/other event identities retained."
+  },
+  {
+    "dependencies": [
+      "enforce_request_access",
+      "decode_request",
+      "get_db",
+      "dependency"
+    ],
+    "file": "app/routers/component_advisor.py",
+    "function": "post_policy_version",
+    "line": 356,
+    "methods": [
+      "POST"
+    ],
+    "path": "/api/component-advisor/policies/{kind}/versions",
+    "request_resource_fields": {},
+    "response_model": "dict[str, typing.Any]",
+    "test_coverage": "Matching router/security suites in exact frozen inventory; focused and real Chrome scenarios recorded separately.",
+    "wire_policy": "Explicit named fields or DTO/route ownership only; UUIDv4 for public resources, integer persistence/worker/other event identities retained."
+  },
+  {
+    "dependencies": [
+      "enforce_request_access",
+      "decode_request",
+      "get_db",
+      "dependency"
+    ],
+    "file": "app/routers/component_advisor.py",
+    "function": "list_recommendations",
+    "line": 513,
+    "methods": [
+      "GET"
+    ],
+    "path": "/api/component-advisor/recommendations",
+    "request_resource_fields": {},
+    "response_model": "dict[str, typing.Any]",
+    "test_coverage": "Matching router/security suites in exact frozen inventory; focused and real Chrome scenarios recorded separately.",
+    "wire_policy": "Explicit named fields or DTO/route ownership only; UUIDv4 for public resources, integer persistence/worker/other event identities retained."
+  },
+  {
+    "dependencies": [
+      "enforce_request_access",
+      "decode_request",
+      "dashboard_scope_dependency",
+      "get_db",
+      "dependency"
+    ],
+    "file": "app/routers/component_advisor.py",
+    "function": "create_recommendation",
+    "line": 468,
+    "methods": [
+      "POST"
+    ],
+    "path": "/api/component-advisor/recommendations",
+    "request_resource_fields": {},
+    "response_model": "dict[str, typing.Any]",
+    "test_coverage": "Matching router/security suites in exact frozen inventory; focused and real Chrome scenarios recorded separately.",
+    "wire_policy": "Explicit named fields or DTO/route ownership only; UUIDv4 for public resources, integer persistence/worker/other event identities retained."
+  },
+  {
+    "dependencies": [
+      "enforce_request_access",
+      "decode_request",
+      "get_db",
+      "dependency"
+    ],
+    "file": "app/routers/component_advisor.py",
+    "function": "get_recommendation",
+    "line": 534,
+    "methods": [
+      "GET"
+    ],
+    "path": "/api/component-advisor/recommendations/{recommendation_id}",
+    "request_resource_fields": {},
+    "response_model": "dict[str, typing.Any]",
+    "test_coverage": "Matching router/security suites in exact frozen inventory; focused and real Chrome scenarios recorded separately.",
+    "wire_policy": "Explicit named fields or DTO/route ownership only; UUIDv4 for public resources, integer persistence/worker/other event identities retained."
+  },
+  {
+    "dependencies": [
+      "enforce_request_access",
+      "decode_request",
+      "get_db",
+      "dependency"
+    ],
+    "file": "app/routers/component_advisor.py",
+    "function": "get_recommendation_candidates",
+    "line": 548,
+    "methods": [
+      "GET"
+    ],
+    "path": "/api/component-advisor/recommendations/{recommendation_id}/candidates",
+    "request_resource_fields": {},
+    "response_model": "dict[str, typing.Any]",
+    "test_coverage": "Matching router/security suites in exact frozen inventory; focused and real Chrome scenarios recorded separately.",
+    "wire_policy": "Explicit named fields or DTO/route ownership only; UUIDv4 for public resources, integer persistence/worker/other event identities retained."
+  },
+  {
+    "dependencies": [
+      "enforce_request_access",
+      "decode_request",
+      "get_db",
+      "dependency"
+    ],
+    "file": "app/routers/component_advisor.py",
+    "function": "add_manual_candidate",
+    "line": 610,
+    "methods": [
+      "POST"
+    ],
+    "path": "/api/component-advisor/recommendations/{recommendation_id}/candidates",
+    "request_resource_fields": {},
+    "response_model": "dict[str, typing.Any]",
+    "test_coverage": "Matching router/security suites in exact frozen inventory; focused and real Chrome scenarios recorded separately.",
+    "wire_policy": "Explicit named fields or DTO/route ownership only; UUIDv4 for public resources, integer persistence/worker/other event identities retained."
+  },
+  {
+    "dependencies": [
+      "enforce_request_access",
+      "decode_request",
+      "get_db",
+      "dependency"
+    ],
+    "file": "app/routers/component_advisor.py",
+    "function": "get_candidate",
+    "line": 636,
+    "methods": [
+      "GET"
+    ],
+    "path": "/api/component-advisor/recommendations/{recommendation_id}/candidates/{candidate_id}",
+    "request_resource_fields": {},
+    "response_model": "dict[str, typing.Any]",
+    "test_coverage": "Matching router/security suites in exact frozen inventory; focused and real Chrome scenarios recorded separately.",
+    "wire_policy": "Explicit named fields or DTO/route ownership only; UUIDv4 for public resources, integer persistence/worker/other event identities retained."
+  },
+  {
+    "dependencies": [
+      "enforce_request_access",
+      "decode_request",
+      "get_db",
+      "dependency"
+    ],
+    "file": "app/routers/component_advisor.py",
+    "function": "get_candidate_compatibility",
+    "line": 654,
+    "methods": [
+      "GET"
+    ],
+    "path": "/api/component-advisor/recommendations/{recommendation_id}/candidates/{candidate_id}/compatibility",
+    "request_resource_fields": {},
+    "response_model": "dict[str, typing.Any]",
+    "test_coverage": "Matching router/security suites in exact frozen inventory; focused and real Chrome scenarios recorded separately.",
+    "wire_policy": "Explicit named fields or DTO/route ownership only; UUIDv4 for public resources, integer persistence/worker/other event identities retained."
+  },
+  {
+    "dependencies": [
+      "enforce_request_access",
+      "decode_request",
+      "get_db",
+      "dependency"
+    ],
+    "file": "app/routers/component_advisor.py",
+    "function": "get_candidate_evidence",
+    "line": 673,
+    "methods": [
+      "GET"
+    ],
+    "path": "/api/component-advisor/recommendations/{recommendation_id}/candidates/{candidate_id}/evidence",
+    "request_resource_fields": {},
+    "response_model": "dict[str, typing.Any]",
+    "test_coverage": "Matching router/security suites in exact frozen inventory; focused and real Chrome scenarios recorded separately.",
+    "wire_policy": "Explicit named fields or DTO/route ownership only; UUIDv4 for public resources, integer persistence/worker/other event identities retained."
+  },
+  {
+    "dependencies": [
+      "enforce_request_access",
+      "decode_request",
+      "get_db",
+      "dependency"
+    ],
+    "file": "app/routers/component_advisor.py",
+    "function": "post_decision",
+    "line": 727,
+    "methods": [
+      "POST"
+    ],
+    "path": "/api/component-advisor/recommendations/{recommendation_id}/decisions",
+    "request_resource_fields": {},
+    "response_model": "dict[str, typing.Any]",
+    "test_coverage": "Matching router/security suites in exact frozen inventory; focused and real Chrome scenarios recorded separately.",
+    "wire_policy": "Explicit named fields or DTO/route ownership only; UUIDv4 for public resources, integer persistence/worker/other event identities retained."
+  },
+  {
+    "dependencies": [
+      "enforce_request_access",
+      "decode_request",
+      "get_db",
+      "dependency"
+    ],
+    "file": "app/routers/component_advisor.py",
+    "function": "evaluate_recommendation",
+    "line": 563,
+    "methods": [
+      "POST"
+    ],
+    "path": "/api/component-advisor/recommendations/{recommendation_id}/evaluate",
+    "request_resource_fields": {},
+    "response_model": "dict[str, typing.Any]",
+    "test_coverage": "Matching router/security suites in exact frozen inventory; focused and real Chrome scenarios recorded separately.",
+    "wire_policy": "Explicit named fields or DTO/route ownership only; UUIDv4 for public resources, integer persistence/worker/other event identities retained."
+  },
+  {
+    "dependencies": [
+      "enforce_request_access",
+      "decode_request",
+      "get_db",
+      "dependency"
+    ],
+    "file": "app/routers/component_advisor.py",
+    "function": "get_recommendation_events",
+    "line": 771,
+    "methods": [
+      "GET"
+    ],
+    "path": "/api/component-advisor/recommendations/{recommendation_id}/events",
+    "request_resource_fields": {},
+    "response_model": "dict[str, typing.Any]",
+    "test_coverage": "Matching router/security suites in exact frozen inventory; focused and real Chrome scenarios recorded separately.",
+    "wire_policy": "Explicit named fields or DTO/route ownership only; UUIDv4 for public resources, integer persistence/worker/other event identities retained."
+  },
+  {
+    "dependencies": [
+      "enforce_request_access",
+      "decode_request",
+      "dashboard_scope_dependency",
+      "_as_of",
+      "get_db",
+      "dependency"
+    ],
+    "file": "app/routers/component_advisor.py",
+    "function": "advisor_search",
+    "line": 254,
+    "methods": [
+      "GET"
+    ],
+    "path": "/api/component-advisor/search",
+    "request_resource_fields": {},
+    "response_model": "dict[str, typing.Any]",
+    "test_coverage": "Matching router/security suites in exact frozen inventory; focused and real Chrome scenarios recorded separately.",
+    "wire_policy": "Explicit named fields or DTO/route ownership only; UUIDv4 for public resources, integer persistence/worker/other event identities retained."
+  },
+  {
+    "dependencies": [
+      "enforce_request_access",
+      "decode_request",
+      "dashboard_scope_dependency",
+      "_filters",
+      "_as_of",
+      "get_db",
+      "dependency"
+    ],
+    "file": "app/routers/component_advisor.py",
+    "function": "advisor_summary",
+    "line": 124,
+    "methods": [
+      "GET"
+    ],
+    "path": "/api/component-advisor/summary",
+    "request_resource_fields": {},
+    "response_model": "typing.Any",
+    "test_coverage": "Matching router/security suites in exact frozen inventory; focused and real Chrome scenarios recorded separately.",
+    "wire_policy": "Explicit named fields or DTO/route ownership only; UUIDv4 for public resources, integer persistence/worker/other event identities retained."
+  },
+  {
+    "dependencies": [
+      "enforce_request_access",
+      "decode_request",
+      "dependency",
+      "get_db"
+    ],
+    "file": "app/routers/logical_sboms.py",
+    "function": "get_master",
+    "line": 104,
+    "methods": [
+      "GET"
+    ],
+    "path": "/api/logical-sboms/{logical_id}",
+    "request_resource_fields": {},
+    "response_model": "<class 'app.schemas.LogicalSBOMOut'>",
+    "test_coverage": "Matching router/security suites in exact frozen inventory; focused and real Chrome scenarios recorded separately.",
+    "wire_policy": "Explicit named fields or DTO/route ownership only; UUIDv4 for public resources, integer persistence/worker/other event identities retained."
+  },
+  {
+    "dependencies": [
+      "enforce_request_access",
+      "decode_request",
+      "dependency",
+      "get_db"
+    ],
+    "file": "app/routers/logical_sboms.py",
+    "function": "list_versions",
+    "line": 111,
+    "methods": [
+      "GET"
+    ],
+    "path": "/api/logical-sboms/{logical_id}/versions",
+    "request_resource_fields": {},
+    "response_model": "list[app.schemas.SBOMSourceOut]",
+    "test_coverage": "Matching router/security suites in exact frozen inventory; focused and real Chrome scenarios recorded separately.",
+    "wire_policy": "Explicit named fields or DTO/route ownership only; UUIDv4 for public resources, integer persistence/worker/other event identities retained."
+  },
+  {
+    "dependencies": [
+      "enforce_request_access",
+      "decode_request",
+      "get_db"
+    ],
+    "file": "app/routers/pdf.py",
+    "function": "create_pdf_report_by_run_id",
+    "line": 113,
+    "methods": [
+      "POST"
+    ],
+    "path": "/api/pdf-report",
+    "request_resource_fields": {},
+    "response_model": "None",
+    "test_coverage": "Matching router/security suites in exact frozen inventory; focused and real Chrome scenarios recorded separately.",
+    "wire_policy": "Explicit named fields or DTO/route ownership only; UUIDv4 for public resources, integer persistence/worker/other event identities retained."
+  },
+  {
+    "dependencies": [
+      "enforce_request_access",
+      "decode_request",
+      "dependency",
+      "get_db"
+    ],
+    "file": "app/routers/platform.py",
+    "function": "list_platform_administrators",
+    "line": 510,
+    "methods": [
+      "GET"
+    ],
+    "path": "/api/platform/administrators",
+    "request_resource_fields": {},
+    "response_model": "<class 'app.schemas_platform.PlatformAdministratorPage'>",
+    "test_coverage": "Matching router/security suites in exact frozen inventory; focused and real Chrome scenarios recorded separately.",
+    "wire_policy": "Explicit named fields or DTO/route ownership only; UUIDv4 for public resources, integer persistence/worker/other event identities retained."
+  },
+  {
+    "dependencies": [
+      "enforce_request_access",
+      "decode_request",
+      "dependency",
+      "get_db"
+    ],
+    "file": "app/routers/platform.py",
+    "function": "grant_platform_administrator",
+    "line": 544,
+    "methods": [
+      "POST"
+    ],
+    "path": "/api/platform/administrators",
+    "request_resource_fields": {},
+    "response_model": "<class 'app.schemas_platform.PlatformAdministratorGrantResponse'>",
+    "test_coverage": "Matching router/security suites in exact frozen inventory; focused and real Chrome scenarios recorded separately.",
+    "wire_policy": "Explicit named fields or DTO/route ownership only; UUIDv4 for public resources, integer persistence/worker/other event identities retained."
+  },
+  {
+    "dependencies": [
+      "enforce_request_access",
+      "decode_request",
+      "dependency",
+      "get_db"
+    ],
+    "file": "app/routers/platform.py",
+    "function": "revoke_platform_administrator",
+    "line": 599,
+    "methods": [
+      "DELETE"
+    ],
+    "path": "/api/platform/administrators/{grant_id}",
+    "request_resource_fields": {
+      "grant_id": "platform_user_roles"
+    },
+    "response_model": "None",
+    "test_coverage": "Matching router/security suites in exact frozen inventory; focused and real Chrome scenarios recorded separately.",
+    "wire_policy": "Explicit named fields or DTO/route ownership only; UUIDv4 for public resources, integer persistence/worker/other event identities retained."
+  },
+  {
+    "dependencies": [
+      "enforce_request_access",
+      "decode_request",
+      "dependency",
+      "get_db"
+    ],
+    "file": "app/routers/platform.py",
+    "function": "list_platform_users",
+    "line": 389,
+    "methods": [
+      "GET"
+    ],
+    "path": "/api/platform/users",
+    "request_resource_fields": {},
+    "response_model": "<class 'app.schemas_platform.PlatformUserPage'>",
+    "test_coverage": "Matching router/security suites in exact frozen inventory; focused and real Chrome scenarios recorded separately.",
+    "wire_policy": "Explicit named fields or DTO/route ownership only; UUIDv4 for public resources, integer persistence/worker/other event identities retained."
+  },
+  {
+    "dependencies": [
+      "enforce_request_access",
+      "decode_request",
+      "dependency",
+      "get_db"
+    ],
+    "file": "app/routers/platform.py",
+    "function": "search_platform_users",
+    "line": 293,
+    "methods": [
+      "GET"
+    ],
+    "path": "/api/platform/users/search",
+    "request_resource_fields": {},
+    "response_model": "<class 'app.schemas_platform.UserSearchResponse'>",
+    "test_coverage": "Matching router/security suites in exact frozen inventory; focused and real Chrome scenarios recorded separately.",
+    "wire_policy": "Explicit named fields or DTO/route ownership only; UUIDv4 for public resources, integer persistence/worker/other event identities retained."
+  },
+  {
+    "dependencies": [
+      "enforce_request_access",
+      "decode_request",
+      "dependency",
+      "get_db"
+    ],
+    "file": "app/routers/platform.py",
+    "function": "get_platform_user",
+    "line": 477,
+    "methods": [
+      "GET"
+    ],
+    "path": "/api/platform/users/{user_id}",
+    "request_resource_fields": {},
+    "response_model": "<class 'app.schemas_platform.PlatformUserDetail'>",
+    "test_coverage": "Matching router/security suites in exact frozen inventory; focused and real Chrome scenarios recorded separately.",
+    "wire_policy": "Explicit named fields or DTO/route ownership only; UUIDv4 for public resources, integer persistence/worker/other event identities retained."
+  },
+  {
+    "dependencies": [
+      "enforce_request_access",
+      "decode_request",
+      "dependency",
+      "get_db"
+    ],
+    "file": "app/routers/platform.py",
+    "function": "update_iam_user_status_compatibility",
+    "line": 758,
+    "methods": [
+      "PATCH"
+    ],
+    "path": "/api/platform/users/{user_id}",
+    "request_resource_fields": {},
+    "response_model": "<class 'app.schemas_platform.PlatformUserStatusResponse'>",
+    "test_coverage": "Matching router/security suites in exact frozen inventory; focused and real Chrome scenarios recorded separately.",
+    "wire_policy": "Explicit named fields or DTO/route ownership only; UUIDv4 for public resources, integer persistence/worker/other event identities retained."
+  },
+  {
+    "dependencies": [
+      "enforce_request_access",
+      "decode_request",
+      "dependency",
+      "get_db"
+    ],
+    "file": "app/routers/platform.py",
+    "function": "user_audit",
+    "line": 858,
+    "methods": [
+      "GET"
+    ],
+    "path": "/api/platform/users/{user_id}/audit",
+    "request_resource_fields": {},
+    "response_model": "None",
+    "test_coverage": "Matching router/security suites in exact frozen inventory; focused and real Chrome scenarios recorded separately.",
+    "wire_policy": "Explicit named fields or DTO/route ownership only; UUIDv4 for public resources, integer persistence/worker/other event identities retained."
+  },
+  {
+    "dependencies": [
+      "enforce_request_access",
+      "decode_request",
+      "dependency",
+      "get_db"
+    ],
+    "file": "app/routers/platform.py",
+    "function": "force_password_change",
+    "line": 873,
+    "methods": [
+      "POST"
+    ],
+    "path": "/api/platform/users/{user_id}/force-password-change",
+    "request_resource_fields": {},
+    "response_model": "None",
+    "test_coverage": "Matching router/security suites in exact frozen inventory; focused and real Chrome scenarios recorded separately.",
+    "wire_policy": "Explicit named fields or DTO/route ownership only; UUIDv4 for public resources, integer persistence/worker/other event identities retained."
+  },
+  {
+    "dependencies": [
+      "enforce_request_access",
+      "decode_request",
+      "dependency",
+      "get_db"
+    ],
+    "file": "app/routers/platform.py",
+    "function": "revoke_native_sessions",
+    "line": 912,
+    "methods": [
+      "POST"
+    ],
+    "path": "/api/platform/users/{user_id}/logout-all",
+    "request_resource_fields": {},
+    "response_model": "None",
+    "test_coverage": "Matching router/security suites in exact frozen inventory; focused and real Chrome scenarios recorded separately.",
+    "wire_policy": "Explicit named fields or DTO/route ownership only; UUIDv4 for public resources, integer persistence/worker/other event identities retained."
+  },
+  {
+    "dependencies": [
+      "enforce_request_access",
+      "decode_request",
+      "dependency",
+      "get_db"
+    ],
+    "file": "app/routers/platform.py",
+    "function": "edit_user_profile",
+    "line": 849,
+    "methods": [
+      "PATCH"
+    ],
+    "path": "/api/platform/users/{user_id}/profile",
+    "request_resource_fields": {},
+    "response_model": "None",
+    "test_coverage": "Matching router/security suites in exact frozen inventory; focused and real Chrome scenarios recorded separately.",
+    "wire_policy": "Explicit named fields or DTO/route ownership only; UUIDv4 for public resources, integer persistence/worker/other event identities retained."
+  },
+  {
+    "dependencies": [
+      "enforce_request_access",
+      "decode_request",
+      "dependency",
+      "get_db"
+    ],
+    "file": "app/routers/platform.py",
+    "function": "update_iam_user_status",
+    "line": 742,
+    "methods": [
+      "PATCH"
+    ],
+    "path": "/api/platform/users/{user_id}/status",
+    "request_resource_fields": {},
+    "response_model": "<class 'app.schemas_platform.PlatformUserStatusResponse'>",
+    "test_coverage": "Matching router/security suites in exact frozen inventory; focused and real Chrome scenarios recorded separately.",
+    "wire_policy": "Explicit named fields or DTO/route ownership only; UUIDv4 for public resources, integer persistence/worker/other event identities retained."
+  },
+  {
+    "dependencies": [
+      "enforce_request_access",
+      "decode_request",
+      "dependency",
+      "get_db"
+    ],
+    "file": "app/routers/platform.py",
+    "function": "unlock_user",
+    "line": 866,
+    "methods": [
+      "POST"
+    ],
+    "path": "/api/platform/users/{user_id}/unlock",
+    "request_resource_fields": {},
+    "response_model": "None",
+    "test_coverage": "Matching router/security suites in exact frozen inventory; focused and real Chrome scenarios recorded separately.",
+    "wire_policy": "Explicit named fields or DTO/route ownership only; UUIDv4 for public resources, integer persistence/worker/other event identities retained."
+  },
+  {
+    "dependencies": [
+      "enforce_request_access",
+      "decode_request",
+      "dependency",
+      "get_db"
+    ],
+    "file": "app/routers/products.py",
+    "function": "delete_product",
+    "line": 311,
+    "methods": [
+      "DELETE"
+    ],
+    "path": "/api/products/{product_id}",
+    "request_resource_fields": {},
+    "response_model": "None",
+    "test_coverage": "Matching router/security suites in exact frozen inventory; focused and real Chrome scenarios recorded separately.",
+    "wire_policy": "Explicit named fields or DTO/route ownership only; UUIDv4 for public resources, integer persistence/worker/other event identities retained."
+  },
+  {
+    "dependencies": [
+      "enforce_request_access",
+      "decode_request",
+      "dependency",
+      "get_db"
+    ],
+    "file": "app/routers/products.py",
+    "function": "get_product",
+    "line": 190,
+    "methods": [
+      "GET"
+    ],
+    "path": "/api/products/{product_id}",
+    "request_resource_fields": {},
+    "response_model": "<class 'app.schemas.ProductRead'>",
+    "test_coverage": "Matching router/security suites in exact frozen inventory; focused and real Chrome scenarios recorded separately.",
+    "wire_policy": "Explicit named fields or DTO/route ownership only; UUIDv4 for public resources, integer persistence/worker/other event identities retained."
+  },
+  {
+    "dependencies": [
+      "enforce_request_access",
+      "decode_request",
+      "dependency",
+      "get_db"
+    ],
+    "file": "app/routers/products.py",
+    "function": "update_product",
+    "line": 202,
+    "methods": [
+      "PATCH"
+    ],
+    "path": "/api/products/{product_id}",
+    "request_resource_fields": {},
+    "response_model": "<class 'app.schemas.ProductRead'>",
+    "test_coverage": "Matching router/security suites in exact frozen inventory; focused and real Chrome scenarios recorded separately.",
+    "wire_policy": "Explicit named fields or DTO/route ownership only; UUIDv4 for public resources, integer persistence/worker/other event identities retained."
+  },
+  {
+    "dependencies": [
+      "enforce_request_access",
+      "decode_request",
+      "dependency",
+      "get_db"
+    ],
+    "file": "app/routers/logical_sboms.py",
+    "function": "list_logical_sboms",
+    "line": 65,
+    "methods": [
+      "GET"
+    ],
+    "path": "/api/products/{product_id}/logical-sboms",
+    "request_resource_fields": {},
+    "response_model": "<class 'app.schemas.LogicalSBOMListResponse'>",
+    "test_coverage": "Matching router/security suites in exact frozen inventory; focused and real Chrome scenarios recorded separately.",
+    "wire_policy": "Explicit named fields or DTO/route ownership only; UUIDv4 for public resources, integer persistence/worker/other event identities retained."
+  },
+  {
+    "dependencies": [
+      "enforce_request_access",
+      "decode_request",
+      "dependency",
+      "dependency",
+      "get_db"
+    ],
+    "file": "app/routers/logical_sboms.py",
+    "function": "create_logical_sbom",
+    "line": 28,
+    "methods": [
+      "POST"
+    ],
+    "path": "/api/products/{product_id}/logical-sboms",
+    "request_resource_fields": {},
+    "response_model": "<class 'app.schemas.LogicalSBOMOut'>",
+    "test_coverage": "Matching router/security suites in exact frozen inventory; focused and real Chrome scenarios recorded separately.",
+    "wire_policy": "Explicit named fields or DTO/route ownership only; UUIDv4 for public resources, integer persistence/worker/other event identities retained."
+  },
+  {
+    "dependencies": [
+      "enforce_request_access",
+      "decode_request",
+      "dependency",
+      "get_db"
+    ],
+    "file": "app/routers/products.py",
+    "function": "list_product_sboms",
+    "line": 346,
+    "methods": [
+      "GET"
+    ],
+    "path": "/api/products/{product_id}/sboms",
+    "request_resource_fields": {},
+    "response_model": "list[app.schemas.SBOMSourceOut]",
+    "test_coverage": "Matching router/security suites in exact frozen inventory; focused and real Chrome scenarios recorded separately.",
+    "wire_policy": "Explicit named fields or DTO/route ownership only; UUIDv4 for public resources, integer persistence/worker/other event identities retained."
+  },
+  {
+    "dependencies": [
+      "enforce_request_access",
+      "decode_request",
+      "dependency",
+      "get_db"
+    ],
+    "file": "app/routers/schedules.py",
+    "function": "delete_product_schedule",
+    "line": 616,
+    "methods": [
+      "DELETE"
+    ],
+    "path": "/api/products/{product_id}/schedule",
+    "request_resource_fields": {},
+    "response_model": "None",
+    "test_coverage": "Matching router/security suites in exact frozen inventory; focused and real Chrome scenarios recorded separately.",
+    "wire_policy": "Explicit named fields or DTO/route ownership only; UUIDv4 for public resources, integer persistence/worker/other event identities retained."
+  },
+  {
+    "dependencies": [
+      "enforce_request_access",
+      "decode_request",
+      "dependency",
+      "get_db"
+    ],
+    "file": "app/routers/schedules.py",
+    "function": "get_product_schedule",
+    "line": 522,
+    "methods": [
+      "GET"
+    ],
+    "path": "/api/products/{product_id}/schedule",
+    "request_resource_fields": {},
+    "response_model": "<class 'app.schemas.ScheduleOut'>",
+    "test_coverage": "Matching router/security suites in exact frozen inventory; focused and real Chrome scenarios recorded separately.",
+    "wire_policy": "Explicit named fields or DTO/route ownership only; UUIDv4 for public resources, integer persistence/worker/other event identities retained."
+  },
+  {
+    "dependencies": [
+      "enforce_request_access",
+      "decode_request",
+      "dependency",
+      "get_db"
+    ],
+    "file": "app/routers/schedules.py",
+    "function": "patch_product_schedule",
+    "line": 588,
+    "methods": [
+      "PATCH"
+    ],
+    "path": "/api/products/{product_id}/schedule",
+    "request_resource_fields": {},
+    "response_model": "<class 'app.schemas.ScheduleOut'>",
+    "test_coverage": "Matching router/security suites in exact frozen inventory; focused and real Chrome scenarios recorded separately.",
+    "wire_policy": "Explicit named fields or DTO/route ownership only; UUIDv4 for public resources, integer persistence/worker/other event identities retained."
+  },
+  {
+    "dependencies": [
+      "enforce_request_access",
+      "decode_request",
+      "dependency",
+      "get_db"
+    ],
+    "file": "app/routers/schedules.py",
+    "function": "upsert_product_schedule",
+    "line": 479,
+    "methods": [
+      "POST"
+    ],
+    "path": "/api/products/{product_id}/schedule",
+    "request_resource_fields": {},
+    "response_model": "<class 'app.schemas.ScheduleOut'>",
+    "test_coverage": "Matching router/security suites in exact frozen inventory; focused and real Chrome scenarios recorded separately.",
+    "wire_policy": "Explicit named fields or DTO/route ownership only; UUIDv4 for public resources, integer persistence/worker/other event identities retained."
+  },
+  {
+    "dependencies": [
+      "enforce_request_access",
+      "decode_request",
+      "dependency",
+      "get_db"
+    ],
+    "file": "app/routers/schedules.py",
+    "function": "get_effective_product_schedule",
+    "line": 541,
+    "methods": [
+      "GET"
+    ],
+    "path": "/api/products/{product_id}/schedule/effective",
+    "request_resource_fields": {},
+    "response_model": "<class 'app.schemas.ScheduleResolved'>",
+    "test_coverage": "Matching router/security suites in exact frozen inventory; focused and real Chrome scenarios recorded separately.",
+    "wire_policy": "Explicit named fields or DTO/route ownership only; UUIDv4 for public resources, integer persistence/worker/other event identities retained."
+  },
+  {
+    "dependencies": [
+      "enforce_request_access",
+      "decode_request",
+      "dependency",
+      "get_db"
+    ],
+    "file": "app/routers/schedules.py",
+    "function": "exclude_product_from_parent_schedule",
+    "line": 561,
+    "methods": [
+      "POST"
+    ],
+    "path": "/api/products/{product_id}/schedule/exclude",
+    "request_resource_fields": {},
+    "response_model": "<class 'app.schemas.ScheduleOut'>",
+    "test_coverage": "Matching router/security suites in exact frozen inventory; focused and real Chrome scenarios recorded separately.",
+    "wire_policy": "Explicit named fields or DTO/route ownership only; UUIDv4 for public resources, integer persistence/worker/other event identities retained."
+  },
+  {
+    "dependencies": [
+      "enforce_request_access",
+      "decode_request",
+      "dependency",
+      "get_db"
+    ],
+    "file": "app/routers/schedules.py",
+    "function": "restore_product_schedule_inheritance",
+    "line": 571,
+    "methods": [
+      "POST"
+    ],
+    "path": "/api/products/{product_id}/schedule/inherit",
+    "request_resource_fields": {},
+    "response_model": "None",
+    "test_coverage": "Matching router/security suites in exact frozen inventory; focused and real Chrome scenarios recorded separately.",
+    "wire_policy": "Explicit named fields or DTO/route ownership only; UUIDv4 for public resources, integer persistence/worker/other event identities retained."
+  },
+  {
+    "dependencies": [
+      "enforce_request_access",
+      "decode_request",
+      "get_db"
+    ],
+    "file": "app/routers/projects.py",
+    "function": "list_projects",
+    "line": 136,
+    "methods": [
+      "GET"
+    ],
+    "path": "/api/projects",
+    "request_resource_fields": {},
+    "response_model": "list[app.schemas.ProjectOut]",
+    "test_coverage": "Matching router/security suites in exact frozen inventory; focused and real Chrome scenarios recorded separately.",
+    "wire_policy": "Explicit named fields or DTO/route ownership only; UUIDv4 for public resources, integer persistence/worker/other event identities retained."
+  },
+  {
+    "dependencies": [
+      "enforce_request_access",
+      "decode_request",
+      "get_current_tenant_context",
+      "get_db"
+    ],
+    "file": "app/routers/projects.py",
+    "function": "create_project",
+    "line": 75,
+    "methods": [
+      "POST"
+    ],
+    "path": "/api/projects",
+    "request_resource_fields": {},
+    "response_model": "<class 'app.schemas.ProjectOut'>",
+    "test_coverage": "Matching router/security suites in exact frozen inventory; focused and real Chrome scenarios recorded separately.",
+    "wire_policy": "Explicit named fields or DTO/route ownership only; UUIDv4 for public resources, integer persistence/worker/other event identities retained."
+  },
+  {
+    "dependencies": [
+      "enforce_request_access",
+      "decode_request",
+      "get_current_tenant_context",
+      "get_db"
+    ],
+    "file": "app/routers/projects.py",
+    "function": "delete_project",
+    "line": 226,
+    "methods": [
+      "DELETE"
+    ],
+    "path": "/api/projects/{project_id}",
+    "request_resource_fields": {},
+    "response_model": "None",
+    "test_coverage": "Matching router/security suites in exact frozen inventory; focused and real Chrome scenarios recorded separately.",
+    "wire_policy": "Explicit named fields or DTO/route ownership only; UUIDv4 for public resources, integer persistence/worker/other event identities retained."
+  },
+  {
+    "dependencies": [
+      "enforce_request_access",
+      "decode_request",
+      "get_current_tenant_context",
+      "get_db"
+    ],
+    "file": "app/routers/projects.py",
+    "function": "get_project_details",
+    "line": 118,
+    "methods": [
+      "GET"
+    ],
+    "path": "/api/projects/{project_id}",
+    "request_resource_fields": {},
+    "response_model": "<class 'app.schemas.ProjectOut'>",
+    "test_coverage": "Matching router/security suites in exact frozen inventory; focused and real Chrome scenarios recorded separately.",
+    "wire_policy": "Explicit named fields or DTO/route ownership only; UUIDv4 for public resources, integer persistence/worker/other event identities retained."
+  },
+  {
+    "dependencies": [
+      "enforce_request_access",
+      "decode_request",
+      "get_current_tenant_context",
+      "get_db"
+    ],
+    "file": "app/routers/projects.py",
+    "function": "update_project",
+    "line": 141,
+    "methods": [
+      "PATCH"
+    ],
+    "path": "/api/projects/{project_id}",
+    "request_resource_fields": {},
+    "response_model": "<class 'app.schemas.ProjectOut'>",
+    "test_coverage": "Matching router/security suites in exact frozen inventory; focused and real Chrome scenarios recorded separately.",
+    "wire_policy": "Explicit named fields or DTO/route ownership only; UUIDv4 for public resources, integer persistence/worker/other event identities retained."
+  },
+  {
+    "dependencies": [
+      "enforce_request_access",
+      "decode_request",
+      "get_current_tenant_context",
+      "get_db"
+    ],
+    "file": "app/routers/projects.py",
+    "function": "project_delete_impact",
+    "line": 174,
+    "methods": [
+      "GET"
+    ],
+    "path": "/api/projects/{project_id}/delete-impact",
+    "request_resource_fields": {},
+    "response_model": "None",
+    "test_coverage": "Matching router/security suites in exact frozen inventory; focused and real Chrome scenarios recorded separately.",
+    "wire_policy": "Explicit named fields or DTO/route ownership only; UUIDv4 for public resources, integer persistence/worker/other event identities retained."
+  },
+  {
+    "dependencies": [
+      "enforce_request_access",
+      "decode_request",
+      "dependency",
+      "get_db"
+    ],
+    "file": "app/routers/products.py",
+    "function": "list_project_products",
+    "line": 169,
+    "methods": [
+      "GET"
+    ],
+    "path": "/api/projects/{project_id}/products",
+    "request_resource_fields": {},
+    "response_model": "<class 'app.schemas.ProductListResponse'>",
+    "test_coverage": "Matching router/security suites in exact frozen inventory; focused and real Chrome scenarios recorded separately.",
+    "wire_policy": "Explicit named fields or DTO/route ownership only; UUIDv4 for public resources, integer persistence/worker/other event identities retained."
+  },
+  {
+    "dependencies": [
+      "enforce_request_access",
+      "decode_request",
+      "dependency",
+      "get_db"
+    ],
+    "file": "app/routers/products.py",
+    "function": "create_product",
+    "line": 126,
+    "methods": [
+      "POST"
+    ],
+    "path": "/api/projects/{project_id}/products",
+    "request_resource_fields": {},
+    "response_model": "<class 'app.schemas.ProductRead'>",
+    "test_coverage": "Matching router/security suites in exact frozen inventory; focused and real Chrome scenarios recorded separately.",
+    "wire_policy": "Explicit named fields or DTO/route ownership only; UUIDv4 for public resources, integer persistence/worker/other event identities retained."
+  },
+  {
+    "dependencies": [
+      "enforce_request_access",
+      "decode_request",
+      "get_current_tenant_context",
+      "get_db"
+    ],
+    "file": "app/routers/reports.py",
+    "function": "export_fda_510k_sbom_report",
+    "line": 82,
+    "methods": [
+      "POST"
+    ],
+    "path": "/api/projects/{project_id}/reports/fda-510k-sbom/export",
+    "request_resource_fields": {},
+    "response_model": "None",
+    "test_coverage": "Matching router/security suites in exact frozen inventory; focused and real Chrome scenarios recorded separately.",
+    "wire_policy": "Explicit named fields or DTO/route ownership only; UUIDv4 for public resources, integer persistence/worker/other event identities retained."
+  },
+  {
+    "dependencies": [
+      "enforce_request_access",
+      "decode_request",
+      "dependency",
+      "get_db"
+    ],
+    "file": "app/routers/projects.py",
+    "function": "restore_project",
+    "line": 419,
+    "methods": [
+      "POST"
+    ],
+    "path": "/api/projects/{project_id}/restore",
+    "request_resource_fields": {},
+    "response_model": "None",
+    "test_coverage": "Matching router/security suites in exact frozen inventory; focused and real Chrome scenarios recorded separately.",
+    "wire_policy": "Explicit named fields or DTO/route ownership only; UUIDv4 for public resources, integer persistence/worker/other event identities retained."
+  },
+  {
+    "dependencies": [
+      "enforce_request_access",
+      "decode_request",
+      "dependency",
+      "get_db"
+    ],
+    "file": "app/routers/schedules.py",
+    "function": "delete_project_schedule",
+    "line": 432,
+    "methods": [
+      "DELETE"
+    ],
+    "path": "/api/projects/{project_id}/schedule",
+    "request_resource_fields": {},
+    "response_model": "None",
+    "test_coverage": "Matching router/security suites in exact frozen inventory; focused and real Chrome scenarios recorded separately.",
+    "wire_policy": "Explicit named fields or DTO/route ownership only; UUIDv4 for public resources, integer persistence/worker/other event identities retained."
+  },
+  {
+    "dependencies": [
+      "enforce_request_access",
+      "decode_request",
+      "dependency",
+      "get_db"
+    ],
+    "file": "app/routers/schedules.py",
+    "function": "get_project_schedule",
+    "line": 383,
+    "methods": [
+      "GET"
+    ],
+    "path": "/api/projects/{project_id}/schedule",
+    "request_resource_fields": {},
+    "response_model": "<class 'app.schemas.ScheduleOut'>",
+    "test_coverage": "Matching router/security suites in exact frozen inventory; focused and real Chrome scenarios recorded separately.",
+    "wire_policy": "Explicit named fields or DTO/route ownership only; UUIDv4 for public resources, integer persistence/worker/other event identities retained."
+  },
+  {
+    "dependencies": [
+      "enforce_request_access",
+      "decode_request",
+      "dependency",
+      "get_db"
+    ],
+    "file": "app/routers/schedules.py",
+    "function": "patch_project_schedule",
+    "line": 402,
+    "methods": [
+      "PATCH"
+    ],
+    "path": "/api/projects/{project_id}/schedule",
+    "request_resource_fields": {},
+    "response_model": "<class 'app.schemas.ScheduleOut'>",
+    "test_coverage": "Matching router/security suites in exact frozen inventory; focused and real Chrome scenarios recorded separately.",
+    "wire_policy": "Explicit named fields or DTO/route ownership only; UUIDv4 for public resources, integer persistence/worker/other event identities retained."
+  },
+  {
+    "dependencies": [
+      "enforce_request_access",
+      "decode_request",
+      "dependency",
+      "get_db"
+    ],
+    "file": "app/routers/schedules.py",
+    "function": "upsert_project_schedule",
+    "line": 337,
+    "methods": [
+      "POST"
+    ],
+    "path": "/api/projects/{project_id}/schedule",
+    "request_resource_fields": {},
+    "response_model": "<class 'app.schemas.ScheduleOut'>",
+    "test_coverage": "Matching router/security suites in exact frozen inventory; focused and real Chrome scenarios recorded separately.",
+    "wire_policy": "Explicit named fields or DTO/route ownership only; UUIDv4 for public resources, integer persistence/worker/other event identities retained."
+  },
+  {
+    "dependencies": [
+      "enforce_request_access",
+      "decode_request",
+      "get_db"
+    ],
+    "file": "app/routers/runs.py",
+    "function": "list_analysis_runs",
+    "line": 74,
+    "methods": [
+      "GET"
+    ],
+    "path": "/api/runs",
+    "request_resource_fields": {},
+    "response_model": "list[app.schemas.AnalysisRunOut]",
+    "test_coverage": "Matching router/security suites in exact frozen inventory; focused and real Chrome scenarios recorded separately.",
+    "wire_policy": "Explicit named fields or DTO/route ownership only; UUIDv4 for public resources, integer persistence/worker/other event identities retained."
+  },
+  {
+    "dependencies": [
+      "enforce_request_access",
+      "decode_request",
+      "get_db"
+    ],
+    "file": "app/routers/runs.py",
+    "function": "runs_aggregate_endpoint",
+    "line": 178,
+    "methods": [
+      "GET"
+    ],
+    "path": "/api/runs/aggregate",
+    "request_resource_fields": {},
+    "response_model": "<class 'app.schemas.RunsAggregateOut'>",
+    "test_coverage": "Matching router/security suites in exact frozen inventory; focused and real Chrome scenarios recorded separately.",
+    "wire_policy": "Explicit named fields or DTO/route ownership only; UUIDv4 for public resources, integer persistence/worker/other event identities retained."
+  },
+  {
+    "dependencies": [
+      "enforce_request_access",
+      "decode_request",
+      "get_db"
+    ],
+    "file": "app/routers/runs.py",
+    "function": "list_recent_runs",
+    "line": 215,
+    "methods": [
+      "GET"
+    ],
+    "path": "/api/runs/recent",
+    "request_resource_fields": {},
+    "response_model": "<class 'list'>",
+    "test_coverage": "Matching router/security suites in exact frozen inventory; focused and real Chrome scenarios recorded separately.",
+    "wire_policy": "Explicit named fields or DTO/route ownership only; UUIDv4 for public resources, integer persistence/worker/other event identities retained."
+  },
+  {
+    "dependencies": [
+      "enforce_request_access",
+      "decode_request",
+      "get_db"
+    ],
+    "file": "app/routers/runs.py",
+    "function": "search_runs",
+    "line": 265,
+    "methods": [
+      "GET"
+    ],
+    "path": "/api/runs/search",
+    "request_resource_fields": {},
+    "response_model": "<class 'list'>",
+    "test_coverage": "Matching router/security suites in exact frozen inventory; focused and real Chrome scenarios recorded separately.",
+    "wire_policy": "Explicit named fields or DTO/route ownership only; UUIDv4 for public resources, integer persistence/worker/other event identities retained."
+  },
+  {
+    "dependencies": [
+      "enforce_request_access",
+      "decode_request",
+      "get_current_tenant_context",
+      "get_db"
+    ],
+    "file": "app/routers/runs.py",
+    "function": "get_analysis_run",
+    "line": 337,
+    "methods": [
+      "GET"
+    ],
+    "path": "/api/runs/{run_id}",
+    "request_resource_fields": {
+      "run_id": "analysis_run"
+    },
+    "response_model": "<class 'app.schemas.AnalysisRunOut'>",
+    "test_coverage": "Matching router/security suites in exact frozen inventory; focused and real Chrome scenarios recorded separately.",
+    "wire_policy": "Explicit named fields or DTO/route ownership only; UUIDv4 for public resources, integer persistence/worker/other event identities retained."
+  },
+  {
+    "dependencies": [
+      "enforce_request_access",
+      "decode_request",
+      "get_current_tenant_context",
+      "get_db"
+    ],
+    "file": "app/routers/runs.py",
+    "function": "list_run_findings",
+    "line": 355,
+    "methods": [
+      "GET"
+    ],
+    "path": "/api/runs/{run_id}/findings",
+    "request_resource_fields": {
+      "run_id": "analysis_run"
+    },
+    "response_model": "list[app.schemas.AnalysisFindingOut]",
+    "test_coverage": "Matching router/security suites in exact frozen inventory; focused and real Chrome scenarios recorded separately.",
+    "wire_policy": "Explicit named fields or DTO/route ownership only; UUIDv4 for public resources, integer persistence/worker/other event identities retained."
+  },
+  {
+    "dependencies": [
+      "enforce_request_access",
+      "decode_request",
+      "get_current_tenant_context",
+      "get_db"
+    ],
+    "file": "app/routers/runs.py",
+    "function": "list_run_findings_enriched",
+    "line": 432,
+    "methods": [
+      "GET"
+    ],
+    "path": "/api/runs/{run_id}/findings-enriched",
+    "request_resource_fields": {
+      "run_id": "analysis_run"
+    },
+    "response_model": "None",
+    "test_coverage": "Matching router/security suites in exact frozen inventory; focused and real Chrome scenarios recorded separately.",
+    "wire_policy": "Explicit named fields or DTO/route ownership only; UUIDv4 for public resources, integer persistence/worker/other event identities retained."
+  },
+  {
+    "dependencies": [
+      "enforce_request_access",
+      "decode_request",
+      "get_current_tenant_context",
+      "get_db"
+    ],
+    "file": "app/routers/sboms_crud.py",
+    "function": "get_sbom_details",
+    "line": 894,
+    "methods": [
+      "GET"
+    ],
+    "path": "/api/sboms",
+    "request_resource_fields": {},
+    "response_model": "list[app.schemas.SBOMSourceOut]",
+    "test_coverage": "Matching router/security suites in exact frozen inventory; focused and real Chrome scenarios recorded separately.",
+    "wire_policy": "Explicit named fields or DTO/route ownership only; UUIDv4 for public resources, integer persistence/worker/other event identities retained."
+  },
+  {
+    "dependencies": [
+      "enforce_request_access",
+      "decode_request",
+      "dependency",
+      "get_db"
+    ],
+    "file": "app/routers/sboms_crud.py",
+    "function": "create_sbom",
+    "line": 704,
+    "methods": [
+      "POST"
+    ],
+    "path": "/api/sboms",
+    "request_resource_fields": {},
+    "response_model": "<class 'app.schemas.SBOMSourceOut'>",
+    "test_coverage": "Matching router/security suites in exact frozen inventory; focused and real Chrome scenarios recorded separately.",
+    "wire_policy": "Explicit named fields or DTO/route ownership only; UUIDv4 for public resources, integer persistence/worker/other event identities retained."
+  },
+  {
+    "dependencies": [
+      "enforce_request_access",
+      "decode_request",
+      "get_db"
+    ],
+    "file": "app/routers/sbom_versions.py",
+    "function": "compare_sbom_versions",
+    "line": 284,
+    "methods": [
+      "GET"
+    ],
+    "path": "/api/sboms/compare-versions",
+    "request_resource_fields": {},
+    "response_model": "dict[str, typing.Any]",
+    "test_coverage": "Matching router/security suites in exact frozen inventory; focused and real Chrome scenarios recorded separately.",
+    "wire_policy": "Explicit named fields or DTO/route ownership only; UUIDv4 for public resources, integer persistence/worker/other event identities retained."
+  },
+  {
+    "dependencies": [
+      "enforce_request_access",
+      "decode_request",
+      "dependency",
+      "get_db"
+    ],
+    "file": "app/routers/sbom_upload.py",
+    "function": "upload_sbom",
+    "line": 128,
+    "methods": [
+      "POST"
+    ],
+    "path": "/api/sboms/upload",
+    "request_resource_fields": {},
+    "response_model": "<class 'app.routers.sbom_upload.SbomAcceptedResponse'>",
+    "test_coverage": "Matching router/security suites in exact frozen inventory; focused and real Chrome scenarios recorded separately.",
+    "wire_policy": "Explicit named fields or DTO/route ownership only; UUIDv4 for public resources, integer persistence/worker/other event identities retained."
+  },
+  {
+    "dependencies": [
+      "enforce_request_access",
+      "decode_request",
+      "get_db"
+    ],
+    "file": "app/routers/sbom_versions.py",
+    "function": "get_conversion_report",
+    "line": 539,
+    "methods": [
+      "GET"
+    ],
+    "path": "/api/sboms/{id}/conversion-report",
+    "request_resource_fields": {},
+    "response_model": "<class 'app.schemas.SbomConversionReportResponse'>",
+    "test_coverage": "Matching router/security suites in exact frozen inventory; focused and real Chrome scenarios recorded separately.",
+    "wire_policy": "Explicit named fields or DTO/route ownership only; UUIDv4 for public resources, integer persistence/worker/other event identities retained."
+  },
+  {
+    "dependencies": [
+      "enforce_request_access",
+      "decode_request",
+      "get_current_tenant_context",
+      "get_db"
+    ],
+    "file": "app/routers/sbom_versions.py",
+    "function": "convert_spdx_to_cyclonedx_endpoint",
+    "line": 493,
+    "methods": [
+      "POST"
+    ],
+    "path": "/api/sboms/{id}/convert/cyclonedx",
+    "request_resource_fields": {},
+    "response_model": "<class 'app.schemas.SbomConversionResponse'>",
+    "test_coverage": "Matching router/security suites in exact frozen inventory; focused and real Chrome scenarios recorded separately.",
+    "wire_policy": "Explicit named fields or DTO/route ownership only; UUIDv4 for public resources, integer persistence/worker/other event identities retained."
+  },
+  {
+    "dependencies": [
+      "enforce_request_access",
+      "decode_request",
+      "get_current_tenant_context",
+      "get_db"
+    ],
+    "file": "app/routers/sbom_versions.py",
+    "function": "edit_sbom_endpoint",
+    "line": 228,
+    "methods": [
+      "POST"
+    ],
+    "path": "/api/sboms/{id}/edit",
+    "request_resource_fields": {},
+    "response_model": "<class 'app.schemas.SBOMSourceOut'>",
+    "test_coverage": "Matching router/security suites in exact frozen inventory; focused and real Chrome scenarios recorded separately.",
+    "wire_policy": "Explicit named fields or DTO/route ownership only; UUIDv4 for public resources, integer persistence/worker/other event identities retained."
+  },
+  {
+    "dependencies": [
+      "enforce_request_access",
+      "decode_request",
+      "get_db"
+    ],
+    "file": "app/routers/sbom_versions.py",
+    "function": "export_sbom",
+    "line": 614,
+    "methods": [
+      "GET"
+    ],
+    "path": "/api/sboms/{id}/export",
+    "request_resource_fields": {},
+    "response_model": "None",
+    "test_coverage": "Matching router/security suites in exact frozen inventory; focused and real Chrome scenarios recorded separately.",
+    "wire_policy": "Explicit named fields or DTO/route ownership only; UUIDv4 for public resources, integer persistence/worker/other event identities retained."
+  },
+  {
+    "dependencies": [
+      "enforce_request_access",
+      "decode_request",
+      "get_db"
+    ],
+    "file": "app/routers/sbom_versions.py",
+    "function": "list_sbom_lifecycle",
+    "line": 328,
+    "methods": [
+      "GET"
+    ],
+    "path": "/api/sboms/{id}/lifecycle",
+    "request_resource_fields": {},
+    "response_model": "None",
+    "test_coverage": "Matching router/security suites in exact frozen inventory; focused and real Chrome scenarios recorded separately.",
+    "wire_policy": "Explicit named fields or DTO/route ownership only; UUIDv4 for public resources, integer persistence/worker/other event identities retained."
+  },
+  {
+    "dependencies": [
+      "enforce_request_access",
+      "decode_request",
+      "get_db"
+    ],
+    "file": "app/routers/sbom_versions.py",
+    "function": "get_sbom_lifecycle_diagnostics",
+    "line": 889,
+    "methods": [
+      "GET"
+    ],
+    "path": "/api/sboms/{id}/lifecycle/diagnostics",
+    "request_resource_fields": {},
+    "response_model": "None",
+    "test_coverage": "Matching router/security suites in exact frozen inventory; focused and real Chrome scenarios recorded separately.",
+    "wire_policy": "Explicit named fields or DTO/route ownership only; UUIDv4 for public resources, integer persistence/worker/other event identities retained."
+  },
+  {
+    "dependencies": [
+      "enforce_request_access",
+      "decode_request",
+      "get_db"
+    ],
+    "file": "app/routers/sbom_versions.py",
+    "function": "refresh_sbom_lifecycle",
+    "line": 317,
+    "methods": [
+      "POST"
+    ],
+    "path": "/api/sboms/{id}/lifecycle/refresh",
+    "request_resource_fields": {},
+    "response_model": "None",
+    "test_coverage": "Matching router/security suites in exact frozen inventory; focused and real Chrome scenarios recorded separately.",
+    "wire_policy": "Explicit named fields or DTO/route ownership only; UUIDv4 for public resources, integer persistence/worker/other event identities retained."
+  },
+  {
+    "dependencies": [
+      "enforce_request_access",
+      "decode_request",
+      "get_db"
+    ],
+    "file": "app/routers/sbom_versions.py",
+    "function": "get_sbom_lifecycle_report",
+    "line": 362,
+    "methods": [
+      "GET"
+    ],
+    "path": "/api/sboms/{id}/lifecycle/report",
+    "request_resource_fields": {},
+    "response_model": "None",
+    "test_coverage": "Matching router/security suites in exact frozen inventory; focused and real Chrome scenarios recorded separately.",
+    "wire_policy": "Explicit named fields or DTO/route ownership only; UUIDv4 for public resources, integer persistence/worker/other event identities retained."
+  },
+  {
+    "dependencies": [
+      "enforce_request_access",
+      "decode_request",
+      "get_db"
+    ],
+    "file": "app/routers/sbom_versions.py",
+    "function": "get_lifecycle_report_pack",
+    "line": 392,
+    "methods": [
+      "GET"
+    ],
+    "path": "/api/sboms/{id}/reports/lifecycle-pack",
+    "request_resource_fields": {},
+    "response_model": "None",
+    "test_coverage": "Matching router/security suites in exact frozen inventory; focused and real Chrome scenarios recorded separately.",
+    "wire_policy": "Explicit named fields or DTO/route ownership only; UUIDv4 for public resources, integer persistence/worker/other event identities retained."
+  },
+  {
+    "dependencies": [
+      "enforce_request_access",
+      "decode_request",
+      "get_current_tenant_context",
+      "get_db"
+    ],
+    "file": "app/routers/sbom_versions.py",
+    "function": "restore_sbom_version",
+    "line": 298,
+    "methods": [
+      "POST"
+    ],
+    "path": "/api/sboms/{id}/restore/{version_id}",
+    "request_resource_fields": {},
+    "response_model": "<class 'app.schemas.SBOMSourceOut'>",
+    "test_coverage": "Matching router/security suites in exact frozen inventory; focused and real Chrome scenarios recorded separately.",
+    "wire_policy": "Explicit named fields or DTO/route ownership only; UUIDv4 for public resources, integer persistence/worker/other event identities retained."
+  },
+  {
+    "dependencies": [
+      "enforce_request_access",
+      "decode_request",
+      "get_db"
+    ],
+    "file": "app/routers/sbom_versions.py",
+    "function": "get_sbom_versions",
+    "line": 264,
+    "methods": [
+      "GET"
+    ],
+    "path": "/api/sboms/{id}/versions",
+    "request_resource_fields": {},
+    "response_model": "list[app.schemas.SBOMSourceOut]",
+    "test_coverage": "Matching router/security suites in exact frozen inventory; focused and real Chrome scenarios recorded separately.",
+    "wire_policy": "Explicit named fields or DTO/route ownership only; UUIDv4 for public resources, integer persistence/worker/other event identities retained."
+  },
+  {
+    "dependencies": [
+      "enforce_request_access",
+      "decode_request",
+      "get_current_tenant_context",
+      "get_db"
+    ],
+    "file": "app/routers/sboms_crud.py",
+    "function": "delete_sbom",
+    "line": 1432,
+    "methods": [
+      "DELETE"
+    ],
+    "path": "/api/sboms/{sbom_id}",
+    "request_resource_fields": {},
+    "response_model": "None",
+    "test_coverage": "Matching router/security suites in exact frozen inventory; focused and real Chrome scenarios recorded separately.",
+    "wire_policy": "Explicit named fields or DTO/route ownership only; UUIDv4 for public resources, integer persistence/worker/other event identities retained."
+  },
+  {
+    "dependencies": [
+      "enforce_request_access",
+      "decode_request",
+      "get_current_tenant_context",
+      "get_db"
+    ],
+    "file": "app/routers/sboms_crud.py",
+    "function": "get_sbom",
+    "line": 619,
+    "methods": [
+      "GET"
+    ],
+    "path": "/api/sboms/{sbom_id}",
+    "request_resource_fields": {},
+    "response_model": "<class 'app.schemas.SBOMSourceOut'>",
+    "test_coverage": "Matching router/security suites in exact frozen inventory; focused and real Chrome scenarios recorded separately.",
+    "wire_policy": "Explicit named fields or DTO/route ownership only; UUIDv4 for public resources, integer persistence/worker/other event identities retained."
+  },
+  {
+    "dependencies": [
+      "enforce_request_access",
+      "decode_request",
+      "dependency",
+      "get_db"
+    ],
+    "file": "app/routers/sboms_crud.py",
+    "function": "update_sbom",
+    "line": 1256,
+    "methods": [
+      "PATCH"
+    ],
+    "path": "/api/sboms/{sbom_id}",
+    "request_resource_fields": {},
+    "response_model": "<class 'app.schemas.SBOMSourceOut'>",
+    "test_coverage": "Matching router/security suites in exact frozen inventory; focused and real Chrome scenarios recorded separately.",
+    "wire_policy": "Explicit named fields or DTO/route ownership only; UUIDv4 for public resources, integer persistence/worker/other event identities retained."
+  },
+  {
+    "dependencies": [
+      "enforce_request_access",
+      "decode_request",
+      "get_current_tenant_context",
+      "get_db"
+    ],
+    "file": "app/routers/sboms_crud.py",
+    "function": "list_sbom_analysis_runs",
+    "line": 2093,
+    "methods": [
+      "GET"
+    ],
+    "path": "/api/sboms/{sbom_id}/analysis-runs",
+    "request_resource_fields": {},
+    "response_model": "list[app.schemas.AnalysisRunOut]",
+    "test_coverage": "Matching router/security suites in exact frozen inventory; focused and real Chrome scenarios recorded separately.",
+    "wire_policy": "Explicit named fields or DTO/route ownership only; UUIDv4 for public resources, integer persistence/worker/other event identities retained."
+  },
+  {
+    "dependencies": [
+      "enforce_request_access",
+      "decode_request",
+      "get_db"
+    ],
+    "file": "app/routers/sboms_crud.py",
+    "function": "run_analysis_for_sbom",
+    "line": 1625,
+    "methods": [
+      "POST"
+    ],
+    "path": "/api/sboms/{sbom_id}/analyze",
+    "request_resource_fields": {},
+    "response_model": "<class 'app.schemas.AnalysisRunOut'>",
+    "test_coverage": "Matching router/security suites in exact frozen inventory; focused and real Chrome scenarios recorded separately.",
+    "wire_policy": "Explicit named fields or DTO/route ownership only; UUIDv4 for public resources, integer persistence/worker/other event identities retained."
+  },
+  {
+    "dependencies": [
+      "enforce_request_access",
+      "decode_request",
+      "get_current_tenant_context",
+      "get_db"
+    ],
+    "file": "app/routers/sboms_crud.py",
+    "function": "analyze_sbom_stream",
+    "line": 1691,
+    "methods": [
+      "POST"
+    ],
+    "path": "/api/sboms/{sbom_id}/analyze/stream",
+    "request_resource_fields": {},
+    "response_model": "None",
+    "test_coverage": "Matching router/security suites in exact frozen inventory; focused and real Chrome scenarios recorded separately.",
+    "wire_policy": "Explicit named fields or DTO/route ownership only; UUIDv4 for public resources, integer persistence/worker/other event identities retained."
+  },
+  {
+    "dependencies": [
+      "enforce_request_access",
+      "decode_request",
+      "get_current_tenant_context",
+      "get_db"
+    ],
+    "file": "app/routers/sboms_crud.py",
+    "function": "get_sbom_components",
+    "line": 1018,
+    "methods": [
+      "GET"
+    ],
+    "path": "/api/sboms/{sbom_id}/components",
+    "request_resource_fields": {},
+    "response_model": "<class 'app.schemas.SBOMComponentListResponse'>",
+    "test_coverage": "Matching router/security suites in exact frozen inventory; focused and real Chrome scenarios recorded separately.",
+    "wire_policy": "Explicit named fields or DTO/route ownership only; UUIDv4 for public resources, integer persistence/worker/other event identities retained."
+  },
+  {
+    "dependencies": [
+      "enforce_request_access",
+      "decode_request",
+      "get_current_tenant_context",
+      "get_db"
+    ],
+    "file": "app/routers/sboms_crud.py",
+    "function": "reprocess_sbom_components",
+    "line": 1067,
+    "methods": [
+      "POST"
+    ],
+    "path": "/api/sboms/{sbom_id}/components/reprocess",
+    "request_resource_fields": {},
+    "response_model": "None",
+    "test_coverage": "Matching router/security suites in exact frozen inventory; focused and real Chrome scenarios recorded separately.",
+    "wire_policy": "Explicit named fields or DTO/route ownership only; UUIDv4 for public resources, integer persistence/worker/other event identities retained."
+  },
+  {
+    "dependencies": [
+      "enforce_request_access",
+      "decode_request",
+      "get_current_tenant_context",
+      "get_db"
+    ],
+    "file": "app/routers/vex.py",
+    "function": "get_component_vulnerabilities",
+    "line": 144,
+    "methods": [
+      "GET"
+    ],
+    "path": "/api/sboms/{sbom_id}/components/{component_id}/vulnerabilities",
+    "request_resource_fields": {},
+    "response_model": "None",
+    "test_coverage": "Matching router/security suites in exact frozen inventory; focused and real Chrome scenarios recorded separately.",
+    "wire_policy": "Explicit named fields or DTO/route ownership only; UUIDv4 for public resources, integer persistence/worker/other event identities retained."
+  },
+  {
+    "dependencies": [
+      "enforce_request_access",
+      "decode_request",
+      "get_current_tenant_context",
+      "get_db"
+    ],
+    "file": "app/routers/vex.py",
+    "function": "patch_vex_override",
+    "line": 155,
+    "methods": [
+      "PATCH"
+    ],
+    "path": "/api/sboms/{sbom_id}/components/{component_id}/vulnerabilities/{vulnerability_id}/vex-override",
+    "request_resource_fields": {},
+    "response_model": "None",
+    "test_coverage": "Matching router/security suites in exact frozen inventory; focused and real Chrome scenarios recorded separately.",
+    "wire_policy": "Explicit named fields or DTO/route ownership only; UUIDv4 for public resources, integer persistence/worker/other event identities retained."
+  },
+  {
+    "dependencies": [
+      "enforce_request_access",
+      "decode_request",
+      "get_current_tenant_context",
+      "get_db"
+    ],
+    "file": "app/routers/vex.py",
+    "function": "get_vex_override_history",
+    "line": 210,
+    "methods": [
+      "GET"
+    ],
+    "path": "/api/sboms/{sbom_id}/components/{component_id}/vulnerabilities/{vulnerability_id}/vex-override/history",
+    "request_resource_fields": {},
+    "response_model": "None",
+    "test_coverage": "Matching router/security suites in exact frozen inventory; focused and real Chrome scenarios recorded separately.",
+    "wire_policy": "Explicit named fields or DTO/route ownership only; UUIDv4 for public resources, integer persistence/worker/other event identities retained."
+  },
+  {
+    "dependencies": [
+      "enforce_request_access",
+      "decode_request",
+      "get_current_tenant_context",
+      "get_db"
+    ],
+    "file": "app/routers/sboms_crud.py",
+    "function": "get_sbom_dedupe_report",
+    "line": 1220,
+    "methods": [
+      "GET"
+    ],
+    "path": "/api/sboms/{sbom_id}/dedupe-report",
+    "request_resource_fields": {},
+    "response_model": "None",
+    "test_coverage": "Matching router/security suites in exact frozen inventory; focused and real Chrome scenarios recorded separately.",
+    "wire_policy": "Explicit named fields or DTO/route ownership only; UUIDv4 for public resources, integer persistence/worker/other event identities retained."
+  },
+  {
+    "dependencies": [
+      "enforce_request_access",
+      "decode_request",
+      "get_current_tenant_context",
+      "get_db"
+    ],
+    "file": "app/routers/sboms_crud.py",
+    "function": "sbom_delete_impact",
+    "line": 1419,
+    "methods": [
+      "GET"
+    ],
+    "path": "/api/sboms/{sbom_id}/delete-impact",
+    "request_resource_fields": {},
+    "response_model": "None",
+    "test_coverage": "Matching router/security suites in exact frozen inventory; focused and real Chrome scenarios recorded separately.",
+    "wire_policy": "Explicit named fields or DTO/route ownership only; UUIDv4 for public resources, integer persistence/worker/other event identities retained."
+  },
+  {
+    "dependencies": [
+      "enforce_request_access",
+      "decode_request",
+      "get_current_tenant_context",
+      "get_db"
+    ],
+    "file": "app/routers/sboms_crud.py",
+    "function": "download_sbom_original",
+    "line": 675,
+    "methods": [
+      "GET"
+    ],
+    "path": "/api/sboms/{sbom_id}/download",
+    "request_resource_fields": {},
+    "response_model": "None",
+    "test_coverage": "Matching router/security suites in exact frozen inventory; focused and real Chrome scenarios recorded separately.",
+    "wire_policy": "Explicit named fields or DTO/route ownership only; UUIDv4 for public resources, integer persistence/worker/other event identities retained."
+  },
+  {
+    "dependencies": [
+      "enforce_request_access",
+      "decode_request",
+      "get_db"
+    ],
+    "file": "app/routers/sbom.py",
+    "function": "get_sbom_info",
+    "line": 201,
+    "methods": [
+      "GET"
+    ],
+    "path": "/api/sboms/{sbom_id}/info",
+    "request_resource_fields": {},
+    "response_model": "None",
+    "test_coverage": "Matching router/security suites in exact frozen inventory; focused and real Chrome scenarios recorded separately.",
+    "wire_policy": "Explicit named fields or DTO/route ownership only; UUIDv4 for public resources, integer persistence/worker/other event identities retained."
+  },
+  {
+    "dependencies": [
+      "enforce_request_access",
+      "decode_request",
+      "dependency",
+      "get_db"
+    ],
+    "file": "app/routers/sboms_crud.py",
+    "function": "change_sbom_lifecycle",
+    "line": 1506,
+    "methods": [
+      "POST"
+    ],
+    "path": "/api/sboms/{sbom_id}/lifecycle",
+    "request_resource_fields": {},
+    "response_model": "<class 'app.schemas.SBOMSourceOut'>",
+    "test_coverage": "Matching router/security suites in exact frozen inventory; focused and real Chrome scenarios recorded separately.",
+    "wire_policy": "Explicit named fields or DTO/route ownership only; UUIDv4 for public resources, integer persistence/worker/other event identities retained."
+  },
+  {
+    "dependencies": [
+      "enforce_request_access",
+      "decode_request",
+      "dependency",
+      "get_db"
+    ],
+    "file": "app/routers/sboms_crud.py",
+    "function": "get_sbom_lifecycle_history",
+    "line": 1518,
+    "methods": [
+      "GET"
+    ],
+    "path": "/api/sboms/{sbom_id}/lifecycle-history",
+    "request_resource_fields": {},
+    "response_model": "None",
+    "test_coverage": "Matching router/security suites in exact frozen inventory; focused and real Chrome scenarios recorded separately.",
+    "wire_policy": "Explicit named fields or DTO/route ownership only; UUIDv4 for public resources, integer persistence/worker/other event identities retained."
+  },
+  {
+    "dependencies": [
+      "enforce_request_access",
+      "decode_request",
+      "get_current_tenant_context",
+      "get_db"
+    ],
+    "file": "app/routers/sboms_crud.py",
+    "function": "get_sbom_normalization_report",
+    "line": 1247,
+    "methods": [
+      "GET"
+    ],
+    "path": "/api/sboms/{sbom_id}/normalization-report",
+    "request_resource_fields": {},
+    "response_model": "None",
+    "test_coverage": "Matching router/security suites in exact frozen inventory; focused and real Chrome scenarios recorded separately.",
+    "wire_policy": "Explicit named fields or DTO/route ownership only; UUIDv4 for public resources, integer persistence/worker/other event identities retained."
+  },
+  {
+    "dependencies": [
+      "enforce_request_access",
+      "decode_request",
+      "dependency",
+      "get_db"
+    ],
+    "file": "app/routers/sboms_crud.py",
+    "function": "normalize_deduplicate_sbom",
+    "line": 1174,
+    "methods": [
+      "POST"
+    ],
+    "path": "/api/sboms/{sbom_id}/normalize-deduplicate",
+    "request_resource_fields": {},
+    "response_model": "None",
+    "test_coverage": "Matching router/security suites in exact frozen inventory; focused and real Chrome scenarios recorded separately.",
+    "wire_policy": "Explicit named fields or DTO/route ownership only; UUIDv4 for public resources, integer persistence/worker/other event identities retained."
+  },
+  {
+    "dependencies": [
+      "enforce_request_access",
+      "decode_request",
+      "dependency",
+      "get_db"
+    ],
+    "file": "app/routers/sboms_crud.py",
+    "function": "sbom_quality",
+    "line": 2118,
+    "methods": [
+      "GET"
+    ],
+    "path": "/api/sboms/{sbom_id}/quality",
+    "request_resource_fields": {},
+    "response_model": "None",
+    "test_coverage": "Matching router/security suites in exact frozen inventory; focused and real Chrome scenarios recorded separately.",
+    "wire_policy": "Explicit named fields or DTO/route ownership only; UUIDv4 for public resources, integer persistence/worker/other event identities retained."
+  },
+  {
+    "dependencies": [
+      "enforce_request_access",
+      "decode_request",
+      "get_current_tenant_context",
+      "get_db"
+    ],
+    "file": "app/routers/sboms_crud.py",
+    "function": "get_sbom_raw_chunk",
+    "line": 658,
+    "methods": [
+      "GET"
+    ],
+    "path": "/api/sboms/{sbom_id}/raw",
+    "request_resource_fields": {},
+    "response_model": "<class 'app.schemas.SbomRawChunkResponse'>",
+    "test_coverage": "Matching router/security suites in exact frozen inventory; focused and real Chrome scenarios recorded separately.",
+    "wire_policy": "Explicit named fields or DTO/route ownership only; UUIDv4 for public resources, integer persistence/worker/other event identities retained."
+  },
+  {
+    "dependencies": [
+      "enforce_request_access",
+      "decode_request",
+      "get_current_tenant_context",
+      "get_db"
+    ],
+    "file": "app/routers/vex.py",
+    "function": "get_vex_report_pack",
+    "line": 104,
+    "methods": [
+      "GET"
+    ],
+    "path": "/api/sboms/{sbom_id}/reports/vex-pack",
+    "request_resource_fields": {},
+    "response_model": "None",
+    "test_coverage": "Matching router/security suites in exact frozen inventory; focused and real Chrome scenarios recorded separately.",
+    "wire_policy": "Explicit named fields or DTO/route ownership only; UUIDv4 for public resources, integer persistence/worker/other event identities retained."
+  },
+  {
+    "dependencies": [
+      "enforce_request_access",
+      "decode_request",
+      "get_db"
+    ],
+    "file": "app/routers/sbom_versions.py",
+    "function": "export_sbom_vulnerabilities_excel",
+    "line": 585,
+    "methods": [
+      "GET"
+    ],
+    "path": "/api/sboms/{sbom_id}/reports/vulnerabilities.xlsx",
+    "request_resource_fields": {},
+    "response_model": "None",
+    "test_coverage": "Matching router/security suites in exact frozen inventory; focused and real Chrome scenarios recorded separately.",
+    "wire_policy": "Explicit named fields or DTO/route ownership only; UUIDv4 for public resources, integer persistence/worker/other event identities retained."
+  },
+  {
+    "dependencies": [
+      "enforce_request_access",
+      "decode_request",
+      "get_current_tenant_context",
+      "get_db"
+    ],
+    "file": "app/routers/sboms_crud.py",
+    "function": "restore_sbom",
+    "line": 1527,
+    "methods": [
+      "POST"
+    ],
+    "path": "/api/sboms/{sbom_id}/restore",
+    "request_resource_fields": {},
+    "response_model": "None",
+    "test_coverage": "Matching router/security suites in exact frozen inventory; focused and real Chrome scenarios recorded separately.",
+    "wire_policy": "Explicit named fields or DTO/route ownership only; UUIDv4 for public resources, integer persistence/worker/other event identities retained."
+  },
+  {
+    "dependencies": [
+      "enforce_request_access",
+      "decode_request",
+      "get_db"
+    ],
+    "file": "app/routers/sboms_crud.py",
+    "function": "revalidate_sbom",
+    "line": 1558,
+    "methods": [
+      "POST"
+    ],
+    "path": "/api/sboms/{sbom_id}/revalidate",
+    "request_resource_fields": {},
+    "response_model": "<class 'app.schemas.SBOMSourceOut'>",
+    "test_coverage": "Matching router/security suites in exact frozen inventory; focused and real Chrome scenarios recorded separately.",
+    "wire_policy": "Explicit named fields or DTO/route ownership only; UUIDv4 for public resources, integer persistence/worker/other event identities retained."
+  },
+  {
+    "dependencies": [
+      "enforce_request_access",
+      "decode_request",
+      "get_db"
+    ],
+    "file": "app/routers/sbom.py",
+    "function": "get_sbom_risk_summary",
+    "line": 26,
+    "methods": [
+      "GET"
+    ],
+    "path": "/api/sboms/{sbom_id}/risk-summary",
+    "request_resource_fields": {},
+    "response_model": "None",
+    "test_coverage": "Matching router/security suites in exact frozen inventory; focused and real Chrome scenarios recorded separately.",
+    "wire_policy": "Explicit named fields or DTO/route ownership only; UUIDv4 for public resources, integer persistence/worker/other event identities retained."
+  },
+  {
+    "dependencies": [
+      "enforce_request_access",
+      "decode_request",
+      "dependency",
+      "get_db"
+    ],
+    "file": "app/routers/schedules.py",
+    "function": "delete_sbom_schedule",
+    "line": 794,
+    "methods": [
+      "DELETE"
+    ],
+    "path": "/api/sboms/{sbom_id}/schedule",
+    "request_resource_fields": {},
+    "response_model": "None",
+    "test_coverage": "Matching router/security suites in exact frozen inventory; focused and real Chrome scenarios recorded separately.",
+    "wire_policy": "Explicit named fields or DTO/route ownership only; UUIDv4 for public resources, integer persistence/worker/other event identities retained."
+  },
+  {
+    "dependencies": [
+      "enforce_request_access",
+      "decode_request",
+      "dependency",
+      "get_db"
+    ],
+    "file": "app/routers/schedules.py",
+    "function": "get_sbom_schedule",
+    "line": 701,
+    "methods": [
+      "GET"
+    ],
+    "path": "/api/sboms/{sbom_id}/schedule",
+    "request_resource_fields": {},
+    "response_model": "<class 'app.schemas.ScheduleResolved'>",
+    "test_coverage": "Matching router/security suites in exact frozen inventory; focused and real Chrome scenarios recorded separately.",
+    "wire_policy": "Explicit named fields or DTO/route ownership only; UUIDv4 for public resources, integer persistence/worker/other event identities retained."
+  },
+  {
+    "dependencies": [
+      "enforce_request_access",
+      "decode_request",
+      "dependency",
+      "get_db"
+    ],
+    "file": "app/routers/schedules.py",
+    "function": "patch_sbom_schedule",
+    "line": 761,
+    "methods": [
+      "PATCH"
+    ],
+    "path": "/api/sboms/{sbom_id}/schedule",
+    "request_resource_fields": {},
+    "response_model": "<class 'app.schemas.ScheduleOut'>",
+    "test_coverage": "Matching router/security suites in exact frozen inventory; focused and real Chrome scenarios recorded separately.",
+    "wire_policy": "Explicit named fields or DTO/route ownership only; UUIDv4 for public resources, integer persistence/worker/other event identities retained."
+  },
+  {
+    "dependencies": [
+      "enforce_request_access",
+      "decode_request",
+      "dependency",
+      "get_db"
+    ],
+    "file": "app/routers/schedules.py",
+    "function": "upsert_sbom_schedule",
+    "line": 655,
+    "methods": [
+      "POST"
+    ],
+    "path": "/api/sboms/{sbom_id}/schedule",
+    "request_resource_fields": {},
+    "response_model": "<class 'app.schemas.ScheduleOut'>",
+    "test_coverage": "Matching router/security suites in exact frozen inventory; focused and real Chrome scenarios recorded separately.",
+    "wire_policy": "Explicit named fields or DTO/route ownership only; UUIDv4 for public resources, integer persistence/worker/other event identities retained."
+  },
+  {
+    "dependencies": [
+      "enforce_request_access",
+      "decode_request",
+      "dependency",
+      "get_db"
+    ],
+    "file": "app/routers/schedules.py",
+    "function": "exclude_sbom_from_parent_schedule",
+    "line": 734,
+    "methods": [
+      "POST"
+    ],
+    "path": "/api/sboms/{sbom_id}/schedule/exclude",
+    "request_resource_fields": {},
+    "response_model": "<class 'app.schemas.ScheduleOut'>",
+    "test_coverage": "Matching router/security suites in exact frozen inventory; focused and real Chrome scenarios recorded separately.",
+    "wire_policy": "Explicit named fields or DTO/route ownership only; UUIDv4 for public resources, integer persistence/worker/other event identities retained."
+  },
+  {
+    "dependencies": [
+      "enforce_request_access",
+      "decode_request",
+      "dependency",
+      "get_db"
+    ],
+    "file": "app/routers/schedules.py",
+    "function": "restore_sbom_schedule_inheritance",
+    "line": 744,
+    "methods": [
+      "POST"
+    ],
+    "path": "/api/sboms/{sbom_id}/schedule/inherit",
+    "request_resource_fields": {},
+    "response_model": "None",
+    "test_coverage": "Matching router/security suites in exact frozen inventory; focused and real Chrome scenarios recorded separately.",
+    "wire_policy": "Explicit named fields or DTO/route ownership only; UUIDv4 for public resources, integer persistence/worker/other event identities retained."
+  },
+  {
+    "dependencies": [
+      "enforce_request_access",
+      "decode_request",
+      "get_current_tenant_context",
+      "get_db"
+    ],
+    "file": "app/routers/sboms_crud.py",
+    "function": "get_sbom_document_stats",
+    "line": 646,
+    "methods": [
+      "GET"
+    ],
+    "path": "/api/sboms/{sbom_id}/stats",
+    "request_resource_fields": {},
+    "response_model": "<class 'app.schemas.SbomDocumentStatsResponse'>",
+    "test_coverage": "Matching router/security suites in exact frozen inventory; focused and real Chrome scenarios recorded separately.",
+    "wire_policy": "Explicit named fields or DTO/route ownership only; UUIDv4 for public resources, integer persistence/worker/other event identities retained."
+  },
+  {
+    "dependencies": [
+      "enforce_request_access",
+      "decode_request",
+      "get_db",
+      "get_current_tenant_context"
+    ],
+    "file": "app/routers/sbom.py",
+    "function": "get_sbom_validation_report",
+    "line": 90,
+    "methods": [
+      "GET"
+    ],
+    "path": "/api/sboms/{sbom_id}/validation-report",
+    "request_resource_fields": {},
+    "response_model": "<class 'app.schemas.ValidationReportResponse'>",
+    "test_coverage": "Matching router/security suites in exact frozen inventory; focused and real Chrome scenarios recorded separately.",
+    "wire_policy": "Explicit named fields or DTO/route ownership only; UUIDv4 for public resources, integer persistence/worker/other event identities retained."
+  },
+  {
+    "dependencies": [
+      "enforce_request_access",
+      "decode_request",
+      "get_current_tenant_context",
+      "get_db"
+    ],
+    "file": "app/routers/vex.py",
+    "function": "get_vex_statements",
+    "line": 63,
+    "methods": [
+      "GET"
+    ],
+    "path": "/api/sboms/{sbom_id}/vex",
+    "request_resource_fields": {},
+    "response_model": "None",
+    "test_coverage": "Matching router/security suites in exact frozen inventory; focused and real Chrome scenarios recorded separately.",
+    "wire_policy": "Explicit named fields or DTO/route ownership only; UUIDv4 for public resources, integer persistence/worker/other event identities retained."
+  },
+  {
+    "dependencies": [
+      "enforce_request_access",
+      "decode_request",
+      "get_current_tenant_context",
+      "get_db"
+    ],
+    "file": "app/routers/vex.py",
+    "function": "upload_vex_document",
+    "line": 40,
+    "methods": [
+      "POST"
+    ],
+    "path": "/api/sboms/{sbom_id}/vex",
+    "request_resource_fields": {},
+    "response_model": "None",
+    "test_coverage": "Matching router/security suites in exact frozen inventory; focused and real Chrome scenarios recorded separately.",
+    "wire_policy": "Explicit named fields or DTO/route ownership only; UUIDv4 for public resources, integer persistence/worker/other event identities retained."
+  },
+  {
+    "dependencies": [
+      "enforce_request_access",
+      "decode_request",
+      "get_current_tenant_context",
+      "get_db"
+    ],
+    "file": "app/routers/vex.py",
+    "function": "discover_vex_documents",
+    "line": 130,
+    "methods": [
+      "POST"
+    ],
+    "path": "/api/sboms/{sbom_id}/vex/discover",
+    "request_resource_fields": {},
+    "response_model": "None",
+    "test_coverage": "Matching router/security suites in exact frozen inventory; focused and real Chrome scenarios recorded separately.",
+    "wire_policy": "Explicit named fields or DTO/route ownership only; UUIDv4 for public resources, integer persistence/worker/other event identities retained."
+  },
+  {
+    "dependencies": [
+      "enforce_request_access",
+      "decode_request",
+      "get_current_tenant_context",
+      "get_db"
+    ],
+    "file": "app/routers/vex.py",
+    "function": "get_vex_report",
+    "line": 74,
+    "methods": [
+      "GET"
+    ],
+    "path": "/api/sboms/{sbom_id}/vex/report",
+    "request_resource_fields": {},
+    "response_model": "None",
+    "test_coverage": "Matching router/security suites in exact frozen inventory; focused and real Chrome scenarios recorded separately.",
+    "wire_policy": "Explicit named fields or DTO/route ownership only; UUIDv4 for public resources, integer persistence/worker/other event identities retained."
+  },
+  {
+    "dependencies": [
+      "enforce_request_access",
+      "decode_request",
+      "dependency",
+      "get_db"
+    ],
+    "file": "app/routers/sboms_crud.py",
+    "function": "create_sbom_workspace",
+    "line": 632,
+    "methods": [
+      "POST"
+    ],
+    "path": "/api/sboms/{sbom_id}/workspace",
+    "request_resource_fields": {},
+    "response_model": "None",
+    "test_coverage": "Matching router/security suites in exact frozen inventory; focused and real Chrome scenarios recorded separately.",
+    "wire_policy": "Explicit named fields or DTO/route ownership only; UUIDv4 for public resources, integer persistence/worker/other event identities retained."
+  },
+  {
+    "dependencies": [
+      "enforce_request_access",
+      "decode_request",
+      "dependency",
+      "get_db"
+    ],
+    "file": "app/routers/schedules.py",
+    "function": "list_schedules",
+    "line": 834,
+    "methods": [
+      "GET"
+    ],
+    "path": "/api/schedules",
+    "request_resource_fields": {},
+    "response_model": "list[app.schemas.ScheduleOut]",
+    "test_coverage": "Matching router/security suites in exact frozen inventory; focused and real Chrome scenarios recorded separately.",
+    "wire_policy": "Explicit named fields or DTO/route ownership only; UUIDv4 for public resources, integer persistence/worker/other event identities retained."
+  },
+  {
+    "dependencies": [
+      "enforce_request_access",
+      "decode_request",
+      "dependency",
+      "get_db"
+    ],
+    "file": "app/routers/schedules.py",
+    "function": "pause_schedule",
+    "line": 903,
+    "methods": [
+      "POST"
+    ],
+    "path": "/api/schedules/{schedule_id}/pause",
+    "request_resource_fields": {},
+    "response_model": "<class 'app.schemas.ScheduleOut'>",
+    "test_coverage": "Matching router/security suites in exact frozen inventory; focused and real Chrome scenarios recorded separately.",
+    "wire_policy": "Explicit named fields or DTO/route ownership only; UUIDv4 for public resources, integer persistence/worker/other event identities retained."
+  },
+  {
+    "dependencies": [
+      "enforce_request_access",
+      "decode_request",
+      "dependency",
+      "get_db"
+    ],
+    "file": "app/routers/schedules.py",
+    "function": "resume_schedule",
+    "line": 921,
+    "methods": [
+      "POST"
+    ],
+    "path": "/api/schedules/{schedule_id}/resume",
+    "request_resource_fields": {},
+    "response_model": "<class 'app.schemas.ScheduleOut'>",
+    "test_coverage": "Matching router/security suites in exact frozen inventory; focused and real Chrome scenarios recorded separately.",
+    "wire_policy": "Explicit named fields or DTO/route ownership only; UUIDv4 for public resources, integer persistence/worker/other event identities retained."
+  },
+  {
+    "dependencies": [
+      "enforce_request_access",
+      "decode_request",
+      "dependency",
+      "get_db"
+    ],
+    "file": "app/routers/schedules.py",
+    "function": "run_schedule_now",
+    "line": 944,
+    "methods": [
+      "POST"
+    ],
+    "path": "/api/schedules/{schedule_id}/run-now",
+    "request_resource_fields": {},
+    "response_model": "None",
+    "test_coverage": "Matching router/security suites in exact frozen inventory; focused and real Chrome scenarios recorded separately.",
+    "wire_policy": "Explicit named fields or DTO/route ownership only; UUIDv4 for public resources, integer persistence/worker/other event identities retained."
+  },
+  {
+    "dependencies": [
+      "enforce_request_access",
+      "decode_request",
+      "dependency",
+      "get_db"
+    ],
+    "file": "app/routers/schedules.py",
+    "function": "preview_schedule_targets",
+    "line": 882,
+    "methods": [
+      "GET"
+    ],
+    "path": "/api/schedules/{schedule_id}/targets",
+    "request_resource_fields": {},
+    "response_model": "<class 'app.schemas.ScheduleTargetPreview'>",
+    "test_coverage": "Matching router/security suites in exact frozen inventory; focused and real Chrome scenarios recorded separately.",
+    "wire_policy": "Explicit named fields or DTO/route ownership only; UUIDv4 for public resources, integer persistence/worker/other event identities retained."
+  },
+  {
+    "dependencies": [
+      "dependency",
+      "get_db",
+      "decode_request"
+    ],
+    "file": "app/routers/native_auth.py",
+    "function": "add_existing",
+    "line": 139,
+    "methods": [
+      "POST"
+    ],
+    "path": "/api/tenants/{tenant_id}/memberships",
+    "request_resource_fields": {},
+    "response_model": "None",
+    "test_coverage": "Matching router/security suites in exact frozen inventory; focused and real Chrome scenarios recorded separately.",
+    "wire_policy": "Explicit named fields or DTO/route ownership only; UUIDv4 for public resources, integer persistence/worker/other event identities retained."
+  },
+  {
+    "dependencies": [
+      "dependency",
+      "get_db",
+      "decode_request"
+    ],
+    "file": "app/routers/tenants.py",
+    "function": "list_tenant_users",
+    "line": 707,
+    "methods": [
+      "GET"
+    ],
+    "path": "/api/tenants/{tenant_id}/users",
+    "request_resource_fields": {},
+    "response_model": "list[dict] | dict",
+    "test_coverage": "Matching router/security suites in exact frozen inventory; focused and real Chrome scenarios recorded separately.",
+    "wire_policy": "Explicit named fields or DTO/route ownership only; UUIDv4 for public resources, integer persistence/worker/other event identities retained."
+  },
+  {
+    "dependencies": [
+      "dependency",
+      "get_db",
+      "decode_request"
+    ],
+    "file": "app/routers/tenants.py",
+    "function": "add_tenant_user",
+    "line": 768,
+    "methods": [
+      "POST"
+    ],
+    "path": "/api/tenants/{tenant_id}/users",
+    "request_resource_fields": {},
+    "response_model": "<class 'dict'>",
+    "test_coverage": "Matching router/security suites in exact frozen inventory; focused and real Chrome scenarios recorded separately.",
+    "wire_policy": "Explicit named fields or DTO/route ownership only; UUIDv4 for public resources, integer persistence/worker/other event identities retained."
+  },
+  {
+    "dependencies": [
+      "dependency",
+      "get_db",
+      "decode_request"
+    ],
+    "file": "app/routers/tenants.py",
+    "function": "delete_tenant_user",
+    "line": 1107,
+    "methods": [
+      "DELETE"
+    ],
+    "path": "/api/tenants/{tenant_id}/users/{membership_id}",
+    "request_resource_fields": {
+      "membership_id": "tenant_users"
+    },
+    "response_model": "None",
+    "test_coverage": "Matching router/security suites in exact frozen inventory; focused and real Chrome scenarios recorded separately.",
+    "wire_policy": "Explicit named fields or DTO/route ownership only; UUIDv4 for public resources, integer persistence/worker/other event identities retained."
+  },
+  {
+    "dependencies": [
+      "dependency",
+      "get_db",
+      "decode_request"
+    ],
+    "file": "app/routers/tenants.py",
+    "function": "get_tenant_user",
+    "line": 754,
+    "methods": [
+      "GET"
+    ],
+    "path": "/api/tenants/{tenant_id}/users/{membership_id}",
+    "request_resource_fields": {
+      "membership_id": "tenant_users"
+    },
+    "response_model": "<class 'dict'>",
+    "test_coverage": "Matching router/security suites in exact frozen inventory; focused and real Chrome scenarios recorded separately.",
+    "wire_policy": "Explicit named fields or DTO/route ownership only; UUIDv4 for public resources, integer persistence/worker/other event identities retained."
+  },
+  {
+    "dependencies": [
+      "dependency",
+      "get_db",
+      "decode_request"
+    ],
+    "file": "app/routers/tenants.py",
+    "function": "update_tenant_user",
+    "line": 882,
+    "methods": [
+      "PATCH"
+    ],
+    "path": "/api/tenants/{tenant_id}/users/{membership_id}",
+    "request_resource_fields": {
+      "membership_id": "tenant_users"
+    },
+    "response_model": "<class 'dict'>",
+    "test_coverage": "Matching router/security suites in exact frozen inventory; focused and real Chrome scenarios recorded separately.",
+    "wire_policy": "Explicit named fields or DTO/route ownership only; UUIDv4 for public resources, integer persistence/worker/other event identities retained."
+  },
+  {
+    "dependencies": [
+      "dependency",
+      "get_db",
+      "decode_request"
+    ],
+    "file": "app/routers/tenants.py",
+    "function": "activate_tenant_user",
+    "line": 1085,
+    "methods": [
+      "POST"
+    ],
+    "path": "/api/tenants/{tenant_id}/users/{membership_id}/activate",
+    "request_resource_fields": {
+      "membership_id": "tenant_users"
+    },
+    "response_model": "<class 'dict'>",
+    "test_coverage": "Matching router/security suites in exact frozen inventory; focused and real Chrome scenarios recorded separately.",
+    "wire_policy": "Explicit named fields or DTO/route ownership only; UUIDv4 for public resources, integer persistence/worker/other event identities retained."
+  },
+  {
+    "dependencies": [
+      "dependency",
+      "get_db",
+      "decode_request"
+    ],
+    "file": "app/routers/tenants.py",
+    "function": "tenant_user_audit",
+    "line": 1174,
+    "methods": [
+      "GET"
+    ],
+    "path": "/api/tenants/{tenant_id}/users/{membership_id}/audit",
+    "request_resource_fields": {
+      "membership_id": "tenant_users"
+    },
+    "response_model": "None",
+    "test_coverage": "Matching router/security suites in exact frozen inventory; focused and real Chrome scenarios recorded separately.",
+    "wire_policy": "Explicit named fields or DTO/route ownership only; UUIDv4 for public resources, integer persistence/worker/other event identities retained."
+  },
+  {
+    "dependencies": [
+      "dependency",
+      "get_db",
+      "decode_request"
+    ],
+    "file": "app/routers/tenants.py",
+    "function": "deactivate_tenant_user",
+    "line": 1096,
+    "methods": [
+      "POST"
+    ],
+    "path": "/api/tenants/{tenant_id}/users/{membership_id}/deactivate",
+    "request_resource_fields": {
+      "membership_id": "tenant_users"
+    },
+    "response_model": "<class 'dict'>",
+    "test_coverage": "Matching router/security suites in exact frozen inventory; focused and real Chrome scenarios recorded separately.",
+    "wire_policy": "Explicit named fields or DTO/route ownership only; UUIDv4 for public resources, integer persistence/worker/other event identities retained."
+  },
+  {
+    "dependencies": [
+      "dependency",
+      "get_db",
+      "decode_request"
+    ],
+    "file": "app/routers/tenants.py",
+    "function": "edit_tenant_profile",
+    "line": 1162,
+    "methods": [
+      "PATCH"
+    ],
+    "path": "/api/tenants/{tenant_id}/users/{membership_id}/profile",
+    "request_resource_fields": {
+      "membership_id": "tenant_users"
+    },
+    "response_model": "None",
+    "test_coverage": "Matching router/security suites in exact frozen inventory; focused and real Chrome scenarios recorded separately.",
+    "wire_policy": "Explicit named fields or DTO/route ownership only; UUIDv4 for public resources, integer persistence/worker/other event identities retained."
+  },
+  {
+    "dependencies": [
+      "dependency",
+      "get_db",
+      "decode_request"
+    ],
+    "file": "app/routers/tenants.py",
+    "function": "list_tenant_user_roles",
+    "line": 452,
+    "methods": [
+      "GET"
+    ],
+    "path": "/api/tenants/{tenant_id}/users/{user_id}/roles",
+    "request_resource_fields": {},
+    "response_model": "<class 'dict'>",
+    "test_coverage": "Matching router/security suites in exact frozen inventory; focused and real Chrome scenarios recorded separately.",
+    "wire_policy": "Explicit named fields or DTO/route ownership only; UUIDv4 for public resources, integer persistence/worker/other event identities retained."
+  },
+  {
+    "dependencies": [
+      "dependency",
+      "get_db",
+      "decode_request"
+    ],
+    "file": "app/routers/tenants.py",
+    "function": "grant_tenant_user_role",
+    "line": 466,
+    "methods": [
+      "POST"
+    ],
+    "path": "/api/tenants/{tenant_id}/users/{user_id}/roles",
+    "request_resource_fields": {},
+    "response_model": "<class 'dict'>",
+    "test_coverage": "Matching router/security suites in exact frozen inventory; focused and real Chrome scenarios recorded separately.",
+    "wire_policy": "Explicit named fields or DTO/route ownership only; UUIDv4 for public resources, integer persistence/worker/other event identities retained."
+  },
+  {
+    "dependencies": [
+      "dependency",
+      "get_db",
+      "decode_request"
+    ],
+    "file": "app/routers/tenants.py",
+    "function": "replace_tenant_user_roles",
+    "line": 504,
+    "methods": [
+      "PUT"
+    ],
+    "path": "/api/tenants/{tenant_id}/users/{user_id}/roles",
+    "request_resource_fields": {},
+    "response_model": "<class 'dict'>",
+    "test_coverage": "Matching router/security suites in exact frozen inventory; focused and real Chrome scenarios recorded separately.",
+    "wire_policy": "Explicit named fields or DTO/route ownership only; UUIDv4 for public resources, integer persistence/worker/other event identities retained."
+  },
+  {
+    "dependencies": [
+      "dependency",
+      "get_db",
+      "decode_request"
+    ],
+    "file": "app/routers/tenants.py",
+    "function": "tenant_user_role_history",
+    "line": 581,
+    "methods": [
+      "GET"
+    ],
+    "path": "/api/tenants/{tenant_id}/users/{user_id}/roles/history",
+    "request_resource_fields": {},
+    "response_model": "<class 'dict'>",
+    "test_coverage": "Matching router/security suites in exact frozen inventory; focused and real Chrome scenarios recorded separately.",
+    "wire_policy": "Explicit named fields or DTO/route ownership only; UUIDv4 for public resources, integer persistence/worker/other event identities retained."
+  },
+  {
+    "dependencies": [
+      "dependency",
+      "get_db",
+      "decode_request"
+    ],
+    "file": "app/routers/tenants.py",
+    "function": "revoke_tenant_user_role",
+    "line": 542,
+    "methods": [
+      "DELETE"
+    ],
+    "path": "/api/tenants/{tenant_id}/users/{user_id}/roles/{role_code}",
+    "request_resource_fields": {},
+    "response_model": "<class 'dict'>",
+    "test_coverage": "Matching router/security suites in exact frozen inventory; focused and real Chrome scenarios recorded separately.",
+    "wire_policy": "Explicit named fields or DTO/route ownership only; UUIDv4 for public resources, integer persistence/worker/other event identities retained."
+  },
+  {
+    "dependencies": [
+      "enforce_request_access",
+      "decode_request",
+      "get_db"
+    ],
+    "file": "app/routers/compare.py",
+    "function": "compare_runs",
+    "line": 74,
+    "methods": [
+      "POST"
+    ],
+    "path": "/api/v1/compare",
+    "request_resource_fields": {},
+    "response_model": "<class 'app.schemas_compare.CompareResult'>",
+    "test_coverage": "Matching router/security suites in exact frozen inventory; focused and real Chrome scenarios recorded separately.",
+    "wire_policy": "Explicit named fields or DTO/route ownership only; UUIDv4 for public resources, integer persistence/worker/other event identities retained."
+  },
+  {
+    "dependencies": [
+      "enforce_request_access",
+      "decode_request",
+      "get_db"
+    ],
+    "file": "app/routers/compare.py",
+    "function": "export_compare",
+    "line": 89,
+    "methods": [
+      "POST"
+    ],
+    "path": "/api/v1/compare/{cache_key}/export",
+    "request_resource_fields": {},
+    "response_model": "None",
+    "test_coverage": "Matching router/security suites in exact frozen inventory; focused and real Chrome scenarios recorded separately.",
+    "wire_policy": "Explicit named fields or DTO/route ownership only; UUIDv4 for public resources, integer persistence/worker/other event identities retained."
+  },
+  {
+    "dependencies": [
+      "enforce_request_access",
+      "decode_request",
+      "get_db"
+    ],
+    "file": "app/routers/ai_fixes.py",
+    "function": "list_run_fixes",
+    "line": 894,
+    "methods": [
+      "GET"
+    ],
+    "path": "/api/v1/runs/{run_id}/ai-fixes",
+    "request_resource_fields": {
+      "run_id": "analysis_run"
+    },
+    "response_model": "<class 'app.routers.ai_fixes.FindingFixListResponse'>",
+    "test_coverage": "Matching router/security suites in exact frozen inventory; focused and real Chrome scenarios recorded separately.",
+    "wire_policy": "Explicit named fields or DTO/route ownership only; UUIDv4 for public resources, integer persistence/worker/other event identities retained."
+  },
+  {
+    "dependencies": [
+      "enforce_request_access",
+      "decode_request",
+      "get_db"
+    ],
+    "file": "app/routers/ai_fixes.py",
+    "function": "trigger_run_fixes",
+    "line": 313,
+    "methods": [
+      "POST"
+    ],
+    "path": "/api/v1/runs/{run_id}/ai-fixes",
+    "request_resource_fields": {
+      "run_id": "analysis_run"
+    },
+    "response_model": "<class 'app.routers.ai_fixes.TriggerBatchResponse'>",
+    "test_coverage": "Matching router/security suites in exact frozen inventory; focused and real Chrome scenarios recorded separately.",
+    "wire_policy": "Explicit named fields or DTO/route ownership only; UUIDv4 for public resources, integer persistence/worker/other event identities retained."
+  },
+  {
+    "dependencies": [
+      "enforce_request_access",
+      "decode_request",
+      "get_db"
+    ],
+    "file": "app/routers/ai_fixes.py",
+    "function": "list_run_batches",
+    "line": 679,
+    "methods": [
+      "GET"
+    ],
+    "path": "/api/v1/runs/{run_id}/ai-fixes/batches",
+    "request_resource_fields": {
+      "run_id": "analysis_run"
+    },
+    "response_model": "<class 'app.routers.ai_fixes.BatchListResponse'>",
+    "test_coverage": "Matching router/security suites in exact frozen inventory; focused and real Chrome scenarios recorded separately.",
+    "wire_policy": "Explicit named fields or DTO/route ownership only; UUIDv4 for public resources, integer persistence/worker/other event identities retained."
+  },
+  {
+    "dependencies": [
+      "enforce_request_access",
+      "decode_request",
+      "get_db"
+    ],
+    "file": "app/routers/ai_fixes.py",
+    "function": "get_run_batch",
+    "line": 694,
+    "methods": [
+      "GET"
+    ],
+    "path": "/api/v1/runs/{run_id}/ai-fixes/batches/{batch_id}",
+    "request_resource_fields": {
+      "run_id": "analysis_run"
+    },
+    "response_model": "<class 'app.routers.ai_fixes.BatchDetailResponse'>",
+    "test_coverage": "Matching router/security suites in exact frozen inventory; focused and real Chrome scenarios recorded separately.",
+    "wire_policy": "Explicit named fields or DTO/route ownership only; UUIDv4 for public resources, integer persistence/worker/other event identities retained."
+  },
+  {
+    "dependencies": [
+      "enforce_request_access",
+      "decode_request",
+      "get_db"
+    ],
+    "file": "app/routers/ai_fixes.py",
+    "function": "cancel_run_batch",
+    "line": 731,
+    "methods": [
+      "POST"
+    ],
+    "path": "/api/v1/runs/{run_id}/ai-fixes/batches/{batch_id}/cancel",
+    "request_resource_fields": {
+      "run_id": "analysis_run"
+    },
+    "response_model": "<class 'dict'>",
+    "test_coverage": "Matching router/security suites in exact frozen inventory; focused and real Chrome scenarios recorded separately.",
+    "wire_policy": "Explicit named fields or DTO/route ownership only; UUIDv4 for public resources, integer persistence/worker/other event identities retained."
+  },
+  {
+    "dependencies": [
+      "enforce_request_access",
+      "decode_request"
+    ],
+    "file": "app/routers/ai_fixes.py",
+    "function": "stream_batch_progress",
+    "line": 711,
+    "methods": [
+      "GET"
+    ],
+    "path": "/api/v1/runs/{run_id}/ai-fixes/batches/{batch_id}/stream",
+    "request_resource_fields": {
+      "run_id": "analysis_run"
+    },
+    "response_model": "None",
+    "test_coverage": "Matching router/security suites in exact frozen inventory; focused and real Chrome scenarios recorded separately.",
+    "wire_policy": "Explicit named fields or DTO/route ownership only; UUIDv4 for public resources, integer persistence/worker/other event identities retained."
+  },
+  {
+    "dependencies": [
+      "enforce_request_access",
+      "decode_request",
+      "get_db"
+    ],
+    "file": "app/routers/ai_fixes.py",
+    "function": "estimate_run_duration_legacy",
+    "line": 492,
+    "methods": [
+      "GET"
+    ],
+    "path": "/api/v1/runs/{run_id}/ai-fixes/estimate",
+    "request_resource_fields": {
+      "run_id": "analysis_run"
+    },
+    "response_model": "<class 'app.routers.ai_fixes.BatchDurationEstimateResponse'>",
+    "test_coverage": "Matching router/security suites in exact frozen inventory; focused and real Chrome scenarios recorded separately.",
+    "wire_policy": "Explicit named fields or DTO/route ownership only; UUIDv4 for public resources, integer persistence/worker/other event identities retained."
+  },
+  {
+    "dependencies": [
+      "enforce_request_access",
+      "decode_request",
+      "get_db"
+    ],
+    "file": "app/routers/ai_fixes.py",
+    "function": "estimate_run_duration",
+    "line": 510,
+    "methods": [
+      "POST"
+    ],
+    "path": "/api/v1/runs/{run_id}/ai-fixes/estimate",
+    "request_resource_fields": {
+      "run_id": "analysis_run"
+    },
+    "response_model": "<class 'app.routers.ai_fixes.EstimateResponse'>",
+    "test_coverage": "Matching router/security suites in exact frozen inventory; focused and real Chrome scenarios recorded separately.",
+    "wire_policy": "Explicit named fields or DTO/route ownership only; UUIDv4 for public resources, integer persistence/worker/other event identities retained."
+  },
+  {
+    "dependencies": [
+      "enforce_request_access",
+      "decode_request",
+      "get_db"
+    ],
+    "file": "app/routers/cves.py",
+    "function": "get_cve_detail_with_scan_context",
+    "line": 111,
+    "methods": [
+      "GET"
+    ],
+    "path": "/api/v1/scans/{scan_id}/cves/{cve_id}",
+    "request_resource_fields": {
+      "scan_id": "analysis_run"
+    },
+    "response_model": "<class 'app.schemas_cve.CveDetailWithContext'>",
+    "test_coverage": "Matching router/security suites in exact frozen inventory; focused and real Chrome scenarios recorded separately.",
+    "wire_policy": "Explicit named fields or DTO/route ownership only; UUIDv4 for public resources, integer persistence/worker/other event identities retained."
+  },
+  {
+    "dependencies": [
+      "enforce_request_access",
+      "decode_request",
+      "queue_filters",
+      "get_db",
+      "get_current_tenant_context"
+    ],
+    "file": "app/routers/vex_investigations.py",
+    "function": "list_investigations",
+    "line": 421,
+    "methods": [
+      "GET"
+    ],
+    "path": "/api/vex/investigations",
+    "request_resource_fields": {},
+    "response_model": "<class 'app.schemas_vex.InvestigationListResponse'>",
+    "test_coverage": "Matching router/security suites in exact frozen inventory; focused and real Chrome scenarios recorded separately.",
+    "wire_policy": "Explicit named fields or DTO/route ownership only; UUIDv4 for public resources, integer persistence/worker/other event identities retained."
+  },
+  {
+    "dependencies": [
+      "enforce_request_access",
+      "decode_request",
+      "get_db",
+      "get_current_tenant_context"
+    ],
+    "file": "app/routers/vex_investigations.py",
+    "function": "investigation_analysis_runs",
+    "line": 569,
+    "methods": [
+      "GET"
+    ],
+    "path": "/api/vex/investigations/analysis-runs",
+    "request_resource_fields": {},
+    "response_model": "None",
+    "test_coverage": "Matching router/security suites in exact frozen inventory; focused and real Chrome scenarios recorded separately.",
+    "wire_policy": "Explicit named fields or DTO/route ownership only; UUIDv4 for public resources, integer persistence/worker/other event identities retained."
+  },
+  {
+    "dependencies": [
+      "enforce_request_access",
+      "decode_request",
+      "get_db",
+      "get_current_tenant_context"
+    ],
+    "file": "app/routers/vex_investigations.py",
+    "function": "investigation_assignees",
+    "line": 628,
+    "methods": [
+      "GET"
+    ],
+    "path": "/api/vex/investigations/assignees",
+    "request_resource_fields": {},
+    "response_model": "dict[str, typing.Any]",
+    "test_coverage": "Matching router/security suites in exact frozen inventory; focused and real Chrome scenarios recorded separately.",
+    "wire_policy": "Explicit named fields or DTO/route ownership only; UUIDv4 for public resources, integer persistence/worker/other event identities retained."
+  },
+  {
+    "dependencies": [
+      "enforce_request_access",
+      "decode_request",
+      "get_db",
+      "get_current_tenant_context"
+    ],
+    "file": "app/routers/vex_investigations.py",
+    "function": "investigation_comparison",
+    "line": 593,
+    "methods": [
+      "GET"
+    ],
+    "path": "/api/vex/investigations/comparison",
+    "request_resource_fields": {},
+    "response_model": "None",
+    "test_coverage": "Matching router/security suites in exact frozen inventory; focused and real Chrome scenarios recorded separately.",
+    "wire_policy": "Explicit named fields or DTO/route ownership only; UUIDv4 for public resources, integer persistence/worker/other event identities retained."
+  },
+  {
+    "dependencies": [
+      "enforce_request_access",
+      "decode_request",
+      "get_db",
+      "get_current_tenant_context"
+    ],
+    "file": "app/routers/vex_investigations.py",
+    "function": "resolve_investigation",
+    "line": 650,
+    "methods": [
+      "GET"
+    ],
+    "path": "/api/vex/investigations/resolve",
+    "request_resource_fields": {},
+    "response_model": "<class 'app.schemas_vex.InvestigationDetail'>",
+    "test_coverage": "Matching router/security suites in exact frozen inventory; focused and real Chrome scenarios recorded separately.",
+    "wire_policy": "Explicit named fields or DTO/route ownership only; UUIDv4 for public resources, integer persistence/worker/other event identities retained."
+  },
+  {
+    "dependencies": [
+      "enforce_request_access",
+      "decode_request",
+      "get_db",
+      "get_current_tenant_context"
+    ],
+    "file": "app/routers/vex_investigations.py",
+    "function": "investigation_run_snapshot",
+    "line": 579,
+    "methods": [
+      "GET"
+    ],
+    "path": "/api/vex/investigations/run-snapshot",
+    "request_resource_fields": {
+      "analysis_run_id": "analysis_run"
+    },
+    "response_model": "None",
+    "test_coverage": "Matching router/security suites in exact frozen inventory; focused and real Chrome scenarios recorded separately.",
+    "wire_policy": "Explicit named fields or DTO/route ownership only; UUIDv4 for public resources, integer persistence/worker/other event identities retained."
+  },
+  {
+    "dependencies": [
+      "enforce_request_access",
+      "decode_request",
+      "queue_filters",
+      "get_db",
+      "get_current_tenant_context"
+    ],
+    "file": "app/routers/vex_investigations.py",
+    "function": "investigation_summary",
+    "line": 518,
+    "methods": [
+      "GET"
+    ],
+    "path": "/api/vex/investigations/summary",
+    "request_resource_fields": {},
+    "response_model": "<class 'app.schemas_vex.InvestigationSummaryResponse'>",
+    "test_coverage": "Matching router/security suites in exact frozen inventory; focused and real Chrome scenarios recorded separately.",
+    "wire_policy": "Explicit named fields or DTO/route ownership only; UUIDv4 for public resources, integer persistence/worker/other event identities retained."
+  },
+  {
+    "dependencies": [
+      "enforce_request_access",
+      "decode_request",
+      "get_db",
+      "get_current_tenant_context"
+    ],
+    "file": "app/routers/vex_investigations.py",
+    "function": "investigation_versions",
+    "line": 554,
+    "methods": [
+      "GET"
+    ],
+    "path": "/api/vex/investigations/versions",
+    "request_resource_fields": {},
+    "response_model": "None",
+    "test_coverage": "Matching router/security suites in exact frozen inventory; focused and real Chrome scenarios recorded separately.",
+    "wire_policy": "Explicit named fields or DTO/route ownership only; UUIDv4 for public resources, integer persistence/worker/other event identities retained."
+  },
+  {
+    "dependencies": [
+      "enforce_request_access",
+      "decode_request",
+      "get_db",
+      "get_current_tenant_context"
+    ],
+    "file": "app/routers/vex_investigations.py",
+    "function": "get_investigation",
+    "line": 707,
+    "methods": [
+      "GET"
+    ],
+    "path": "/api/vex/investigations/{investigation_id}",
+    "request_resource_fields": {},
+    "response_model": "<class 'app.schemas_vex.InvestigationDetail'>",
+    "test_coverage": "Matching router/security suites in exact frozen inventory; focused and real Chrome scenarios recorded separately.",
+    "wire_policy": "Explicit named fields or DTO/route ownership only; UUIDv4 for public resources, integer persistence/worker/other event identities retained."
+  },
+  {
+    "dependencies": [
+      "enforce_request_access",
+      "decode_request",
+      "get_db",
+      "get_current_tenant_context"
+    ],
+    "file": "app/routers/vex_investigations.py",
+    "function": "set_investigation_assignment",
+    "line": 980,
+    "methods": [
+      "PUT"
+    ],
+    "path": "/api/vex/investigations/{investigation_id}/assignment",
+    "request_resource_fields": {},
+    "response_model": "<class 'app.schemas_vex.InvestigationDetail'>",
+    "test_coverage": "Matching router/security suites in exact frozen inventory; focused and real Chrome scenarios recorded separately.",
+    "wire_policy": "Explicit named fields or DTO/route ownership only; UUIDv4 for public resources, integer persistence/worker/other event identities retained."
+  },
+  {
+    "dependencies": [
+      "enforce_request_access",
+      "decode_request",
+      "get_db",
+      "get_current_tenant_context"
+    ],
+    "file": "app/routers/vex_investigations.py",
+    "function": "resolve_investigation_mapping",
+    "line": 1018,
+    "methods": [
+      "PUT"
+    ],
+    "path": "/api/vex/investigations/{investigation_id}/component",
+    "request_resource_fields": {},
+    "response_model": "<class 'app.schemas_vex.InvestigationDetail'>",
+    "test_coverage": "Matching router/security suites in exact frozen inventory; focused and real Chrome scenarios recorded separately.",
+    "wire_policy": "Explicit named fields or DTO/route ownership only; UUIDv4 for public resources, integer persistence/worker/other event identities retained."
+  },
+  {
+    "dependencies": [
+      "enforce_request_access",
+      "decode_request",
+      "get_db",
+      "get_current_tenant_context"
+    ],
+    "file": "app/routers/vex_investigations.py",
+    "function": "set_investigation_decision",
+    "line": 886,
+    "methods": [
+      "PUT"
+    ],
+    "path": "/api/vex/investigations/{investigation_id}/decision",
+    "request_resource_fields": {},
+    "response_model": "<class 'app.schemas_vex.InvestigationDetail'>",
+    "test_coverage": "Matching router/security suites in exact frozen inventory; focused and real Chrome scenarios recorded separately.",
+    "wire_policy": "Explicit named fields or DTO/route ownership only; UUIDv4 for public resources, integer persistence/worker/other event identities retained."
+  },
+  {
+    "dependencies": [
+      "enforce_request_access",
+      "decode_request",
+      "dashboard_scope_dependency",
+      "get_db"
+    ],
+    "file": "app/routers/vulnerabilities.py",
+    "function": "list_vulnerabilities",
+    "line": 31,
+    "methods": [
+      "GET"
+    ],
+    "path": "/api/vulnerabilities",
+    "request_resource_fields": {},
+    "response_model": "None",
+    "test_coverage": "Matching router/security suites in exact frozen inventory; focused and real Chrome scenarios recorded separately.",
+    "wire_policy": "Explicit named fields or DTO/route ownership only; UUIDv4 for public resources, integer persistence/worker/other event identities retained."
+  },
+  {
+    "dependencies": [
+      "enforce_request_access",
+      "decode_request",
+      "dashboard_scope_dependency",
+      "get_db"
+    ],
+    "file": "app/routers/dashboard_main.py",
+    "function": "dashboard_activity",
+    "line": 191,
+    "methods": [
+      "GET"
+    ],
+    "path": "/dashboard/activity",
+    "request_resource_fields": {},
+    "response_model": "None",
+    "test_coverage": "Matching router/security suites in exact frozen inventory; focused and real Chrome scenarios recorded separately.",
+    "wire_policy": "Explicit named fields or DTO/route ownership only; UUIDv4 for public resources, integer persistence/worker/other event identities retained."
+  },
+  {
+    "dependencies": [
+      "enforce_request_access",
+      "decode_request",
+      "dashboard_scope_dependency",
+      "get_db"
+    ],
+    "file": "app/routers/dashboard_advanced.py",
+    "function": "dashboard_exploitation",
+    "line": 59,
+    "methods": [
+      "GET"
+    ],
+    "path": "/dashboard/exploitation",
+    "request_resource_fields": {},
+    "response_model": "None",
+    "test_coverage": "Matching router/security suites in exact frozen inventory; focused and real Chrome scenarios recorded separately.",
+    "wire_policy": "Explicit named fields or DTO/route ownership only; UUIDv4 for public resources, integer persistence/worker/other event identities retained."
+  },
+  {
+    "dependencies": [
+      "enforce_request_access",
+      "decode_request",
+      "dashboard_scope_dependency",
+      "get_db"
+    ],
+    "file": "app/routers/dashboard_main.py",
+    "function": "dashboard_application_options",
+    "line": 95,
+    "methods": [
+      "GET"
+    ],
+    "path": "/dashboard/filter-options/applications",
+    "request_resource_fields": {},
+    "response_model": "None",
+    "test_coverage": "Matching router/security suites in exact frozen inventory; focused and real Chrome scenarios recorded separately.",
+    "wire_policy": "Explicit named fields or DTO/route ownership only; UUIDv4 for public resources, integer persistence/worker/other event identities retained."
+  },
+  {
+    "dependencies": [
+      "enforce_request_access",
+      "decode_request",
+      "dashboard_scope_dependency",
+      "get_db"
+    ],
+    "file": "app/routers/dashboard_main.py",
+    "function": "dashboard_project_options",
+    "line": 82,
+    "methods": [
+      "GET"
+    ],
+    "path": "/dashboard/filter-options/projects",
+    "request_resource_fields": {},
+    "response_model": "None",
+    "test_coverage": "Matching router/security suites in exact frozen inventory; focused and real Chrome scenarios recorded separately.",
+    "wire_policy": "Explicit named fields or DTO/route ownership only; UUIDv4 for public resources, integer persistence/worker/other event identities retained."
+  },
+  {
+    "dependencies": [
+      "enforce_request_access",
+      "decode_request",
+      "dashboard_scope_dependency",
+      "get_db"
+    ],
+    "file": "app/routers/dashboard_main.py",
+    "function": "dashboard_sbom_options",
+    "line": 107,
+    "methods": [
+      "GET"
+    ],
+    "path": "/dashboard/filter-options/sboms",
+    "request_resource_fields": {},
+    "response_model": "None",
+    "test_coverage": "Matching router/security suites in exact frozen inventory; focused and real Chrome scenarios recorded separately.",
+    "wire_policy": "Explicit named fields or DTO/route ownership only; UUIDv4 for public resources, integer persistence/worker/other event identities retained."
+  },
+  {
+    "dependencies": [
+      "enforce_request_access",
+      "decode_request",
+      "dashboard_scope_dependency",
+      "get_db"
+    ],
+    "file": "app/routers/dashboard_advanced.py",
+    "function": "dashboard_forecast",
+    "line": 37,
+    "methods": [
+      "GET"
+    ],
+    "path": "/dashboard/forecast",
+    "request_resource_fields": {},
+    "response_model": "None",
+    "test_coverage": "Matching router/security suites in exact frozen inventory; focused and real Chrome scenarios recorded separately.",
+    "wire_policy": "Explicit named fields or DTO/route ownership only; UUIDv4 for public resources, integer persistence/worker/other event identities retained."
+  },
+  {
+    "dependencies": [
+      "enforce_request_access",
+      "decode_request",
+      "dashboard_scope_dependency",
+      "get_db"
+    ],
+    "file": "app/routers/dashboard_main.py",
+    "function": "get_dashboard_health",
+    "line": 419,
+    "methods": [
+      "GET"
+    ],
+    "path": "/dashboard/health",
+    "request_resource_fields": {},
+    "response_model": "None",
+    "test_coverage": "Matching router/security suites in exact frozen inventory; focused and real Chrome scenarios recorded separately.",
+    "wire_policy": "Explicit named fields or DTO/route ownership only; UUIDv4 for public resources, integer persistence/worker/other event identities retained."
+  },
+  {
+    "dependencies": [
+      "enforce_request_access",
+      "decode_request",
+      "dashboard_scope_dependency",
+      "get_db"
+    ],
+    "file": "app/routers/dashboard_main.py",
+    "function": "get_dashboard_lifecycle",
+    "line": 390,
+    "methods": [
+      "GET"
+    ],
+    "path": "/dashboard/lifecycle",
+    "request_resource_fields": {},
+    "response_model": "None",
+    "test_coverage": "Matching router/security suites in exact frozen inventory; focused and real Chrome scenarios recorded separately.",
+    "wire_policy": "Explicit named fields or DTO/route ownership only; UUIDv4 for public resources, integer persistence/worker/other event identities retained."
+  },
+  {
+    "dependencies": [
+      "enforce_request_access",
+      "decode_request",
+      "dashboard_scope_dependency",
+      "get_db"
+    ],
+    "file": "app/routers/dashboard_main.py",
+    "function": "dashboard_lifetime",
+    "line": 347,
+    "methods": [
+      "GET"
+    ],
+    "path": "/dashboard/lifetime",
+    "request_resource_fields": {},
+    "response_model": "<class 'app.schemas_dashboard.LifetimeMetrics'>",
+    "test_coverage": "Matching router/security suites in exact frozen inventory; focused and real Chrome scenarios recorded separately.",
+    "wire_policy": "Explicit named fields or DTO/route ownership only; UUIDv4 for public resources, integer persistence/worker/other event identities retained."
+  },
+  {
+    "dependencies": [
+      "enforce_request_access",
+      "decode_request",
+      "dashboard_scope_dependency",
+      "get_db"
+    ],
+    "file": "app/routers/dashboard_main.py",
+    "function": "dashboard_posture",
+    "line": 218,
+    "methods": [
+      "GET"
+    ],
+    "path": "/dashboard/posture",
+    "request_resource_fields": {},
+    "response_model": "<class 'app.schemas_dashboard.DashboardPostureResponse'>",
+    "test_coverage": "Matching router/security suites in exact frozen inventory; focused and real Chrome scenarios recorded separately.",
+    "wire_policy": "Explicit named fields or DTO/route ownership only; UUIDv4 for public resources, integer persistence/worker/other event identities retained."
+  },
+  {
+    "dependencies": [
+      "enforce_request_access",
+      "decode_request",
+      "dashboard_scope_dependency",
+      "get_db"
+    ],
+    "file": "app/routers/dashboard_main.py",
+    "function": "dashboard_posture_versions",
+    "line": 64,
+    "methods": [
+      "GET"
+    ],
+    "path": "/dashboard/posture-versions",
+    "request_resource_fields": {},
+    "response_model": "None",
+    "test_coverage": "Matching router/security suites in exact frozen inventory; focused and real Chrome scenarios recorded separately.",
+    "wire_policy": "Explicit named fields or DTO/route ownership only; UUIDv4 for public resources, integer persistence/worker/other event identities retained."
+  },
+  {
+    "dependencies": [
+      "enforce_request_access",
+      "decode_request",
+      "dashboard_scope_dependency",
+      "dependency",
+      "get_db"
+    ],
+    "file": "app/routers/dashboard_main.py",
+    "function": "dashboard_priority_findings",
+    "line": 139,
+    "methods": [
+      "GET"
+    ],
+    "path": "/dashboard/priority-findings",
+    "request_resource_fields": {},
+    "response_model": "None",
+    "test_coverage": "Matching router/security suites in exact frozen inventory; focused and real Chrome scenarios recorded separately.",
+    "wire_policy": "Explicit named fields or DTO/route ownership only; UUIDv4 for public resources, integer persistence/worker/other event identities retained."
+  },
+  {
+    "dependencies": [
+      "enforce_request_access",
+      "decode_request",
+      "dashboard_scope_dependency",
+      "get_db"
+    ],
+    "file": "app/routers/dashboard_main.py",
+    "function": "dashboard_recent_sboms",
+    "line": 181,
+    "methods": [
+      "GET"
+    ],
+    "path": "/dashboard/recent-sboms",
+    "request_resource_fields": {},
+    "response_model": "None",
+    "test_coverage": "Matching router/security suites in exact frozen inventory; focused and real Chrome scenarios recorded separately.",
+    "wire_policy": "Explicit named fields or DTO/route ownership only; UUIDv4 for public resources, integer persistence/worker/other event identities retained."
+  },
+  {
+    "dependencies": [
+      "enforce_request_access",
+      "decode_request",
+      "dashboard_scope_dependency",
+      "get_db"
+    ],
+    "file": "app/routers/dashboard_advanced.py",
+    "function": "dashboard_remediation",
+    "line": 73,
+    "methods": [
+      "GET"
+    ],
+    "path": "/dashboard/remediation",
+    "request_resource_fields": {},
+    "response_model": "None",
+    "test_coverage": "Matching router/security suites in exact frozen inventory; focused and real Chrome scenarios recorded separately.",
+    "wire_policy": "Explicit named fields or DTO/route ownership only; UUIDv4 for public resources, integer persistence/worker/other event identities retained."
+  },
+  {
+    "dependencies": [
+      "enforce_request_access",
+      "decode_request",
+      "dashboard_scope_dependency",
+      "get_db"
+    ],
+    "file": "app/routers/dashboard_main.py",
+    "function": "get_dashboard_remediation_stats",
+    "line": 429,
+    "methods": [
+      "GET"
+    ],
+    "path": "/dashboard/remediation-stats",
+    "request_resource_fields": {},
+    "response_model": "None",
+    "test_coverage": "Matching router/security suites in exact frozen inventory; focused and real Chrome scenarios recorded separately.",
+    "wire_policy": "Explicit named fields or DTO/route ownership only; UUIDv4 for public resources, integer persistence/worker/other event identities retained."
+  },
+  {
+    "dependencies": [
+      "enforce_request_access",
+      "decode_request",
+      "dashboard_scope_dependency",
+      "get_db"
+    ],
+    "file": "app/routers/dashboard_advanced.py",
+    "function": "dashboard_risk_map",
+    "line": 83,
+    "methods": [
+      "GET"
+    ],
+    "path": "/dashboard/risk-map",
+    "request_resource_fields": {},
+    "response_model": "None",
+    "test_coverage": "Matching router/security suites in exact frozen inventory; focused and real Chrome scenarios recorded separately.",
+    "wire_policy": "Explicit named fields or DTO/route ownership only; UUIDv4 for public resources, integer persistence/worker/other event identities retained."
+  },
+  {
+    "dependencies": [
+      "enforce_request_access",
+      "decode_request",
+      "dashboard_scope_dependency",
+      "get_db"
+    ],
+    "file": "app/routers/dashboard_advanced.py",
+    "function": "dashboard_risk_matrix",
+    "line": 93,
+    "methods": [
+      "GET"
+    ],
+    "path": "/dashboard/risk-matrix",
+    "request_resource_fields": {},
+    "response_model": "None",
+    "test_coverage": "Matching router/security suites in exact frozen inventory; focused and real Chrome scenarios recorded separately.",
+    "wire_policy": "Explicit named fields or DTO/route ownership only; UUIDv4 for public resources, integer persistence/worker/other event identities retained."
+  },
+  {
+    "dependencies": [
+      "enforce_request_access",
+      "decode_request",
+      "dashboard_scope_dependency",
+      "get_db"
+    ],
+    "file": "app/routers/dashboard_main.py",
+    "function": "dashboard_scoped_runs",
+    "line": 128,
+    "methods": [
+      "GET"
+    ],
+    "path": "/dashboard/runs",
+    "request_resource_fields": {},
+    "response_model": "None",
+    "test_coverage": "Matching router/security suites in exact frozen inventory; focused and real Chrome scenarios recorded separately.",
+    "wire_policy": "Explicit named fields or DTO/route ownership only; UUIDv4 for public resources, integer persistence/worker/other event identities retained."
+  },
+  {
+    "dependencies": [
+      "enforce_request_access",
+      "decode_request",
+      "dashboard_scope_dependency",
+      "get_db"
+    ],
+    "file": "app/routers/dashboard_main.py",
+    "function": "dashboard_scanned_project_ids",
+    "line": 90,
+    "methods": [
+      "GET"
+    ],
+    "path": "/dashboard/scanned-project-ids",
+    "request_resource_fields": {},
+    "response_model": "None",
+    "test_coverage": "Matching router/security suites in exact frozen inventory; focused and real Chrome scenarios recorded separately.",
+    "wire_policy": "Explicit named fields or DTO/route ownership only; UUIDv4 for public resources, integer persistence/worker/other event identities retained."
+  },
+  {
+    "dependencies": [
+      "enforce_request_access",
+      "decode_request",
+      "dashboard_scope_dependency",
+      "get_db"
+    ],
+    "file": "app/routers/dashboard_main.py",
+    "function": "dashboard_severity",
+    "line": 204,
+    "methods": [
+      "GET"
+    ],
+    "path": "/dashboard/severity",
+    "request_resource_fields": {},
+    "response_model": "None",
+    "test_coverage": "Matching router/security suites in exact frozen inventory; focused and real Chrome scenarios recorded separately.",
+    "wire_policy": "Explicit named fields or DTO/route ownership only; UUIDv4 for public resources, integer persistence/worker/other event identities retained."
+  },
+  {
+    "dependencies": [
+      "enforce_request_access",
+      "decode_request",
+      "dashboard_scope_dependency",
+      "get_db"
+    ],
+    "file": "app/routers/dashboard_main.py",
+    "function": "dashboard_stats",
+    "line": 149,
+    "methods": [
+      "GET"
+    ],
+    "path": "/dashboard/stats",
+    "request_resource_fields": {},
+    "response_model": "None",
+    "test_coverage": "Matching router/security suites in exact frozen inventory; focused and real Chrome scenarios recorded separately.",
+    "wire_policy": "Explicit named fields or DTO/route ownership only; UUIDv4 for public resources, integer persistence/worker/other event identities retained."
+  },
+  {
+    "dependencies": [
+      "enforce_request_access",
+      "decode_request",
+      "dashboard_scope_dependency",
+      "get_db"
+    ],
+    "file": "app/routers/dashboard_main.py",
+    "function": "get_dashboard_summary",
+    "line": 446,
+    "methods": [
+      "GET"
+    ],
+    "path": "/dashboard/summary",
+    "request_resource_fields": {},
+    "response_model": "None",
+    "test_coverage": "Matching router/security suites in exact frozen inventory; focused and real Chrome scenarios recorded separately.",
+    "wire_policy": "Explicit named fields or DTO/route ownership only; UUIDv4 for public resources, integer persistence/worker/other event identities retained."
+  },
+  {
+    "dependencies": [
+      "enforce_request_access",
+      "decode_request",
+      "dashboard_scope_dependency",
+      "get_db"
+    ],
+    "file": "app/routers/dashboard.py",
+    "function": "dashboard_trend",
+    "line": 34,
+    "methods": [
+      "GET"
+    ],
+    "path": "/dashboard/trend",
+    "request_resource_fields": {},
+    "response_model": "<class 'app.schemas_dashboard.FindingsTrendResponse'>",
+    "test_coverage": "Matching router/security suites in exact frozen inventory; focused and real Chrome scenarios recorded separately.",
+    "wire_policy": "Explicit named fields or DTO/route ownership only; UUIDv4 for public resources, integer persistence/worker/other event identities retained."
+  },
+  {
+    "dependencies": [
+      "enforce_request_access",
+      "decode_request",
+      "dashboard_scope_dependency",
+      "get_db"
+    ],
+    "file": "app/routers/dashboard_main.py",
+    "function": "get_dashboard_vex",
+    "line": 404,
+    "methods": [
+      "GET"
+    ],
+    "path": "/dashboard/vex",
+    "request_resource_fields": {},
+    "response_model": "<class 'app.schemas_dashboard.DashboardVexResponse'>",
+    "test_coverage": "Matching router/security suites in exact frozen inventory; focused and real Chrome scenarios recorded separately.",
+    "wire_policy": "Explicit named fields or DTO/route ownership only; UUIDv4 for public resources, integer persistence/worker/other event identities retained."
+  },
+  {
+    "dependencies": [
+      "enforce_request_access",
+      "decode_request",
+      "dashboard_scope_dependency",
+      "get_db"
+    ],
+    "file": "app/routers/dashboard_main.py",
+    "function": "dashboard_vulnerability_age",
+    "line": 320,
+    "methods": [
+      "GET"
+    ],
+    "path": "/dashboard/vulnerability-age",
+    "request_resource_fields": {},
+    "response_model": "<class 'app.schemas_dashboard.VulnerabilityAgeResponse'>",
+    "test_coverage": "Matching router/security suites in exact frozen inventory; focused and real Chrome scenarios recorded separately.",
+    "wire_policy": "Explicit named fields or DTO/route ownership only; UUIDv4 for public resources, integer persistence/worker/other event identities retained."
+  }
+]

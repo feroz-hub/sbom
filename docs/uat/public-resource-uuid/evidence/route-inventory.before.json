@@ -1,0 +1,475 @@
+[
+  {
+    "file": "app/routers/ai_fixes.py",
+    "line": 314,
+    "function": "trigger_run_fixes",
+    "method": "POST",
+    "declared_path": "/runs/{run_id}/ai-fixes",
+    "identifiers": [
+      "run_id"
+    ]
+  },
+  {
+    "file": "app/routers/ai_fixes.py",
+    "line": 498,
+    "function": "estimate_run_duration_legacy",
+    "method": "GET",
+    "declared_path": "/runs/{run_id}/ai-fixes/estimate",
+    "identifiers": [
+      "run_id"
+    ]
+  },
+  {
+    "file": "app/routers/ai_fixes.py",
+    "line": 514,
+    "function": "estimate_run_duration",
+    "method": "POST",
+    "declared_path": "/runs/{run_id}/ai-fixes/estimate",
+    "identifiers": [
+      "run_id"
+    ]
+  },
+  {
+    "file": "app/routers/ai_fixes.py",
+    "line": 683,
+    "function": "list_run_batches",
+    "method": "GET",
+    "declared_path": "/runs/{run_id}/ai-fixes/batches",
+    "identifiers": [
+      "run_id"
+    ]
+  },
+  {
+    "file": "app/routers/ai_fixes.py",
+    "line": 698,
+    "function": "get_run_batch",
+    "method": "GET",
+    "declared_path": "/runs/{run_id}/ai-fixes/batches/{batch_id}",
+    "identifiers": [
+      "run_id"
+    ]
+  },
+  {
+    "file": "app/routers/ai_fixes.py",
+    "line": 712,
+    "function": "stream_batch_progress",
+    "method": "GET",
+    "declared_path": "/runs/{run_id}/ai-fixes/batches/{batch_id}/stream",
+    "identifiers": [
+      "run_id"
+    ]
+  },
+  {
+    "file": "app/routers/ai_fixes.py",
+    "line": 735,
+    "function": "cancel_run_batch",
+    "method": "POST",
+    "declared_path": "/runs/{run_id}/ai-fixes/batches/{batch_id}/cancel",
+    "identifiers": [
+      "run_id"
+    ]
+  },
+  {
+    "file": "app/routers/ai_fixes.py",
+    "line": 760,
+    "function": "get_progress",
+    "method": "GET",
+    "declared_path": "/runs/{run_id}/ai-fixes/progress",
+    "identifiers": [
+      "run_id"
+    ]
+  },
+  {
+    "file": "app/routers/ai_fixes.py",
+    "line": 804,
+    "function": "cancel_run_fixes_legacy",
+    "method": "POST",
+    "declared_path": "/runs/{run_id}/ai-fixes/cancel",
+    "identifiers": [
+      "run_id"
+    ]
+  },
+  {
+    "file": "app/routers/ai_fixes.py",
+    "line": 831,
+    "function": "stream_progress_legacy",
+    "method": "GET",
+    "declared_path": "/runs/{run_id}/ai-fixes/stream",
+    "identifiers": [
+      "run_id"
+    ]
+  },
+  {
+    "file": "app/routers/ai_fixes.py",
+    "line": 895,
+    "function": "list_run_fixes",
+    "method": "GET",
+    "declared_path": "/runs/{run_id}/ai-fixes",
+    "identifiers": [
+      "analysis_run_id",
+      "run_id"
+    ]
+  },
+  {
+    "file": "app/routers/analysis.py",
+    "line": 75,
+    "function": "compare_analysis_runs",
+    "method": "GET",
+    "declared_path": "/compare",
+    "identifiers": [
+      "analysis_run_id",
+      "run_id"
+    ]
+  },
+  {
+    "file": "app/routers/analysis.py",
+    "line": 189,
+    "function": "export_sarif",
+    "method": "GET",
+    "declared_path": "/{run_id}/export/sarif",
+    "identifiers": [
+      "analysis_run_id",
+      "run_id"
+    ]
+  },
+  {
+    "file": "app/routers/analysis.py",
+    "line": 312,
+    "function": "export_csv",
+    "method": "GET",
+    "declared_path": "/{run_id}/export/csv",
+    "identifiers": [
+      "analysis_run_id",
+      "run_id"
+    ]
+  },
+  {
+    "file": "app/routers/compare.py",
+    "line": 76,
+    "function": "compare_runs",
+    "method": "POST",
+    "declared_path": "/compare",
+    "identifiers": [
+      "run_a_id",
+      "run_b_id"
+    ]
+  },
+  {
+    "file": "app/routers/dashboard_main.py",
+    "line": 129,
+    "function": "dashboard_scoped_runs",
+    "method": "GET",
+    "declared_path": "/runs",
+    "identifiers": []
+  },
+  {
+    "file": "app/routers/health.py",
+    "line": 208,
+    "function": "get_analysis_config",
+    "method": "GET",
+    "declared_path": "/api/analysis/config",
+    "identifiers": []
+  },
+  {
+    "file": "app/routers/native_auth.py",
+    "line": 140,
+    "function": "add_existing",
+    "method": "POST",
+    "declared_path": "/tenants/{tenant_id}/memberships",
+    "identifiers": [
+      "membership_id"
+    ]
+  },
+  {
+    "file": "app/routers/pdf.py",
+    "line": 114,
+    "function": "create_pdf_report_by_run_id",
+    "method": "POST",
+    "declared_path": "/pdf-report",
+    "identifiers": [
+      "runId",
+      "run_id"
+    ]
+  },
+  {
+    "file": "app/routers/platform.py",
+    "line": 258,
+    "function": "recover_tenant_admin",
+    "method": "POST",
+    "declared_path": "/tenants/{tenant_id}/recover-admin",
+    "identifiers": [
+      "target_membership_id"
+    ]
+  },
+  {
+    "file": "app/routers/platform.py",
+    "line": 294,
+    "function": "search_platform_users",
+    "method": "GET",
+    "declared_path": "/users/search",
+    "identifiers": [
+      "membership:"
+    ]
+  },
+  {
+    "file": "app/routers/platform.py",
+    "line": 511,
+    "function": "list_platform_administrators",
+    "method": "GET",
+    "declared_path": "/administrators",
+    "identifiers": []
+  },
+  {
+    "file": "app/routers/platform.py",
+    "line": 549,
+    "function": "grant_platform_administrator",
+    "method": "POST",
+    "declared_path": "/administrators",
+    "identifiers": []
+  },
+  {
+    "file": "app/routers/platform.py",
+    "line": 600,
+    "function": "revoke_platform_administrator",
+    "method": "DELETE",
+    "declared_path": "/administrators/{grant_id}",
+    "identifiers": [
+      "grant_id"
+    ]
+  },
+  {
+    "file": "app/routers/projects.py",
+    "line": 175,
+    "function": "project_delete_impact",
+    "method": "GET",
+    "declared_path": "/projects/{project_id}/delete-impact",
+    "identifiers": [
+      "analysis_run_id"
+    ]
+  },
+  {
+    "file": "app/routers/projects.py",
+    "line": 227,
+    "function": "delete_project",
+    "method": "DELETE",
+    "declared_path": "/projects/{project_id}",
+    "identifiers": [
+      "analysis_run_id"
+    ]
+  },
+  {
+    "file": "app/routers/runs.py",
+    "line": 75,
+    "function": "list_analysis_runs",
+    "method": "GET",
+    "declared_path": "/runs",
+    "identifiers": []
+  },
+  {
+    "file": "app/routers/runs.py",
+    "line": 179,
+    "function": "runs_aggregate_endpoint",
+    "method": "GET",
+    "declared_path": "/runs/aggregate",
+    "identifiers": []
+  },
+  {
+    "file": "app/routers/runs.py",
+    "line": 216,
+    "function": "list_recent_runs",
+    "method": "GET",
+    "declared_path": "/runs/recent",
+    "identifiers": []
+  },
+  {
+    "file": "app/routers/runs.py",
+    "line": 258,
+    "function": "search_runs",
+    "method": "GET",
+    "declared_path": "/runs/search",
+    "identifiers": []
+  },
+  {
+    "file": "app/routers/runs.py",
+    "line": 319,
+    "function": "get_analysis_run",
+    "method": "GET",
+    "declared_path": "/runs/{run_id}",
+    "identifiers": [
+      "run_id"
+    ]
+  },
+  {
+    "file": "app/routers/runs.py",
+    "line": 337,
+    "function": "list_run_findings",
+    "method": "GET",
+    "declared_path": "/runs/{run_id}/findings",
+    "identifiers": [
+      "run_id"
+    ]
+  },
+  {
+    "file": "app/routers/runs.py",
+    "line": 414,
+    "function": "list_run_findings_enriched",
+    "method": "GET",
+    "declared_path": "/runs/{run_id}/findings-enriched",
+    "identifiers": [
+      "analysis_run_id",
+      "run_id"
+    ]
+  },
+  {
+    "file": "app/routers/sbom.py",
+    "line": 27,
+    "function": "get_sbom_risk_summary",
+    "method": "GET",
+    "declared_path": "/{sbom_id}/risk-summary",
+    "identifiers": [
+      "analysis_run_id",
+      "run_id"
+    ]
+  },
+  {
+    "file": "app/routers/sboms_crud.py",
+    "line": 1627,
+    "function": "run_analysis_for_sbom",
+    "method": "POST",
+    "declared_path": "/sboms/{sbom_id}/analyze",
+    "identifiers": [
+      "run_id"
+    ]
+  },
+  {
+    "file": "app/routers/sboms_crud.py",
+    "line": 1693,
+    "function": "analyze_sbom_stream",
+    "method": "POST",
+    "declared_path": "/sboms/{sbom_id}/analyze/stream",
+    "identifiers": [
+      "analysis_run_id",
+      "runId",
+      "run_id"
+    ]
+  },
+  {
+    "file": "app/routers/sboms_crud.py",
+    "line": 2094,
+    "function": "list_sbom_analysis_runs",
+    "method": "GET",
+    "declared_path": "/sboms/{sbom_id}/analysis-runs",
+    "identifiers": []
+  },
+  {
+    "file": "app/routers/tenants.py",
+    "line": 582,
+    "function": "tenant_user_role_history",
+    "method": "GET",
+    "declared_path": "/tenants/{tenant_id}/users/{user_id}/roles/history",
+    "identifiers": [
+      "membership_id",
+      "target_membership_id"
+    ]
+  },
+  {
+    "file": "app/routers/tenants.py",
+    "line": 755,
+    "function": "get_tenant_user",
+    "method": "GET",
+    "declared_path": "/tenants/{tenant_id}/users/{membership_id}",
+    "identifiers": [
+      "membership_id"
+    ]
+  },
+  {
+    "file": "app/routers/tenants.py",
+    "line": 769,
+    "function": "add_tenant_user",
+    "method": "POST",
+    "declared_path": "/tenants/{tenant_id}/users",
+    "identifiers": [
+      "target_membership_id"
+    ]
+  },
+  {
+    "file": "app/routers/tenants.py",
+    "line": 883,
+    "function": "update_tenant_user",
+    "method": "PATCH",
+    "declared_path": "/tenants/{tenant_id}/users/{membership_id}",
+    "identifiers": [
+      "membership_id",
+      "target_membership_id"
+    ]
+  },
+  {
+    "file": "app/routers/tenants.py",
+    "line": 1086,
+    "function": "activate_tenant_user",
+    "method": "POST",
+    "declared_path": "/tenants/{tenant_id}/users/{membership_id}/activate",
+    "identifiers": [
+      "membership_id"
+    ]
+  },
+  {
+    "file": "app/routers/tenants.py",
+    "line": 1097,
+    "function": "deactivate_tenant_user",
+    "method": "POST",
+    "declared_path": "/tenants/{tenant_id}/users/{membership_id}/deactivate",
+    "identifiers": [
+      "membership_id"
+    ]
+  },
+  {
+    "file": "app/routers/tenants.py",
+    "line": 1108,
+    "function": "delete_tenant_user",
+    "method": "DELETE",
+    "declared_path": "/tenants/{tenant_id}/users/{membership_id}",
+    "identifiers": [
+      "membership_id",
+      "target_membership_id"
+    ]
+  },
+  {
+    "file": "app/routers/tenants.py",
+    "line": 1163,
+    "function": "edit_tenant_profile",
+    "method": "PATCH",
+    "declared_path": "/tenants/{tenant_id}/users/{membership_id}/profile",
+    "identifiers": [
+      "membership_id"
+    ]
+  },
+  {
+    "file": "app/routers/tenants.py",
+    "line": 1175,
+    "function": "tenant_user_audit",
+    "method": "GET",
+    "declared_path": "/tenants/{tenant_id}/users/{membership_id}/audit",
+    "identifiers": [
+      "membership_id"
+    ]
+  },
+  {
+    "file": "app/routers/vex_investigations.py",
+    "line": 570,
+    "function": "investigation_analysis_runs",
+    "method": "GET",
+    "declared_path": "/api/vex/investigations/analysis-runs",
+    "identifiers": []
+  },
+  {
+    "file": "app/routers/vex_investigations.py",
+    "line": 580,
+    "function": "investigation_run_snapshot",
+    "method": "GET",
+    "declared_path": "/api/vex/investigations/run-snapshot",
+    "identifiers": [
+      "analysis_run_id"
+    ]
+  }
+]

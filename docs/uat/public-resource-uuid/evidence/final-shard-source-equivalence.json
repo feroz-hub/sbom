@@ -1,0 +1,15 @@
+{
+  "all_changes_are_primary_only_test_modules": true,
+  "application_source_changed": false,
+  "changed_files": [
+    "tests/test_sbom_selection_policy.py",
+    "tests/test_sboms_analyze_snapshot.py",
+    "tests/test_vex_audit_concurrency.py"
+  ],
+  "current_source_drift": [],
+  "focused_cases": 2122,
+  "focused_execution": "backend-final-focused-v5.xml",
+  "focused_selected_files_unchanged": true,
+  "imports_of_changed_modules": [],
+  "primary_execution_pending": "backend-final-primary-v6.xml"
+}

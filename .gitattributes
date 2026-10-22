@@ -1,0 +1,2 @@
+# Preserve the reviewed patch artifact byte-for-byte, including blank context lines.
+docs/uat/public-resource-uuid/evidence/implementation-source.patch -text whitespace=-blank-at-eol

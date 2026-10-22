@@ -1,0 +1,5 @@
+simulation: public-resource-osv
+routing: path
+mocks:
+  - routeKey: osv
+    path: ./osv-mock/config.yaml
