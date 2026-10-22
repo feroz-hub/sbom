@@ -216,8 +216,74 @@ def test_real_legacy100_101_backup_and_upgrade_remains_supported(synthetic, monk
     monkeypatch.setattr(common.stack, "REVISION", common.CURRENT)
     engine, state = synthetic
     before = common.before_upgrade(engine)
-    common.ensure_current(confirm=lambda: common.CONFIRMATION)
+    common._ensure_unit(common, confirm=lambda: common.CONFIRMATION)
     with engine.connect() as c:
         common.validate_after(c, before)
         c.rollback()
     assert not (state / "pending-schema-upgrade.json").exists()
+
+
+def test_future103_discovered_and_validated_without_launcher_edit(synthetic, monkeypatch, tmp_path):
+    import shutil
+
+    from scripts import greenfield_auto_migrations as automatic
+    from scripts import greenfield_migrations as common
+    from scripts import greenfield_resource_migrations as unit
+
+    engine, state = synthetic
+    root = tmp_path / "future-checkout"
+    for directory in ("alembic/versions", "app", "scripts"):
+        shutil.copytree(
+            common.stack.ROOT / directory, root / directory, ignore=shutil.ignore_patterns("__pycache__", "*.pyc")
+        )
+    code = """
+from __future__ import annotations
+revision = "103_synthetic_startup_probe"
+down_revision = "102_public_membership_grant_analysis_uuid"
+branch_labels = None
+depends_on = None
+startup = {"version": 1, "tables": ("tenant_users",), "advisory_key": 7160085103,
+           "description": "Add a nullable synthetic test column; preserve all existing rows and privileges."}
+def startup_preflight(c):
+    return not c.exec_driver_sql("SELECT EXISTS(SELECT FROM pg_attribute WHERE attrelid='public.tenant_users'::regclass AND attname='startup_probe' AND NOT attisdropped)").scalar_one()
+def upgrade():
+    from alembic import op
+    op.get_bind().exec_driver_sql("ALTER TABLE public.tenant_users ADD COLUMN startup_probe text")
+def startup_validate(c, before):
+    from scripts import greenfield_migrations as common
+    import hashlib
+    column = c.exec_driver_sql("SELECT format_type(atttypid,atttypmod),attnotnull FROM pg_attribute WHERE attrelid='public.tenant_users'::regclass AND attname='startup_probe' AND NOT attisdropped").all()
+    if [tuple(r) for r in column] != [('text', False)]:
+        raise RuntimeError('Synthetic column mismatch')
+    after = common.snapshot(c, omit_public_id_tables=())
+    if before is not None:
+        kept = [r for r in after['catalog']['columns'] if r[:2] != ['tenant_users','startup_probe']]
+        if kept != before['catalog']['columns'] or len(after['catalog']['columns']) != len(kept)+1:
+            raise RuntimeError('Unreviewed column delta')
+        for key in before['catalog']:
+            if key != 'columns' and after['catalog'][key] != before['catalog'][key]:
+                raise RuntimeError('Unexpected catalog/security change')
+        digest = hashlib.sha256()
+        count = 0
+        for row in c.exec_driver_sql("SELECT (to_jsonb(t)-'startup_probe')::text FROM tenant_users t ORDER BY (to_jsonb(t)-'startup_probe')::text"):
+            count += 1
+            digest.update(row[0].encode()+b'\\n')
+        after['data']['tenant_users'] = [count,digest.hexdigest()]
+        if after['data'] != before['data']:
+            raise RuntimeError('Existing UUID/row data changed')
+    return True
+"""
+    (root / "alembic/versions/103_synthetic_startup_probe.py").write_text(code)
+    monkeypatch.setattr(common.stack, "ROOT", root)
+    answers = iter([unit.CONFIRMATION, "UPGRADE " + common.stack.DB + " 102 TO 103"])
+    common.ensure_current(confirm=lambda: next(answers))
+    with engine.connect() as c:
+        assert c.exec_driver_sql("SELECT version_num FROM alembic_version").scalars().all() == [
+            "103_synthetic_startup_probe"
+        ]
+        c.rollback()
+    common.ensure_current(confirm=lambda: pytest.fail("no approval on already validated current revision"))
+    backups = list((state / "upgrade-backups").iterdir())
+    assert len(backups) == 2
+    assert all((p / "approved-source-snapshot.json").exists() for p in backups)
+    assert automatic.discover(root).head == "103_synthetic_startup_probe"

@@ -75,7 +75,7 @@ def flow(monkeypatch, tmp_path):
 def test_current_schema_starts_without_prompt_or_migration(flow):
     flow.marker.return_value = (IDENTITY, migration.CURRENT)
     prompt = Mock(side_effect=AssertionError("unnecessary prompt"))
-    migration.ensure_current(confirm=prompt)
+    migration._ensure_unit(migration, confirm=prompt)
     prompt.assert_not_called()
     flow.backup.assert_not_called()
     flow.body.assert_not_called()
@@ -85,7 +85,7 @@ def test_current_schema_starts_without_prompt_or_migration(flow):
 @pytest.mark.parametrize("answer", ["", "yes", "101", "UPGRADE other_database 100 TO 101"])
 def test_unapproved_upgrade_does_not_backup_or_write(flow, answer):
     with pytest.raises(migration.SchemaUpgradeError, match="not approved"):
-        migration.ensure_current(confirm=lambda: answer)
+        migration._ensure_unit(migration, confirm=lambda: answer)
     flow.backup.assert_not_called()
     flow.body.assert_not_called()
     assert flow.events == []
@@ -94,13 +94,15 @@ def test_unapproved_upgrade_does_not_backup_or_write(flow, answer):
 def test_noninteractive_start_cannot_approve_itself(flow, monkeypatch):
     monkeypatch.setattr(migration.sys.stdin, "isatty", lambda: False)
     with pytest.raises(migration.SchemaUpgradeError, match="interactive migration approval"):
-        migration.ensure_current()
+        migration._ensure_unit(
+            migration,
+        )
     flow.body.assert_not_called()
     flow.backup.assert_not_called()
 
 
 def test_confirmed_upgrade_backup_precedes_single_write_and_separate_readback(flow):
-    migration.ensure_current(confirm=lambda: migration.CONFIRMATION)
+    migration._ensure_unit(migration, confirm=lambda: migration.CONFIRMATION)
     flow.backup.assert_called_once_with(flow.engine, flow.before, IDENTITY)
     flow.body.assert_called_once()
     assert flow.events.count("migration101") == flow.events.count("commit") == 1
@@ -123,7 +125,7 @@ def test_confirmed_upgrade_backup_precedes_single_write_and_separate_readback(fl
 def test_backup_failure_cannot_reach_ddl(flow):
     flow.backup.side_effect = migration.SchemaUpgradeError("backup verification failed")
     with pytest.raises(migration.SchemaUpgradeError, match="backup verification failed"):
-        migration.ensure_current(confirm=lambda: migration.CONFIRMATION)
+        migration._ensure_unit(migration, confirm=lambda: migration.CONFIRMATION)
     flow.body.assert_not_called()
     assert not flow.events
 
@@ -131,21 +133,21 @@ def test_backup_failure_cannot_reach_ddl(flow):
 def test_source_is_rechecked_after_backup_before_any_write(flow):
     migration.verify_sources.side_effect = [None, migration.SchemaUpgradeError("source changed")]
     with pytest.raises(migration.SchemaUpgradeError, match="source changed"):
-        migration.ensure_current(confirm=lambda: migration.CONFIRMATION)
+        migration._ensure_unit(migration, confirm=lambda: migration.CONFIRMATION)
     flow.body.assert_not_called()
 
 
 def test_database_changed_after_backup_refuses(flow):
     flow.marker.side_effect = [(IDENTITY, migration.PREVIOUS), (IDENTITY, migration.CURRENT)]
     with pytest.raises(migration.SchemaUpgradeError, match="changed after review"):
-        migration.ensure_current(confirm=lambda: migration.CONFIRMATION)
+        migration._ensure_unit(migration, confirm=lambda: migration.CONFIRMATION)
     flow.body.assert_not_called()
 
 
 def test_locked_catalog_drift_rolls_back_and_physically_closes(flow):
     migration.snapshot.return_value = {"unexpected": "catalog drift"}
     with pytest.raises(migration.SchemaUpgradeError, match="before locked migration"):
-        migration.ensure_current(confirm=lambda: migration.CONFIRMATION)
+        migration._ensure_unit(migration, confirm=lambda: migration.CONFIRMATION)
     flow.body.assert_not_called()
     flow.transaction.rollback.assert_called_once()
     flow.transaction.commit.assert_not_called()
@@ -156,7 +158,7 @@ def test_locked_catalog_drift_rolls_back_and_physically_closes(flow):
 def test_precommit_failure_retains_manual_reconciliation_claim(flow):
     flow.body.side_effect = RuntimeError("synthetic unprintable driver credential")
     with pytest.raises(migration.SchemaUpgradeError, match="precommit migration") as caught:
-        migration.ensure_current(confirm=lambda: migration.CONFIRMATION)
+        migration._ensure_unit(migration, confirm=lambda: migration.CONFIRMATION)
     assert "credential" not in str(caught.value)
     flow.transaction.rollback.assert_called_once()
     assert flow.events.count("close") == 1
@@ -166,7 +168,7 @@ def test_precommit_failure_retains_manual_reconciliation_claim(flow):
 def test_unknown_commit_never_retries_rolls_back_or_reads_back(flow):
     flow.transaction.commit.side_effect = RuntimeError("lost acknowledgement")
     with pytest.raises(migration.SchemaUpgradeError, match="UNKNOWN COMMIT"):
-        migration.ensure_current(confirm=lambda: migration.CONFIRMATION)
+        migration._ensure_unit(migration, confirm=lambda: migration.CONFIRMATION)
     flow.transaction.rollback.assert_not_called()
     assert flow.engine.connect.call_count == 1
     assert (flow.tmp / "pending-schema-upgrade.json").exists()
@@ -175,13 +177,13 @@ def test_unknown_commit_never_retries_rolls_back_or_reads_back(flow):
 def test_committed_but_failed_acceptance_stops_services_and_future_attempts(flow):
     migration.validate_after.side_effect = [None, migration.SchemaUpgradeError("readback drift")]
     with pytest.raises(migration.SchemaUpgradeError, match="committed but acceptance is incomplete"):
-        migration.ensure_current(confirm=lambda: migration.CONFIRMATION)
+        migration._ensure_unit(migration, confirm=lambda: migration.CONFIRMATION)
     flow.transaction.commit.assert_called_once()
     flow.transaction.rollback.assert_not_called()
     assert flow.events.count("close") == 2
     flow.marker.reset_mock()
     with pytest.raises(migration.SchemaUpgradeError, match="manual reconciliation"):
-        migration.ensure_current(confirm=lambda: migration.CONFIRMATION)
+        migration._ensure_unit(migration, confirm=lambda: migration.CONFIRMATION)
     flow.marker.assert_not_called()
 
 
@@ -189,7 +191,7 @@ def test_existing_pending_claim_cannot_be_bypassed_even_on_schema101(flow):
     (flow.tmp / "pending-schema-upgrade.json").write_text("synthetic pending attempt")
     flow.marker.return_value = (IDENTITY, migration.CURRENT)
     with pytest.raises(migration.SchemaUpgradeError, match="manual reconciliation"):
-        migration.ensure_current(confirm=lambda: migration.CONFIRMATION)
+        migration._ensure_unit(migration, confirm=lambda: migration.CONFIRMATION)
     flow.marker.assert_not_called()
     flow.body.assert_not_called()
 
@@ -293,20 +295,10 @@ def test_restore_parity_rejects_nonliteral_expression_cast_changes():
     assert not migration.restored_snapshot_matches(before, after)
 
 
-def test_revision102_dispatches_only_to_the_reviewed_unit(monkeypatch):
-    from scripts import greenfield_resource_migrations as unit
+def test_public_launcher_delegates_to_automatic_graph_discovery(monkeypatch):
+    from scripts import greenfield_auto_migrations as automatic
 
-    monkeypatch.setattr(migration.stack, "REVISION", "102_public_membership_grant_analysis_uuid")
     execute = Mock()
-    monkeypatch.setattr(migration, "_ensure_unit", execute)
+    monkeypatch.setattr(automatic, "ensure_current", execute)
     migration.ensure_current()
-    execute.assert_called_once_with(unit, confirm=None)
-
-
-def test_unknown_application_revision_refuses_before_credentials(monkeypatch):
-    monkeypatch.setattr(migration.stack, "REVISION", "103_unreviewed")
-    execute = Mock(side_effect=AssertionError("must stop before preflight"))
-    monkeypatch.setattr(migration, "_ensure_unit", execute)
-    with pytest.raises(migration.SchemaUpgradeError, match="Unreviewed application revision"):
-        migration.ensure_current()
-    execute.assert_not_called()
+    execute.assert_called_once_with(confirm=None)

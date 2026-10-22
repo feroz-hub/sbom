@@ -31,7 +31,7 @@ def resource_flow(flow, monkeypatch):
 @pytest.mark.parametrize("answer", ["", "yes", "102", common.CONFIRMATION])
 def test_only_exact_separate_101_102_confirmation_authorizes(resource_flow, answer):
     with pytest.raises(common.SchemaUpgradeError, match="not approved"):
-        common.ensure_current(confirm=lambda: answer)
+        common._ensure_unit(unit, confirm=lambda: answer)
     resource_flow.backup.assert_not_called()
     resource_flow.body.assert_not_called()
     assert not resource_flow.events
@@ -40,13 +40,15 @@ def test_only_exact_separate_101_102_confirmation_authorizes(resource_flow, answ
 def test_noninteractive_start_refuses(resource_flow, monkeypatch):
     monkeypatch.setattr(common.sys.stdin, "isatty", lambda: False)
     with pytest.raises(common.SchemaUpgradeError, match="interactive migration approval"):
-        common.ensure_current()
+        common._ensure_unit(
+            unit,
+        )
     resource_flow.backup.assert_not_called()
     resource_flow.body.assert_not_called()
 
 
 def test_backup_single_transaction_three_locks_and_closed_independent_readback(resource_flow):
-    common.ensure_current(confirm=lambda: unit.CONFIRMATION)
+    common._ensure_unit(unit, confirm=lambda: unit.CONFIRMATION)
     f = resource_flow
     f.backup.assert_called_once_with(f.engine, f.before, IDENTITY)
     f.body.assert_called_once()
@@ -66,7 +68,7 @@ def test_backup_single_transaction_three_locks_and_closed_independent_readback(r
 def test_already102_never_migrates_or_prompts(resource_flow):
     resource_flow.marker.return_value = (IDENTITY, unit.CURRENT)
     prompt = Mock(side_effect=AssertionError("no prompt for accepted current schema"))
-    common.ensure_current(confirm=prompt)
+    common._ensure_unit(unit, confirm=prompt)
     prompt.assert_not_called()
     resource_flow.backup.assert_not_called()
     resource_flow.body.assert_not_called()
@@ -90,7 +92,7 @@ def test_failures_stop_without_retry_or_automatic_repair(resource_flow, failure)
     elif failure == "commit":
         f.transaction.commit.side_effect = RuntimeError("lost acknowledgement")
     with pytest.raises(common.SchemaUpgradeError) as caught:
-        common.ensure_current(confirm=lambda: unit.CONFIRMATION)
+        common._ensure_unit(unit, confirm=lambda: unit.CONFIRMATION)
     assert "sensitive" not in str(caught.value)
     assert f.body.call_count <= 1 and f.transaction.commit.call_count <= 1
     if failure in {"backup", "source"}:
@@ -109,14 +111,14 @@ def test_failures_stop_without_retry_or_automatic_repair(resource_flow, failure)
     if failure not in {"backup", "source"}:
         assert (f.tmp / "pending-schema-upgrade.json").exists()
         with pytest.raises(common.SchemaUpgradeError, match="manual reconciliation"):
-            common.ensure_current(confirm=lambda: unit.CONFIRMATION)
+            common._ensure_unit(unit, confirm=lambda: unit.CONFIRMATION)
 
 
 def test_existing_attempt_claim_blocks_even_current102(resource_flow):
     (resource_flow.tmp / "pending-schema-upgrade.json").write_text("synthetic attempt")
     resource_flow.marker.return_value = (IDENTITY, unit.CURRENT)
     with pytest.raises(common.SchemaUpgradeError, match="manual reconciliation"):
-        common.ensure_current(confirm=lambda: unit.CONFIRMATION)
+        common._ensure_unit(unit, confirm=lambda: unit.CONFIRMATION)
     resource_flow.marker.assert_not_called()
 
 

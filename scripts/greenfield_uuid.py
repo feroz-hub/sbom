@@ -24,7 +24,20 @@ if not LOCAL_SOCKET.exists():
     LOCAL_SOCKET = Path("/var/run/docker.sock")
 DOCKER = [shutil.which("docker") or "/usr/local/bin/docker", "--host", "unix://" + str(LOCAL_SOCKET)]
 DB = "sbom_greenfield_uuid"
-REVISION = "102_public_membership_grant_analysis_uuid"
+
+
+def current_revision():
+    from scripts.greenfield_migration_graph import discover
+
+    return discover(ROOT).head
+
+
+def __getattr__(name):
+    # Existing callers can keep importing REVISION; its value is discovered,
+    # rather than copied into another launcher constant for every migration.
+    if name == "REVISION":
+        return current_revision()
+    raise AttributeError(name)
 
 
 def read_private(name):
@@ -277,7 +290,7 @@ def bootstrap(database=DB):
         with engine.begin() as connection:
             if inspect(connection).has_table("alembic_version"):
                 marker = connection.exec_driver_sql("SELECT version_num FROM alembic_version").scalar_one()
-                if marker != REVISION:
+                if marker != current_revision():
                     raise RuntimeError("Unexpected existing greenfield revision")
                 print("Existing marker observed; structural verification follows without schema repair")
             else:
@@ -329,10 +342,14 @@ def bootstrap(database=DB):
                     seed_catalog(seed_session)
                 connection.exec_driver_sql("CREATE TABLE public.alembic_version(version_num varchar(128) PRIMARY KEY)")
                 connection.execute(
-                    text("INSERT INTO public.alembic_version(version_num) VALUES(:revision)"), {"revision": "100_greenfield_uuid_final"}
+                    text("INSERT INTO public.alembic_version(version_num) VALUES(:revision)"),
+                    {"revision": "100_greenfield_uuid_final"},
                 )
                 apply_user_uuid_revision(connection)
                 apply_resource_uuid_revision(connection)
+                from scripts.greenfield_auto_migrations import apply_fresh_tail
+
+                apply_fresh_tail(connection)
                 connection.exec_driver_sql("GRANT USAGE ON SCHEMA public TO greenfield_app")
                 connection.exec_driver_sql(
                     "GRANT SELECT, INSERT, UPDATE, DELETE ON ALL TABLES IN SCHEMA public TO greenfield_app"
@@ -345,8 +362,13 @@ def bootstrap(database=DB):
                     "GRANT EXECUTE ON FUNCTION public.uuid_public_identity_guard_v1() TO greenfield_app"
                 )
         with engine.connect() as reader:
+            reader.exec_driver_sql("SET TRANSACTION READ ONLY")
+            from scripts.greenfield_auto_migrations import validate_current_tail
+
+            validate_current_tail(reader)
             print("Committed revision:", reader.exec_driver_sql("SELECT version_num FROM alembic_version").scalar_one())
             print("Application tables:", len(metadata.tables))
+            reader.rollback()
     finally:
         engine.dispose()
     from scripts.greenfield_schema_check import verify

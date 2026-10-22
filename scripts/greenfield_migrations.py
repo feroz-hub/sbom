@@ -51,7 +51,7 @@ def engine(database=None, *, control=False):
         raise SchemaUpgradeError("Ambient PG* settings are not allowed for the fixed Greenfield migration target.")
     address = make_url(stack.url("greenfield_setup", "setup-password", "postgres" if control else stack.DB))
     if database is not None:
-        if not re.fullmatch(r"sbom_greenfield_uuid_pre10[12]_[0-9a-f]{12}", database):
+        if not re.fullmatch(r"sbom_greenfield_uuid_pre[0-9]{3,6}_[0-9a-f]{12}", database):
             raise SchemaUpgradeError("Invalid task-owned backup rehearsal database.")
         address = address.set(database=database)
     if (address.host, address.port, address.username) != ("127.0.0.1", 56044, "greenfield_setup"):
@@ -241,7 +241,7 @@ def restored_snapshot_matches(before, restored):
     return True
 
 
-def backup_and_rehearse(e, before, observed_identity, *, predecessor=PREVIOUS, snapshotter=None):
+def backup_and_rehearse(e, before, observed_identity, *, predecessor=PREVIOUS, snapshotter=None, successor=None):
     """Full PG16 custom archive, encrypted locally, restored to a NEW retained DB.
 
     The verified container's explicit local Unix socket uses its existing local
@@ -249,8 +249,13 @@ def backup_and_rehearse(e, before, observed_identity, *, predecessor=PREVIOUS, s
     """
     from cryptography.fernet import Fernet
 
-    if predecessor not in (PREVIOUS, CURRENT):
-        raise SchemaUpgradeError("Unreviewed backup predecessor.")
+    from .greenfield_migration_graph import discover
+
+    graph = discover(stack.ROOT)
+    if successor is None:
+        successor = {PREVIOUS: CURRENT, CURRENT: "102_public_membership_grant_analysis_uuid"}.get(predecessor)
+    if not any(r.revision == successor and r.parent == predecessor for r in graph.revisions):
+        raise SchemaUpgradeError("Backup must precede one discovered forward migration.")
     snapshotter = snapshot if snapshotter is None else snapshotter
     stack.verify_resources()
     with e.connect() as c:
@@ -267,7 +272,7 @@ def backup_and_rehearse(e, before, observed_identity, *, predecessor=PREVIOUS, s
     folder.mkdir(mode=0o700)
     container = json.loads(stack.read_private("docker-identities.json"))["sbom-greenfield-uuid-dev-postgres-1"]
     base = [*stack.DOCKER, "exec", "-i", container]
-    next_number = "101" if predecessor == PREVIOUS else "102"
+    next_number = successor.split("_", 1)[0]
     target = "sbom_greenfield_uuid_pre" + next_number + "_" + uuid.uuid4().hex[:12]
     with tempfile.TemporaryFile(dir=folder) as temporary:
         result = subprocess.run(
@@ -466,14 +471,10 @@ def describe_upgrade(before):
 
 
 def ensure_current(*, confirm=None):
-    """Choose a reviewed next-only unit; never chain upgrades or infer approval."""
-    if stack.REVISION == "102_public_membership_grant_analysis_uuid":
-        from . import greenfield_resource_migrations as unit
-    elif stack.REVISION == CURRENT:
-        unit = sys.modules[__name__]
-    else:
-        raise SchemaUpgradeError("Unreviewed application revision; no migration or service startup permitted.")
-    _ensure_unit(unit, confirm=confirm)
+    """Discover pending units automatically; require fresh confirmation for each."""
+    from .greenfield_auto_migrations import ensure_current as discover_and_upgrade
+
+    discover_and_upgrade(confirm=confirm)
 
 
 def _ensure_unit(unit, *, confirm=None):
@@ -515,6 +516,10 @@ def _ensure_unit(unit, *, confirm=None):
         unit.verify_sources()
         if unit.inspect_current(e) != (observed_identity, unit.PREVIOUS) or unit.before_upgrade(e) != before:
             raise SchemaUpgradeError("Source database changed after review/backup; no migration performed.")
+        source_lock = getattr(unit, "source_lock", None)
+        if source_lock is not None:
+            source_lock.verify()
+            _private(backup / "approved-source-snapshot.json", source_lock.original_json)
         _private(
             pending, json.dumps({"identity": observed_identity, "backup": str(backup), "unit": unit.CURRENT}).encode()
         )
