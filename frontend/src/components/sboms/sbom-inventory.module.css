@@ -1,0 +1,65 @@
+
+/* Scoped to the SBOM inventory: shared tables elsewhere retain their design. */
+.inventoryTable {
+  min-width: 1200px;
+  font-variant-numeric: tabular-nums;
+}
+.inventoryTable thead {
+  background: var(--color-surface-muted) !important;
+}
+.inventoryTable thead th {
+  color: var(--color-hcl-muted);
+  border-right: 0;
+  border-bottom: 1px solid var(--color-border);
+  padding: 0.85rem 0.75rem;
+  font-size: 0.68rem;
+  letter-spacing: 0.045em;
+}
+.inventoryTable thead th button {
+  color: var(--color-hcl-muted);
+}
+.inventoryTable thead th button:hover,
+.inventoryTable thead th button:focus-visible {
+  color: var(--color-hcl-navy);
+}
+.inventoryTable tbody td {
+  border-right: 0;
+  padding: 0.85rem 0.75rem;
+  vertical-align: middle;
+}
+.inventoryTable tbody tr:nth-child(odd) {
+  background: var(--color-surface);
+}
+.inventoryTable tbody tr:nth-child(even) {
+  background: var(--color-surface-muted);
+}
+.inventoryTable tbody tr:hover {
+  background: var(--row-hover-bg);
+}
+.inventoryTable tbody tr:focus-within {
+  outline: 2px solid var(--color-hcl-blue);
+  outline-offset: -2px;
+}
+.filterChip {
+  display: inline-flex;
+  max-width: 100%;
+  align-items: center;
+  gap: 0.4rem;
+  border: 1px solid var(--color-border);
+  border-radius: 999px;
+  background: var(--color-surface-muted);
+  padding: 0.35rem 0.6rem;
+  color: var(--color-hcl-navy);
+  font-size: 0.75rem;
+  overflow-wrap: anywhere;
+}
+.filterChip button {
+  display: inline-flex;
+  align-items: center;
+  justify-content: center;
+  width: 1.25rem;
+  height: 1.25rem;
+  border-radius: 999px;
+}
+.filterChip button:hover { background: var(--color-hcl-light); }
+.filterChip button:focus-visible { outline: 2px solid var(--color-hcl-blue); outline-offset: 2px; }
