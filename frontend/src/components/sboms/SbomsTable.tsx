@@ -201,6 +201,19 @@ export function SbomsTable({ sboms, isLoading, error }: SbomsTableProps) {
   const [showFilters, setShowFilters] = useState(false);
   const [viewMode, setViewMode] = useViewMode('sboms-inventory');
 
+  // Keep server and initial hydration deterministic; on first small-screen visit
+  // prefer a card layout unless the user already chose a saved view.
+  useEffect(() => {
+    if (typeof window === 'undefined' || window.innerWidth >= 768) return;
+    try {
+      if (window.localStorage.getItem('sbom.viewmode.sboms-inventory') === null) {
+        setViewMode('grid');
+      }
+    } catch {
+      // Privacy-mode storage restrictions must never block the inventory.
+    }
+  }, [setViewMode]);
+
   const impactQuery = useQuery({
     queryKey: ['sbom-delete-impact', deleteTarget?.id],
     queryFn: ({ signal }) => getSbomDeleteImpact(deleteTarget!.id, signal),
@@ -411,6 +424,17 @@ export function SbomsTable({ sboms, isLoading, error }: SbomsTableProps) {
                   Filters{activeFilterCount ? ` (${activeFilterCount})` : ''}
                 </UiButton>
                 <ViewToggle label="SBOMs" value={viewMode} onChange={setViewMode} />
+                {viewMode === 'grid' && (
+                  <label className="flex items-center gap-2 rounded-lg border border-border px-3 py-2 text-xs text-hcl-navy">
+                    <SelectionCheckbox
+                      state={selectionState}
+                      onChange={toggleAllFiltered}
+                      label="Select all filtered SBOMs"
+                      disabled={filteredSboms.length === 0}
+                    />
+                    Select all
+                  </label>
+                )}
                 <Button
                   permission="sbom:export"
                   variant="secondary"
