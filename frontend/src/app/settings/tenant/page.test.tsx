@@ -484,7 +484,7 @@ describe('TenantUsersPage', () => {
   it('keeps members without a name or email in the unfiltered directory', async () => {
     api.getTenantMembers.mockResolvedValue([{ ...member, display_name: null, email: null }]);
     renderPage();
-    expect(await screen.findAllByText('User #00000000-0000-4000-8000-00000000000c')).toHaveLength(2);
+    expect(await screen.findAllByText('Member')).toHaveLength(2);
     expect(screen.getByLabelText('1 total members')).toBeInTheDocument();
   });
 

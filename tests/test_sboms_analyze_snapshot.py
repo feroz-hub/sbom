@@ -57,6 +57,21 @@ def test_post_sbom_analyze_returns_locked_shape(client, seeded_sbom, mock_extern
 
     actual = normalize(resp.json())
     expected = _load_or_write("post_sbom_analyze", actual)
+    # Keep the locked UUID/business payload and independently verify the
+    # additive display keys against this persisted synthetic run.
+    from app.db import SessionLocal
+
+    body = resp.json()
+    assert body["sbom_id"] == sbom_id
+    with SessionLocal() as db, verified_fixture_tenant(db, 1):
+        run = public_row(db, AnalysisRun, body["id"])
+        sbom = public_row(db, SBOMSource, sbom_id)
+        assert run.sbom_id == sbom.id
+        expected.update(display_id=run.id, sbom_display_id=sbom.id)
+        for name in ("project", "product"):
+            internal = getattr(run, f"{name}_id")
+            if internal is not None:
+                expected[f"{name}_display_id"] = internal
 
     assert actual == expected, (
         "POST /api/sboms/{id}/analyze response shape drifted.\n"

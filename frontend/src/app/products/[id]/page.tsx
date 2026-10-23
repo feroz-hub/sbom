@@ -1,5 +1,6 @@
 'use client';
 
+import { recordIdLabel } from '@/components/ui/RecordIdDisplay';
 import Link from 'next/link';
 import { use, useState } from 'react';
 import { useMutation, useQuery, useQueryClient } from '@tanstack/react-query';
@@ -47,7 +48,7 @@ function ProductSbomRow({ sbom, master }: { sbom: SBOMSource; master: LogicalSBO
 
   return (
     <tr>
-      <Td className="font-mono text-xs text-hcl-muted">#{master.id}</Td>
+      <Td className="font-mono text-xs text-hcl-muted">{recordIdLabel('', master.display_id)}</Td>
       <Td>
         <Link
           href={`/sboms/logical/${master.id}`}
@@ -221,7 +222,7 @@ export default function ProductDetailPage({ params }: ProductDetailPageProps) {
             <dl className="grid gap-4 sm:grid-cols-2 lg:grid-cols-4">
               <div>
                 <dt className="text-xs font-medium uppercase text-hcl-muted">Project</dt>
-                <dd className="mt-1 text-hcl-navy">Project #{product.project_id}</dd>
+                <dd className="mt-1 text-hcl-navy">{recordIdLabel('Project', product.project_display_id)}</dd>
               </div>
               <div>
                 <dt className="text-xs font-medium uppercase text-hcl-muted">SBOMs</dt>
@@ -269,7 +270,7 @@ export default function ProductDetailPage({ params }: ProductDetailPageProps) {
                 ) : !logicalSbomsQuery.data?.items.length ? (
                   <EmptyRow cols={8} message="No SBOMs are linked to this application yet." />
                 ) : (
-                  logicalSbomsQuery.data.items.map(master => master.latest_version ? <ProductSbomRow key={master.id} sbom={master.latest_version} master={master} /> : <tr key={master.id}><Td>#{master.id}</Td><Td><Link href={`/sboms/logical/${master.id}`}>{master.name}</Link></Td><td colSpan={6} className="p-3 text-hcl-muted">No versions uploaded</td></tr>)
+                  logicalSbomsQuery.data.items.map(master => master.latest_version ? <ProductSbomRow key={master.id} sbom={master.latest_version} master={master} /> : <tr key={master.id}><Td>{recordIdLabel('', master.display_id)}</Td><Td><Link href={`/sboms/logical/${master.id}`}>{master.name}</Link></Td><td colSpan={6} className="p-3 text-hcl-muted">No versions uploaded</td></tr>)
                 )}
               </TableBody>
             </Table>

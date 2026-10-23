@@ -15,6 +15,9 @@ export interface ReportPreferences {
   enabled: boolean;
 }
 export interface ReportSubscription extends ReportPreferences {
+  project_display_id?: number | null;
+  product_display_id?: number | null;
+  sbom_display_id?: number | null;
   id: number; tenant_id: (string | number); iam_user_id: string;
   created_on: string; modified_on: string | null; last_delivered_at: string | null;
 }

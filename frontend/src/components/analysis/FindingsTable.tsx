@@ -1,5 +1,6 @@
 'use client';
 
+import { recordIdLabel } from '@/components/ui/RecordIdDisplay';
 import { PermissionButton } from '@/components/ui/PermissionButton';
 
 import { useCallback, useEffect, useMemo, useState } from 'react';
@@ -1245,7 +1246,7 @@ function ExpandedDetail({ finding: f, aliases, cwes, fixedVersions, onAliasOpen,
       <div className="lg:col-span-2 space-y-3">
         <div className="rounded border border-border p-3 text-xs space-y-1">
           <p className="font-semibold">Original SBOM component</p>
-          <p>{f.component_name} {f.component_version} · ID {f.component_id ?? 'Unresolved'}</p>
+          <p>{f.component_name} {f.component_version} · {recordIdLabel('Component', f.component_display_id)}</p>
           {f.bom_ref && <p className="break-all font-mono">Reference: {f.bom_ref}</p>}
           {f.purl && <p className="break-all font-mono">{f.purl}</p>}
           <p>Selected CVSS: {f.score ?? 'Unscored'} · {f.cvss_version ?? 'Version unknown'} · {f.cvss_source ?? 'Source unavailable'}</p>

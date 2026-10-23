@@ -1,5 +1,6 @@
 'use client';
 
+import { recordIdLabel } from '@/components/ui/RecordIdDisplay';
 import { useMemo, useState } from 'react';
 import Link from 'next/link';
 import { useQuery } from '@tanstack/react-query';
@@ -48,8 +49,8 @@ function groupRows(rows: VulnerabilityRow[]): ProjectGroup[] {
   const projects = new Map<string, ProjectGroup>();
 
   for (const row of rows) {
-    const projectName = row.project_name?.trim() || (row.project_id != null ? `Project #${row.project_id}` : 'Unassigned project');
-    const productName = row.product_name?.trim() || (row.product_id != null ? `Product #${row.product_id}` : 'Unassigned product');
+    const projectName = row.project_name?.trim() || (row.project_id != null ? recordIdLabel('Project', row.project_display_id) : 'Unassigned project');
+    const productName = row.product_name?.trim() || (row.product_id != null ? recordIdLabel('Application', row.product_display_id) : 'Unassigned product');
     const projectKey = String(row.project_id ?? projectName);
     const productKey = `${projectKey}::${row.product_id ?? productName}`;
 
@@ -270,7 +271,7 @@ export function VulnerabilitiesByScope({ severity, onSeverityChange, scope }: Vu
                                       href={`/sboms/${row.sbom_id}`}
                                       className="hover:text-hcl-blue hover:underline"
                                     >
-                                      {row.sbom_name || `SBOM #${row.sbom_id}`}
+                                      {row.sbom_name || recordIdLabel('SBOM', row.sbom_display_id)}
                                     </Link>
                                   ) : (
                                     row.sbom_name || '—'

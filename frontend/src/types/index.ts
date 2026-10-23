@@ -1,4 +1,13 @@
 export interface Project {
+  /** Output-only persisted keys. Never use for selection, routing or authorization. */
+  display_id?: number | null;
+  project_display_id?: number | null;
+  product_display_id?: number | null;
+  sbom_display_id?: number | null;
+  current_sbom_display_id?: number | null;
+  latest_sbom_display_id?: number | null;
+  run_display_id?: number | null;
+
   id: (string | number);
   project_name: string;
   project_details: string | null;
@@ -11,6 +20,15 @@ export interface Project {
 }
 
 export interface Product {
+  /** Output-only persisted keys. Never use for selection, routing or authorization. */
+  display_id?: number | null;
+  project_display_id?: number | null;
+  product_display_id?: number | null;
+  sbom_display_id?: number | null;
+  current_sbom_display_id?: number | null;
+  latest_sbom_display_id?: number | null;
+  run_display_id?: number | null;
+
   id: (string | number);
   tenant_id?: (string | number);
   project_id: (string | number);
@@ -78,6 +96,15 @@ export type AnalysisStatus =
   | 'cancelled';
 
 export interface LatestAnalysisSummary {
+  /** Output-only persisted keys. Never use for selection, routing or authorization. */
+  display_id?: number | null;
+  project_display_id?: number | null;
+  product_display_id?: number | null;
+  sbom_display_id?: number | null;
+  current_sbom_display_id?: number | null;
+  latest_sbom_display_id?: number | null;
+  run_display_id?: number | null;
+
   run_id?: string | string;
   status: AnalysisStatus | string;
   result?: string | null;
@@ -101,6 +128,15 @@ export interface SbomLifecycleEvent {
 }
 
 export interface SBOMSource {
+  /** Output-only persisted keys. Never use for selection, routing or authorization. */
+  display_id?: number | null;
+  project_display_id?: number | null;
+  product_display_id?: number | null;
+  sbom_display_id?: number | null;
+  current_sbom_display_id?: number | null;
+  latest_sbom_display_id?: number | null;
+  run_display_id?: number | null;
+
   logical_sbom_id?: (string | number) | null;
   lifecycle_status?: 'ACTIVE' | 'INACTIVE';
   lifecycle_revision?: number;
@@ -436,6 +472,15 @@ export type ApplyPatchResponse = ValidationSession;
 export type ValidationSessionImportResponse = SBOMSource;
 
 export interface SBOMComponent {
+  /** Output-only persisted keys. Never use for selection, routing or authorization. */
+  display_id?: number | null;
+  project_display_id?: number | null;
+  product_display_id?: number | null;
+  sbom_display_id?: number | null;
+  current_sbom_display_id?: number | null;
+  latest_sbom_display_id?: number | null;
+  run_display_id?: number | null;
+
   id: (string | number);
   sbom_id: (string | number);
   bom_ref?: string | null;
@@ -733,6 +778,7 @@ export interface VexStatement {
   vex_document_id?: number | null;
   sbom_id: (string | number);
   component_id?: (string | number) | null;
+  component_display_id?: number | null;
   component_name?: string | null;
   component_version?: string | null;
   vulnerability_id: string;
@@ -753,7 +799,7 @@ export interface VexStatement {
 export interface ComponentVulnerability {
   vulnerability_id: string;
   severity: string | null;
-  findings: { id: number; run_id: string; source: string | null; match_reason: string | null; matched_range: string | null; title: string | null }[];
+  findings: { id: number; run_id: string; run_display_id?: number | null; source: string | null; match_reason: string | null; matched_range: string | null; title: string | null }[];
   current_decision: VexStatement | null;
 }
 
@@ -943,6 +989,15 @@ export interface VulnerabilityRemediation {
 }
 
 export interface AnalysisRun {
+  /** Output-only persisted keys. Never use for selection, routing or authorization. */
+  display_id?: number | null;
+  project_display_id?: number | null;
+  product_display_id?: number | null;
+  sbom_display_id?: number | null;
+  current_sbom_display_id?: number | null;
+  latest_sbom_display_id?: number | null;
+  run_display_id?: number | null;
+
   is_current?: boolean;
   processing_eligibility?: { eligible: boolean; reason_code: string | null; reason: string | null };
   id: string;
@@ -1077,6 +1132,7 @@ export interface AnalysisFinding {
   id: number;
   analysis_run_id: string;          // backend field name
   component_id?: (string | number) | null;
+  component_display_id?: number | null;
   vuln_id: string | null;
   source: string | null;            // e.g. "NVD", "OSV", "NVD,OSV"
   title: string | null;
@@ -1368,6 +1424,7 @@ export interface LifetimeMetrics {
 }
 
 export interface RecentSbom {
+  display_id?: number | null;
   id: number;
   sbom_name: string;
   created_on: string;
@@ -1698,8 +1755,8 @@ export interface DashboardTrend {
 }
 
 export interface CompareRunsResult {
-  run_a: { id: string; sbom_name: string | null; completed_on: string | null };
-  run_b: { id: string; sbom_name: string | null; completed_on: string | null };
+  run_a: { display_id?: number | null; id: string; sbom_name: string | null; completed_on: string | null };
+  run_b: { display_id?: number | null; id: string; sbom_name: string | null; completed_on: string | null };
   new_findings: string[];
   resolved_findings: string[];
   common_findings: string[];
@@ -1777,6 +1834,15 @@ export interface ScheduleUpsertPayload {
 }
 
 export interface ScheduleTarget {
+  /** Output-only persisted keys. Never use for selection, routing or authorization. */
+  display_id?: number | null;
+  project_display_id?: number | null;
+  product_display_id?: number | null;
+  sbom_display_id?: number | null;
+  current_sbom_display_id?: number | null;
+  latest_sbom_display_id?: number | null;
+  run_display_id?: number | null;
+
   project_id: (string | number) | null;
   project_name: string | null;
   product_id: (string | number) | null;
@@ -1880,6 +1946,15 @@ export type VexInvestigationSortField =
   | 'updated_at';
 
 export interface VexInvestigationRow {
+  /** Output-only persisted keys. Never use for selection, routing or authorization. */
+  display_id?: number | null;
+  project_display_id?: number | null;
+  product_display_id?: number | null;
+  sbom_display_id?: number | null;
+  current_sbom_display_id?: number | null;
+  latest_sbom_display_id?: number | null;
+  run_display_id?: number | null;
+
   sbom_version?: string | null;
   analysis_run_id?: string | null;
   historical?: boolean;
@@ -1977,6 +2052,15 @@ export interface VexInvestigationCapabilities {
 }
 
 export interface VexInvestigationDetail {
+  /** Output-only persisted keys. Never use for selection, routing or authorization. */
+  display_id?: number | null;
+  project_display_id?: number | null;
+  product_display_id?: number | null;
+  sbom_display_id?: number | null;
+  current_sbom_display_id?: number | null;
+  latest_sbom_display_id?: number | null;
+  run_display_id?: number | null;
+
   sbom_version?: string | null;
   previous_decisions?: Array<{ source_name?: string | null; impact_statement?: string | null; action_statement?: string | null; evidence?: Record<string, unknown> | null; investigation_id: number; statement_id: number; sbom_id: (string | number); sbom_version: string; decision: string; justification: string | null; reviewer: string | null; decided_at: string | null; component_name: string; component_version: string; analysis_run_id: string | null; applicability: string; component_version_changed: boolean }>;
   capabilities?: VexInvestigationCapabilities;
@@ -2078,6 +2162,15 @@ export interface VexInvestigationDecision {
 export * from './componentAdvisor';
 
 export interface LogicalSBOM {
+  /** Output-only persisted keys. Never use for selection, routing or authorization. */
+  display_id?: number | null;
+  project_display_id?: number | null;
+  product_display_id?: number | null;
+  sbom_display_id?: number | null;
+  current_sbom_display_id?: number | null;
+  latest_sbom_display_id?: number | null;
+  run_display_id?: number | null;
+
   id: (string | number); tenant_id: (string | number); product_id: (string | number) | null; name: string;
   description: string | null; created_by: string | null; created_at: string; updated_at: string;
   version_count: number; latest_version: SBOMSource | null; version_ordering: string;

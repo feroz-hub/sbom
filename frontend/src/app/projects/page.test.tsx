@@ -16,11 +16,11 @@ vi.mock('@/components/products/ProductFormDialog', () => ({ ProductFormDialog: (
 vi.mock('@/components/sboms/SbomUploadModal', () => ({ SbomUploadModal: ({ open, initialProjectId, initialProductId }: { open: boolean; initialProjectId: number; initialProductId: number }) => open ? <div role="dialog" aria-label={`Upload to project ${initialProjectId} application ${initialProductId}`} /> : null }));
 vi.mock('@/components/schedules/ProjectScheduleDialog', () => ({ ProjectScheduleDialog: ({ open, project }: { open: boolean; project: Project }) => open ? <div role="dialog" aria-label={`Schedule ${project.project_name}`} /> : null }));
 const projects: Project[] = [
-  { id: "00000000-0000-4000-8000-000000000002", project_name: 'Pump Security', project_details: 'Governance and monitoring', project_status: 1, created_by: 'owner@example.test', created_on: null, modified_by: null, modified_on: null },
-  { id: "00000000-0000-4000-8000-000000000001", project_name: 'TestProject', project_details: null, project_status: 0, created_by: null, created_on: null, modified_by: null, modified_on: null },
+  { id: "00000000-0000-4000-8000-000000000002", display_id: 2, project_name: 'Pump Security', project_details: 'Governance and monitoring', project_status: 1, created_by: 'owner@example.test', created_on: null, modified_by: null, modified_on: null },
+  { id: "00000000-0000-4000-8000-000000000001", display_id: 1, project_name: 'TestProject', project_details: null, project_status: 0, created_by: null, created_on: null, modified_by: null, modified_on: null },
 ];
-const pump: Product = { id: "00000000-0000-4000-8000-000000000014", project_id: "00000000-0000-4000-8000-000000000002", name: 'Pump Controller', description: 'Controller software', status: 'active', sbom_count: 1, latest_sbom_id: "00000000-0000-4000-8000-000000000008", latest_sbom_version: '1.0.0', current_sbom_id: "00000000-0000-4000-8000-000000000008", current_sbom_version: '1.0.0' };
-const other: Product = { id: "00000000-0000-4000-8000-00000000000a", project_id: "00000000-0000-4000-8000-000000000001", name: 'Other application', status: 'inactive', sbom_count: 2 };
+const pump: Product = { id: "00000000-0000-4000-8000-000000000014", display_id: 20, project_id: "00000000-0000-4000-8000-000000000002", name: 'Pump Controller', description: 'Controller software', status: 'active', sbom_count: 1, latest_sbom_id: "00000000-0000-4000-8000-000000000008", latest_sbom_display_id: 8, latest_sbom_version: '1.0.0', current_sbom_id: "00000000-0000-4000-8000-000000000008", current_sbom_display_id: 8, current_sbom_version: '1.0.0' };
+const other: Product = { id: "00000000-0000-4000-8000-00000000000a", display_id: 10, project_id: "00000000-0000-4000-8000-000000000001", name: 'Other application', status: 'inactive', sbom_count: 2 };
 function setup() {
   const client = new QueryClient({ defaultOptions: { queries: { retry: false }, mutations: { retry: false } } });
   const tree = () => <QueryClientProvider client={client}><ToastProvider><ProjectsPage /></ToastProvider></QueryClientProvider>;
@@ -41,6 +41,13 @@ beforeEach(() => {
 });
 
 describe('Projects selection and contextual applications', () => {
+  it('shows the persisted project label while selection and links retain UUIDs', async () => {
+    mocks.getProjects.mockResolvedValue([{ ...projects[0], display_id: 873 }]);
+    setup();
+    await screen.findByLabelText('Project ID 873');
+    expect(screen.queryByText(`#${projects[0].id}`)).not.toBeInTheDocument();
+    expect(mocks.getProducts).toHaveBeenCalledWith(projects[0].id, expect.any(AbortSignal));
+  });
   it('loads only the initial project applications and switches the same table with URL selection', async () => {
     const { refresh } = setup();
     await screen.findByRole('button', { name: 'Select project Pump Security' });
@@ -67,8 +74,8 @@ describe('Projects selection and contextual applications', () => {
   });
   it('keeps application edit, upload, soft-delete confirmation and SBOM links', async () => {
     setup(); await waitFor(() => expect(within(appTable()).getByText('Pump Controller')).toBeInTheDocument());
-    expect(within(appTable()).getByRole('link', { name: "#00000000-0000-4000-8000-000000000008" })).toHaveAttribute('href', "/sboms/00000000-0000-4000-8000-000000000008");
-    expect(within(appTable()).getByRole('link', { name: '1.0.0' })).toHaveAttribute('href', "/sboms/00000000-0000-4000-8000-000000000008");
+    expect(within(appTable()).getByRole('link', { name: "SBOM #8" })).toHaveAttribute('href', "/sboms/00000000-0000-4000-8000-000000000008");
+    expect(within(appTable()).getByRole('link', { name: 'SBOM #8 · 1.0.0' })).toHaveAttribute('href', "/sboms/00000000-0000-4000-8000-000000000008");
     const actions = () => { fireEvent.click(within(appTable()).getByRole('button', { name: 'Actions for application Pump Controller' })); return screen.getByRole('menu'); };
     fireEvent.click(within(actions()).getByRole('menuitem', { name: 'Edit application' }));
     expect(screen.getByRole('dialog', { name: 'Edit application in Pump Security' })).toBeInTheDocument();

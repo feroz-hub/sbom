@@ -26,7 +26,7 @@ interface TenantMembersTableProps {
 }
 
 export function memberDisplayName(member: TenantMember): string {
-  return member.display_name || member.email || `User #${member.user_id}`;
+  return member.display_name || member.email || 'Member';
 }
 
 /**

@@ -29,6 +29,14 @@ function setup(initial = defaultReportPreferences('PROJECT', 3), allowed = false
 
 beforeEach(() => { cleanup(); vi.clearAllMocks(); searchParams = new URLSearchParams(); });
 describe('Notification preferences', () => {
+  it('labels an authorized target with its persisted integer but saves its UUID', async () => {
+    const id = 'f5e7f4c4-8a16-4c70-93d8-092173885437';
+    vi.mocked(api.getReportTargets).mockResolvedValueOnce([{ id, display_id: 873, label: 'Production' }]);
+    setup(defaultReportPreferences('PROJECT', id));
+    expect(await screen.findByRole('option', { name: 'Production · #873' })).toHaveValue(id);
+    fireEvent.click(screen.getByRole('button', { name: 'Save subscription' }));
+    await waitFor(() => expect(api.createReportSubscription).toHaveBeenCalledWith(expect.objectContaining({ project_id: id })));
+  });
   it('opens the exact emailed delivery and lets the user return to recent history', async () => {
     searchParams = new URLSearchParams('delivery=52');
     const client = new QueryClient({ defaultOptions: { queries: { retry: false } } });
@@ -42,7 +50,7 @@ describe('Notification preferences', () => {
     expect(screen.getByLabelText('Part A: Latest state (required)')).toBeDisabled();
     expect(screen.queryByLabelText(/recipient email/i)).not.toBeInTheDocument();
     expect(screen.queryByRole('option', { name: 'TENANT' })).not.toBeInTheDocument();
-    await screen.findByRole('option', { name: 'Production · #3' });
+    await screen.findByRole('option', { name: 'Production' });
   });
   it('allows tenant scope only when backend grants it', () => {
     setup(defaultReportPreferences('TENANT'), true);

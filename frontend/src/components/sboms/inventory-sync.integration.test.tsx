@@ -68,7 +68,7 @@ it('actual project creation refreshes report options on reopen without resetting
   fireEvent.change(screen.getByRole('textbox', { name: 'Project Name' }), { target: { value: 'New Project' } });
   fireEvent.click(screen.getByRole('button', { name: 'Create Project' })); await waitFor(() => expect(closed).toHaveBeenCalled());
   mounted.rerender(wrap(<ReportPreferencesEditor initial={defaultReportPreferences('PROJECT', 1)} tenantScopeAllowed={false} onClose={vi.fn()} />));
-  expect(await screen.findByRole('option', { name: 'New Project · #2' })).toBeInTheDocument();
+  expect(await screen.findByRole('option', { name: 'New Project' })).toBeInTheDocument();
   expect(screen.getByLabelText('Scope')).toHaveValue('PROJECT'); expect(screen.getByLabelText('Target')).toHaveValue('1');
   expect(screen.getByLabelText('Search scope')).toHaveValue(''); expect(api.targets).toHaveBeenCalledTimes(1);
   expect(qc.getQueryState(['reports', 'deliveries', false, '', 52])?.isInvalidated).toBe(false);
@@ -119,7 +119,7 @@ it('active report refresh preserves search, scope and selected target', async ()
   await waitFor(() => expect(api.targets).toHaveBeenCalledTimes(1));
   api.targets.mockResolvedValue([{ id: 1, label: 'Project A' }, { id: 2, label: 'New target' }]);
   await invalidateProjectMetadata(qc, { ...project, id: 2 });
-  expect(await screen.findByRole('option', { name: 'New target · #2' })).toBeInTheDocument();
+  expect(await screen.findByRole('option', { name: 'New target' })).toBeInTheDocument();
   expect(screen.getByLabelText('Search scope')).toHaveValue('Production'); expect(screen.getByLabelText('Scope')).toHaveValue('PROJECT');
   expect(screen.getByLabelText('Target')).toHaveValue('1'); expect(api.targets).toHaveBeenCalledTimes(2);
 });

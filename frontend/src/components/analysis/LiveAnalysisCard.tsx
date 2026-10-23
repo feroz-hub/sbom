@@ -367,7 +367,7 @@ export function LiveAnalysisCard({ state, onCancel, onReset }: LiveAnalysisCardP
         <span className="mr-auto font-metric text-[11px] tabular-nums text-hcl-muted">
           {isDone && runId && (
             <>
-              Run #<strong className="text-hcl-navy">{runId}</strong> · {formatDuration(elapsedMs)}
+              Analysis complete · {formatDuration(elapsedMs)}
             </>
           )}
         </span>

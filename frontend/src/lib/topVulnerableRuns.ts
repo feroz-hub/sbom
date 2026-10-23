@@ -1,4 +1,5 @@
 import type { AnalysisRun } from '@/types';
+import { recordIdLabel } from '@/lib/recordDisplay';
 import type { SeverityKey } from '@/lib/severityParam';
 
 export type { SeverityKey };
@@ -47,7 +48,7 @@ export function aggregateRuns(runs: AnalysisRun[]): SbomBucket[] {
     if (totalFindings === 0) continue;
     buckets.set(run.sbom_id, {
       sbomId: run.sbom_id,
-      sbomName: run.sbom_name ?? `SBOM #${run.sbom_id}`,
+      sbomName: run.sbom_name ?? recordIdLabel('SBOM', run.sbom_display_id),
       critical,
       high,
       medium,

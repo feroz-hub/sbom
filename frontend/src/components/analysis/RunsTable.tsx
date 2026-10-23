@@ -1,5 +1,6 @@
 'use client';
 
+import { recordIdLabel } from '@/components/ui/RecordIdDisplay';
 import { useEffect, useMemo, useState } from 'react';
 import { useRouter } from 'next/navigation';
 import { Eye, Download } from 'lucide-react';
@@ -83,7 +84,7 @@ export function RunsTable({ runs, isLoading, error, selectedIds, onToggleSelect 
     try {
       const blob = await downloadPdfReport({
         runId: run.id,
-        title: `Analysis Report - Run #${run.id}`,
+        title: `Analysis Report - ${recordIdLabel('Run', run.display_id)}`,
         filename: `sbom-analysis-run-${run.id}.pdf`,
       });
       downloadBlob(blob, `sbom-analysis-run-${run.id}.pdf`);
@@ -121,7 +122,7 @@ export function RunsTable({ runs, isLoading, error, selectedIds, onToggleSelect 
     if (search.trim()) {
       rows = rows.filter((r) =>
         matchesMultiField(search, [
-          String(r.id),
+          String(r.display_id ?? ''),
           r.sbom_name,
           r.source,
           String(r.sbom_id ?? ''),
@@ -331,7 +332,7 @@ export function RunsTable({ runs, isLoading, error, selectedIds, onToggleSelect 
                   <Td onClick={(e) => e.stopPropagation()} className="w-8">
                     <input
                       type="checkbox"
-                      aria-label={`Select run #${run.id} for comparison`}
+                      aria-label={`Select ${recordIdLabel('Run', run.display_id)} for comparison`}
                       checked={selectedIds?.has(run.id) ?? false}
                       disabled={run.processing_eligibility?.eligible === false}
                       title={run.processing_eligibility?.reason ?? undefined}
@@ -342,11 +343,11 @@ export function RunsTable({ runs, isLoading, error, selectedIds, onToggleSelect 
                 )}
                 <Td className="font-mono text-xs text-hcl-muted">
                   <div className="flex items-center gap-1.5">
-                    <span>#{run.id}</span>
+                    <span>{recordIdLabel('', run.display_id)}</span>
                     <PinButton
                       kind="run"
                       id={run.id}
-                      label={run.sbom_name ? `${run.sbom_name} · #${run.id}` : `Run #${run.id}`}
+                      label={run.sbom_name ? `${run.sbom_name} · ${recordIdLabel('Run', run.display_id)}` : `${recordIdLabel('Run', run.display_id)}`}
                       href={`/analysis/${run.id}`}
                       compact
                       hoverOnly
@@ -354,7 +355,7 @@ export function RunsTable({ runs, isLoading, error, selectedIds, onToggleSelect 
                   </div>
                 </Td>
                 <Td className="max-w-[140px] truncate font-medium text-hcl-navy">
-                  {run.sbom_name || (run.sbom_id ? `SBOM #${run.sbom_id}` : '—')}
+                  {run.sbom_name || (run.sbom_id ? recordIdLabel('SBOM', run.sbom_display_id) : '—')}
                 </Td>
                 <Td onClick={(e) => e.stopPropagation()}>
                   <StatusBadge status={run.run_status} />

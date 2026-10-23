@@ -1,5 +1,6 @@
 'use client';
 
+import { recordIdLabel } from '@/components/ui/RecordIdDisplay';
 import Link from 'next/link';
 import { usePathname, useSearchParams } from 'next/navigation';
 import { Fragment, useEffect, useRef, useState, type ReactNode } from 'react';
@@ -17,6 +18,7 @@ import { useSidebar } from './SidebarContext';
 import { SidebarStatus } from './SidebarStatus';
 import { TenantSwitcher } from './TenantSwitcher';
 import { usePinned, unpin } from '@/lib/pinned';
+import { cachedRecordLabel } from '@/lib/recordDisplay';
 import { getRecentSboms, getRuns } from '@/lib/api';
 import { usePermissions } from '@/hooks/usePermission';
 import { useAuth } from '@/hooks/useAuth';
@@ -513,7 +515,7 @@ function PinnedSection() {
         <SidebarRow
           key={`${item.kind}-${item.id}`}
           href={item.href}
-          label={item.label}
+          label={cachedRecordLabel(item.label, item.id, item.kind === 'sbom' ? 'SBOM' : 'Run')}
           subtitle={item.kind === 'sbom' ? 'SBOM' : 'Run'}
           onUnpin={() => unpin(item.kind, item.id)}
         />
@@ -562,7 +564,7 @@ function RecentSection() {
         <SidebarRow
           key={`run-${r.id}`}
           href={`/analysis/${r.id}`}
-          label={r.sbom_name ? `${r.sbom_name} · #${r.id}` : `Run #${r.id}`}
+          label={r.sbom_name ? `${r.sbom_name} · ${recordIdLabel('Run', r.display_id)}` : recordIdLabel('Run', r.display_id)}
           subtitle={`Run · ${r.run_status}`}
         />
       ))}

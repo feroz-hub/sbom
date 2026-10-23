@@ -110,7 +110,7 @@ describe('CompareView — error envelopes', () => {
     );
     renderWithCompareProviders(<CompareView />);
     await waitFor(() =>
-      expect(screen.getByText(/Run #00000000-0000-4000-8000-000000000002 isn't ready yet/i)).toBeInTheDocument(),
+      expect(screen.getByText(/The selected run isn't ready yet/i)).toBeInTheDocument(),
     );
     expect(screen.getByText(/RUNNING/)).toBeInTheDocument();
     // B-4 — the misleading "auto-retry shortly" copy is gone; a manual
@@ -136,7 +136,7 @@ describe('CompareView — error envelopes', () => {
       expect(screen.getByText(/Run not found/i)).toBeInTheDocument(),
     );
     // B-5 — id from detail is rendered, not the placeholder "Run #?".
-    expect(screen.getByText(/Run #00000000-0000-4000-8000-000000000063 no longer exists/i)).toBeInTheDocument();
+    expect(screen.getByText(/The selected run no longer exists/i)).toBeInTheDocument();
   });
 });
 

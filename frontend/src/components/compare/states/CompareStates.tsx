@@ -70,7 +70,7 @@ export function EmptySelectionState() {
 export function SameRunPickedState({ runId }: { runId: string }) {
   return (
     <Alert variant="info" title="That's the same run twice">
-      Run #{runId} is selected on both sides — there's nothing to diff. Pick a
+      {runId ? 'The selected run' : 'A run'} is selected on both sides — there's nothing to diff. Pick a
       different baseline or candidate to see changes.
     </Alert>
   );
@@ -85,7 +85,7 @@ export function RunNotReadyState({
   runId?: string;
   onRetry?: () => void;
 }) {
-  const runLabel = runId != null ? `Run #${runId}` : 'One of the runs';
+  const runLabel = runId != null ? 'The selected run' : 'One of the runs';
   const statusLabel = status ?? 'unknown';
   return (
     <Alert variant="warning" title={`${runLabel} isn't ready yet`}>
@@ -113,7 +113,7 @@ export function PermissionDeniedState() {
 }
 
 export function RunNotFoundState({ runId }: { runId?: string }) {
-  const idLabel = runId != null ? `Run #${runId}` : 'A run from this URL';
+  const idLabel = runId != null ? 'The selected run' : 'A run from this URL';
   return (
     <Alert variant="error" title="Run not found">
       {idLabel} no longer exists — it may have been deleted.

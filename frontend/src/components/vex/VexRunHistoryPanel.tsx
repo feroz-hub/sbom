@@ -1,5 +1,6 @@
 'use client';
 
+import { recordIdLabel } from '@/components/ui/RecordIdDisplay';
 import { useState } from 'react';
 import { useQuery } from '@tanstack/react-query';
 import { useAuth } from '@/hooks/useAuth';
@@ -19,7 +20,7 @@ export function VexRunHistoryPanel({sbomId}: {sbomId: (string | number)}) {
   return <section aria-label="Historical analysis snapshots" className="space-y-3 rounded border border-border p-4">
     <Select label="Historical analysis run" value={runId} onChange={event => {setRunId(event.target.value); setOffset(0);}}>
       <option value="">Select run evidence…</option>
-      {runs.data?.items.map(run => <option key={run.id} value={run.id}>Run {run.id} · {run.run_status} · {run.completed_on ?? 'Incomplete'}{!run.is_current ? ' · Obsolete' : ''}</option>)}
+      {runs.data?.items.map(run => <option key={run.id} value={run.id}>{recordIdLabel('Run', run.display_id)} · {run.run_status} · {run.completed_on ?? 'Incomplete'}{!run.is_current ? ' · Obsolete' : ''}</option>)}
     </Select>
     {runs.isError || snapshot.isError ? <Alert variant="error">Historical run evidence could not be loaded.</Alert> : null}
     {!!runId && snapshot.isPending && <p role="status">Loading historical snapshot…</p>}

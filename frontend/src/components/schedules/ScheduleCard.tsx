@@ -138,7 +138,7 @@ export function ScheduleCard({ scope, targetId, processingReason }: ScheduleCard
     },
     onSuccess: (res, _variables, context) => {
       if (!context?.isCurrent()) return;
-      for (const id of res.sbom_ids) addPendingAnalysis(id, `SBOM #${id}`, context.scopeKey);
+      for (const id of res.sbom_ids) addPendingAnalysis(id, 'Scheduled SBOM', context.scopeKey);
       showToast(
         `Enqueued ${res.sbom_ids.length} SBOM analysis${res.sbom_ids.length === 1 ? '' : 'es'}`,
         'success',

@@ -47,6 +47,15 @@ export type ComponentChangeKind =
 // =============================================================================
 
 export interface RunSummary {
+  /** Output-only persisted keys. Never use for selection, routing or authorization. */
+  display_id?: number | null;
+  project_display_id?: number | null;
+  product_display_id?: number | null;
+  sbom_display_id?: number | null;
+  current_sbom_display_id?: number | null;
+  latest_sbom_display_id?: number | null;
+  run_display_id?: number | null;
+
   id: string;
   sbom_id: (string | number) | null;
   sbom_name: string | null;

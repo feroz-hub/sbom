@@ -86,7 +86,7 @@ function RecommendationView({ recommendationId }: { recommendationId: number }) 
               {discovery.source_posture ? <LifecycleBadge bucket={discovery.source_posture.lifecycle_bucket} /> : null}
               <Badge variant="gray">{STATUS_LABELS[item.status]}</Badge>
             </div>
-            <p>Reason: {TRIGGER_LABELS[item.trigger_type]} · Context: {item.context.level === 'SBOM' ? `SBOM #${item.context.sbom_id}` : 'Tenant-wide'} · Evaluated {formatTimestamp(item.evaluated_at)}</p>
+            <p>Reason: {TRIGGER_LABELS[item.trigger_type]} · Context: {item.context.level === 'SBOM' ? 'Selected SBOM' : 'Tenant-wide'} · Evaluated {formatTimestamp(item.evaluated_at)}</p>
             {discovery.source_posture?.actionable_vulnerability_ids?.length ? (
               <p>Actionable: {discovery.source_posture.actionable_vulnerability_ids.join(', ')}</p>
             ) : null}

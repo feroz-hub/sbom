@@ -1,5 +1,6 @@
 'use client';
 
+import { recordIdLabel } from '@/components/ui/RecordIdDisplay';
 import Link from 'next/link';
 import { useState } from 'react';
 import { CveDetailDialog } from '@/components/vulnerabilities/CveDetailDialog';
@@ -126,7 +127,7 @@ export function DashboardOperations({ scope, tenantId }: { scope: DashboardFilte
     </Surface>
     <Surface className="min-w-0" elevation={1}>
       <SurfaceHeader><h2 className="text-sm font-semibold text-hcl-navy">Recent analysis runs</h2><Link href={dashboardDrilldownUrl('/analysis', scope)} className="rounded text-xs text-hcl-blue focus-visible:ring-2 focus-visible:ring-hcl-blue">View all →</Link></SurfaceHeader>
-      <SurfaceContent>{state(runs, !runs.data?.length) ?? <ul className="divide-y divide-border-subtle">{runs.data?.map(run => <li key={run.id} className="py-3 first:pt-0"><div className="flex items-center justify-between gap-3"><Link href={`/analysis/${run.id}`} className="truncate rounded text-xs font-semibold text-hcl-blue focus-visible:ring-2 focus-visible:ring-hcl-blue" title={run.sbom_name ?? undefined}>{run.sbom_name ?? `Analysis #${run.id}`}</Link><span className="shrink-0 text-[10px] text-hcl-muted">{run.completed_on ? formatDate(run.completed_on) : 'In progress'}</span></div><div className="mt-1 flex justify-between gap-2 text-xs text-hcl-muted"><span>{runOutcome(run)}</span><span className="font-metric">{run.total_findings ?? '—'} findings</span></div></li>)}</ul>}</SurfaceContent>
+      <SurfaceContent>{state(runs, !runs.data?.length) ?? <ul className="divide-y divide-border-subtle">{runs.data?.map(run => <li key={run.id} className="py-3 first:pt-0"><div className="flex items-center justify-between gap-3"><Link href={`/analysis/${run.id}`} className="truncate rounded text-xs font-semibold text-hcl-blue focus-visible:ring-2 focus-visible:ring-hcl-blue" title={run.sbom_name ?? undefined}>{run.sbom_name ?? recordIdLabel('Run', run.display_id)}</Link><span className="shrink-0 text-[10px] text-hcl-muted">{run.completed_on ? formatDate(run.completed_on) : 'In progress'}</span></div><div className="mt-1 flex justify-between gap-2 text-xs text-hcl-muted"><span>{runOutcome(run)}</span><span className="font-metric">{run.total_findings ?? '—'} findings</span></div></li>)}</ul>}</SurfaceContent>
     </Surface>
     <CveDetailDialog cveId={selected?.vuln_id ?? null} scanId={selected?.component_id ? selected.analysis_run_id : null} componentId={selected?.component_id ?? null} findingId={selected?.id ?? null} open={!!selected} onOpenChange={open => { if (!open) setSelected(null); }} seed={null} />
   </section>;

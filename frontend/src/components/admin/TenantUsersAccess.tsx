@@ -251,7 +251,7 @@ function TenantUsersAccessContent() {
     );
   }
 
-  const tenantName = activeTenantObj?.name || `Tenant #${currentTenantId}`;
+  const tenantName = activeTenantObj?.name || 'Selected tenant';
 
   const searchTerm = memberSearch.trim().toLocaleLowerCase();
   const filteredMembers = searchTerm ? members.data?.filter(member =>
@@ -364,7 +364,7 @@ function TenantUsersAccessContent() {
         <ManageRolesModal
           open={rolesModalMember !== null}
           onClose={() => !actionLoading && setRolesModalMember(null)}
-          displayName={rolesModalMember.display_name || rolesModalMember.email || `User #${rolesModalMember.user_id}`}
+          displayName={rolesModalMember.display_name || rolesModalMember.email || 'Member'}
           tenantName={tenantName}
           assignableRoles={(roles.data?.roles ?? []).map(role => getRoleCode(role)).filter((code): code is string => Boolean(code))}
           currentRoles={rolesModalMember.roles ?? [rolesModalMember.role]}
@@ -379,7 +379,7 @@ function TenantUsersAccessContent() {
         <DisableMembershipDialog
           open={disableModalMember !== null}
           onClose={() => !actionLoading && setDisableModalMember(null)}
-          displayName={disableModalMember.display_name || disableModalMember.email || `User #${disableModalMember.user_id}`}
+          displayName={disableModalMember.display_name || disableModalMember.email || 'Member'}
           tenantName={tenantName}
           isSelf={user?.userId === disableModalMember.user_id}
           loading={actionLoading}
@@ -391,7 +391,7 @@ function TenantUsersAccessContent() {
         <EnableMembershipDialog
           open={enableModalMember !== null}
           onClose={() => !actionLoading && setEnableModalMember(null)}
-          displayName={enableModalMember.display_name || enableModalMember.email || `User #${enableModalMember.user_id}`}
+          displayName={enableModalMember.display_name || enableModalMember.email || 'Member'}
           tenantName={tenantName}
           isSelf={user?.userId === enableModalMember.user_id}
           loading={actionLoading}
@@ -403,7 +403,7 @@ function TenantUsersAccessContent() {
         <RemoveMemberDialog
           open={removeModalMember !== null}
           onClose={() => !actionLoading && setRemoveModalMember(null)}
-          displayName={removeModalMember.display_name || removeModalMember.email || `User #${removeModalMember.user_id}`}
+          displayName={removeModalMember.display_name || removeModalMember.email || 'Member'}
           tenantName={tenantName}
           isSelf={user?.userId === removeModalMember.user_id}
           loading={actionLoading}

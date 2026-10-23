@@ -25,6 +25,9 @@ def legacy():
         "sbom_iam_public_uuid_upgrade_test",
         "sbom_public_resource_uuid_upgrade_test",
         "sbom_public_resource_uuid_focused_upgrade_test",
+        # Explicitly owned by the UI display-ID regression environment.
+        "sbom_ui_integer_display_upgrade_test_20261023",
+        "sbom_ui_integer_display_failures_upgrade_test_20261023",
     }
     engine = create_engine(target, hide_parameters=True)
     with engine.begin() as c:

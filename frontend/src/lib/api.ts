@@ -1321,6 +1321,9 @@ export function getRunsAggregate(
 // app/routers/vulnerabilities.py.
 
 export interface VulnerabilityRow {
+  project_display_id?: number | null;
+  product_display_id?: number | null;
+  sbom_display_id?: number | null;
   finding_id: number;
   vuln_id: string;
   severity: string;
@@ -3276,7 +3279,7 @@ export function getDashboardPriorityFindings(scope: DashboardFilterScope, signal
 }
 
 export function getVexAnalysisRuns(sbomId: (string | number), signal?: AbortSignal) {
-  return request<{items: Array<{id: string; run_status: string; completed_on: string | null; is_current: boolean}>}>(
+  return request<{items: Array<{display_id?: number | null; id: string; run_status: string; completed_on: string | null; is_current: boolean}>}>(
     `/api/vex/investigations/analysis-runs?sbom_id=${sbomId}`, {signal});
 }
 

@@ -1,5 +1,6 @@
 'use client';
 
+import { recordIdLabel } from '@/components/ui/RecordIdDisplay';
 import { useEffect, useState } from 'react';
 import { useRouter } from 'next/navigation';
 import { useQuery } from '@tanstack/react-query';
@@ -82,7 +83,7 @@ export function CompareView() {
   };
 
   const subtitle = canQuery
-    ? `Run #${urlState.runA} vs Run #${urlState.runB}`
+    ? `${recordIdLabel('Run', aPick?.display_id)} vs ${recordIdLabel('Run', bPick?.display_id)}`
     : 'Diff two analysis runs';
 
   // Surface specific error envelopes — the API returns structured detail

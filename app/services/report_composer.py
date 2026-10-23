@@ -190,6 +190,7 @@ def public_report_snapshot(db, report, tenant_id):
     from sqlalchemy import select
 
     from ..models import AnalysisRun, Product, Projects, SBOMComponent, SBOMSource, Tenant
+    from ..record_presentation import add_display
 
     models = {
         "tenant_id": Tenant,
@@ -223,17 +224,27 @@ def public_report_snapshot(db, report, tenant_id):
             return [walk(item, entity) for item in value]
         if isinstance(value, dict):
             result = {}
+            labels = {}
             for key, item in value.items():
                 if key == "scheduled_outcomes":
-                    result[key] = {
-                        identity(SBOMSource, int(k) if str(k).isdecimal() else k): walk(v) for k, v in item.items()
-                    }
+                    outcomes = {}
+                    for k, v in item.items():
+                        internal = int(k) if str(k).isdecimal() else k
+                        row = walk(v)
+                        if not collecting:
+                            add_display(row, "sbom_id", "sbom_source", internal)
+                        outcomes[identity(SBOMSource, internal)] = row
+                    result[key] = outcomes
                 elif key in models or key == "id" and entity is not None:
-                    result[key] = identity(entity if key == "id" else models[key], item)
+                    model = entity if key == "id" else models[key]
+                    result[key] = identity(model, item)
+                    if not collecting:
+                        add_display(labels, key, model.__tablename__, item)
                 else:
                     result[key] = walk(
                         item, SBOMSource if key == "sboms" else AnalysisRun if key in {"run_a", "run_b"} else None
                     )
+            result.update(labels)
             return result
         return value
 

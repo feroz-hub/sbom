@@ -201,7 +201,7 @@ export function VexDecisionEditor({
         <div className="flex flex-wrap gap-x-6 gap-y-1">
           <span>
             <span className="text-hcl-muted">Component: </span>
-            <span className="font-medium">{componentLabel ?? `#${componentId}`}</span>
+            <span className="font-medium">{componentLabel ?? 'Selected component'}</span>
           </span>
           <span>
             <span className="text-hcl-muted">Vulnerability: </span>

@@ -269,7 +269,7 @@ export function SbomConversionCard({ sbom, formatLabel }: SbomConversionCardProp
               <dt className="text-xs font-medium text-hcl-muted uppercase">Converted SBOM</dt>
               <dd className="mt-1 font-medium text-hcl-navy">
                 <Link href={`/sboms/${convertedId}`} className="text-hcl-blue hover:underline">
-                  #{convertedId}
+                  Converted SBOM
                 </Link>
               </dd>
             </div>

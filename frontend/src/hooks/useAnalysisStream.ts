@@ -117,7 +117,7 @@ export function useAnalysisStream(sbomId: (string | number)) {
         return;
       }
 
-      addPendingAnalysis(sbomId, `SBOM #${sbomId}`, scope.key);
+      addPendingAnalysis(sbomId, 'Selected SBOM', scope.key);
       runIdRef.current = null;
       runningAnalysisRef.current.add(sbomId);
       const clearPending = () => {
@@ -239,7 +239,7 @@ export function useAnalysisStream(sbomId: (string | number)) {
         if (!isCurrent()) return;
         if (typeof data.runId === 'string') {
           runIdRef.current = data.runId;
-          addPendingAnalysis(sbomId, `SBOM #${sbomId}`, scope.key, data.runId);
+          addPendingAnalysis(sbomId, 'Selected SBOM', scope.key, data.runId);
         }
         if (eventType === 'progress') {
           const phase = data.phase as string | undefined;

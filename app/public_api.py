@@ -33,6 +33,7 @@ from .iam_public_api import (
     user_lookup,
 )
 from .models import IAMUser, LogicalSBOM, Product, Projects, SBOMComponent, SBOMSource, Tenant
+from .record_presentation import add_display, augment_openapi, presentable_path
 
 MODELS = {
     **resources.MODELS,
@@ -328,6 +329,8 @@ async def decode_request(request: Request, db=Depends(get_db)):
                         entity = field_entity(key, path)
                         if key in ("metadata_json", "evidence_json", "sbom_data", "validation_report", "raw_document"):
                             continue
+                        if key == "display_id" or key.endswith("_display_id"):
+                            raise HTTPException(422, "Display identifiers are output-only; use the public UUID")
                         if (
                             key == "assigned_to"
                             and resources.namespace_field(key, path)
@@ -478,6 +481,7 @@ def install_public_boundary(app):
                             return [walk(x, node.get("items", {}), entity) for x in value]
                         if isinstance(value, dict):
                             result = {}
+                            labels = {}
                             for key, item in value.items():
                                 target = field_entity(key, path)
                                 if key == "input" and isinstance(value.get("loc"), list) and value["loc"]:
@@ -509,6 +513,8 @@ def install_public_boundary(app):
                                     result[key] = [outward(batch, x) for x in item]
                                 elif target and isinstance(item, int):
                                     result[key] = outward(target, item)
+                                    if not collecting and response.status_code < 400 and presentable_path(path):
+                                        add_display(labels, key, target, item)
                                 elif key == "raw_report" and isinstance(item, str) and resources.run_route(path):
                                     try:
                                         report = json.loads(item)
@@ -536,6 +542,9 @@ def install_public_boundary(app):
                                             )
                                         ),
                                     )
+                            # A DTO's optional/default display value must never
+                            # overwrite the label derived from its actual key.
+                            result.update(labels)
                             return result
                         return value
 
@@ -691,6 +700,6 @@ def install_public_openapi(app):
                         parameter["schema"] = uuid_field(parameter.get("schema", {}))
         from .resource_openapi import augment
 
-        return augment(doc)
+        return augment_openapi(augment(doc), schema_entity, field_entity)
 
     app.openapi = generate

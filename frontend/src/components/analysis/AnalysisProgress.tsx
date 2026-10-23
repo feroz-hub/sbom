@@ -193,7 +193,7 @@ export function AnalysisProgress({ state, onCancel, onReset }: AnalysisProgressP
       {/* Footer actions */}
       <div className="px-4 py-3 border-t border-hcl-border bg-hcl-light/40 flex items-center justify-between gap-3">
         <div className="text-xs text-hcl-muted">
-          {isDone && runId && `Run #${runId} · ${formatDuration(elapsedMs)}`}
+          {isDone && runId && `Analysis complete · ${formatDuration(elapsedMs)}`}
         </div>
         <div className="flex items-center gap-2">
           {isRunning && onCancel && (

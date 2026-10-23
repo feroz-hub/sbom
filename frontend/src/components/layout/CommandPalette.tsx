@@ -1,5 +1,6 @@
 'use client';
 
+import { recordIdLabel } from '@/components/ui/RecordIdDisplay';
 import {
   useCallback,
   useEffect,
@@ -281,11 +282,11 @@ function useCommands(query: string, isOpen: boolean, onClose: () => void): Comma
       id: `sbom.${s.id}`,
       group: 'sboms' as const,
       title: s.sbom_name,
-      subtitle: `Open SBOM #${s.id} · ${formatDate(s.created_on)}`,
+      subtitle: `Open ${recordIdLabel('SBOM', s.display_id)} · ${formatDate(s.created_on)}`,
       hint: '↵ Open',
       Icon: FileText,
       iconTone: 'text-hcl-blue',
-      keywords: `sbom #${s.id}`,
+      keywords: `${recordIdLabel('SBOM', s.display_id)}`,
       run: () => goto(`/sboms/${s.id}`),
     }));
   }, [sbomsQuery.data, goto, canSboms]);
@@ -298,7 +299,7 @@ function useCommands(query: string, isOpen: boolean, onClose: () => void): Comma
       return {
         id: `run.${r.id}`,
         group: 'runs' as const,
-        title: r.sbom_name ? `${r.sbom_name} — Run #${r.id}` : `Run #${r.id}`,
+        title: r.sbom_name ? `${r.sbom_name} — ${recordIdLabel('Run', r.display_id)}` : `${recordIdLabel('Run', r.display_id)}`,
         subtitle: `${status} · ${(r.total_findings ?? 0).toLocaleString()} findings · ${formatDate(r.completed_on ?? r.started_on)}`,
         hint: '↵ Open',
         Icon: Activity,

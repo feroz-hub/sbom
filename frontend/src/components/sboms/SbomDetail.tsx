@@ -1,5 +1,6 @@
 'use client';
 
+import { recordIdLabel } from '@/components/ui/RecordIdDisplay';
 import { usePermissions } from '@/hooks/usePermission';
 import { PermissionFields } from '@/components/ui/PermissionGate';
 import { PermissionButton } from '@/components/ui/PermissionButton';
@@ -1073,7 +1074,7 @@ export function SbomDetail({ sbom }: SbomDetailProps) {
                     label: 'Project',
                     value: (
                       <div className="flex items-center gap-2">
-                        <span>{sbom.project_name || (sbom.projectid ? `Project #${sbom.projectid}` : '—')}</span>
+                        <span>{sbom.project_name || (sbom.projectid ? recordIdLabel('Project', sbom.project_display_id) : '—')}</span>
                         <PermissionButton size="sm" variant="ghost" permission={["sbom:update","product:assign_sbom"]}
                           type="button"
 	                          onClick={() => {
@@ -1910,7 +1911,7 @@ export function SbomDetail({ sbom }: SbomDetailProps) {
                 ) : (
                   runPagination.pageItems.map((run) => (
                     <tr key={run.id} className="hover:bg-hcl-light/40">
-                      <Td className="font-mono text-xs text-hcl-muted">#{run.id}</Td>
+                      <Td className="font-mono text-xs text-hcl-muted">{recordIdLabel('Run', run.display_id)}</Td>
                       <Td><StatusBadge status={run.run_status} /></Td>
                       <Td className="text-foreground/90">{run.total_findings ?? '—'}</Td>
                       <Td className="text-hcl-muted">{formatDuration(run.duration_ms)}</Td>
@@ -2079,7 +2080,7 @@ export function SbomDetail({ sbom }: SbomDetailProps) {
       </Dialog>
 
       {managedVexComponent && !isVexOverrideOpen && <ComponentVexManager
-        key={managedVexComponent.id} sbomId={sbom.id} component={managedVexComponent}
+        key={managedVexComponent.id} sbomId={sbom.id} sbomDisplayId={sbom.display_id} component={managedVexComponent}
         canEdit={canManageEvidence} onClose={() => setManagedVexComponent(null)}
         onDecision={(vulnerability, statement, manual) => openVexOverrideModal(statement, managedVexComponent, vulnerability, manual)}
       />}

@@ -123,13 +123,13 @@ export default function SchedulesPage() {
   );
 
   const targetLabel = useCallback((sched: AnalysisSchedule): string => {
-    if (sched.scope === 'TENANT') return `Tenant #${sched.tenant_id ?? ''}`;
-    if (sched.scope === 'PRODUCT') return sched.product_name ?? `Product #${sched.product_id ?? ''}`;
+    if (sched.scope === 'TENANT') return 'Selected tenant';
+    if (sched.scope === 'PRODUCT') return sched.product_name ?? 'Selected application';
     if (sched.scope === 'PROJECT' && sched.project_id != null) {
-      return sched.project_name ?? projectById.get(sched.project_id)?.project_name ?? `Project #${sched.project_id}`;
+      return sched.project_name ?? projectById.get(sched.project_id)?.project_name ?? 'Selected project';
     }
     if (sched.scope === 'SBOM' && sched.sbom_id != null) {
-      const name = sched.sbom_name ?? sbomById.get(sched.sbom_id)?.sbom_name ?? `SBOM #${sched.sbom_id}`;
+      const name = sched.sbom_name ?? sbomById.get(sched.sbom_id)?.sbom_name ?? 'Selected SBOM';
       return `${name}${sched.sbom_version ? ` ${sched.sbom_version}` : ''}`;
     }
     return '—';
@@ -176,7 +176,7 @@ export default function SchedulesPage() {
     mutationFn: (id: number) => runScheduleNow(id),
     onSuccess: (res, _variables, context) => {
       if (!context?.isCurrent()) return;
-      for (const id of res.sbom_ids) addPendingAnalysis(id, `SBOM #${id}`, context.scopeKey);
+      for (const id of res.sbom_ids) addPendingAnalysis(id, 'Scheduled SBOM', context.scopeKey);
       showToast(
         `Enqueued ${res.sbom_ids.length} SBOM analysis${res.sbom_ids.length === 1 ? '' : 'es'}`,
         'success',

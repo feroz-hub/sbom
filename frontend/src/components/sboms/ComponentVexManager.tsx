@@ -1,5 +1,6 @@
 'use client';
 
+import { recordIdLabel } from '@/components/ui/RecordIdDisplay';
 import Link from 'next/link';
 import { useState } from 'react';
 import { useQuery } from '@tanstack/react-query';
@@ -8,8 +9,8 @@ import type { SBOMComponent, VexStatement } from '@/types';
 import { Dialog, DialogBody } from '@/components/ui/Dialog';
 import { PermissionButton as Button } from '@/components/ui/PermissionButton';
 
-export function ComponentVexManager({ sbomId, component, canEdit, onClose, onDecision }: {
-  sbomId: (string | number); component: SBOMComponent; canEdit: boolean; onClose: () => void;
+export function ComponentVexManager({ sbomId, sbomDisplayId, component, canEdit, onClose, onDecision }: {
+  sbomId: (string | number); sbomDisplayId?: number | null; component: SBOMComponent; canEdit: boolean; onClose: () => void;
   onDecision: (vulnerability: string, statement?: VexStatement, manual?: boolean) => void;
 }) {
   const [search, setSearch] = useState('');
@@ -27,7 +28,7 @@ export function ComponentVexManager({ sbomId, component, canEdit, onClose, onDec
   return <>
     <Dialog open={!historyPair} onClose={onClose} title={`Manage VEX — ${component.name} @ ${component.version ?? 'unknown'}`} maxWidth="2xl">
       <DialogBody>
-        <p className="mb-3 text-sm">SBOM #{sbomId} · Component #{component.id}. Each vulnerability has its own decision.</p>
+        <p className="mb-3 text-sm">{recordIdLabel('SBOM', sbomDisplayId)} · {recordIdLabel('Component', component.display_id)}. Each vulnerability has its own decision.</p>
         <div className="mb-4 flex items-center gap-3">
           <input aria-label="Search vulnerabilities" placeholder="Search CVE, GHSA or vendor identifier" value={search}
             onChange={event => setSearch(event.target.value)} className="w-full rounded border p-2" />
@@ -40,7 +41,7 @@ export function ComponentVexManager({ sbomId, component, canEdit, onClose, onDec
             <tbody>{rows.map(row => <tr className="border-t" key={row.vulnerability_id}>
               <td className="p-2 font-mono">{row.vulnerability_id}</td><td className="p-2">{row.severity ?? 'Unknown'}</td>
               <td className="p-2">{row.findings.length ? <details><summary>{row.findings.length} finding(s)</summary>
-                {row.findings.map(f => <p key={f.id}>Run #{f.run_id} · {f.source ?? 'Unknown source'} · {f.match_reason ?? 'No match detail'} {f.matched_range ?? ''}</p>)}
+                {row.findings.map(f => <p key={f.id}>{recordIdLabel('Run', f.run_display_id)} · {f.source ?? 'Unknown source'} · {f.match_reason ?? 'No match detail'} {f.matched_range ?? ''}</p>)}
               </details> : 'No detected finding; VEX evidence only'}</td>
               <td className="p-2">{row.current_decision?.status ?? 'No decision'}</td>
               <td className="p-2">{row.current_decision?.source_name ?? '—'}</td>
@@ -63,7 +64,7 @@ export function ComponentVexManager({ sbomId, component, canEdit, onClose, onDec
     </Dialog>
     <Dialog open={Boolean(historyPair)} onClose={() => setHistoryPair(null)} title={`VEX History — ${historyPair ?? ''}`} maxWidth="xl">
       <DialogBody>
-        <p>{component.name} @ {component.version} · SBOM #{sbomId}</p>
+        <p>{component.name} @ {component.version} · {recordIdLabel('SBOM', sbomDisplayId)}</p>
         {history.isPending ? <p>Loading history…</p> : history.isError ? <p role="alert">Could not load history.</p> : <>
           <h3 className="mt-3 font-semibold">Current VEX Decision</h3>
           <p>{history.data?.current_decision?.status ?? 'No decision'} · {history.data?.current_decision?.source_name ?? '—'}</p>

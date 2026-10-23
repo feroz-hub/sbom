@@ -1,5 +1,6 @@
 'use client';
 
+import { recordIdLabel } from '@/components/ui/RecordIdDisplay';
 import { publicId } from '@/lib/publicId';
 import { Suspense, use, useState } from 'react';
 import { useQuery } from '@tanstack/react-query';
@@ -145,7 +146,7 @@ function AnalysisDetailContent({ params }: AnalysisDetailPageProps) {
     try {
       const blob = await downloadPdfReport({
         runId: run.id,
-        title: `Analysis Report — Run #${run.id}`,
+        title: `Analysis Report — ${recordIdLabel('Run', run.display_id)}`,
         filename: `sbom-analysis-run-${run.id}.pdf`,
       });
       downloadBlob(blob, `sbom-analysis-run-${run.id}.pdf`);
@@ -248,11 +249,11 @@ function AnalysisDetailContent({ params }: AnalysisDetailPageProps) {
   return (
     <div className="flex flex-1 flex-col">
       <TopBar
-        title={`Run #${run.id}`}
-        subtitle={run.sbom_name ?? `SBOM #${run.sbom_id ?? '—'}`}
+        title={`${recordIdLabel('Run', run.display_id)}`}
+        subtitle={run.sbom_name ?? recordIdLabel('SBOM', run.sbom_display_id)}
         breadcrumbs={[
           { label: 'Analysis Runs', href: '/analysis' },
-          { label: `Run #${run.id}` },
+          { label: `${recordIdLabel('Run', run.display_id)}` },
         ]}
         action={<ExportMenu items={exportItems} />}
       />

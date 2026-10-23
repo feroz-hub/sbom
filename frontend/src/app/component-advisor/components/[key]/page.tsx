@@ -195,7 +195,7 @@ function ComponentDetail({ canonicalKey }: { canonicalKey: string }) {
           <CardContent className="space-y-3 text-sm">
             <p className="text-xs text-hcl-muted">Adoption is contextual evidence only — not proof of compatibility or security.</p>
             {c.adoption.active_sbom_occurrences === 0 ? <AdvisorNotice kind="NO_ACTIVE_SBOM_OCCURRENCES" /> : (
-              <p>{c.adoption.active_sbom_occurrences} active SBOM occurrence(s) · Products: {c.adoption.products.map((p) => p.name ?? `#${p.id}`).join(', ') || '—'} · Projects: {c.adoption.projects.map((p) => p.name ?? `#${p.id}`).join(', ') || '—'}</p>
+              <p>{c.adoption.active_sbom_occurrences} active SBOM occurrence(s) · Products: {c.adoption.products.map((p) => p.name ?? 'Unnamed resource').join(', ') || '—'} · Projects: {c.adoption.projects.map((p) => p.name ?? 'Unnamed resource').join(', ') || '—'}</p>
             )}
             <Table ariaLabel="Observed versions of this component">
               <TableHead><tr><Th>Version</Th><Th>Risk</Th><Th>Lifecycle</Th><Th>Licenses</Th><Th>Occurrences</Th><Th>Products</Th></tr></TableHead>

@@ -107,7 +107,7 @@ function GlobalBatchRow({ entry, compact = false }: RowProps) {
             href={`/analysis/${runId}`}
             className="truncate text-xs font-semibold text-hcl-navy hover:underline"
           >
-            Run #{runId}
+            Analysis run
           </Link>
           {label ? (
             <span className="truncate rounded-md bg-surface-muted px-1.5 py-0.5 text-[10px] font-medium uppercase tracking-wide text-hcl-muted">

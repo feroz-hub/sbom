@@ -1,6 +1,7 @@
 'use client';
 
 import { useState } from 'react';
+import { recordIdLabel } from '@/lib/recordDisplay';
 import { useSearchParams } from 'next/navigation';
 import { useQuery } from '@tanstack/react-query';
 import { PermissionButton as Button } from '@/components/ui/PermissionButton';
@@ -69,8 +70,8 @@ export function ReportPreferencesEditor({ initial, id, tenantScopeAllowed, onClo
           </select></label>
           {form.scope !== 'TENANT' && <div><label>Search scope<input className={fieldClass} value={search} onChange={e => setSearch(e.target.value)} placeholder="Filter by name (first 200 matches)" /></label>
             <label>Target<select className={fieldClass} value={target ?? ''} onChange={e => patch({ project_id: form.scope === 'PROJECT' ? e.target.value || null : null, product_id: form.scope === 'PRODUCT' ? e.target.value || null : null, sbom_id: form.scope === 'SBOM' ? e.target.value || null : null })}>
-              <option value="">Choose a target</option>{target && !targets.data?.some(t => t.id === target) && <option value={target}>Selected #{target}</option>}
-              {targets.data?.map(t => <option value={t.id} key={t.id}>{t.label} · #{t.id}</option>)}
+              <option value="">Choose a target</option>{target && !targets.data?.some(t => t.id === target) && <option value={target}>Selected target</option>}
+              {targets.data?.map(t => <option value={t.id} key={t.id}>{t.label}{t.display_id ? ` · ${recordIdLabel('', t.display_id)}` : ''}</option>)}
             </select></label>{targets.isError && <p role="alert">Could not load targets.</p>}</div>}
           <label>Cadence<select className={fieldClass} value={form.cadence} onChange={e => patch({ cadence: e.target.value as ReportPreferences['cadence'] })}>{['ON_EVERY_RUN', 'DAILY', 'WEEKLY', 'MONTHLY'].map(c => <option key={c}>{c}</option>)}</select></label>
           <label>IANA timezone<input className={fieldClass} value={form.timezone} onChange={e => patch({ timezone: e.target.value })} placeholder="UTC" /></label>
@@ -133,7 +134,7 @@ export function ReportNotificationsPage() {
     <section className="rounded-xl border border-border-subtle bg-surface p-5"><h2 className="mb-4 text-lg font-semibold">Subscriptions</h2>
       {subscriptions.isError && <p role="alert">Subscriptions could not be loaded.</p>}
       {subscriptions.isLoading ? <p>Loading…</p> : !subscriptions.data?.length ? <p className="text-sm text-hcl-muted">No subscriptions yet. Add one or use “Notify me” on a project, product or SBOM.</p> : <div className="space-y-3">{subscriptions.data.map(sub => <div key={sub.id} className="flex flex-wrap items-center justify-between gap-3 rounded-lg border border-border-subtle p-3">
-        <div><strong>{sub.scope} {sub.project_id ?? sub.product_id ?? sub.sbom_id ?? ''}</strong><p className="text-sm text-hcl-muted">{sub.cadence} · Parts {sub.parts.join(', ')} · {sub.formats.join(', ') || 'Email only'} · {sub.enabled ? 'Enabled' : 'Paused'}{allTenant ? ` · User #${sub.iam_user_id}` : ''}</p></div>
+        <div><strong>{sub.scope} {sub.scope === 'TENANT' ? 'subscription' : recordIdLabel('', sub.scope === 'PROJECT' ? sub.project_display_id : sub.scope === 'PRODUCT' ? sub.product_display_id : sub.sbom_display_id)}</strong><p className="text-sm text-hcl-muted">{sub.cadence} · Parts {sub.parts.join(', ')} · {sub.formats.join(', ') || 'Email only'} · {sub.enabled ? 'Enabled' : 'Paused'}{allTenant ? ' · Tenant member' : ''}</p></div>
         <div className="flex flex-wrap gap-2">{!allTenant && <><Button size="sm" variant="secondary" onClick={() => setEditing({ id: sub.id, preferences: preferencesOnly(sub) })}>Edit / preview</Button><Button size="sm" variant="secondary" disabled={!sub.enabled || send.isPending} onClick={() => act(send.mutateAsync(sub.id), 'Report request saved. Check delivery history for its outcome.')}>Send now</Button></>}
           <Button size="sm" variant="secondary" disabled={pause.isPending || allTenant && !sub.enabled} onClick={() => act(pause.mutateAsync({ id: sub.id, enabled: !sub.enabled }), sub.enabled ? 'Subscription paused.' : 'Subscription resumed.')}>{sub.enabled ? 'Pause' : 'Resume'}</Button>
           {!allTenant && <Button size="sm" variant="secondary" onClick={() => setRemove(sub)}>Delete</Button>}

@@ -1,5 +1,6 @@
 'use client';
 
+import { recordIdLabel } from '@/components/ui/RecordIdDisplay';
 import { publicId } from '@/lib/publicId';
 import { Suspense, useMemo, useState } from 'react';
 import Link from 'next/link';
@@ -47,7 +48,7 @@ function CompareRunsPageInner() {
     <div className="flex flex-1 flex-col">
       <TopBar
         title="Compare runs"
-        subtitle={canQuery ? `Run #${runA} vs Run #${runB}` : 'Diff two analysis runs'}
+        subtitle={canQuery ? 'Selected analysis runs' : 'Diff two analysis runs'}
         breadcrumbs={[
           { label: 'Analysis Runs', href: '/analysis' },
           { label: 'Compare' },
@@ -284,7 +285,7 @@ function CompareBody({ data }: { data: NonNullable<Awaited<ReturnType<typeof com
 // ─── Helper components ───────────────────────────────────────────────────────
 
 interface RunHeaderProps {
-  run: { id: string; sbom_name: string | null; completed_on: string | null };
+  run: { display_id?: number | null; id: string; sbom_name: string | null; completed_on: string | null };
   label: string;
   align: 'left' | 'right';
 }
@@ -302,7 +303,7 @@ function RunHeader({ run, label, align }: RunHeaderProps) {
       </p>
       <h3 className="mt-1 truncate text-display-sm font-semibold text-hcl-navy">
         <Link href={`/analysis/${run.id}`} className="hover:text-primary hover:underline">
-          #{run.id}
+          {recordIdLabel('Run', run.display_id)}
         </Link>
       </h3>
       <p className="font-metric mt-0.5 truncate text-xs tabular-nums text-hcl-muted">

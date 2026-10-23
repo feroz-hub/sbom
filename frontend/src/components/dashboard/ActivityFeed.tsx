@@ -1,5 +1,6 @@
 'use client';
 
+import { recordIdLabel } from '@/components/ui/RecordIdDisplay';
 import { PermissionLink } from '@/components/ui/PermissionLink';
 import Link from 'next/link';
 import { useMemo } from 'react';
@@ -229,7 +230,7 @@ function FeedRow({ item }: { item: FeedItem }) {
             <span className="font-medium">{status.label}</span>
             <span className="text-hcl-muted"> · </span>
             <span className="text-hcl-muted group-hover:text-primary">
-              {run.sbom_name ?? `Run #${run.id}`}
+              {run.sbom_name ?? recordIdLabel('Run', run.display_id)}
             </span>
           </p>
           <div className="flex flex-wrap items-center gap-x-2 gap-y-0.5 text-[11px] text-hcl-muted">

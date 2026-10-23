@@ -1,5 +1,6 @@
 'use client';
 
+import { recordIdLabel } from '@/components/ui/RecordIdDisplay';
 import {
   AlertOctagon,
   CheckCircle2,
@@ -267,7 +268,7 @@ export function RunDetailHero({ run, findings, rightSlot }: RunDetailHeroProps) 
 
           <div>
             <h2 className="text-display-lg font-semibold tracking-display text-hcl-navy">
-              Run #{run.id}
+              {recordIdLabel('Run', run.display_id)}
               {run.sbom_name && (
                 <span className="ml-2 text-base font-normal text-hcl-muted">
                   · {run.sbom_name}
@@ -336,7 +337,7 @@ export function RunDetailHero({ run, findings, rightSlot }: RunDetailHeroProps) 
                     href={`/sboms/${run.sbom_id}`}
                     className="text-hcl-blue hover:underline"
                   >
-                    #{run.sbom_id}
+                    {recordIdLabel('SBOM', run.sbom_display_id)}
                   </Link>
                 ) : (
                   '—'

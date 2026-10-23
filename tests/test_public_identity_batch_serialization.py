@@ -55,6 +55,7 @@ def test_distinct_references_use_one_scoped_lookup_not_one_per_row(projects):
         event.remove(engine, 'before_cursor_execute', record)
     assert response.status_code == 200
     assert [row['id'] for row in response.json()['projects']] == [public for _, public in projects]
+    assert [row['display_id'] for row in response.json()['projects']] == [internal for internal, _ in projects]
     assert len(statements) == 1, f"Expected one scoped batch query; observed {len(statements)}"
     assert all('tenant_id' in sql for sql in statements)
 
@@ -68,7 +69,7 @@ def test_repeated_ids_native_documents_and_integer_nonresources_stay_distinct(pr
         response = client.get('/api/serialization-unit')
     assert response.status_code == 200
     body = response.json()
-    assert body['projects'] == [{'id': public}, {'id': public}]
+    assert body['projects'] == [{'id': public, 'display_id': internal}, {'id': public, 'display_id': internal}]
     for key in ('row_version', 'metadata_json', 'raw_document', 'versions', 'run_id'):
         assert body[key] == payload[key]
 
@@ -107,4 +108,5 @@ def test_more_than_one_lookup_chunk_preserves_every_uuid(client):
         event.remove(engine, "before_cursor_execute", record)
     assert response.status_code == 200
     assert [row["id"] for row in response.json()["projects"]] == [public for _, public in references]
+    assert [row["display_id"] for row in response.json()["projects"]] == [internal for internal, _ in references]
     assert len(statements) == 2

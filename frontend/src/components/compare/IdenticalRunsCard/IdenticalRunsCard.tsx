@@ -1,5 +1,6 @@
 'use client';
 
+import { recordIdLabel } from '@/components/ui/RecordIdDisplay';
 import { ArrowRight, Check } from 'lucide-react';
 import { Surface, SurfaceContent } from '@/components/ui/Surface';
 import type { CompareResult } from '@/types/compare';
@@ -67,8 +68,8 @@ export function IdenticalRunsCard({ result, onViewSharedFindings }: Props) {
         <p className="mx-auto max-w-2xl text-sm text-hcl-muted">
           {variant === 'both-clean' && (
             <>
-              Both <strong className="text-hcl-navy">Run #{result.run_a.id}</strong> and{' '}
-              <strong className="text-hcl-navy">Run #{result.run_b.id}</strong> produced
+              Both <strong className="text-hcl-navy">{recordIdLabel('Run', result.run_a.display_id)}</strong> and{' '}
+              <strong className="text-hcl-navy">{recordIdLabel('Run', result.run_b.display_id)}</strong> produced
               clean scans.
             </>
           )}

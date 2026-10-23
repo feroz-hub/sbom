@@ -181,7 +181,15 @@ def test_T20_different_context_or_trigger_is_a_separate_item__D10(client, seeded
     scoped = create(client, LOG4J, "CRITICAL_FINDING",
                     params={"project_id": str(product.project.public_id), "product_id": str(product.public_id), "sbom_id": str(sbom.public_id)}).json()
     assert len({tenant_wide["id"], manual["id"], scoped["id"]}) == 3
-    assert scoped["context"] == {"project_id": str(product.project.public_id), "product_id": str(product.public_id), "sbom_id": str(sbom.public_id), "level": "SBOM"}
+    assert scoped["context"] == {
+        "project_id": str(product.project.public_id),
+        "product_display_id": product.id,
+        "project_display_id": product.project.id,
+        "product_id": str(product.public_id),
+        "sbom_id": str(sbom.public_id),
+        "sbom_display_id": sbom.id,
+        "level": "SBOM",
+    }
 
 
 def test_T20_a_closed_item_does_not_block_a_new_one(client, seeded, db):

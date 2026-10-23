@@ -1,5 +1,6 @@
 'use client';
 
+import { RecordIdDisplay } from '@/components/ui/RecordIdDisplay';
 import { useEffect, useMemo, useRef, useState } from 'react';
 import { useMutation, useQuery, useQueryClient } from '@tanstack/react-query';
 import { PermissionGate } from '@/components/ui/PermissionGate';
@@ -81,7 +82,7 @@ function ProjectCard({
       {onSelect && <button type="button" aria-label={`Select project ${project.project_name}`} aria-pressed={Boolean(selected)} onClick={() => onSelect(project)} className="absolute inset-0 z-0 rounded-xl focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-hcl-blue/50" />}
       <div className="pointer-events-none relative flex items-start justify-between gap-2">
         <div className="min-w-0">
-          <p className="font-mono text-[11px] text-hcl-muted">#{project.id}</p>
+          <p className="font-mono text-[11px] text-hcl-muted"><RecordIdDisplay kind="Project" displayId={project.display_id} /></p>
           <h3 className="mt-0.5 truncate font-semibold text-hcl-navy" title={project.project_name}>
             {project.project_name}
           </h3>
@@ -181,7 +182,7 @@ export function ProjectsTable({ projects, isLoading, error, initialProjectId, se
     if (search.trim()) {
       rows = rows.filter((p) =>
         matchesMultiField(search, [
-          String(p.id),
+          String(p.display_id ?? ''),
           p.project_name,
           p.project_details,
           p.created_by,
@@ -386,7 +387,7 @@ export function ProjectsTable({ projects, isLoading, error, initialProjectId, se
               ) : (
                 pagination.pageItems.map((project) => (
                   <tr key={project.id} className={`transition-colors hover:bg-hcl-light/40 ${selectedId === project.id ? 'bg-blue-50/60' : ''}`}>
-                    <Td className="font-mono text-xs text-hcl-muted">#{project.id}</Td>
+                    <Td className="font-mono text-xs text-hcl-muted"><RecordIdDisplay kind="Project" displayId={project.display_id} /></Td>
                     <Td className="font-medium text-hcl-navy">{onSelect ? <button aria-label={`Select project ${project.project_name}`} aria-pressed={selectedId === project.id} className="rounded text-left focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-hcl-blue/50" onClick={() => onSelect(project)}>{project.project_name}{selectedId === project.id && <span className="ml-2 text-xs text-hcl-blue">Selected</span>}</button> : project.project_name}</Td>
                     <Td>
                       <Badge variant={project.project_status === 1 ? 'success' : 'gray'}>

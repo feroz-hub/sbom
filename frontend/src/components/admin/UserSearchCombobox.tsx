@@ -162,7 +162,7 @@ export function UserSearchCombobox({
           )}
           {(selectedUser.tenant_memberships ?? []).map((membership) => (
             <span key={membership.tenant_id} className="text-xs text-hcl-muted">
-              {membership.tenant_name || `Tenant #${membership.tenant_id}`}: {' '}
+              {membership.tenant_name || 'Tenant membership'}: {' '}
               <strong className="text-foreground">
                 {(membership.roles?.length ? membership.roles : [membership.role])
                   .map(getRoleLabel)
@@ -185,7 +185,7 @@ export function UserSearchCombobox({
             </button>
             {showTechDetails && (
               <div className="mt-2 rounded bg-background p-2 text-xs font-mono text-hcl-muted border border-border">
-                <p>User ID: {selectedUser.id}</p>
+                <p>{selectedUser.display_name || selectedUser.email || 'Selected account'}</p>
                 <p>HCL.CS Subject: {selectedUser.external_subject}</p>
                 {selectedUser.external_issuer && <p>Issuer: {selectedUser.external_issuer}</p>}
               </div>

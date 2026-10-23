@@ -1,5 +1,6 @@
 'use client';
 
+import { recordIdLabel } from '@/components/ui/RecordIdDisplay';
 import { Suspense, useCallback, useMemo, useState } from 'react';
 import { useRouter } from 'next/navigation';
 import { useQuery } from '@tanstack/react-query';
@@ -105,7 +106,7 @@ function AnalysisPageInner() {
     const byId = new Map<string | number, string>();
     for (const sbom of sboms ?? []) {
       if (sbom.product_id != null && !byId.has(sbom.product_id)) {
-        byId.set(sbom.product_id, sbom.product_name?.trim() || `Product #${sbom.product_id}`);
+        byId.set(sbom.product_id, sbom.product_name?.trim() || recordIdLabel('Application', sbom.product_display_id));
       }
     }
     return Array.from(byId, ([id, name]) => ({ id, name })).sort((a, b) =>
@@ -148,8 +149,8 @@ function AnalysisPageInner() {
   });
 
   const handleAnalysisComplete = useCallback(
-    (runId: string) => {
-      showToast(`Analysis run #${runId} completed successfully.`, 'success');
+    () => {
+      showToast('Analysis completed successfully.', 'success');
       refetch();
     },
     [showToast, refetch],

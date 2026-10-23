@@ -1,5 +1,6 @@
 'use client';
 
+import { recordIdLabel } from '@/components/ui/RecordIdDisplay';
 import { useEffect, useMemo, useRef } from 'react';
 import { Layers, Play, Sparkles } from 'lucide-react';
 import { PermissionButton as Button } from '@/components/ui/PermissionButton';
@@ -14,7 +15,7 @@ import type { AnalysisConfig } from '@/lib/api';
 
 export interface ConsolidatedAnalysisPanelProps {
   analysisConfig: AnalysisConfig | undefined;
-  sboms: { id: string | number; sbom_name: string }[] | undefined;
+  sboms: { display_id?: number | null; id: string | number; sbom_name: string }[] | undefined;
   consolidatedSbomId: string;
   onConsolidatedSbomIdChange: (value: string) => void;
   /** Selected sources (controlled). */
@@ -113,7 +114,7 @@ export function ConsolidatedAnalysisPanel({
                   >
                     {sboms?.map((s) => (
                       <option key={s.id} value={s.id}>
-                        #{s.id} — {s.sbom_name}
+                        {recordIdLabel('SBOM', s.display_id)} — {s.sbom_name}
                       </option>
                     ))}
                   </Select>

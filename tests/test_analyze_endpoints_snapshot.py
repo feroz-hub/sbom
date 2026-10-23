@@ -40,6 +40,24 @@ def _assert_deprecated(resp, sbom_id: str) -> None:
     assert resp.headers["Link"] == f'</api/sboms/{sbom_id}/analyze>; rel="successor-version"'
 
 
+def _with_persisted_display_ids(expected: dict, body: dict, seeded_sbom: dict) -> dict:
+    """Extend the locked UUID contract with independently read persisted keys."""
+    from app.db import SessionLocal
+
+    result = json.loads(json.dumps(expected))
+    with SessionLocal() as db, verified_fixture_tenant(db, 1):
+        run = public_row(db, AnalysisRun, body["id"])
+        sbom = public_row(db, SBOMSource, seeded_sbom["id"])
+        assert run.sbom_id == sbom.id
+        result.update(display_id=run.id, run_display_id=run.id, sbom_display_id=sbom.id)
+        for name in ("project", "product"):
+            internal = getattr(run, f"{name}_id")
+            if internal is not None:
+                result[f"{name}_display_id"] = internal
+        result["sbom"]["display_id"] = sbom.id
+    return result
+
+
 @pytest.mark.snapshot
 def test_analyze_sbom_nvd(client, seeded_sbom, mock_external_sources):
     resp = client.post(
@@ -49,7 +67,7 @@ def test_analyze_sbom_nvd(client, seeded_sbom, mock_external_sources):
     assert resp.status_code == 200, resp.text
     _assert_deprecated(resp, seeded_sbom["id"])
     actual = normalize(resp.json())
-    expected = _load_or_write("analyze_sbom_nvd", actual)
+    expected = _with_persisted_display_ids(_load_or_write("analyze_sbom_nvd", actual), resp.json(), seeded_sbom)
     assert actual == expected
 
 
@@ -62,7 +80,7 @@ def test_analyze_sbom_github(client, seeded_sbom, mock_external_sources):
     assert resp.status_code == 200, resp.text
     _assert_deprecated(resp, seeded_sbom["id"])
     actual = normalize(resp.json())
-    expected = _load_or_write("analyze_sbom_github", actual)
+    expected = _with_persisted_display_ids(_load_or_write("analyze_sbom_github", actual), resp.json(), seeded_sbom)
     assert actual == expected
 
 
@@ -75,7 +93,7 @@ def test_analyze_sbom_osv(client, seeded_sbom, mock_external_sources):
     assert resp.status_code == 200, resp.text
     _assert_deprecated(resp, seeded_sbom["id"])
     actual = normalize(resp.json())
-    expected = _load_or_write("analyze_sbom_osv", actual)
+    expected = _with_persisted_display_ids(_load_or_write("analyze_sbom_osv", actual), resp.json(), seeded_sbom)
     assert actual == expected
 
 
@@ -91,7 +109,7 @@ def test_analyze_sbom_consolidated(client, seeded_sbom, mock_external_sources):
     assert resp.status_code == 200, resp.text
     _assert_deprecated(resp, seeded_sbom["id"])
     actual = normalize(resp.json())
-    expected = _load_or_write("analyze_sbom_consolidated", actual)
+    expected = _with_persisted_display_ids(_load_or_write("analyze_sbom_consolidated", actual), resp.json(), seeded_sbom)
     assert actual == expected
 
 

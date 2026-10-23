@@ -127,7 +127,7 @@ export function SbomPreflightChecklist({ sbomId }: SbomPreflightChecklistProps) 
           <p className="flex items-start gap-2 text-sm text-amber-700 dark:text-amber-300">
             <AlertTriangle className="h-4 w-4 mt-0.5" aria-hidden />
             <span>
-              Could not preview SBOM #{sbomId}: {error.message}. You can still run analysis — but
+              Could not preview selected SBOM: {error.message}. You can still run analysis — but
               we won&apos;t be able to estimate runtime.
             </span>
           </p>

@@ -22,7 +22,7 @@ function VersionRow({ version, latestId }: { version: SBOMSource; latestId?: str
     <Td>{version.product_version || version.productver || '—'}</Td>
     <Td>{formatDate(version.created_on)}</Td><Td>{version.created_by || '—'}</Td>
     <Td>{version.lifecycle_status || 'ACTIVE'} · {version.status}</Td>
-    <Td><SbomStatusBadge sbomId={version.id} latestAnalysis={version.latest_analysis} initialStatus={busy ? 'RUNNING' : undefined} /></Td>
+    <Td><SbomStatusBadge sbomId={version.id} displayId={version.display_id} latestAnalysis={version.latest_analysis} initialStatus={busy ? 'RUNNING' : undefined} /></Td>
     <Td>{hasPermission('analysis:run') && <Button size="sm" disabled={busy || !eligibility.eligible} loading={busy} onClick={() => startAnalysis({ sources: ['NVD', 'OSV', 'GITHUB'] })}>Run Analysis</Button>}</Td>
   </tr>;
 }

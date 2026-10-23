@@ -1,5 +1,6 @@
 'use client';
 
+import { RecordIdDisplay, recordIdLabel } from '@/components/ui/RecordIdDisplay';
 import { PermissionButton } from '@/components/ui/PermissionButton';
 
 import { useEffect, useMemo, useState } from 'react';
@@ -51,13 +52,13 @@ interface SbomsTableProps {
 
 function displayProject(sb: SBOMSource): string {
   if (sb.project_name?.trim()) return sb.project_name.trim();
-  if (sb.projectid != null) return `Project #${sb.projectid}`;
+  if (sb.projectid != null) return recordIdLabel('Project', sb.project_display_id);
   return 'Unassigned';
 }
 
 function displayProduct(sb: SBOMSource): string {
   if (sb.product_name?.trim()) return sb.product_name.trim();
-  if (sb.product_id != null) return `Product #${sb.product_id}`;
+  if (sb.product_id != null) return recordIdLabel('Application', sb.product_display_id);
   return 'Unassigned';
 }
 
@@ -179,7 +180,7 @@ export function SbomsTable({ sboms, isLoading, error }: SbomsTableProps) {
     if (search.trim()) {
       rows = rows.filter((sb) =>
         matchesMultiField(search, [
-          String(sb.id),
+          String(sb.display_id ?? ''),
           sb.sbom_name,
           displayProject(sb),
           displayProduct(sb),
@@ -490,7 +491,11 @@ export function SbomsTable({ sboms, isLoading, error }: SbomsTableProps) {
                       label={`Select ${sbom.sbom_name}`}
                     />
                   </Td>
-                  <Td className="font-mono text-xs text-hcl-muted">#{sbom.id}</Td>
+                  <Td className="font-mono text-xs text-hcl-muted">
+                    <Link href={`/sboms/${sbom.id}`} className="rounded hover:underline focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-hcl-blue/40">
+                      <RecordIdDisplay displayId={sbom.display_id} />
+                    </Link>
+                  </Td>
                   <Td className="max-w-[220px] font-medium text-hcl-navy">
                     <div className="flex items-center gap-1.5">
                       <Link
@@ -527,7 +532,7 @@ export function SbomsTable({ sboms, isLoading, error }: SbomsTableProps) {
                   </Td>
                   <Td>
                     <SbomStatusBadge
-                      sbomId={sbom.id}
+                      sbomId={sbom.id} displayId={sbom.display_id}
                       initialStatus={sbom._analysisStatus}
                       initialFindings={sbom._findingsCount}
                       latestAnalysis={sbom.latest_analysis}
