@@ -45,6 +45,7 @@ function SbomsContent() {
     <div className="flex flex-col flex-1">
       <TopBar
         title="SBOMs"
+        subtitle="Manage uploaded bills of materials, validate their contents and review security analysis."
         action={
           <Button permission={["sbom:upload", "product:assign_sbom"]} onClick={() => setShowUpload(true)}>
             <Upload className="h-4 w-4" />
@@ -52,9 +53,9 @@ function SbomsContent() {
           </Button>
         }
       />
-      <div className="p-6">
+      <main className="min-w-0 p-4 md:p-6 lg:p-8">
         <SbomsTable sboms={sboms} isLoading={isLoading} error={error} />
-      </div>
+      </main>
 
       <SbomUploadModal
         open={showUpload}
