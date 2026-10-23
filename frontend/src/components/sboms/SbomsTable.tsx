@@ -1,8 +1,6 @@
 'use client';
 
 import { RecordIdDisplay, recordIdLabel } from '@/components/ui/RecordIdDisplay';
-import { PermissionButton } from '@/components/ui/PermissionButton';
-
 import { useEffect, useMemo, useState } from 'react';
 import { useMutation, useQuery, useQueryClient } from '@tanstack/react-query';
 import { FileSpreadsheet, SlidersHorizontal, X } from 'lucide-react';
@@ -408,7 +406,7 @@ export function SbomsTable({ sboms, isLoading, error }: SbomsTableProps) {
                 className="w-full lg:max-w-md"
               />
               <div className="flex flex-wrap items-center gap-2">
-                <UiButton variant="secondary" size="md" aria-expanded={showFilters} aria-controls="sbom-inventory-filters" onClick={() => setShowFilters((value) => !value)}>
+                <UiButton variant="secondary" size="md" aria-expanded={showFilters} aria-controls={showFilters ? "sbom-inventory-filters" : undefined} onClick={() => setShowFilters((value) => !value)}>
                   <SlidersHorizontal className="h-4 w-4" aria-hidden />
                   Filters{activeFilterCount ? ` (${activeFilterCount})` : ''}
                 </UiButton>
