@@ -1,0 +1,298 @@
+{
+  "schema": "record-display-source-hashes.v1",
+  "algorithm": "SHA256",
+  "files": [
+    {
+      "path": "app/public_api.py",
+      "sha256": "ece0f6d2d3eb30557fb38565789350f2c409562617cb88faaff6b4c5bfdd445c"
+    },
+    {
+      "path": "app/record_presentation.py",
+      "sha256": "aaa49e2fcab723bd43e2fab826807425ea489c5e5c79421ffbf1836bfc597a23"
+    },
+    {
+      "path": "app/services/report_composer.py",
+      "sha256": "48756cd4493b8732369c0b1201e0df94bc8c724d6922e485df1093a9a5ad2c3e"
+    },
+    {
+      "path": "app/services/report_rendering.py",
+      "sha256": "2634c34cf5870495c4c1108fe1fea45b8c497365df9f76c4c5fefed0b1b6e148"
+    },
+    {
+      "path": "frontend/src/app/analysis/[id]/page.tsx",
+      "sha256": "356f902144107df08d1d56321dd12d194886859b72745894e7f2f217d0531a8b"
+    },
+    {
+      "path": "frontend/src/app/analysis/compare/_v1/page.tsx",
+      "sha256": "f72bd58d60b95c2b457a5a129b2c5f768a2bb548822c778e6a51f4de7496b3c9"
+    },
+    {
+      "path": "frontend/src/app/analysis/page.tsx",
+      "sha256": "7b28058bc10286d9c7167c7d584c1d86db64e81a0a45829b07774b42d8b9f108"
+    },
+    {
+      "path": "frontend/src/app/component-advisor/components/[key]/page.tsx",
+      "sha256": "c8b0959ae5283d61fa52562602d3c15c30967d0d2637feab313f3513139e56f8"
+    },
+    {
+      "path": "frontend/src/app/component-advisor/recommendations/[id]/page.tsx",
+      "sha256": "2335a3c81ed05965dfd102778b9d713367fecf3ba79da13488f46f91df43f0f9"
+    },
+    {
+      "path": "frontend/src/app/products/[id]/page.tsx",
+      "sha256": "78930b5f79a428266302b87ee4ad4ae2d78d996fdc78c5c0e189d9f9da7783eb"
+    },
+    {
+      "path": "frontend/src/app/projects/page.test.tsx",
+      "sha256": "b0222739e730b103b01565e886e838debbd2d0c5a6d8c77f5a81c5461726bb8b"
+    },
+    {
+      "path": "frontend/src/app/schedules/page.tsx",
+      "sha256": "9e1f08a1a43cdc5bd024217767cf6bcf4deb2d178d8b0a13528dea67be6185bf"
+    },
+    {
+      "path": "frontend/src/app/settings/tenant/page.test.tsx",
+      "sha256": "926a8c35a0944c97e36e66559fc0e87316a687f84bbca9543b08c4bb576c52dc"
+    },
+    {
+      "path": "frontend/src/components/admin/TenantMembersTable.tsx",
+      "sha256": "531497ef8dbc83aed7dd771700b95e4305b48d38a26afb5ccd8b3b16fa42fbe0"
+    },
+    {
+      "path": "frontend/src/components/admin/TenantUsersAccess.tsx",
+      "sha256": "32b5ebc04fbdb349fb24de255999bd35077e61a759afee163c29e3dc51be610c"
+    },
+    {
+      "path": "frontend/src/components/admin/UserSearchCombobox.tsx",
+      "sha256": "a2aee3f9f06a73e7292fe274d69c174245a2e7ef37e73250d02dfd3b5769fc24"
+    },
+    {
+      "path": "frontend/src/components/ai-fixes/GlobalAiBatchProgress/GlobalAiBatchBanner.tsx",
+      "sha256": "256f99e7c8ece03aee1fe66e6cf3ac489acbfb76ef07ca0edb85f5c9a4079886"
+    },
+    {
+      "path": "frontend/src/components/analysis/AnalysisProgress.tsx",
+      "sha256": "1ba3729ddae5a3521709b2fe1ad1bd2ede21e820365c4e2fc85609783d0b55fd"
+    },
+    {
+      "path": "frontend/src/components/analysis/ConsolidatedAnalysisPanel.tsx",
+      "sha256": "351c56e8cb1194631b5b6ffdb67a86cebaac53ce723b8d130eb78d5c51c3ebee"
+    },
+    {
+      "path": "frontend/src/components/analysis/FindingsTable.tsx",
+      "sha256": "cdf030aad75b05adf4d1b863da32322546e192d3e0a448992ad3d0742f77cfb9"
+    },
+    {
+      "path": "frontend/src/components/analysis/LiveAnalysisCard.tsx",
+      "sha256": "6ae0390ad366b8a58898fe81c466fee3428cf9c72f09556f02febe4d906743d1"
+    },
+    {
+      "path": "frontend/src/components/analysis/RunDetailHero.tsx",
+      "sha256": "2627980717d7c17d8266d56c03bef36c31f1261a5385cb616aef963c149eaeff"
+    },
+    {
+      "path": "frontend/src/components/analysis/RunsTable.status.test.tsx",
+      "sha256": "ba950279667c49ada3e49011d46a3aaa7ca06b2ebd53f83c64021141a06c1094"
+    },
+    {
+      "path": "frontend/src/components/analysis/RunsTable.tsx",
+      "sha256": "61e0857e886fc5265b70ed84b441eded64a451a6b78eb29c18318ec94a0e1645"
+    },
+    {
+      "path": "frontend/src/components/analysis/SbomPreflightChecklist.tsx",
+      "sha256": "1e53b4645153ff03750b10364401dd45a2f6f8269dc11196f9ed9650a28f2e4e"
+    },
+    {
+      "path": "frontend/src/components/analysis/VulnerabilitiesByScope.tsx",
+      "sha256": "81591736cb319fec137d0696929c21e439728492d536331cbf98ee6b3391b4ce"
+    },
+    {
+      "path": "frontend/src/components/compare/CompareView.tsx",
+      "sha256": "9794659e4309da19764f02500ced9116d9eb48138ab66fe348629438a2a01ffa"
+    },
+    {
+      "path": "frontend/src/components/compare/IdenticalRunsCard/IdenticalRunsCard.tsx",
+      "sha256": "5c4239069e7e9d9f502c1fec79e583e91402076308ab773538cb53917f491939"
+    },
+    {
+      "path": "frontend/src/components/compare/SelectionBar/RunPicker.tsx",
+      "sha256": "ee2798777d1d6a5a5454bd2a45e3712d69e4ec132711e47eae73150fb5ec8acd"
+    },
+    {
+      "path": "frontend/src/components/compare/__tests__/CompareView.integration.test.tsx",
+      "sha256": "0fb16d484f502173f02d92d606171f89905aedec72cebfad95691f6ea3a0f759"
+    },
+    {
+      "path": "frontend/src/components/compare/__tests__/RunPicker.test.tsx",
+      "sha256": "513bad4ad1fb5af141f520a742c0aa851abb151799f8bbdbab6f52874b5efda9"
+    },
+    {
+      "path": "frontend/src/components/compare/__tests__/test-utils.tsx",
+      "sha256": "a748a5b9f6b78836f143dcccabc14b8cba4bbf3d2e8605ff4c6a0b9d3ccdc2e5"
+    },
+    {
+      "path": "frontend/src/components/compare/states/CompareStates.tsx",
+      "sha256": "06ec793ba145dea5f0da8cc2df8bec7b27853372d4704fe1219a2743b43411c7"
+    },
+    {
+      "path": "frontend/src/components/dashboard/ActivityFeed.tsx",
+      "sha256": "383d87d8b1059029071129aa99a217bd49f2a4007069c5db424b021f721e74e5"
+    },
+    {
+      "path": "frontend/src/components/dashboard/PortfolioOverview.tsx",
+      "sha256": "fa7b5e68ffb5013eeff77a152c712da3375717ef24edd0f89a1528a4bc77b3e6"
+    },
+    {
+      "path": "frontend/src/components/layout/CommandPalette.tsx",
+      "sha256": "22ce5dbe14ded275d90dd38241f709a21e465687ca322b0befd9d06cc87efa47"
+    },
+    {
+      "path": "frontend/src/components/layout/Sidebar.tsx",
+      "sha256": "813b56a00af74f5ad21dfc4fa99026b576d2aaa50c54bdf7de30cbc5641ea1c0"
+    },
+    {
+      "path": "frontend/src/components/projects/ProjectApplications.tsx",
+      "sha256": "7b0f608f4add06018e2009d8db6e152c62a15b5570dee3d28cc59cfc78143196"
+    },
+    {
+      "path": "frontend/src/components/projects/ProjectsTable.tsx",
+      "sha256": "80d77bc6f2c4765e1edb69518d3f1c32f21174d5c060a4ecba05d9791e3cf0bc"
+    },
+    {
+      "path": "frontend/src/components/reports/ReportNotificationsPage.test.tsx",
+      "sha256": "31f0f3157d546e6c6061f3c31c8161dab8e7504c0a11e118ef374b12f118591a"
+    },
+    {
+      "path": "frontend/src/components/reports/ReportNotificationsPage.tsx",
+      "sha256": "2efaeaa8ca1e96de3dbe833fc388b4d96806d73cd725d6186ccfad033b8776e8"
+    },
+    {
+      "path": "frontend/src/components/sboms/AnalysisStatusBadge.tsx",
+      "sha256": "2a9eb109c7c905846b52becd62939f68469a1d33b58d9f0ed4f3ef675ff3eb8e"
+    },
+    {
+      "path": "frontend/src/components/sboms/ComponentVexManager.tsx",
+      "sha256": "0ed59d0323d76a4bcc82aad84ff8d19c63dda0769f4b0579abe0f82ea430fe53"
+    },
+    {
+      "path": "frontend/src/components/sboms/LogicalSbomHistory.tsx",
+      "sha256": "c7d6bce3f2c605067711c43516a3f76ab8046a5cc55348c7fac493eec2d0b07b"
+    },
+    {
+      "path": "frontend/src/components/sboms/SbomConversionCard.test.tsx",
+      "sha256": "15608d02af1956d68dec4dd74c04c6f1ee455489f8479fb8d272ecc65a738221"
+    },
+    {
+      "path": "frontend/src/components/sboms/SbomConversionCard.tsx",
+      "sha256": "7eeeba4ca9ef71bf1dcf96d04ca0e23ee1fa5c2144e0cb94280e20742233674d"
+    },
+    {
+      "path": "frontend/src/components/sboms/SbomDetail.tsx",
+      "sha256": "7b481c838e6915cc812676dc10c43b966509ca5c3b084e76df520310c6a4f12c"
+    },
+    {
+      "path": "frontend/src/components/sboms/SbomStatusBadge.tsx",
+      "sha256": "3bc61f338ac25144a27700ba697bae75fed2fd75c31762384055cd7805d1de30"
+    },
+    {
+      "path": "frontend/src/components/sboms/SbomsTable.analysis.test.tsx",
+      "sha256": "4135439a78a2fc43a49d3526768bf81722d1e4101862c446f301f6457c1d7e16"
+    },
+    {
+      "path": "frontend/src/components/sboms/SbomsTable.tsx",
+      "sha256": "db8036124e221a65ef1fc29392c785f719695b78a8a89507d01be949da2e1832"
+    },
+    {
+      "path": "frontend/src/components/sboms/inventory-sync.integration.test.tsx",
+      "sha256": "f6f6abae9af39ee1ff8df0d178762b31f4780f2404155021d626335ef91a7ba8"
+    },
+    {
+      "path": "frontend/src/components/schedules/ScheduleCard.tsx",
+      "sha256": "a949db1e5ef24ba4027d389a103669551d75413e195623afabd711bbd7c84765"
+    },
+    {
+      "path": "frontend/src/components/ui/RecordIdDisplay.test.tsx",
+      "sha256": "0a3c8ad3bc8c9283ace9892a8cffc9b45e005ca681ef344ee69d5119157fe191"
+    },
+    {
+      "path": "frontend/src/components/ui/RecordIdDisplay.tsx",
+      "sha256": "9c514ac39084e411e1691bb2e5b59f0b413ab637183d1fb33eeb6a1c22c2ff2b"
+    },
+    {
+      "path": "frontend/src/components/vex/VexDecisionEditor.tsx",
+      "sha256": "ed6268f37625a49b2ad648421d878cf4fd61cf5a235ae457fd02f5231c904697"
+    },
+    {
+      "path": "frontend/src/components/vex/VexRunHistoryPanel.test.tsx",
+      "sha256": "ad433c45e735ea5ab503e6bb7a94585aeaf20063ee00466ddc0bd8ba24569e63"
+    },
+    {
+      "path": "frontend/src/components/vex/VexRunHistoryPanel.tsx",
+      "sha256": "7fdd92c565b361c1a80014469b3ec3b7e7a92f570345bb468535b17f6c1df7ed"
+    },
+    {
+      "path": "frontend/src/hooks/useAnalysisStream.ts",
+      "sha256": "1358166b6d9887aa629fc095e6db3e91699405ebd684c8bc45bbe7514b83a1e8"
+    },
+    {
+      "path": "frontend/src/lib/api.ts",
+      "sha256": "9230084978af757272bf8ff791b72b2f623a69a242453c5c8b7f18fee252424e"
+    },
+    {
+      "path": "frontend/src/lib/recordDisplay.test.ts",
+      "sha256": "89b81472a65c852030a031a7ccae00737c26c36b78016b8b8c049389e0620a3a"
+    },
+    {
+      "path": "frontend/src/lib/recordDisplay.ts",
+      "sha256": "7184591d79839b9b545da1af101079b00a3cc4fba5cb8063ba971bc1bf7088c5"
+    },
+    {
+      "path": "frontend/src/lib/reportApi.ts",
+      "sha256": "6d26a851a8d88c8a8c6dd862cabfb7891bc7e74b54f92295e03de2a2ee3ea391"
+    },
+    {
+      "path": "frontend/src/lib/topVulnerableRuns.ts",
+      "sha256": "fc7ba899e70561b9127d8a492bcf23d20ec6330aa190e9ea5cc7dd65f9af0175"
+    },
+    {
+      "path": "frontend/src/types/compare.ts",
+      "sha256": "2e12ae499a275da59ea4114b38c457a86780dd30c94624c3ccbf9f15a70687d5"
+    },
+    {
+      "path": "frontend/src/types/index.ts",
+      "sha256": "f607855cfe5c5df7c06f56f32b3f8d7ffcaac22f59df081605c01de25e6d0d4b"
+    },
+    {
+      "path": "frontend/src/types/reports.ts",
+      "sha256": "e2d29bbd2d03583b01f9167439b34e8234ffbb7d84454b0a33f0092942d5e7ea"
+    },
+    {
+      "path": "tests/test_analyze_endpoints_snapshot.py",
+      "sha256": "763756ea58b4d8d93ebca8f4b723a8b29016553fb7addca656da619e375fc6ad"
+    },
+    {
+      "path": "tests/test_component_advisor_recommendations_api.py",
+      "sha256": "aa6bc92248e1cc1ac1452a17a12d3a890f7a35b665889755af4e85b9f377d9f7"
+    },
+    {
+      "path": "tests/test_iam_user_uuid_migration.py",
+      "sha256": "00b01b96a0a96d72ac89fe48f93cbf14ecf18fa73b7236516a376dde31e94bae"
+    },
+    {
+      "path": "tests/test_public_identity_batch_serialization.py",
+      "sha256": "9731335c225942b6be614e3ede1514549787ea82afdb3a27521dbb9f18441db1"
+    },
+    {
+      "path": "tests/test_record_presentation.py",
+      "sha256": "34732161176000113f03b61ec6a9462b9fce99226a5cb44d44a9c52e2e0579bc"
+    },
+    {
+      "path": "tests/test_record_presentation_postgres.py",
+      "sha256": "b7820ea6647bb4b05b3883fe1edee641d45eda793516d39504911a25e8cd13ae"
+    },
+    {
+      "path": "tests/test_sboms_analyze_snapshot.py",
+      "sha256": "28d1da113b1927325496cd655444bd68247b8936b3db86c7a3f2d162808f540b"
+    }
+  ]
+}

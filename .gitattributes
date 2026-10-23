@@ -1,2 +1,4 @@
 # Preserve the reviewed patch artifact byte-for-byte, including blank context lines.
 docs/uat/public-resource-uuid/evidence/implementation-source.patch -text whitespace=-blank-at-eol
+# Keep standard unified-diff context bytes in this reviewed evidence artifact.
+docs/uat/ui-integer-id-display/evidence/implementation-source.patch -text whitespace=-blank-at-eol,-space-before-tab

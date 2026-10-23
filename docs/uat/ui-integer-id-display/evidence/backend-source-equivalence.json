@@ -1,0 +1,79 @@
+{
+  "unchanged_application_and_common_runtime_source": true,
+  "all_other_frozen_files_unchanged": 1499,
+  "affected_modules": [
+    {
+      "file": "tests/test_analyze_endpoints_snapshot.py",
+      "old_sha256": "a5c13526b5da9683e98985f6729c668e58c26dd9a85f4668121a9251ea6406eb",
+      "new_sha256": "763756ea58b4d8d93ebca8f4b723a8b29016553fb7addca656da619e375fc6ad",
+      "passed": 5,
+      "failed": 0,
+      "skipped": 0,
+      "exact_original_case_set_match": true,
+      "shared_fixture_dependency": false
+    },
+    {
+      "file": "tests/test_component_advisor_recommendations_api.py",
+      "old_sha256": "26c56676836ec16089e812b17c0cffb6faaa29dd4b412f427b672359839c762c",
+      "new_sha256": "aa6bc92248e1cc1ac1452a17a12d3a890f7a35b665889755af4e85b9f377d9f7",
+      "passed": 29,
+      "failed": 0,
+      "skipped": 0,
+      "exact_original_case_set_match": true,
+      "shared_fixture_dependency": false
+    },
+    {
+      "file": "tests/test_iam_user_uuid_migration.py",
+      "old_sha256": "7534fc43a8ecbc83fbcb01859096f476c8cd7417060bcb0cb36459abdc514622",
+      "new_sha256": "00b01b96a0a96d72ac89fe48f93cbf14ecf18fa73b7236516a376dde31e94bae",
+      "passed": 3,
+      "failed": 0,
+      "skipped": 0,
+      "exact_original_case_set_match": true,
+      "shared_fixture_dependency": false
+    },
+    {
+      "file": "tests/test_public_resource_uuid_migration.py",
+      "old_sha256": "821232e251c4f20f702d52a11d453153b5154c15e0fbcc6b30f4c644b56b46e2",
+      "new_sha256": "821232e251c4f20f702d52a11d453153b5154c15e0fbcc6b30f4c644b56b46e2",
+      "passed": 4,
+      "failed": 0,
+      "skipped": 0,
+      "exact_original_case_set_match": true,
+      "shared_fixture_dependency": true
+    },
+    {
+      "file": "tests/test_public_identity_batch_serialization.py",
+      "old_sha256": "439772aae69e00a1616816f6a258eb459f5d248e591ac256e4948fc9b0377c1e",
+      "new_sha256": "9731335c225942b6be614e3ede1514549787ea82afdb3a27521dbb9f18441db1",
+      "passed": 5,
+      "failed": 0,
+      "skipped": 0,
+      "exact_original_case_set_match": true,
+      "shared_fixture_dependency": false
+    },
+    {
+      "file": "tests/test_sboms_analyze_snapshot.py",
+      "old_sha256": "d85d8f54f407561ffe27456ea7e595660153081b6f56fa7d1e81794589822216",
+      "new_sha256": "28d1da113b1927325496cd655444bd68247b8936b3db86c7a3f2d162808f540b",
+      "passed": 3,
+      "failed": 0,
+      "skipped": 0,
+      "exact_original_case_set_match": true,
+      "shared_fixture_dependency": false
+    }
+  ],
+  "reconciliation_rule": "Exclude all original outcomes in these six modules and replace with complete corrected 5+29+3+4+5+3 case runs; retain original failures/errors as history",
+  "application_source_changed_after_broad_run_start": false,
+  "migration_fixture_change": "Only two exact newly owned database names added; no wildcard, old-name reuse, populated database or host fallback",
+  "changed_shared_test_fixture_dependents": [
+    {
+      "file": "tests/test_public_resource_uuid_migration.py",
+      "result": "4 PASS in corrected migration rerun"
+    },
+    {
+      "file": "tests/test_greenfield_startup_postgresql.py",
+      "result": "2 explicit SKIP; opt-in remains disabled, fixture never executes in skipped cases"
+    }
+  ]
+}

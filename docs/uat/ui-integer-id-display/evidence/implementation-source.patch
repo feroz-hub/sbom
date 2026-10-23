@@ -1,0 +1,2630 @@
+--- a/app/public_api.py
++++ b/app/public_api.py
+@@ -33,6 +33,7 @@
+     user_lookup,
+ )
+ from .models import IAMUser, LogicalSBOM, Product, Projects, SBOMComponent, SBOMSource, Tenant
++from .record_presentation import add_display, augment_openapi, presentable_path
+ 
+ MODELS = {
+     **resources.MODELS,
+@@ -328,6 +329,8 @@
+                         entity = field_entity(key, path)
+                         if key in ("metadata_json", "evidence_json", "sbom_data", "validation_report", "raw_document"):
+                             continue
++                        if key == "display_id" or key.endswith("_display_id"):
++                            raise HTTPException(422, "Display identifiers are output-only; use the public UUID")
+                         if (
+                             key == "assigned_to"
+                             and resources.namespace_field(key, path)
+@@ -478,6 +481,7 @@
+                             return [walk(x, node.get("items", {}), entity) for x in value]
+                         if isinstance(value, dict):
+                             result = {}
++                            labels = {}
+                             for key, item in value.items():
+                                 target = field_entity(key, path)
+                                 if key == "input" and isinstance(value.get("loc"), list) and value["loc"]:
+@@ -509,6 +513,8 @@
+                                     result[key] = [outward(batch, x) for x in item]
+                                 elif target and isinstance(item, int):
+                                     result[key] = outward(target, item)
++                                    if not collecting and response.status_code < 400 and presentable_path(path):
++                                        add_display(labels, key, target, item)
+                                 elif key == "raw_report" and isinstance(item, str) and resources.run_route(path):
+                                     try:
+                                         report = json.loads(item)
+@@ -536,6 +542,9 @@
+                                             )
+                                         ),
+                                     )
++                            # A DTO's optional/default display value must never
++                            # overwrite the label derived from its actual key.
++                            result.update(labels)
+                             return result
+                         return value
+ 
+@@ -691,6 +700,6 @@
+                         parameter["schema"] = uuid_field(parameter.get("schema", {}))
+         from .resource_openapi import augment
+ 
+-        return augment(doc)
++        return augment_openapi(augment(doc), schema_entity, field_entity)
+ 
+     app.openapi = generate
+--- /dev/null
++++ b/app/record_presentation.py
+@@ -0,0 +1,87 @@
++"""Output-only record labels, never alternate resource selectors.
++
++Only business resources already resolved by the scoped public boundary qualify.
++Global tenant/IAM/membership/grant sequences intentionally remain private.
++"""
++
++ENTITIES = frozenset({"projects", "products", "logical_sbom", "sbom_source", "sbom_component", "analysis_run"})
++
++
++def presentable_path(path):
++    # Operational AI progress/store envelopes are not record-label DTOs. Their
++    # strict wire contract and worker/SSE identities stay exactly as reviewed.
++    return not path.startswith(("/api/v1/runs/", "/api/v1/scans/"))
++
++
++def display_field(key, entity):
++    if entity not in ENTITIES:
++        return None
++    if key == "id":
++        return "display_id"
++    if key.endswith("_id"):
++        return key[:-3] + "_display_id"
++    if key in {"projectid", "runId", "scanId"}:
++        return {"projectid": "project_display_id", "runId": "run_display_id", "scanId": "scan_display_id"}[key]
++    return None
++
++
++def add_display(result, key, entity, internal):
++    field = display_field(key, entity)
++    if field and type(internal) is int and 0 < internal <= 2**53 - 1:
++        result[field] = internal
++
++
++def integer_label(kind, value):
++    if type(value) is int and 0 < value <= 2**53 - 1:
++        return f"{kind} #{value}"
++    return f"{kind} —"
++
++
++def schema_field():
++    return {
++        "anyOf": [{"type": "integer", "minimum": 1, "maximum": 2**53 - 1}, {"type": "null"}],
++        "readOnly": True,
++        "description": "Existing persisted integer key for authorized display only. Never a resource selector; use the UUID.",
++    }
++
++
++def augment_openapi(doc, schema_entity, field_entity):
++    """Decorate successful response schemas only, including existing DTO refs."""
++    schemas = doc.get("components", {}).get("schemas", {})
++    seen = set()
++
++    def visit(node, path):
++        if "$ref" in node:
++            name = node["$ref"].rsplit("/", 1)[-1]
++            marker = (name, path)
++            if marker in seen:
++                return
++            seen.add(marker)
++            node = schemas.get(name, {})
++        entity = schema_entity(node)
++        if node is schemas.get("PublicRunReference"):
++            entity = "analysis_run"
++        properties = node.get("properties", {})
++        for key, value in list(properties.items()):
++            target = entity if key == "id" else field_entity(key, path)
++            field = display_field(key, target)
++            if field:
++                properties[field] = schema_field()
++            visit(value, path)
++        for key in ("items", "additionalProperties"):
++            if isinstance(node.get(key), dict):
++                visit(node[key], path)
++        for key in ("anyOf", "allOf", "oneOf"):
++            for item in node.get(key, []):
++                visit(item, path)
++
++    for path, operations in doc.get("paths", {}).items():
++        if not presentable_path(path):
++            continue
++        for operation in operations.values():
++            if not isinstance(operation, dict):
++                continue
++            for status, response in operation.get("responses", {}).items():
++                if status.startswith("2"):
++                    visit(response.get("content", {}).get("application/json", {}).get("schema", {}), path)
++    return doc
+--- a/app/services/report_composer.py
++++ b/app/services/report_composer.py
+@@ -190,6 +190,7 @@
+     from sqlalchemy import select
+ 
+     from ..models import AnalysisRun, Product, Projects, SBOMComponent, SBOMSource, Tenant
++    from ..record_presentation import add_display
+ 
+     models = {
+         "tenant_id": Tenant,
+@@ -223,17 +224,27 @@
+             return [walk(item, entity) for item in value]
+         if isinstance(value, dict):
+             result = {}
++            labels = {}
+             for key, item in value.items():
+                 if key == "scheduled_outcomes":
+-                    result[key] = {
+-                        identity(SBOMSource, int(k) if str(k).isdecimal() else k): walk(v) for k, v in item.items()
+-                    }
++                    outcomes = {}
++                    for k, v in item.items():
++                        internal = int(k) if str(k).isdecimal() else k
++                        row = walk(v)
++                        if not collecting:
++                            add_display(row, "sbom_id", "sbom_source", internal)
++                        outcomes[identity(SBOMSource, internal)] = row
++                    result[key] = outcomes
+                 elif key in models or key == "id" and entity is not None:
+-                    result[key] = identity(entity if key == "id" else models[key], item)
++                    model = entity if key == "id" else models[key]
++                    result[key] = identity(model, item)
++                    if not collecting:
++                        add_display(labels, key, model.__tablename__, item)
+                 else:
+                     result[key] = walk(
+                         item, SBOMSource if key == "sboms" else AnalysisRun if key in {"run_a", "run_b"} else None
+                     )
++            result.update(labels)
+             return result
+         return value
+ 
+--- a/app/services/report_rendering.py
++++ b/app/services/report_rendering.py
+@@ -10,6 +10,7 @@
+ from reportlab.lib.units import inch
+ from reportlab.platypus import LongTable, Paragraph, SimpleDocTemplate, Spacer, TableStyle
+ 
++from ..record_presentation import integer_label
+ from .email_sender import EmailAttachment
+ from .report_composer import PART_NAMES
+ 
+@@ -20,8 +21,13 @@
+     return "—" if value is None else str(value)
+ 
+ 
+-def report_sections(report, *, compact=False):
++def report_sections(report, *, compact=False, display=False):
+     """One section source for all human-readable formats, including failed parts."""
++
++    def reference(row, key, kind):
++        field = "display_id" if key == "id" else key[:-3] + "_display_id"
++        return integer_label(kind, row.get(field)) if display else row.get(key)
++
+     summary = report["summary"]
+     yield (
+         "Reporting window",
+@@ -39,6 +45,7 @@
+                 "runs_considered",
+                 "severity_floor",
+             )
++            if not (display and k == "tenant_id")
+         ],
+     )
+     yield "Portfolio summary · Convention A", ["Metric", "Value"], [[k, v] for k, v in summary.items()]
+@@ -57,7 +64,14 @@
+         yield (
+             "Scheduled cycle outcomes (posture uses the last successful data)",
+             ["SBOM ID", "Completion status", "Run ID"],
+-            [[sid, outcome["status"], outcome.get("run_id")] for sid, outcome in report["scheduled_outcomes"].items()],
++            [
++                [
++                    integer_label("SBOM", outcome.get("sbom_display_id")) if display else sid,
++                    outcome["status"],
++                    reference(outcome, "run_id", "Run"),
++                ]
++                for sid, outcome in report["scheduled_outcomes"].items()
++            ],
+         )
+     yield (
+         "SBOM results",
+@@ -66,7 +80,7 @@
+             [
+                 s["name"],
+                 s["version"],
+-                s["A"]["run_id"],
++                reference(s["A"], "run_id", "Run"),
+                 s["A"]["run_status"],
+                 s["A"]["latest_attempt_status"],
+                 s["A"]["total_findings"],
+@@ -126,8 +140,8 @@
+                 title,
+                 ["Metric", "Value"],
+                 [
+-                    ["Baseline run", comparison["run_a"]["id"]],
+-                    ["Current run", comparison["run_b"]["id"]],
++                    ["Baseline run", reference(comparison["run_a"], "id", "Run")],
++                    ["Current run", reference(comparison["run_b"], "id", "Run")],
+                     ["Elapsed days", comparison["relationship"]["days_between"]],
+                     ["Relationship", comparison["relationship"]["classification"]],
+                     *[[k, v] for k, v in comparison["posture"].items() if not isinstance(v, list)],
+@@ -302,7 +316,7 @@
+     # The plain-text part carries the complete compact digest; the HTML part is
+     # the executive template (full detail travels in the PDF/XLSX/JSON artifacts).
+     text = [subject]
+-    for title, columns, rows in report_sections(report, compact=True):
++    for title, columns, rows in report_sections(report, compact=True, display=True):
+         text.extend(["", title, " | ".join(columns)])
+         text.extend(" | ".join(_text(v) for v in row) for row in rows)
+     text.extend(omitted)
+@@ -437,7 +451,7 @@
+         [
+             f"<strong>{_e(s['name'])}</strong>",
+             _e(s.get("version")),
+-            _e(s["A"].get("run_id")),
++            _e(integer_label("Run", s["A"].get("run_display_id"))),
+             _e(s["A"].get("run_status")),
+             _e(s["A"].get("total_findings")),
+         ]
+@@ -461,8 +475,12 @@
+     # Scheduled cycle outcomes
+     if report.get("scheduled_outcomes"):
+         outcome_rows = [
+-            [_e(sbom_id), _e(outcome.get("status")), _e(outcome.get("run_id"))]
+-            for sbom_id, outcome in report["scheduled_outcomes"].items()
++            [
++                _e(integer_label("SBOM", outcome.get("sbom_display_id"))),
++                _e(outcome.get("status")),
++                _e(integer_label("Run", outcome.get("run_display_id"))),
++            ]
++            for outcome in report["scheduled_outcomes"].values()
+         ]
+         html.append(
+             _block(
+@@ -503,7 +521,7 @@
+     html.append(
+         f"<tr><td style='padding:18px 36px; background-color:{_HEAD_BG}; border-top:1px solid {_BORDER};'>"
+         f"<div style='font-size:11px; color:#94a3b8; line-height:1.6;'>{caveats}<br><br>"
+-        f"SBOM Analyzer &middot; tenant {_e(report['tenant_id'])} &middot; {_e(report['scope'])} scope &middot; "
++        f"SBOM Analyzer &middot; tenant-scoped report &middot; {_e(report['scope'])} scope &middot; "
+         f"cycle {_e(report['cycle_start'][:10])} &rarr; {_e(report['cycle_end'][:10])}</div></td></tr>"
+     )
+     html.append("</table></td></tr></table></body></html>")
+--- a/frontend/src/app/analysis/[id]/page.tsx
++++ b/frontend/src/app/analysis/[id]/page.tsx
+@@ -1,5 +1,6 @@
+ 'use client';
+ 
++import { recordIdLabel } from '@/components/ui/RecordIdDisplay';
+ import { publicId } from '@/lib/publicId';
+ import { Suspense, use, useState } from 'react';
+ import { useQuery } from '@tanstack/react-query';
+@@ -145,7 +146,7 @@
+     try {
+       const blob = await downloadPdfReport({
+         runId: run.id,
+-        title: `Analysis Report — Run #${run.id}`,
++        title: `Analysis Report — ${recordIdLabel('Run', run.display_id)}`,
+         filename: `sbom-analysis-run-${run.id}.pdf`,
+       });
+       downloadBlob(blob, `sbom-analysis-run-${run.id}.pdf`);
+@@ -248,11 +249,11 @@
+   return (
+     <div className="flex flex-1 flex-col">
+       <TopBar
+-        title={`Run #${run.id}`}
+-        subtitle={run.sbom_name ?? `SBOM #${run.sbom_id ?? '—'}`}
++        title={`${recordIdLabel('Run', run.display_id)}`}
++        subtitle={run.sbom_name ?? recordIdLabel('SBOM', run.sbom_display_id)}
+         breadcrumbs={[
+           { label: 'Analysis Runs', href: '/analysis' },
+-          { label: `Run #${run.id}` },
++          { label: `${recordIdLabel('Run', run.display_id)}` },
+         ]}
+         action={<ExportMenu items={exportItems} />}
+       />
+--- a/frontend/src/app/analysis/compare/_v1/page.tsx
++++ b/frontend/src/app/analysis/compare/_v1/page.tsx
+@@ -1,5 +1,6 @@
+ 'use client';
+ 
++import { recordIdLabel } from '@/components/ui/RecordIdDisplay';
+ import { publicId } from '@/lib/publicId';
+ import { Suspense, useMemo, useState } from 'react';
+ import Link from 'next/link';
+@@ -47,7 +48,7 @@
+     <div className="flex flex-1 flex-col">
+       <TopBar
+         title="Compare runs"
+-        subtitle={canQuery ? `Run #${runA} vs Run #${runB}` : 'Diff two analysis runs'}
++        subtitle={canQuery ? 'Selected analysis runs' : 'Diff two analysis runs'}
+         breadcrumbs={[
+           { label: 'Analysis Runs', href: '/analysis' },
+           { label: 'Compare' },
+@@ -284,7 +285,7 @@
+ // ─── Helper components ───────────────────────────────────────────────────────
+ 
+ interface RunHeaderProps {
+-  run: { id: string; sbom_name: string | null; completed_on: string | null };
++  run: { display_id?: number | null; id: string; sbom_name: string | null; completed_on: string | null };
+   label: string;
+   align: 'left' | 'right';
+ }
+@@ -302,7 +303,7 @@
+       </p>
+       <h3 className="mt-1 truncate text-display-sm font-semibold text-hcl-navy">
+         <Link href={`/analysis/${run.id}`} className="hover:text-primary hover:underline">
+-          #{run.id}
++          {recordIdLabel('Run', run.display_id)}
+         </Link>
+       </h3>
+       <p className="font-metric mt-0.5 truncate text-xs tabular-nums text-hcl-muted">
+--- a/frontend/src/app/analysis/page.tsx
++++ b/frontend/src/app/analysis/page.tsx
+@@ -1,5 +1,6 @@
+ 'use client';
+ 
++import { recordIdLabel } from '@/components/ui/RecordIdDisplay';
+ import { Suspense, useCallback, useMemo, useState } from 'react';
+ import { useRouter } from 'next/navigation';
+ import { useQuery } from '@tanstack/react-query';
+@@ -105,7 +106,7 @@
+     const byId = new Map<string | number, string>();
+     for (const sbom of sboms ?? []) {
+       if (sbom.product_id != null && !byId.has(sbom.product_id)) {
+-        byId.set(sbom.product_id, sbom.product_name?.trim() || `Product #${sbom.product_id}`);
++        byId.set(sbom.product_id, sbom.product_name?.trim() || recordIdLabel('Application', sbom.product_display_id));
+       }
+     }
+     return Array.from(byId, ([id, name]) => ({ id, name })).sort((a, b) =>
+@@ -148,8 +149,8 @@
+   });
+ 
+   const handleAnalysisComplete = useCallback(
+-    (runId: string) => {
+-      showToast(`Analysis run #${runId} completed successfully.`, 'success');
++    () => {
++      showToast('Analysis completed successfully.', 'success');
+       refetch();
+     },
+     [showToast, refetch],
+--- a/frontend/src/app/component-advisor/components/[key]/page.tsx
++++ b/frontend/src/app/component-advisor/components/[key]/page.tsx
+@@ -195,7 +195,7 @@
+           <CardContent className="space-y-3 text-sm">
+             <p className="text-xs text-hcl-muted">Adoption is contextual evidence only — not proof of compatibility or security.</p>
+             {c.adoption.active_sbom_occurrences === 0 ? <AdvisorNotice kind="NO_ACTIVE_SBOM_OCCURRENCES" /> : (
+-              <p>{c.adoption.active_sbom_occurrences} active SBOM occurrence(s) · Products: {c.adoption.products.map((p) => p.name ?? `#${p.id}`).join(', ') || '—'} · Projects: {c.adoption.projects.map((p) => p.name ?? `#${p.id}`).join(', ') || '—'}</p>
++              <p>{c.adoption.active_sbom_occurrences} active SBOM occurrence(s) · Products: {c.adoption.products.map((p) => p.name ?? 'Unnamed resource').join(', ') || '—'} · Projects: {c.adoption.projects.map((p) => p.name ?? 'Unnamed resource').join(', ') || '—'}</p>
+             )}
+             <Table ariaLabel="Observed versions of this component">
+               <TableHead><tr><Th>Version</Th><Th>Risk</Th><Th>Lifecycle</Th><Th>Licenses</Th><Th>Occurrences</Th><Th>Products</Th></tr></TableHead>
+--- a/frontend/src/app/component-advisor/recommendations/[id]/page.tsx
++++ b/frontend/src/app/component-advisor/recommendations/[id]/page.tsx
+@@ -86,7 +86,7 @@
+               {discovery.source_posture ? <LifecycleBadge bucket={discovery.source_posture.lifecycle_bucket} /> : null}
+               <Badge variant="gray">{STATUS_LABELS[item.status]}</Badge>
+             </div>
+-            <p>Reason: {TRIGGER_LABELS[item.trigger_type]} · Context: {item.context.level === 'SBOM' ? `SBOM #${item.context.sbom_id}` : 'Tenant-wide'} · Evaluated {formatTimestamp(item.evaluated_at)}</p>
++            <p>Reason: {TRIGGER_LABELS[item.trigger_type]} · Context: {item.context.level === 'SBOM' ? 'Selected SBOM' : 'Tenant-wide'} · Evaluated {formatTimestamp(item.evaluated_at)}</p>
+             {discovery.source_posture?.actionable_vulnerability_ids?.length ? (
+               <p>Actionable: {discovery.source_posture.actionable_vulnerability_ids.join(', ')}</p>
+             ) : null}
+--- a/frontend/src/app/products/[id]/page.tsx
++++ b/frontend/src/app/products/[id]/page.tsx
+@@ -1,5 +1,6 @@
+ 'use client';
+ 
++import { recordIdLabel } from '@/components/ui/RecordIdDisplay';
+ import Link from 'next/link';
+ import { use, useState } from 'react';
+ import { useMutation, useQuery, useQueryClient } from '@tanstack/react-query';
+@@ -47,7 +48,7 @@
+ 
+   return (
+     <tr>
+-      <Td className="font-mono text-xs text-hcl-muted">#{master.id}</Td>
++      <Td className="font-mono text-xs text-hcl-muted">{recordIdLabel('', master.display_id)}</Td>
+       <Td>
+         <Link
+           href={`/sboms/logical/${master.id}`}
+@@ -221,7 +222,7 @@
+             <dl className="grid gap-4 sm:grid-cols-2 lg:grid-cols-4">
+               <div>
+                 <dt className="text-xs font-medium uppercase text-hcl-muted">Project</dt>
+-                <dd className="mt-1 text-hcl-navy">Project #{product.project_id}</dd>
++                <dd className="mt-1 text-hcl-navy">{recordIdLabel('Project', product.project_display_id)}</dd>
+               </div>
+               <div>
+                 <dt className="text-xs font-medium uppercase text-hcl-muted">SBOMs</dt>
+@@ -269,7 +270,7 @@
+                 ) : !logicalSbomsQuery.data?.items.length ? (
+                   <EmptyRow cols={8} message="No SBOMs are linked to this application yet." />
+                 ) : (
+-                  logicalSbomsQuery.data.items.map(master => master.latest_version ? <ProductSbomRow key={master.id} sbom={master.latest_version} master={master} /> : <tr key={master.id}><Td>#{master.id}</Td><Td><Link href={`/sboms/logical/${master.id}`}>{master.name}</Link></Td><td colSpan={6} className="p-3 text-hcl-muted">No versions uploaded</td></tr>)
++                  logicalSbomsQuery.data.items.map(master => master.latest_version ? <ProductSbomRow key={master.id} sbom={master.latest_version} master={master} /> : <tr key={master.id}><Td>{recordIdLabel('', master.display_id)}</Td><Td><Link href={`/sboms/logical/${master.id}`}>{master.name}</Link></Td><td colSpan={6} className="p-3 text-hcl-muted">No versions uploaded</td></tr>)
+                 )}
+               </TableBody>
+             </Table>
+--- a/frontend/src/app/projects/page.test.tsx
++++ b/frontend/src/app/projects/page.test.tsx
+@@ -16,11 +16,11 @@
+ vi.mock('@/components/sboms/SbomUploadModal', () => ({ SbomUploadModal: ({ open, initialProjectId, initialProductId }: { open: boolean; initialProjectId: number; initialProductId: number }) => open ? <div role="dialog" aria-label={`Upload to project ${initialProjectId} application ${initialProductId}`} /> : null }));
+ vi.mock('@/components/schedules/ProjectScheduleDialog', () => ({ ProjectScheduleDialog: ({ open, project }: { open: boolean; project: Project }) => open ? <div role="dialog" aria-label={`Schedule ${project.project_name}`} /> : null }));
+ const projects: Project[] = [
+-  { id: "00000000-0000-4000-8000-000000000002", project_name: 'Pump Security', project_details: 'Governance and monitoring', project_status: 1, created_by: 'owner@example.test', created_on: null, modified_by: null, modified_on: null },
+-  { id: "00000000-0000-4000-8000-000000000001", project_name: 'TestProject', project_details: null, project_status: 0, created_by: null, created_on: null, modified_by: null, modified_on: null },
++  { id: "00000000-0000-4000-8000-000000000002", display_id: 2, project_name: 'Pump Security', project_details: 'Governance and monitoring', project_status: 1, created_by: 'owner@example.test', created_on: null, modified_by: null, modified_on: null },
++  { id: "00000000-0000-4000-8000-000000000001", display_id: 1, project_name: 'TestProject', project_details: null, project_status: 0, created_by: null, created_on: null, modified_by: null, modified_on: null },
+ ];
+-const pump: Product = { id: "00000000-0000-4000-8000-000000000014", project_id: "00000000-0000-4000-8000-000000000002", name: 'Pump Controller', description: 'Controller software', status: 'active', sbom_count: 1, latest_sbom_id: "00000000-0000-4000-8000-000000000008", latest_sbom_version: '1.0.0', current_sbom_id: "00000000-0000-4000-8000-000000000008", current_sbom_version: '1.0.0' };
+-const other: Product = { id: "00000000-0000-4000-8000-00000000000a", project_id: "00000000-0000-4000-8000-000000000001", name: 'Other application', status: 'inactive', sbom_count: 2 };
++const pump: Product = { id: "00000000-0000-4000-8000-000000000014", display_id: 20, project_id: "00000000-0000-4000-8000-000000000002", name: 'Pump Controller', description: 'Controller software', status: 'active', sbom_count: 1, latest_sbom_id: "00000000-0000-4000-8000-000000000008", latest_sbom_display_id: 8, latest_sbom_version: '1.0.0', current_sbom_id: "00000000-0000-4000-8000-000000000008", current_sbom_display_id: 8, current_sbom_version: '1.0.0' };
++const other: Product = { id: "00000000-0000-4000-8000-00000000000a", display_id: 10, project_id: "00000000-0000-4000-8000-000000000001", name: 'Other application', status: 'inactive', sbom_count: 2 };
+ function setup() {
+   const client = new QueryClient({ defaultOptions: { queries: { retry: false }, mutations: { retry: false } } });
+   const tree = () => <QueryClientProvider client={client}><ToastProvider><ProjectsPage /></ToastProvider></QueryClientProvider>;
+@@ -41,6 +41,13 @@
+ });
+ 
+ describe('Projects selection and contextual applications', () => {
++  it('shows the persisted project label while selection and links retain UUIDs', async () => {
++    mocks.getProjects.mockResolvedValue([{ ...projects[0], display_id: 873 }]);
++    setup();
++    await screen.findByLabelText('Project ID 873');
++    expect(screen.queryByText(`#${projects[0].id}`)).not.toBeInTheDocument();
++    expect(mocks.getProducts).toHaveBeenCalledWith(projects[0].id, expect.any(AbortSignal));
++  });
+   it('loads only the initial project applications and switches the same table with URL selection', async () => {
+     const { refresh } = setup();
+     await screen.findByRole('button', { name: 'Select project Pump Security' });
+@@ -67,8 +74,8 @@
+   });
+   it('keeps application edit, upload, soft-delete confirmation and SBOM links', async () => {
+     setup(); await waitFor(() => expect(within(appTable()).getByText('Pump Controller')).toBeInTheDocument());
+-    expect(within(appTable()).getByRole('link', { name: "#00000000-0000-4000-8000-000000000008" })).toHaveAttribute('href', "/sboms/00000000-0000-4000-8000-000000000008");
+-    expect(within(appTable()).getByRole('link', { name: '1.0.0' })).toHaveAttribute('href', "/sboms/00000000-0000-4000-8000-000000000008");
++    expect(within(appTable()).getByRole('link', { name: "SBOM #8" })).toHaveAttribute('href', "/sboms/00000000-0000-4000-8000-000000000008");
++    expect(within(appTable()).getByRole('link', { name: 'SBOM #8 · 1.0.0' })).toHaveAttribute('href', "/sboms/00000000-0000-4000-8000-000000000008");
+     const actions = () => { fireEvent.click(within(appTable()).getByRole('button', { name: 'Actions for application Pump Controller' })); return screen.getByRole('menu'); };
+     fireEvent.click(within(actions()).getByRole('menuitem', { name: 'Edit application' }));
+     expect(screen.getByRole('dialog', { name: 'Edit application in Pump Security' })).toBeInTheDocument();
+--- a/frontend/src/app/schedules/page.tsx
++++ b/frontend/src/app/schedules/page.tsx
+@@ -123,13 +123,13 @@
+   );
+ 
+   const targetLabel = useCallback((sched: AnalysisSchedule): string => {
+-    if (sched.scope === 'TENANT') return `Tenant #${sched.tenant_id ?? ''}`;
+-    if (sched.scope === 'PRODUCT') return sched.product_name ?? `Product #${sched.product_id ?? ''}`;
++    if (sched.scope === 'TENANT') return 'Selected tenant';
++    if (sched.scope === 'PRODUCT') return sched.product_name ?? 'Selected application';
+     if (sched.scope === 'PROJECT' && sched.project_id != null) {
+-      return sched.project_name ?? projectById.get(sched.project_id)?.project_name ?? `Project #${sched.project_id}`;
++      return sched.project_name ?? projectById.get(sched.project_id)?.project_name ?? 'Selected project';
+     }
+     if (sched.scope === 'SBOM' && sched.sbom_id != null) {
+-      const name = sched.sbom_name ?? sbomById.get(sched.sbom_id)?.sbom_name ?? `SBOM #${sched.sbom_id}`;
++      const name = sched.sbom_name ?? sbomById.get(sched.sbom_id)?.sbom_name ?? 'Selected SBOM';
+       return `${name}${sched.sbom_version ? ` ${sched.sbom_version}` : ''}`;
+     }
+     return '—';
+@@ -176,7 +176,7 @@
+     mutationFn: (id: number) => runScheduleNow(id),
+     onSuccess: (res, _variables, context) => {
+       if (!context?.isCurrent()) return;
+-      for (const id of res.sbom_ids) addPendingAnalysis(id, `SBOM #${id}`, context.scopeKey);
++      for (const id of res.sbom_ids) addPendingAnalysis(id, 'Scheduled SBOM', context.scopeKey);
+       showToast(
+         `Enqueued ${res.sbom_ids.length} SBOM analysis${res.sbom_ids.length === 1 ? '' : 'es'}`,
+         'success',
+--- a/frontend/src/app/settings/tenant/page.test.tsx
++++ b/frontend/src/app/settings/tenant/page.test.tsx
+@@ -484,7 +484,7 @@
+   it('keeps members without a name or email in the unfiltered directory', async () => {
+     api.getTenantMembers.mockResolvedValue([{ ...member, display_name: null, email: null }]);
+     renderPage();
+-    expect(await screen.findAllByText('User #00000000-0000-4000-8000-00000000000c')).toHaveLength(2);
++    expect(await screen.findAllByText('Member')).toHaveLength(2);
+     expect(screen.getByLabelText('1 total members')).toBeInTheDocument();
+   });
+ 
+--- a/frontend/src/components/admin/TenantMembersTable.tsx
++++ b/frontend/src/components/admin/TenantMembersTable.tsx
+@@ -26,7 +26,7 @@
+ }
+ 
+ export function memberDisplayName(member: TenantMember): string {
+-  return member.display_name || member.email || `User #${member.user_id}`;
++  return member.display_name || member.email || 'Member';
+ }
+ 
+ /**
+--- a/frontend/src/components/admin/TenantUsersAccess.tsx
++++ b/frontend/src/components/admin/TenantUsersAccess.tsx
+@@ -251,7 +251,7 @@
+     );
+   }
+ 
+-  const tenantName = activeTenantObj?.name || `Tenant #${currentTenantId}`;
++  const tenantName = activeTenantObj?.name || 'Selected tenant';
+ 
+   const searchTerm = memberSearch.trim().toLocaleLowerCase();
+   const filteredMembers = searchTerm ? members.data?.filter(member =>
+@@ -364,7 +364,7 @@
+         <ManageRolesModal
+           open={rolesModalMember !== null}
+           onClose={() => !actionLoading && setRolesModalMember(null)}
+-          displayName={rolesModalMember.display_name || rolesModalMember.email || `User #${rolesModalMember.user_id}`}
++          displayName={rolesModalMember.display_name || rolesModalMember.email || 'Member'}
+           tenantName={tenantName}
+           assignableRoles={(roles.data?.roles ?? []).map(role => getRoleCode(role)).filter((code): code is string => Boolean(code))}
+           currentRoles={rolesModalMember.roles ?? [rolesModalMember.role]}
+@@ -379,7 +379,7 @@
+         <DisableMembershipDialog
+           open={disableModalMember !== null}
+           onClose={() => !actionLoading && setDisableModalMember(null)}
+-          displayName={disableModalMember.display_name || disableModalMember.email || `User #${disableModalMember.user_id}`}
++          displayName={disableModalMember.display_name || disableModalMember.email || 'Member'}
+           tenantName={tenantName}
+           isSelf={user?.userId === disableModalMember.user_id}
+           loading={actionLoading}
+@@ -391,7 +391,7 @@
+         <EnableMembershipDialog
+           open={enableModalMember !== null}
+           onClose={() => !actionLoading && setEnableModalMember(null)}
+-          displayName={enableModalMember.display_name || enableModalMember.email || `User #${enableModalMember.user_id}`}
++          displayName={enableModalMember.display_name || enableModalMember.email || 'Member'}
+           tenantName={tenantName}
+           isSelf={user?.userId === enableModalMember.user_id}
+           loading={actionLoading}
+@@ -403,7 +403,7 @@
+         <RemoveMemberDialog
+           open={removeModalMember !== null}
+           onClose={() => !actionLoading && setRemoveModalMember(null)}
+-          displayName={removeModalMember.display_name || removeModalMember.email || `User #${removeModalMember.user_id}`}
++          displayName={removeModalMember.display_name || removeModalMember.email || 'Member'}
+           tenantName={tenantName}
+           isSelf={user?.userId === removeModalMember.user_id}
+           loading={actionLoading}
+--- a/frontend/src/components/admin/UserSearchCombobox.tsx
++++ b/frontend/src/components/admin/UserSearchCombobox.tsx
+@@ -162,7 +162,7 @@
+           )}
+           {(selectedUser.tenant_memberships ?? []).map((membership) => (
+             <span key={membership.tenant_id} className="text-xs text-hcl-muted">
+-              {membership.tenant_name || `Tenant #${membership.tenant_id}`}: {' '}
++              {membership.tenant_name || 'Tenant membership'}: {' '}
+               <strong className="text-foreground">
+                 {(membership.roles?.length ? membership.roles : [membership.role])
+                   .map(getRoleLabel)
+@@ -185,7 +185,7 @@
+             </button>
+             {showTechDetails && (
+               <div className="mt-2 rounded bg-background p-2 text-xs font-mono text-hcl-muted border border-border">
+-                <p>User ID: {selectedUser.id}</p>
++                <p>{selectedUser.display_name || selectedUser.email || 'Selected account'}</p>
+                 <p>HCL.CS Subject: {selectedUser.external_subject}</p>
+                 {selectedUser.external_issuer && <p>Issuer: {selectedUser.external_issuer}</p>}
+               </div>
+--- a/frontend/src/components/ai-fixes/GlobalAiBatchProgress/GlobalAiBatchBanner.tsx
++++ b/frontend/src/components/ai-fixes/GlobalAiBatchProgress/GlobalAiBatchBanner.tsx
+@@ -107,7 +107,7 @@
+             href={`/analysis/${runId}`}
+             className="truncate text-xs font-semibold text-hcl-navy hover:underline"
+           >
+-            Run #{runId}
++            Analysis run
+           </Link>
+           {label ? (
+             <span className="truncate rounded-md bg-surface-muted px-1.5 py-0.5 text-[10px] font-medium uppercase tracking-wide text-hcl-muted">
+--- a/frontend/src/components/analysis/AnalysisProgress.tsx
++++ b/frontend/src/components/analysis/AnalysisProgress.tsx
+@@ -193,7 +193,7 @@
+       {/* Footer actions */}
+       <div className="px-4 py-3 border-t border-hcl-border bg-hcl-light/40 flex items-center justify-between gap-3">
+         <div className="text-xs text-hcl-muted">
+-          {isDone && runId && `Run #${runId} · ${formatDuration(elapsedMs)}`}
++          {isDone && runId && `Analysis complete · ${formatDuration(elapsedMs)}`}
+         </div>
+         <div className="flex items-center gap-2">
+           {isRunning && onCancel && (
+--- a/frontend/src/components/analysis/ConsolidatedAnalysisPanel.tsx
++++ b/frontend/src/components/analysis/ConsolidatedAnalysisPanel.tsx
+@@ -1,5 +1,6 @@
+ 'use client';
+ 
++import { recordIdLabel } from '@/components/ui/RecordIdDisplay';
+ import { useEffect, useMemo, useRef } from 'react';
+ import { Layers, Play, Sparkles } from 'lucide-react';
+ import { PermissionButton as Button } from '@/components/ui/PermissionButton';
+@@ -14,7 +15,7 @@
+ 
+ export interface ConsolidatedAnalysisPanelProps {
+   analysisConfig: AnalysisConfig | undefined;
+-  sboms: { id: string | number; sbom_name: string }[] | undefined;
++  sboms: { display_id?: number | null; id: string | number; sbom_name: string }[] | undefined;
+   consolidatedSbomId: string;
+   onConsolidatedSbomIdChange: (value: string) => void;
+   /** Selected sources (controlled). */
+@@ -113,7 +114,7 @@
+                   >
+                     {sboms?.map((s) => (
+                       <option key={s.id} value={s.id}>
+-                        #{s.id} — {s.sbom_name}
++                        {recordIdLabel('SBOM', s.display_id)} — {s.sbom_name}
+                       </option>
+                     ))}
+                   </Select>
+--- a/frontend/src/components/analysis/FindingsTable.tsx
++++ b/frontend/src/components/analysis/FindingsTable.tsx
+@@ -1,5 +1,6 @@
+ 'use client';
+ 
++import { recordIdLabel } from '@/components/ui/RecordIdDisplay';
+ import { PermissionButton } from '@/components/ui/PermissionButton';
+ 
+ import { useCallback, useEffect, useMemo, useState } from 'react';
+@@ -1245,7 +1246,7 @@
+       <div className="lg:col-span-2 space-y-3">
+         <div className="rounded border border-border p-3 text-xs space-y-1">
+           <p className="font-semibold">Original SBOM component</p>
+-          <p>{f.component_name} {f.component_version} · ID {f.component_id ?? 'Unresolved'}</p>
++          <p>{f.component_name} {f.component_version} · {recordIdLabel('Component', f.component_display_id)}</p>
+           {f.bom_ref && <p className="break-all font-mono">Reference: {f.bom_ref}</p>}
+           {f.purl && <p className="break-all font-mono">{f.purl}</p>}
+           <p>Selected CVSS: {f.score ?? 'Unscored'} · {f.cvss_version ?? 'Version unknown'} · {f.cvss_source ?? 'Source unavailable'}</p>
+--- a/frontend/src/components/analysis/LiveAnalysisCard.tsx
++++ b/frontend/src/components/analysis/LiveAnalysisCard.tsx
+@@ -367,7 +367,7 @@
+         <span className="mr-auto font-metric text-[11px] tabular-nums text-hcl-muted">
+           {isDone && runId && (
+             <>
+-              Run #<strong className="text-hcl-navy">{runId}</strong> · {formatDuration(elapsedMs)}
++              Analysis complete · {formatDuration(elapsedMs)}
+             </>
+           )}
+         </span>
+--- a/frontend/src/components/analysis/RunDetailHero.tsx
++++ b/frontend/src/components/analysis/RunDetailHero.tsx
+@@ -1,5 +1,6 @@
+ 'use client';
+ 
++import { recordIdLabel } from '@/components/ui/RecordIdDisplay';
+ import {
+   AlertOctagon,
+   CheckCircle2,
+@@ -267,7 +268,7 @@
+ 
+           <div>
+             <h2 className="text-display-lg font-semibold tracking-display text-hcl-navy">
+-              Run #{run.id}
++              {recordIdLabel('Run', run.display_id)}
+               {run.sbom_name && (
+                 <span className="ml-2 text-base font-normal text-hcl-muted">
+                   · {run.sbom_name}
+@@ -336,7 +337,7 @@
+                     href={`/sboms/${run.sbom_id}`}
+                     className="text-hcl-blue hover:underline"
+                   >
+-                    #{run.sbom_id}
++                    {recordIdLabel('SBOM', run.sbom_display_id)}
+                   </Link>
+                 ) : (
+                   '—'
+--- a/frontend/src/components/analysis/RunsTable.status.test.tsx
++++ b/frontend/src/components/analysis/RunsTable.status.test.tsx
+@@ -24,7 +24,7 @@
+ 
+ function run(overrides: Partial<AnalysisRun>): AnalysisRun {
+   return {
+-    id: "00000000-0000-4000-8000-000000000001",
++    id: "00000000-0000-4000-8000-000000000001", display_id: 1,
+     sbom_id: 10,
+     sbom_name: 'clean-backfill',
+     project_id: null,
+@@ -53,8 +53,8 @@
+       wrap(
+         <RunsTable
+           runs={[
+-            run({ id: "00000000-0000-4000-8000-000000000002", run_status: 'PASS', total_findings: 0, source: 'BACKFILL' }),
+-            run({ id: "00000000-0000-4000-8000-000000000001", sbom_name: 'vulnerable', run_status: 'FINDINGS', total_findings: 35 }),
++            run({ id: "00000000-0000-4000-8000-000000000002", display_id: 2, run_status: 'PASS', total_findings: 0, source: 'BACKFILL' }),
++            run({ id: "00000000-0000-4000-8000-000000000001", display_id: 1, sbom_name: 'vulnerable', run_status: 'FINDINGS', total_findings: 35 }),
+           ]}
+           isLoading={false}
+           error={null}
+@@ -62,7 +62,7 @@
+       ),
+     );
+ 
+-    const backfillRow = screen.getByText('#00000000-0000-4000-8000-000000000002').closest('tr');
++    const backfillRow = screen.getByText('#2').closest('tr');
+     expect(backfillRow).not.toBeNull();
+     expect(within(backfillRow as HTMLElement).getByText('No issues')).toBeInTheDocument();
+     expect(within(backfillRow as HTMLElement).getByText('None')).toBeInTheDocument();
+@@ -70,7 +70,7 @@
+ 
+     fireEvent.change(screen.getByLabelText('Status'), { target: { value: 'OK' } });
+ 
+-    expect(screen.getByText('#00000000-0000-4000-8000-000000000002')).toBeInTheDocument();
++    expect(screen.getByText('#2')).toBeInTheDocument();
+     expect(screen.queryByText('#1')).not.toBeInTheDocument();
+   });
+ });
+@@ -78,8 +78,8 @@
+ it('preserves historical rows while disabling comparison and new PDFs', () => {
+   const reason = 'Analysis unavailable because this SBOM is inactive.';
+   render(wrap(<RunsTable runs={[run({ run_status: 'FINDINGS', processing_eligibility: { eligible: false, reason_code: 'SBOM_INACTIVE', reason } })]} isLoading={false} error={null} selectedIds={new Set()} onToggleSelect={vi.fn()} />));
+-  expect(screen.getByText('#00000000-0000-4000-8000-000000000001')).toBeVisible();
+-  expect(screen.getByRole('checkbox', { name: 'Select run #00000000-0000-4000-8000-000000000001 for comparison' })).toBeDisabled();
++  expect(screen.getByText('#1')).toBeVisible();
++  expect(screen.getByRole('checkbox', { name: 'Select Run #1 for comparison' })).toBeDisabled();
+   expect(screen.getByRole('button', { name: 'Download PDF' })).toBeDisabled();
+   expect(screen.getByRole('button', { name: 'Download PDF' })).toHaveAttribute('title', reason);
+   expect(screen.getByRole('button', { name: 'View run' })).toBeEnabled();
+--- a/frontend/src/components/analysis/RunsTable.tsx
++++ b/frontend/src/components/analysis/RunsTable.tsx
+@@ -1,5 +1,6 @@
+ 'use client';
+ 
++import { recordIdLabel } from '@/components/ui/RecordIdDisplay';
+ import { useEffect, useMemo, useState } from 'react';
+ import { useRouter } from 'next/navigation';
+ import { Eye, Download } from 'lucide-react';
+@@ -83,7 +84,7 @@
+     try {
+       const blob = await downloadPdfReport({
+         runId: run.id,
+-        title: `Analysis Report - Run #${run.id}`,
++        title: `Analysis Report - ${recordIdLabel('Run', run.display_id)}`,
+         filename: `sbom-analysis-run-${run.id}.pdf`,
+       });
+       downloadBlob(blob, `sbom-analysis-run-${run.id}.pdf`);
+@@ -121,7 +122,7 @@
+     if (search.trim()) {
+       rows = rows.filter((r) =>
+         matchesMultiField(search, [
+-          String(r.id),
++          String(r.display_id ?? ''),
+           r.sbom_name,
+           r.source,
+           String(r.sbom_id ?? ''),
+@@ -331,7 +332,7 @@
+                   <Td onClick={(e) => e.stopPropagation()} className="w-8">
+                     <input
+                       type="checkbox"
+-                      aria-label={`Select run #${run.id} for comparison`}
++                      aria-label={`Select ${recordIdLabel('Run', run.display_id)} for comparison`}
+                       checked={selectedIds?.has(run.id) ?? false}
+                       disabled={run.processing_eligibility?.eligible === false}
+                       title={run.processing_eligibility?.reason ?? undefined}
+@@ -342,11 +343,11 @@
+                 )}
+                 <Td className="font-mono text-xs text-hcl-muted">
+                   <div className="flex items-center gap-1.5">
+-                    <span>#{run.id}</span>
++                    <span>{recordIdLabel('', run.display_id)}</span>
+                     <PinButton
+                       kind="run"
+                       id={run.id}
+-                      label={run.sbom_name ? `${run.sbom_name} · #${run.id}` : `Run #${run.id}`}
++                      label={run.sbom_name ? `${run.sbom_name} · ${recordIdLabel('Run', run.display_id)}` : `${recordIdLabel('Run', run.display_id)}`}
+                       href={`/analysis/${run.id}`}
+                       compact
+                       hoverOnly
+@@ -354,7 +355,7 @@
+                   </div>
+                 </Td>
+                 <Td className="max-w-[140px] truncate font-medium text-hcl-navy">
+-                  {run.sbom_name || (run.sbom_id ? `SBOM #${run.sbom_id}` : '—')}
++                  {run.sbom_name || (run.sbom_id ? recordIdLabel('SBOM', run.sbom_display_id) : '—')}
+                 </Td>
+                 <Td onClick={(e) => e.stopPropagation()}>
+                   <StatusBadge status={run.run_status} />
+--- a/frontend/src/components/analysis/SbomPreflightChecklist.tsx
++++ b/frontend/src/components/analysis/SbomPreflightChecklist.tsx
+@@ -127,7 +127,7 @@
+           <p className="flex items-start gap-2 text-sm text-amber-700 dark:text-amber-300">
+             <AlertTriangle className="h-4 w-4 mt-0.5" aria-hidden />
+             <span>
+-              Could not preview SBOM #{sbomId}: {error.message}. You can still run analysis — but
++              Could not preview selected SBOM: {error.message}. You can still run analysis — but
+               we won&apos;t be able to estimate runtime.
+             </span>
+           </p>
+--- a/frontend/src/components/analysis/VulnerabilitiesByScope.tsx
++++ b/frontend/src/components/analysis/VulnerabilitiesByScope.tsx
+@@ -1,5 +1,6 @@
+ 'use client';
+ 
++import { recordIdLabel } from '@/components/ui/RecordIdDisplay';
+ import { useMemo, useState } from 'react';
+ import Link from 'next/link';
+ import { useQuery } from '@tanstack/react-query';
+@@ -48,8 +49,8 @@
+   const projects = new Map<string, ProjectGroup>();
+ 
+   for (const row of rows) {
+-    const projectName = row.project_name?.trim() || (row.project_id != null ? `Project #${row.project_id}` : 'Unassigned project');
+-    const productName = row.product_name?.trim() || (row.product_id != null ? `Product #${row.product_id}` : 'Unassigned product');
++    const projectName = row.project_name?.trim() || (row.project_id != null ? recordIdLabel('Project', row.project_display_id) : 'Unassigned project');
++    const productName = row.product_name?.trim() || (row.product_id != null ? recordIdLabel('Application', row.product_display_id) : 'Unassigned product');
+     const projectKey = String(row.project_id ?? projectName);
+     const productKey = `${projectKey}::${row.product_id ?? productName}`;
+ 
+@@ -270,7 +271,7 @@
+                                       href={`/sboms/${row.sbom_id}`}
+                                       className="hover:text-hcl-blue hover:underline"
+                                     >
+-                                      {row.sbom_name || `SBOM #${row.sbom_id}`}
++                                      {row.sbom_name || recordIdLabel('SBOM', row.sbom_display_id)}
+                                     </Link>
+                                   ) : (
+                                     row.sbom_name || '—'
+--- a/frontend/src/components/compare/CompareView.tsx
++++ b/frontend/src/components/compare/CompareView.tsx
+@@ -1,5 +1,6 @@
+ 'use client';
+ 
++import { recordIdLabel } from '@/components/ui/RecordIdDisplay';
+ import { useEffect, useState } from 'react';
+ import { useRouter } from 'next/navigation';
+ import { useQuery } from '@tanstack/react-query';
+@@ -82,7 +83,7 @@
+   };
+ 
+   const subtitle = canQuery
+-    ? `Run #${urlState.runA} vs Run #${urlState.runB}`
++    ? `${recordIdLabel('Run', aPick?.display_id)} vs ${recordIdLabel('Run', bPick?.display_id)}`
+     : 'Diff two analysis runs';
+ 
+   // Surface specific error envelopes — the API returns structured detail
+--- a/frontend/src/components/compare/IdenticalRunsCard/IdenticalRunsCard.tsx
++++ b/frontend/src/components/compare/IdenticalRunsCard/IdenticalRunsCard.tsx
+@@ -1,5 +1,6 @@
+ 'use client';
+ 
++import { recordIdLabel } from '@/components/ui/RecordIdDisplay';
+ import { ArrowRight, Check } from 'lucide-react';
+ import { Surface, SurfaceContent } from '@/components/ui/Surface';
+ import type { CompareResult } from '@/types/compare';
+@@ -67,8 +68,8 @@
+         <p className="mx-auto max-w-2xl text-sm text-hcl-muted">
+           {variant === 'both-clean' && (
+             <>
+-              Both <strong className="text-hcl-navy">Run #{result.run_a.id}</strong> and{' '}
+-              <strong className="text-hcl-navy">Run #{result.run_b.id}</strong> produced
++              Both <strong className="text-hcl-navy">{recordIdLabel('Run', result.run_a.display_id)}</strong> and{' '}
++              <strong className="text-hcl-navy">{recordIdLabel('Run', result.run_b.display_id)}</strong> produced
+               clean scans.
+             </>
+           )}
+--- a/frontend/src/components/compare/SelectionBar/RunPicker.tsx
++++ b/frontend/src/components/compare/SelectionBar/RunPicker.tsx
+@@ -1,5 +1,6 @@
+ 'use client';
+ 
++import { recordIdLabel } from '@/components/ui/RecordIdDisplay';
+ import { useEffect, useId, useMemo, useRef, useState } from 'react';
+ import { useQuery } from '@tanstack/react-query';
+ import { Check, ChevronDown, Info, Loader2, Search } from 'lucide-react';
+@@ -170,7 +171,7 @@
+   };
+ 
+   const triggerLabel = selectedRun
+-    ? `${selectedRun.sbom_name ?? '—'} · Run #${selectedRun.id} · ${formatDate(
++    ? `${selectedRun.sbom_name ?? '—'} · ${recordIdLabel('Run', selectedRun.display_id)} · ${formatDate(
+         selectedRun.completed_on,
+       )}`
+     : 'Choose a run…';
+@@ -214,10 +215,10 @@
+         <div className="min-w-0">
+           <div className="flex items-center gap-2">
+             <span className="truncate font-medium text-hcl-navy">
+-              {run.sbom_name ?? `Run #${run.id}`}
++              {run.sbom_name ?? recordIdLabel('Run', run.display_id)}
+             </span>
+             <span className="font-mono text-[11px] text-hcl-muted">
+-              #{run.id}
++              {recordIdLabel('', run.display_id)}
+             </span>
+           </div>
+           <div className="mt-0.5 flex flex-wrap items-center gap-x-1.5 gap-y-0.5 text-[11px] text-hcl-muted">
+--- a/frontend/src/components/compare/__tests__/CompareView.integration.test.tsx
++++ b/frontend/src/components/compare/__tests__/CompareView.integration.test.tsx
+@@ -110,7 +110,7 @@
+     );
+     renderWithCompareProviders(<CompareView />);
+     await waitFor(() =>
+-      expect(screen.getByText(/Run #00000000-0000-4000-8000-000000000002 isn't ready yet/i)).toBeInTheDocument(),
++      expect(screen.getByText(/The selected run isn't ready yet/i)).toBeInTheDocument(),
+     );
+     expect(screen.getByText(/RUNNING/)).toBeInTheDocument();
+     // B-4 — the misleading "auto-retry shortly" copy is gone; a manual
+@@ -136,7 +136,7 @@
+       expect(screen.getByText(/Run not found/i)).toBeInTheDocument(),
+     );
+     // B-5 — id from detail is rendered, not the placeholder "Run #?".
+-    expect(screen.getByText(/Run #00000000-0000-4000-8000-000000000063 no longer exists/i)).toBeInTheDocument();
++    expect(screen.getByText(/The selected run no longer exists/i)).toBeInTheDocument();
+   });
+ });
+ 
+--- a/frontend/src/components/compare/__tests__/RunPicker.test.tsx
++++ b/frontend/src/components/compare/__tests__/RunPicker.test.tsx
+@@ -14,7 +14,7 @@
+ 
+ const SAMPLE_RUNS: RunSummary[] = [
+   {
+-    id: "00000000-0000-4000-8000-00000000000a",
++    id: "00000000-0000-4000-8000-00000000000a", display_id: 10,
+     sbom_id: 1,
+     sbom_name: 'log4j-monorepo',
+     project_id: 100,
+@@ -26,7 +26,7 @@
+     total_components: 50,
+   },
+   {
+-    id: "00000000-0000-4000-8000-00000000000b",
++    id: "00000000-0000-4000-8000-00000000000b", display_id: 11,
+     sbom_id: 2,
+     sbom_name: 'web-frontend',
+     project_id: 100,
+@@ -38,7 +38,7 @@
+     total_components: 30,
+   },
+   {
+-    id: "00000000-0000-4000-8000-00000000000c",
++    id: "00000000-0000-4000-8000-00000000000c", display_id: 12,
+     sbom_id: 3,
+     sbom_name: 'mobile-android',
+     project_id: 200,
+@@ -161,7 +161,7 @@
+     // reads the canonical name from the compare API response.
+     recentRuns.mockResolvedValue([]); // simulate empty recent list
+     const summary: RunSummary = {
+-      id: "00000000-0000-4000-8000-0000000003e7",
++      id: "00000000-0000-4000-8000-0000000003e7", display_id: 999,
+       sbom_id: 7,
+       sbom_name: 'archived-service',
+       project_id: 42,
+@@ -181,7 +181,7 @@
+       />,
+     );
+     expect(screen.getByRole('button')).toHaveTextContent(/archived-service/);
+-    expect(screen.getByRole('button')).toHaveTextContent(/#00000000-0000-4000-8000-0000000003e7/);
++    expect(screen.getByRole('button')).toHaveTextContent(/#999/);
+   });
+ 
+   it('renders "Same project as Run A" filter chip when a paired run is given', async () => {
+@@ -216,13 +216,13 @@
+   // Same SBOM as paired (log4j-monorepo @ project 100), older
+   {
+     ...SAMPLE_RUNS[0],
+-    id: "00000000-0000-4000-8000-000000000009",
++    id: "00000000-0000-4000-8000-000000000009", display_id: 9,
+     completed_on: '2026-04-25T12:00:00Z',
+   },
+   // Same SBOM as paired, even older
+   {
+     ...SAMPLE_RUNS[0],
+-    id: "00000000-0000-4000-8000-000000000008",
++    id: "00000000-0000-4000-8000-000000000008", display_id: 8,
+     completed_on: '2026-04-20T12:00:00Z',
+   },
+   // The paired run itself — should be excluded from the dropdown
+@@ -268,20 +268,20 @@
+     await user.click(screen.getByRole('button', { name: /Choose a run/i }));
+     await screen.findByText(/Other runs of log4j-monorepo/i);
+ 
+-    // Only the OTHER log4j runs (#00000000-0000-4000-8000-000000000009, #00000000-0000-4000-8000-000000000008) should be visible — the paired
+-    // run #00000000-0000-4000-8000-00000000000a must not appear as a selectable option.
++    // Only the OTHER log4j runs (#9, #8) should be visible — the paired
++    // run #10 must not appear as a selectable option.
+     const listbox = screen.getByRole('listbox');
+     const optionIds = within(listbox)
+       .getAllByRole('option')
+       .map((el) => el.textContent ?? '');
+-    expect(optionIds.some((t) => t.includes('#00000000-0000-4000-8000-00000000000a'))).toBe(false);
+-    expect(optionIds.some((t) => t.includes('#00000000-0000-4000-8000-000000000009'))).toBe(true);
+-    expect(optionIds.some((t) => t.includes('#00000000-0000-4000-8000-000000000008'))).toBe(true);
++    expect(optionIds.some((t) => t.includes('#10'))).toBe(false);
++    expect(optionIds.some((t) => t.includes('#9'))).toBe(true);
++    expect(optionIds.some((t) => t.includes('#8'))).toBe(true);
+   });
+ 
+   it('shows the single-run hint when the paired SBOM has no other runs', async () => {
+     // Drop the same-SBOM siblings — only the paired run plus unrelated
+-    // SBOMs remain, mirroring the screenshot scenario where app-sbom #00000000-0000-4000-8000-000000000007
++    // SBOMs remain, mirroring the screenshot scenario where app-sbom #7
+     // is the only run of its SBOM.
+     recentRuns.mockResolvedValue([
+       PAIRED_LOG4J,
+--- a/frontend/src/components/compare/__tests__/test-utils.tsx
++++ b/frontend/src/components/compare/__tests__/test-utils.tsx
+@@ -102,7 +102,7 @@
+ export const SAMPLE_COMPARE_RESULT: CompareResult = {
+   cache_key: 'a'.repeat(64),
+   run_a: {
+-    id: "00000000-0000-4000-8000-000000000001",
++    id: "00000000-0000-4000-8000-000000000001", display_id: 1,
+     sbom_id: 100,
+     sbom_name: 'sample-sbom',
+     project_id: 200,
+@@ -114,7 +114,7 @@
+     total_components: 3,
+   },
+   run_b: {
+-    id: "00000000-0000-4000-8000-000000000002",
++    id: "00000000-0000-4000-8000-000000000002", display_id: 2,
+     sbom_id: 101,
+     sbom_name: 'sample-sbom',
+     project_id: 200,
+--- a/frontend/src/components/compare/states/CompareStates.tsx
++++ b/frontend/src/components/compare/states/CompareStates.tsx
+@@ -70,7 +70,7 @@
+ export function SameRunPickedState({ runId }: { runId: string }) {
+   return (
+     <Alert variant="info" title="That's the same run twice">
+-      Run #{runId} is selected on both sides — there's nothing to diff. Pick a
++      {runId ? 'The selected run' : 'A run'} is selected on both sides — there's nothing to diff. Pick a
+       different baseline or candidate to see changes.
+     </Alert>
+   );
+@@ -85,7 +85,7 @@
+   runId?: string;
+   onRetry?: () => void;
+ }) {
+-  const runLabel = runId != null ? `Run #${runId}` : 'One of the runs';
++  const runLabel = runId != null ? 'The selected run' : 'One of the runs';
+   const statusLabel = status ?? 'unknown';
+   return (
+     <Alert variant="warning" title={`${runLabel} isn't ready yet`}>
+@@ -113,7 +113,7 @@
+ }
+ 
+ export function RunNotFoundState({ runId }: { runId?: string }) {
+-  const idLabel = runId != null ? `Run #${runId}` : 'A run from this URL';
++  const idLabel = runId != null ? 'The selected run' : 'A run from this URL';
+   return (
+     <Alert variant="error" title="Run not found">
+       {idLabel} no longer exists — it may have been deleted.
+--- a/frontend/src/components/dashboard/ActivityFeed.tsx
++++ b/frontend/src/components/dashboard/ActivityFeed.tsx
+@@ -1,5 +1,6 @@
+ 'use client';
+ 
++import { recordIdLabel } from '@/components/ui/RecordIdDisplay';
+ import { PermissionLink } from '@/components/ui/PermissionLink';
+ import Link from 'next/link';
+ import { useMemo } from 'react';
+@@ -229,7 +230,7 @@
+             <span className="font-medium">{status.label}</span>
+             <span className="text-hcl-muted"> · </span>
+             <span className="text-hcl-muted group-hover:text-primary">
+-              {run.sbom_name ?? `Run #${run.id}`}
++              {run.sbom_name ?? recordIdLabel('Run', run.display_id)}
+             </span>
+           </p>
+           <div className="flex flex-wrap items-center gap-x-2 gap-y-0.5 text-[11px] text-hcl-muted">
+--- a/frontend/src/components/dashboard/PortfolioOverview.tsx
++++ b/frontend/src/components/dashboard/PortfolioOverview.tsx
+@@ -1,5 +1,6 @@
+ 'use client';
+ 
++import { recordIdLabel } from '@/components/ui/RecordIdDisplay';
+ import Link from 'next/link';
+ import { useState } from 'react';
+ import { CveDetailDialog } from '@/components/vulnerabilities/CveDetailDialog';
+@@ -126,7 +127,7 @@
+     </Surface>
+     <Surface className="min-w-0" elevation={1}>
+       <SurfaceHeader><h2 className="text-sm font-semibold text-hcl-navy">Recent analysis runs</h2><Link href={dashboardDrilldownUrl('/analysis', scope)} className="rounded text-xs text-hcl-blue focus-visible:ring-2 focus-visible:ring-hcl-blue">View all →</Link></SurfaceHeader>
+-      <SurfaceContent>{state(runs, !runs.data?.length) ?? <ul className="divide-y divide-border-subtle">{runs.data?.map(run => <li key={run.id} className="py-3 first:pt-0"><div className="flex items-center justify-between gap-3"><Link href={`/analysis/${run.id}`} className="truncate rounded text-xs font-semibold text-hcl-blue focus-visible:ring-2 focus-visible:ring-hcl-blue" title={run.sbom_name ?? undefined}>{run.sbom_name ?? `Analysis #${run.id}`}</Link><span className="shrink-0 text-[10px] text-hcl-muted">{run.completed_on ? formatDate(run.completed_on) : 'In progress'}</span></div><div className="mt-1 flex justify-between gap-2 text-xs text-hcl-muted"><span>{runOutcome(run)}</span><span className="font-metric">{run.total_findings ?? '—'} findings</span></div></li>)}</ul>}</SurfaceContent>
++      <SurfaceContent>{state(runs, !runs.data?.length) ?? <ul className="divide-y divide-border-subtle">{runs.data?.map(run => <li key={run.id} className="py-3 first:pt-0"><div className="flex items-center justify-between gap-3"><Link href={`/analysis/${run.id}`} className="truncate rounded text-xs font-semibold text-hcl-blue focus-visible:ring-2 focus-visible:ring-hcl-blue" title={run.sbom_name ?? undefined}>{run.sbom_name ?? recordIdLabel('Run', run.display_id)}</Link><span className="shrink-0 text-[10px] text-hcl-muted">{run.completed_on ? formatDate(run.completed_on) : 'In progress'}</span></div><div className="mt-1 flex justify-between gap-2 text-xs text-hcl-muted"><span>{runOutcome(run)}</span><span className="font-metric">{run.total_findings ?? '—'} findings</span></div></li>)}</ul>}</SurfaceContent>
+     </Surface>
+     <CveDetailDialog cveId={selected?.vuln_id ?? null} scanId={selected?.component_id ? selected.analysis_run_id : null} componentId={selected?.component_id ?? null} findingId={selected?.id ?? null} open={!!selected} onOpenChange={open => { if (!open) setSelected(null); }} seed={null} />
+   </section>;
+--- a/frontend/src/components/layout/CommandPalette.tsx
++++ b/frontend/src/components/layout/CommandPalette.tsx
+@@ -1,5 +1,6 @@
+ 'use client';
+ 
++import { recordIdLabel } from '@/components/ui/RecordIdDisplay';
+ import {
+   useCallback,
+   useEffect,
+@@ -281,11 +282,11 @@
+       id: `sbom.${s.id}`,
+       group: 'sboms' as const,
+       title: s.sbom_name,
+-      subtitle: `Open SBOM #${s.id} · ${formatDate(s.created_on)}`,
++      subtitle: `Open ${recordIdLabel('SBOM', s.display_id)} · ${formatDate(s.created_on)}`,
+       hint: '↵ Open',
+       Icon: FileText,
+       iconTone: 'text-hcl-blue',
+-      keywords: `sbom #${s.id}`,
++      keywords: `${recordIdLabel('SBOM', s.display_id)}`,
+       run: () => goto(`/sboms/${s.id}`),
+     }));
+   }, [sbomsQuery.data, goto, canSboms]);
+@@ -298,7 +299,7 @@
+       return {
+         id: `run.${r.id}`,
+         group: 'runs' as const,
+-        title: r.sbom_name ? `${r.sbom_name} — Run #${r.id}` : `Run #${r.id}`,
++        title: r.sbom_name ? `${r.sbom_name} — ${recordIdLabel('Run', r.display_id)}` : `${recordIdLabel('Run', r.display_id)}`,
+         subtitle: `${status} · ${(r.total_findings ?? 0).toLocaleString()} findings · ${formatDate(r.completed_on ?? r.started_on)}`,
+         hint: '↵ Open',
+         Icon: Activity,
+--- a/frontend/src/components/layout/Sidebar.tsx
++++ b/frontend/src/components/layout/Sidebar.tsx
+@@ -1,5 +1,6 @@
+ 'use client';
+ 
++import { recordIdLabel } from '@/components/ui/RecordIdDisplay';
+ import Link from 'next/link';
+ import { usePathname, useSearchParams } from 'next/navigation';
+ import { Fragment, useEffect, useRef, useState, type ReactNode } from 'react';
+@@ -17,6 +18,7 @@
+ import { SidebarStatus } from './SidebarStatus';
+ import { TenantSwitcher } from './TenantSwitcher';
+ import { usePinned, unpin } from '@/lib/pinned';
++import { cachedRecordLabel } from '@/lib/recordDisplay';
+ import { getRecentSboms, getRuns } from '@/lib/api';
+ import { usePermissions } from '@/hooks/usePermission';
+ import { useAuth } from '@/hooks/useAuth';
+@@ -513,7 +515,7 @@
+         <SidebarRow
+           key={`${item.kind}-${item.id}`}
+           href={item.href}
+-          label={item.label}
++          label={cachedRecordLabel(item.label, item.id, item.kind === 'sbom' ? 'SBOM' : 'Run')}
+           subtitle={item.kind === 'sbom' ? 'SBOM' : 'Run'}
+           onUnpin={() => unpin(item.kind, item.id)}
+         />
+@@ -562,7 +564,7 @@
+         <SidebarRow
+           key={`run-${r.id}`}
+           href={`/analysis/${r.id}`}
+-          label={r.sbom_name ? `${r.sbom_name} · #${r.id}` : `Run #${r.id}`}
++          label={r.sbom_name ? `${r.sbom_name} · ${recordIdLabel('Run', r.display_id)}` : recordIdLabel('Run', r.display_id)}
+           subtitle={`Run · ${r.run_status}`}
+         />
+       ))}
+--- a/frontend/src/components/projects/ProjectApplications.tsx
++++ b/frontend/src/components/projects/ProjectApplications.tsx
+@@ -1,5 +1,6 @@
+ 'use client';
+ 
++import { recordIdLabel } from '@/components/ui/RecordIdDisplay';
+ import { useMemo, useState } from 'react';
+ import Link from 'next/link';
+ import { useMutation, useQuery, useQueryClient } from '@tanstack/react-query';
+@@ -63,7 +64,7 @@
+     queryFn: ({ signal }) => getProducts(project.id, signal),
+   });
+   const products = useMemo(() => data?.items ?? [], [data]);
+-  const filtered = useMemo(() => products.filter(product => (statusFilter === 'all' || (product.status || 'active') === statusFilter) && `${product.name} ${product.description || ''} ${product.id}`.toLowerCase().includes(search.trim().toLowerCase())), [products, search, statusFilter]);
++  const filtered = useMemo(() => products.filter(product => (statusFilter === 'all' || (product.status || 'active') === statusFilter) && `${product.name} ${product.description || ''} ${product.display_id ?? ''}`.toLowerCase().includes(search.trim().toLowerCase())), [products, search, statusFilter]);
+   const pagination = usePagination(filtered, { defaultPageSize: 25 });
+   const statuses = Array.from(new Set(products.map(product => product.status || 'active')));
+   function changeSearch(value: string) { setSearch(value); pagination.resetPage(); }
+@@ -95,8 +96,8 @@
+     ]} />;
+   }
+   function status(product: Product) { const value = product.status || 'active'; return <Badge variant={value === 'active' ? 'success' : 'gray'}>{value.toUpperCase()}</Badge>; }
+-  function latest(product: Product) { return <div>{product.latest_sbom_id ? <Link href={`/sboms/${product.latest_sbom_id}`} className="font-medium text-hcl-blue hover:underline">#{product.latest_sbom_id}</Link> : '—'}<p className="mt-1 text-xs text-hcl-muted">{product.latest_sbom_version || '—'}</p></div>; }
+-  function current(product: Product) { return product.current_sbom_id ? <Link href={`/sboms/${product.current_sbom_id}`} className="text-hcl-blue hover:underline">{product.current_sbom_version || `#${product.current_sbom_id}`}</Link> : <span title="CURRENT_ONLY schedules skip this application until a current SBOM is selected." className="text-hcl-muted">Not set</span>; }
++  function latest(product: Product) { return <div>{product.latest_sbom_id ? <Link href={`/sboms/${product.latest_sbom_id}`} className="font-medium text-hcl-blue hover:underline">{recordIdLabel('SBOM', product.latest_sbom_display_id)}</Link> : '—'}<p className="mt-1 text-xs text-hcl-muted">{product.latest_sbom_version || '—'}</p></div>; }
++  function current(product: Product) { return product.current_sbom_id ? <Link href={`/sboms/${product.current_sbom_id}`} className="text-hcl-blue hover:underline">{recordIdLabel('SBOM', product.current_sbom_display_id)}{product.current_sbom_version ? ` · ${product.current_sbom_version}` : ''}</Link> : <span title="CURRENT_ONLY schedules skip this application until a current SBOM is selected." className="text-hcl-muted">Not set</span>; }
+   return (
+     <Card>
+       <CardHeader className="flex flex-col gap-3 sm:flex-row sm:items-center sm:justify-between">
+@@ -106,8 +107,8 @@
+       <CardContent>
+         {!isLoading && !error && products.length > 0 && <div className="mb-4 flex flex-col gap-3 sm:flex-row"><Input aria-label="Search applications" placeholder="Search applications…" value={search} onChange={event => changeSearch(event.target.value)} className="sm:max-w-sm" /><Select aria-label="Application status" value={statusFilter} onChange={event => changeStatus(event.target.value)} className="sm:max-w-[180px]"><option value="all">All statuses</option>{statuses.map(value => <option key={value} value={value}>{value}</option>)}</Select></div>}
+         {error ? <Alert variant="error" title="Could not load applications">{getApiErrorMessage(error, 'Applications could not be loaded. Please try again.')}</Alert> : isLoading ? <p role="status" className="py-6 text-sm text-hcl-muted">Loading applications…</p> : products.length === 0 ? <div className="py-8 text-center"><h3 className="font-semibold text-hcl-navy">No applications in this project</h3><p className="mt-2 text-sm text-hcl-muted">Applications organize this project’s SBOMs.</p><PermissionGate permission="product:create"><Button permission={"product:create"} className="mt-4" size="sm" variant="secondary" onClick={() => setFormOpen(true)}>Create Application</Button></PermissionGate></div> : <>
+-          <div className="hidden md:block"><Table ariaLabel={`${project.project_name} applications`}><TableHead><tr><Th>Application</Th><Th>SBOMs</Th><Th>Latest</Th><Th>Current</Th><Th>Schedule</Th><Th>Status</Th><Th className="text-right">Actions</Th></tr></TableHead><TableBody>{pagination.pageItems.length === 0 ? <EmptyRow cols={7} message="No matching applications. Adjust or clear your filters." /> : pagination.pageItems.map(product => <tr key={product.id}><Td className="min-w-[200px] max-w-sm"><Link href={`/products/${product.id}`} className="font-semibold text-hcl-navy hover:text-hcl-blue hover:underline">{product.name}</Link><p title={product.description || undefined} className="mt-1 line-clamp-2 text-xs leading-relaxed text-hcl-muted">{product.description || 'No description provided.'}</p></Td><Td>{product.sbom_count ?? 0}</Td><Td>{latest(product)}</Td><Td>{current(product)}</Td><Td><ProductScheduleStatus productId={product.id} /></Td><Td>{status(product)}</Td><Td><div className="flex justify-end">{applicationActions(product)}</div></Td></tr>)}</TableBody></Table></div>
+-          <div className="space-y-3 md:hidden">{pagination.pageItems.length === 0 && <p className="text-sm text-hcl-muted">No matching applications. Adjust or clear your filters.</p>}{pagination.pageItems.map(product => <article key={product.id} aria-label={product.name} className="min-w-0 rounded-lg border border-border p-3"><div className="flex items-start justify-between gap-2"><Link href={`/products/${product.id}`} className="min-w-0 break-words text-sm font-semibold text-hcl-navy">{product.name}</Link>{status(product)}</div><p className="mt-2 break-words text-xs text-hcl-muted">{product.description || 'No description provided.'}</p><dl className="mt-3 grid grid-cols-2 gap-3 text-xs"><div><dt className="text-hcl-muted">SBOMs</dt><dd>{product.sbom_count ?? 0}</dd></div><div><dt className="text-hcl-muted">Current</dt><dd>{current(product)}</dd></div><div><dt className="text-hcl-muted">Latest</dt><dd>{latest(product)}</dd></div><div><dt className="text-hcl-muted">Schedule</dt><dd><ProductScheduleStatus productId={product.id} /></dd></div></dl><div className="mt-3 flex items-center justify-between"><Link href={`/products/${product.id}`} className="text-sm font-medium text-hcl-blue">View application</Link>{applicationActions(product)}</div></article>)}</div>
++          <div className="hidden md:block"><Table ariaLabel={`${project.project_name} applications`}><TableHead><tr><Th>Application</Th><Th>SBOMs</Th><Th>Latest</Th><Th>Current</Th><Th>Schedule</Th><Th>Status</Th><Th className="text-right">Actions</Th></tr></TableHead><TableBody>{pagination.pageItems.length === 0 ? <EmptyRow cols={7} message="No matching applications. Adjust or clear your filters." /> : pagination.pageItems.map(product => <tr key={product.id}><Td className="min-w-[200px] max-w-sm"><Link href={`/products/${product.id}`} className="font-semibold text-hcl-navy hover:text-hcl-blue hover:underline">{product.name}</Link><span className="ml-2 text-xs text-hcl-muted">{recordIdLabel('Application', product.display_id)}</span><p title={product.description || undefined} className="mt-1 line-clamp-2 text-xs leading-relaxed text-hcl-muted">{product.description || 'No description provided.'}</p></Td><Td>{product.sbom_count ?? 0}</Td><Td>{latest(product)}</Td><Td>{current(product)}</Td><Td><ProductScheduleStatus productId={product.id} /></Td><Td>{status(product)}</Td><Td><div className="flex justify-end">{applicationActions(product)}</div></Td></tr>)}</TableBody></Table></div>
++          <div className="space-y-3 md:hidden">{pagination.pageItems.length === 0 && <p className="text-sm text-hcl-muted">No matching applications. Adjust or clear your filters.</p>}{pagination.pageItems.map(product => <article key={product.id} aria-label={product.name} className="min-w-0 rounded-lg border border-border p-3"><div className="flex items-start justify-between gap-2"><Link href={`/products/${product.id}`} className="min-w-0 break-words text-sm font-semibold text-hcl-navy">{product.name}</Link><span className="ml-2 text-xs text-hcl-muted">{recordIdLabel('Application', product.display_id)}</span>{status(product)}</div><p className="mt-2 break-words text-xs text-hcl-muted">{product.description || 'No description provided.'}</p><dl className="mt-3 grid grid-cols-2 gap-3 text-xs"><div><dt className="text-hcl-muted">SBOMs</dt><dd>{product.sbom_count ?? 0}</dd></div><div><dt className="text-hcl-muted">Current</dt><dd>{current(product)}</dd></div><div><dt className="text-hcl-muted">Latest</dt><dd>{latest(product)}</dd></div><div><dt className="text-hcl-muted">Schedule</dt><dd><ProductScheduleStatus productId={product.id} /></dd></div></dl><div className="mt-3 flex items-center justify-between"><Link href={`/products/${product.id}`} className="text-sm font-medium text-hcl-blue">View application</Link>{applicationActions(product)}</div></article>)}</div>
+           {(search || statusFilter !== 'all') && <Button size="sm" variant="ghost" className="mt-3" onClick={() => { changeSearch(''); changeStatus('all'); }}>Clear application filters</Button>}
+           {pagination.totalPages > 1 && <Pagination page={pagination.page} pageSize={pagination.pageSize} total={pagination.total} totalPages={pagination.totalPages} rangeStart={pagination.rangeStart} rangeEnd={pagination.rangeEnd} hasPrev={pagination.hasPrev} hasNext={pagination.hasNext} onPageChange={pagination.setPage} onPageSizeChange={pagination.setPageSize} itemNoun="application" />}
+         </>}
+--- a/frontend/src/components/projects/ProjectsTable.tsx
++++ b/frontend/src/components/projects/ProjectsTable.tsx
+@@ -1,5 +1,6 @@
+ 'use client';
+ 
++import { RecordIdDisplay } from '@/components/ui/RecordIdDisplay';
+ import { useEffect, useMemo, useRef, useState } from 'react';
+ import { useMutation, useQuery, useQueryClient } from '@tanstack/react-query';
+ import { PermissionGate } from '@/components/ui/PermissionGate';
+@@ -81,7 +82,7 @@
+       {onSelect && <button type="button" aria-label={`Select project ${project.project_name}`} aria-pressed={Boolean(selected)} onClick={() => onSelect(project)} className="absolute inset-0 z-0 rounded-xl focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-hcl-blue/50" />}
+       <div className="pointer-events-none relative flex items-start justify-between gap-2">
+         <div className="min-w-0">
+-          <p className="font-mono text-[11px] text-hcl-muted">#{project.id}</p>
++          <p className="font-mono text-[11px] text-hcl-muted"><RecordIdDisplay kind="Project" displayId={project.display_id} /></p>
+           <h3 className="mt-0.5 truncate font-semibold text-hcl-navy" title={project.project_name}>
+             {project.project_name}
+           </h3>
+@@ -181,7 +182,7 @@
+     if (search.trim()) {
+       rows = rows.filter((p) =>
+         matchesMultiField(search, [
+-          String(p.id),
++          String(p.display_id ?? ''),
+           p.project_name,
+           p.project_details,
+           p.created_by,
+@@ -386,7 +387,7 @@
+               ) : (
+                 pagination.pageItems.map((project) => (
+                   <tr key={project.id} className={`transition-colors hover:bg-hcl-light/40 ${selectedId === project.id ? 'bg-blue-50/60' : ''}`}>
+-                    <Td className="font-mono text-xs text-hcl-muted">#{project.id}</Td>
++                    <Td className="font-mono text-xs text-hcl-muted"><RecordIdDisplay kind="Project" displayId={project.display_id} /></Td>
+                     <Td className="font-medium text-hcl-navy">{onSelect ? <button aria-label={`Select project ${project.project_name}`} aria-pressed={selectedId === project.id} className="rounded text-left focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-hcl-blue/50" onClick={() => onSelect(project)}>{project.project_name}{selectedId === project.id && <span className="ml-2 text-xs text-hcl-blue">Selected</span>}</button> : project.project_name}</Td>
+                     <Td>
+                       <Badge variant={project.project_status === 1 ? 'success' : 'gray'}>
+--- a/frontend/src/components/reports/ReportNotificationsPage.test.tsx
++++ b/frontend/src/components/reports/ReportNotificationsPage.test.tsx
+@@ -29,6 +29,14 @@
+ 
+ beforeEach(() => { cleanup(); vi.clearAllMocks(); searchParams = new URLSearchParams(); });
+ describe('Notification preferences', () => {
++  it('labels an authorized target with its persisted integer but saves its UUID', async () => {
++    const id = 'f5e7f4c4-8a16-4c70-93d8-092173885437';
++    vi.mocked(api.getReportTargets).mockResolvedValueOnce([{ id, display_id: 873, label: 'Production' }]);
++    setup(defaultReportPreferences('PROJECT', id));
++    expect(await screen.findByRole('option', { name: 'Production · #873' })).toHaveValue(id);
++    fireEvent.click(screen.getByRole('button', { name: 'Save subscription' }));
++    await waitFor(() => expect(api.createReportSubscription).toHaveBeenCalledWith(expect.objectContaining({ project_id: id })));
++  });
+   it('opens the exact emailed delivery and lets the user return to recent history', async () => {
+     searchParams = new URLSearchParams('delivery=52');
+     const client = new QueryClient({ defaultOptions: { queries: { retry: false } } });
+@@ -42,7 +50,7 @@
+     expect(screen.getByLabelText('Part A: Latest state (required)')).toBeDisabled();
+     expect(screen.queryByLabelText(/recipient email/i)).not.toBeInTheDocument();
+     expect(screen.queryByRole('option', { name: 'TENANT' })).not.toBeInTheDocument();
+-    await screen.findByRole('option', { name: 'Production · #3' });
++    await screen.findByRole('option', { name: 'Production' });
+   });
+   it('allows tenant scope only when backend grants it', () => {
+     setup(defaultReportPreferences('TENANT'), true);
+--- a/frontend/src/components/reports/ReportNotificationsPage.tsx
++++ b/frontend/src/components/reports/ReportNotificationsPage.tsx
+@@ -1,6 +1,7 @@
+ 'use client';
+ 
+ import { useState } from 'react';
++import { recordIdLabel } from '@/lib/recordDisplay';
+ import { useSearchParams } from 'next/navigation';
+ import { useQuery } from '@tanstack/react-query';
+ import { PermissionButton as Button } from '@/components/ui/PermissionButton';
+@@ -69,8 +70,8 @@
+           </select></label>
+           {form.scope !== 'TENANT' && <div><label>Search scope<input className={fieldClass} value={search} onChange={e => setSearch(e.target.value)} placeholder="Filter by name (first 200 matches)" /></label>
+             <label>Target<select className={fieldClass} value={target ?? ''} onChange={e => patch({ project_id: form.scope === 'PROJECT' ? e.target.value || null : null, product_id: form.scope === 'PRODUCT' ? e.target.value || null : null, sbom_id: form.scope === 'SBOM' ? e.target.value || null : null })}>
+-              <option value="">Choose a target</option>{target && !targets.data?.some(t => t.id === target) && <option value={target}>Selected #{target}</option>}
+-              {targets.data?.map(t => <option value={t.id} key={t.id}>{t.label} · #{t.id}</option>)}
++              <option value="">Choose a target</option>{target && !targets.data?.some(t => t.id === target) && <option value={target}>Selected target</option>}
++              {targets.data?.map(t => <option value={t.id} key={t.id}>{t.label}{t.display_id ? ` · ${recordIdLabel('', t.display_id)}` : ''}</option>)}
+             </select></label>{targets.isError && <p role="alert">Could not load targets.</p>}</div>}
+           <label>Cadence<select className={fieldClass} value={form.cadence} onChange={e => patch({ cadence: e.target.value as ReportPreferences['cadence'] })}>{['ON_EVERY_RUN', 'DAILY', 'WEEKLY', 'MONTHLY'].map(c => <option key={c}>{c}</option>)}</select></label>
+           <label>IANA timezone<input className={fieldClass} value={form.timezone} onChange={e => patch({ timezone: e.target.value })} placeholder="UTC" /></label>
+@@ -133,7 +134,7 @@
+     <section className="rounded-xl border border-border-subtle bg-surface p-5"><h2 className="mb-4 text-lg font-semibold">Subscriptions</h2>
+       {subscriptions.isError && <p role="alert">Subscriptions could not be loaded.</p>}
+       {subscriptions.isLoading ? <p>Loading…</p> : !subscriptions.data?.length ? <p className="text-sm text-hcl-muted">No subscriptions yet. Add one or use “Notify me” on a project, product or SBOM.</p> : <div className="space-y-3">{subscriptions.data.map(sub => <div key={sub.id} className="flex flex-wrap items-center justify-between gap-3 rounded-lg border border-border-subtle p-3">
+-        <div><strong>{sub.scope} {sub.project_id ?? sub.product_id ?? sub.sbom_id ?? ''}</strong><p className="text-sm text-hcl-muted">{sub.cadence} · Parts {sub.parts.join(', ')} · {sub.formats.join(', ') || 'Email only'} · {sub.enabled ? 'Enabled' : 'Paused'}{allTenant ? ` · User #${sub.iam_user_id}` : ''}</p></div>
++        <div><strong>{sub.scope} {sub.scope === 'TENANT' ? 'subscription' : recordIdLabel('', sub.scope === 'PROJECT' ? sub.project_display_id : sub.scope === 'PRODUCT' ? sub.product_display_id : sub.sbom_display_id)}</strong><p className="text-sm text-hcl-muted">{sub.cadence} · Parts {sub.parts.join(', ')} · {sub.formats.join(', ') || 'Email only'} · {sub.enabled ? 'Enabled' : 'Paused'}{allTenant ? ' · Tenant member' : ''}</p></div>
+         <div className="flex flex-wrap gap-2">{!allTenant && <><Button size="sm" variant="secondary" onClick={() => setEditing({ id: sub.id, preferences: preferencesOnly(sub) })}>Edit / preview</Button><Button size="sm" variant="secondary" disabled={!sub.enabled || send.isPending} onClick={() => act(send.mutateAsync(sub.id), 'Report request saved. Check delivery history for its outcome.')}>Send now</Button></>}
+           <Button size="sm" variant="secondary" disabled={pause.isPending || allTenant && !sub.enabled} onClick={() => act(pause.mutateAsync({ id: sub.id, enabled: !sub.enabled }), sub.enabled ? 'Subscription paused.' : 'Subscription resumed.')}>{sub.enabled ? 'Pause' : 'Resume'}</Button>
+           {!allTenant && <Button size="sm" variant="secondary" onClick={() => setRemove(sub)}>Delete</Button>}
+--- a/frontend/src/components/sboms/AnalysisStatusBadge.tsx
++++ b/frontend/src/components/sboms/AnalysisStatusBadge.tsx
+@@ -1,5 +1,6 @@
+ 'use client';
+ 
++import { recordIdLabel } from '@/components/ui/RecordIdDisplay';
+ import Link from 'next/link';
+ import { Loader2 } from 'lucide-react';
+ import { formatDate } from '@/lib/utils';
+@@ -8,6 +9,7 @@
+ 
+ interface AnalysisStatusBadgeProps {
+   sbomId: (string | number);
++  displayId?: number | null;
+   analysis?: LatestAnalysisSummary | null;
+   optimisticStatus?: OptimisticAnalysisStatus;
+   optimisticFindings?: number;
+@@ -189,7 +191,7 @@
+ }
+ 
+ export function AnalysisStatusBadge({
+-  sbomId,
++  displayId,
+   analysis,
+   optimisticStatus,
+   optimisticFindings,
+@@ -210,7 +212,7 @@
+         href={`/analysis/${view.runId}`}
+         className={`${className} hover:underline`}
+         title={view.tooltip}
+-        aria-label={`SBOM ${sbomId}: ${view.tooltip}`}
++        aria-label={`${recordIdLabel('SBOM', displayId)}: ${view.tooltip}`}
+       >
+         {content}
+       </Link>
+@@ -221,7 +223,7 @@
+     <span
+       className={className}
+       title={view.tooltip}
+-      aria-label={`SBOM ${sbomId}: ${view.tooltip}`}
++      aria-label={`${recordIdLabel('SBOM', displayId)}: ${view.tooltip}`}
+     >
+       {content}
+     </span>
+--- a/frontend/src/components/sboms/ComponentVexManager.tsx
++++ b/frontend/src/components/sboms/ComponentVexManager.tsx
+@@ -1,5 +1,6 @@
+ 'use client';
+ 
++import { recordIdLabel } from '@/components/ui/RecordIdDisplay';
+ import Link from 'next/link';
+ import { useState } from 'react';
+ import { useQuery } from '@tanstack/react-query';
+@@ -8,8 +9,8 @@
+ import { Dialog, DialogBody } from '@/components/ui/Dialog';
+ import { PermissionButton as Button } from '@/components/ui/PermissionButton';
+ 
+-export function ComponentVexManager({ sbomId, component, canEdit, onClose, onDecision }: {
+-  sbomId: (string | number); component: SBOMComponent; canEdit: boolean; onClose: () => void;
++export function ComponentVexManager({ sbomId, sbomDisplayId, component, canEdit, onClose, onDecision }: {
++  sbomId: (string | number); sbomDisplayId?: number | null; component: SBOMComponent; canEdit: boolean; onClose: () => void;
+   onDecision: (vulnerability: string, statement?: VexStatement, manual?: boolean) => void;
+ }) {
+   const [search, setSearch] = useState('');
+@@ -27,7 +28,7 @@
+   return <>
+     <Dialog open={!historyPair} onClose={onClose} title={`Manage VEX — ${component.name} @ ${component.version ?? 'unknown'}`} maxWidth="2xl">
+       <DialogBody>
+-        <p className="mb-3 text-sm">SBOM #{sbomId} · Component #{component.id}. Each vulnerability has its own decision.</p>
++        <p className="mb-3 text-sm">{recordIdLabel('SBOM', sbomDisplayId)} · {recordIdLabel('Component', component.display_id)}. Each vulnerability has its own decision.</p>
+         <div className="mb-4 flex items-center gap-3">
+           <input aria-label="Search vulnerabilities" placeholder="Search CVE, GHSA or vendor identifier" value={search}
+             onChange={event => setSearch(event.target.value)} className="w-full rounded border p-2" />
+@@ -40,7 +41,7 @@
+             <tbody>{rows.map(row => <tr className="border-t" key={row.vulnerability_id}>
+               <td className="p-2 font-mono">{row.vulnerability_id}</td><td className="p-2">{row.severity ?? 'Unknown'}</td>
+               <td className="p-2">{row.findings.length ? <details><summary>{row.findings.length} finding(s)</summary>
+-                {row.findings.map(f => <p key={f.id}>Run #{f.run_id} · {f.source ?? 'Unknown source'} · {f.match_reason ?? 'No match detail'} {f.matched_range ?? ''}</p>)}
++                {row.findings.map(f => <p key={f.id}>{recordIdLabel('Run', f.run_display_id)} · {f.source ?? 'Unknown source'} · {f.match_reason ?? 'No match detail'} {f.matched_range ?? ''}</p>)}
+               </details> : 'No detected finding; VEX evidence only'}</td>
+               <td className="p-2">{row.current_decision?.status ?? 'No decision'}</td>
+               <td className="p-2">{row.current_decision?.source_name ?? '—'}</td>
+@@ -63,7 +64,7 @@
+     </Dialog>
+     <Dialog open={Boolean(historyPair)} onClose={() => setHistoryPair(null)} title={`VEX History — ${historyPair ?? ''}`} maxWidth="xl">
+       <DialogBody>
+-        <p>{component.name} @ {component.version} · SBOM #{sbomId}</p>
++        <p>{component.name} @ {component.version} · {recordIdLabel('SBOM', sbomDisplayId)}</p>
+         {history.isPending ? <p>Loading history…</p> : history.isError ? <p role="alert">Could not load history.</p> : <>
+           <h3 className="mt-3 font-semibold">Current VEX Decision</h3>
+           <p>{history.data?.current_decision?.status ?? 'No decision'} · {history.data?.current_decision?.source_name ?? '—'}</p>
+--- a/frontend/src/components/sboms/LogicalSbomHistory.tsx
++++ b/frontend/src/components/sboms/LogicalSbomHistory.tsx
+@@ -22,7 +22,7 @@
+     <Td>{version.product_version || version.productver || '—'}</Td>
+     <Td>{formatDate(version.created_on)}</Td><Td>{version.created_by || '—'}</Td>
+     <Td>{version.lifecycle_status || 'ACTIVE'} · {version.status}</Td>
+-    <Td><SbomStatusBadge sbomId={version.id} latestAnalysis={version.latest_analysis} initialStatus={busy ? 'RUNNING' : undefined} /></Td>
++    <Td><SbomStatusBadge sbomId={version.id} displayId={version.display_id} latestAnalysis={version.latest_analysis} initialStatus={busy ? 'RUNNING' : undefined} /></Td>
+     <Td>{hasPermission('analysis:run') && <Button size="sm" disabled={busy || !eligibility.eligible} loading={busy} onClick={() => startAnalysis({ sources: ['NVD', 'OSV', 'GITHUB'] })}>Run Analysis</Button>}</Td>
+   </tr>;
+ }
+--- a/frontend/src/components/sboms/SbomConversionCard.test.tsx
++++ b/frontend/src/components/sboms/SbomConversionCard.test.tsx
+@@ -115,7 +115,7 @@
+     fireEvent.click(screen.getByRole('button', { name: /Convert to CycloneDX/i }));
+ 
+     await waitFor(() => {
+-      expect(screen.getByRole('link', { name: '#100' })).toBeInTheDocument();
++      expect(screen.getByRole('link', { name: 'Converted SBOM' })).toBeInTheDocument();
+       expect(screen.getByText(/running in background/i)).toBeInTheDocument();
+       expect(screen.getByText(/Enrichment pending/i)).toBeInTheDocument();
+     });
+--- a/frontend/src/components/sboms/SbomConversionCard.tsx
++++ b/frontend/src/components/sboms/SbomConversionCard.tsx
+@@ -269,7 +269,7 @@
+               <dt className="text-xs font-medium text-hcl-muted uppercase">Converted SBOM</dt>
+               <dd className="mt-1 font-medium text-hcl-navy">
+                 <Link href={`/sboms/${convertedId}`} className="text-hcl-blue hover:underline">
+-                  #{convertedId}
++                  Converted SBOM
+                 </Link>
+               </dd>
+             </div>
+--- a/frontend/src/components/sboms/SbomDetail.tsx
++++ b/frontend/src/components/sboms/SbomDetail.tsx
+@@ -1,5 +1,6 @@
+ 'use client';
+ 
++import { recordIdLabel } from '@/components/ui/RecordIdDisplay';
+ import { usePermissions } from '@/hooks/usePermission';
+ import { PermissionFields } from '@/components/ui/PermissionGate';
+ import { PermissionButton } from '@/components/ui/PermissionButton';
+@@ -1073,7 +1074,7 @@
+                     label: 'Project',
+                     value: (
+                       <div className="flex items-center gap-2">
+-                        <span>{sbom.project_name || (sbom.projectid ? `Project #${sbom.projectid}` : '—')}</span>
++                        <span>{sbom.project_name || (sbom.projectid ? recordIdLabel('Project', sbom.project_display_id) : '—')}</span>
+                         <PermissionButton size="sm" variant="ghost" permission={["sbom:update","product:assign_sbom"]}
+                           type="button"
+ 	                          onClick={() => {
+@@ -1910,7 +1911,7 @@
+                 ) : (
+                   runPagination.pageItems.map((run) => (
+                     <tr key={run.id} className="hover:bg-hcl-light/40">
+-                      <Td className="font-mono text-xs text-hcl-muted">#{run.id}</Td>
++                      <Td className="font-mono text-xs text-hcl-muted">{recordIdLabel('Run', run.display_id)}</Td>
+                       <Td><StatusBadge status={run.run_status} /></Td>
+                       <Td className="text-foreground/90">{run.total_findings ?? '—'}</Td>
+                       <Td className="text-hcl-muted">{formatDuration(run.duration_ms)}</Td>
+@@ -2079,7 +2080,7 @@
+       </Dialog>
+ 
+       {managedVexComponent && !isVexOverrideOpen && <ComponentVexManager
+-        key={managedVexComponent.id} sbomId={sbom.id} component={managedVexComponent}
++        key={managedVexComponent.id} sbomId={sbom.id} sbomDisplayId={sbom.display_id} component={managedVexComponent}
+         canEdit={canManageEvidence} onClose={() => setManagedVexComponent(null)}
+         onDecision={(vulnerability, statement, manual) => openVexOverrideModal(statement, managedVexComponent, vulnerability, manual)}
+       />}
+--- a/frontend/src/components/sboms/SbomStatusBadge.tsx
++++ b/frontend/src/components/sboms/SbomStatusBadge.tsx
+@@ -4,15 +4,16 @@
+ 
+ interface SbomStatusBadgeProps {
+   sbomId: (string | number);
++  displayId?: number | null;
+   initialStatus?: AnalysisStatus;
+   initialFindings?: number;
+   latestAnalysis?: LatestAnalysis | null;
+ }
+ 
+-export function SbomStatusBadge({ sbomId, initialStatus, initialFindings, latestAnalysis }: SbomStatusBadgeProps) {
++export function SbomStatusBadge({ sbomId, displayId, initialStatus, initialFindings, latestAnalysis }: SbomStatusBadgeProps) {
+   return (
+     <AnalysisStatusBadge
+-      sbomId={sbomId}
++      sbomId={sbomId} displayId={displayId}
+       analysis={latestAnalysis}
+       optimisticStatus={initialStatus}
+       optimisticFindings={initialFindings}
+--- a/frontend/src/components/sboms/SbomsTable.analysis.test.tsx
++++ b/frontend/src/components/sboms/SbomsTable.analysis.test.tsx
+@@ -27,6 +27,7 @@
+ function sbomWithAnalysis(latestAnalysis: LatestAnalysis | null): SBOMSource {
+   return {
+     id: String(latestAnalysis?.run_id ?? '00000000-0000-4000-8000-000000000064'),
++    display_id: 100,
+     sbom_name: `sbom-${latestAnalysis?.result ?? 'none'}`,
+     sbom_type: 1,
+     sbom_version: '1.0.0',
+@@ -44,6 +45,16 @@
+ }
+ 
+ describe('SbomsTable analysis column', () => {
++  it('displays the persisted numeric ID while its link selects the UUID', () => {
++    const sbom = sbomWithAnalysis(null);
++    render(wrap(<SbomsTable sboms={[sbom]} isLoading={false} error={null} />));
++
++    const label = screen.getByLabelText('Record ID 100');
++    expect(label).toHaveTextContent('#100');
++    expect(label.closest('a')).toHaveAttribute('href', `/sboms/${sbom.id}`);
++    expect(screen.queryByText(`#${sbom.id}`)).not.toBeInTheDocument();
++  });
++
+   it('shows only SBOM Version in the Version column', () => {
+     const withBoth = {
+       ...sbomWithAnalysis(null),
+@@ -75,7 +86,7 @@
+ 
+     const badge = screen.getByLabelText(/Analysis has not been run for this SBOM/i);
+     expect(within(badge).getByText('Not Run')).toBeInTheDocument();
+-    expect(screen.queryByText('—')).not.toBeInTheDocument();
++    expect(within(badge).queryByText('—')).not.toBeInTheDocument();
+   });
+ 
+   it.each([
+@@ -111,7 +122,7 @@
+       ),
+     );
+ 
+-    const badge = screen.getByRole('link', { name: /SBOM 00000000-0000-4000-8000-00000000004d:/i });
++    const badge = screen.getByRole('link', { name: /SBOM #100:/i });
+     expect(within(badge).getByText(label)).toBeInTheDocument();
+     expect(badge).toHaveAttribute('href', '/analysis/00000000-0000-4000-8000-00000000004d');
+     if (result === 'completed') {
+@@ -157,7 +168,7 @@
+       ),
+     );
+ 
+-    const badge = screen.getByRole('link', { name: /SBOM 00000000-0000-4000-8000-000000000058:/i });
++    const badge = screen.getByRole('link', { name: /SBOM #100:/i });
+     expect(within(badge).getByText('Completed · 0 findings')).toBeInTheDocument();
+     expect(badge).toHaveClass('text-green-700');
+     expect(badge).toHaveAttribute('title', expect.stringContaining('No findings detected'));
+@@ -177,7 +188,7 @@
+                   result: 'pass',
+                   finding_count: 0,
+                 }),
+-                id: 101,
++                id: 101, display_id: 101,
+               },
+             ]}
+             isLoading={false}
+@@ -193,7 +204,7 @@
+     expect(table).toHaveClass('[&_tbody_tr:nth-child(even)]:bg-row-alt');
+     expect(table).toHaveClass('[&_tbody_tr]:hover:bg-row-hover');
+ 
+-    const row = screen.getByText('#00000000-0000-4000-8000-000000000064').closest('tr');
++    const row = screen.getByText('#100').closest('tr');
+     expect(row?.className).not.toMatch(/bg-(white|slate-50|gray-50|blue-50)/);
+     expect(row?.className).not.toContain('hover:bg-hcl-light/40');
+ 
+--- a/frontend/src/components/sboms/SbomsTable.tsx
++++ b/frontend/src/components/sboms/SbomsTable.tsx
+@@ -1,5 +1,6 @@
+ 'use client';
+ 
++import { RecordIdDisplay, recordIdLabel } from '@/components/ui/RecordIdDisplay';
+ import { PermissionButton } from '@/components/ui/PermissionButton';
+ 
+ import { useEffect, useMemo, useState } from 'react';
+@@ -51,13 +52,13 @@
+ 
+ function displayProject(sb: SBOMSource): string {
+   if (sb.project_name?.trim()) return sb.project_name.trim();
+-  if (sb.projectid != null) return `Project #${sb.projectid}`;
++  if (sb.projectid != null) return recordIdLabel('Project', sb.project_display_id);
+   return 'Unassigned';
+ }
+ 
+ function displayProduct(sb: SBOMSource): string {
+   if (sb.product_name?.trim()) return sb.product_name.trim();
+-  if (sb.product_id != null) return `Product #${sb.product_id}`;
++  if (sb.product_id != null) return recordIdLabel('Application', sb.product_display_id);
+   return 'Unassigned';
+ }
+ 
+@@ -179,7 +180,7 @@
+     if (search.trim()) {
+       rows = rows.filter((sb) =>
+         matchesMultiField(search, [
+-          String(sb.id),
++          String(sb.display_id ?? ''),
+           sb.sbom_name,
+           displayProject(sb),
+           displayProduct(sb),
+@@ -490,7 +491,11 @@
+                       label={`Select ${sbom.sbom_name}`}
+                     />
+                   </Td>
+-                  <Td className="font-mono text-xs text-hcl-muted">#{sbom.id}</Td>
++                  <Td className="font-mono text-xs text-hcl-muted">
++                    <Link href={`/sboms/${sbom.id}`} className="rounded hover:underline focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-hcl-blue/40">
++                      <RecordIdDisplay displayId={sbom.display_id} />
++                    </Link>
++                  </Td>
+                   <Td className="max-w-[220px] font-medium text-hcl-navy">
+                     <div className="flex items-center gap-1.5">
+                       <Link
+@@ -527,7 +532,7 @@
+                   </Td>
+                   <Td>
+                     <SbomStatusBadge
+-                      sbomId={sbom.id}
++                      sbomId={sbom.id} displayId={sbom.display_id}
+                       initialStatus={sbom._analysisStatus}
+                       initialFindings={sbom._findingsCount}
+                       latestAnalysis={sbom.latest_analysis}
+--- a/frontend/src/components/sboms/inventory-sync.integration.test.tsx
++++ b/frontend/src/components/sboms/inventory-sync.integration.test.tsx
+@@ -68,7 +68,7 @@
+   fireEvent.change(screen.getByRole('textbox', { name: 'Project Name' }), { target: { value: 'New Project' } });
+   fireEvent.click(screen.getByRole('button', { name: 'Create Project' })); await waitFor(() => expect(closed).toHaveBeenCalled());
+   mounted.rerender(wrap(<ReportPreferencesEditor initial={defaultReportPreferences('PROJECT', 1)} tenantScopeAllowed={false} onClose={vi.fn()} />));
+-  expect(await screen.findByRole('option', { name: 'New Project · #2' })).toBeInTheDocument();
++  expect(await screen.findByRole('option', { name: 'New Project' })).toBeInTheDocument();
+   expect(screen.getByLabelText('Scope')).toHaveValue('PROJECT'); expect(screen.getByLabelText('Target')).toHaveValue('1');
+   expect(screen.getByLabelText('Search scope')).toHaveValue(''); expect(api.targets).toHaveBeenCalledTimes(1);
+   expect(qc.getQueryState(['reports', 'deliveries', false, '', 52])?.isInvalidated).toBe(false);
+@@ -119,7 +119,7 @@
+   await waitFor(() => expect(api.targets).toHaveBeenCalledTimes(1));
+   api.targets.mockResolvedValue([{ id: 1, label: 'Project A' }, { id: 2, label: 'New target' }]);
+   await invalidateProjectMetadata(qc, { ...project, id: 2 });
+-  expect(await screen.findByRole('option', { name: 'New target · #2' })).toBeInTheDocument();
++  expect(await screen.findByRole('option', { name: 'New target' })).toBeInTheDocument();
+   expect(screen.getByLabelText('Search scope')).toHaveValue('Production'); expect(screen.getByLabelText('Scope')).toHaveValue('PROJECT');
+   expect(screen.getByLabelText('Target')).toHaveValue('1'); expect(api.targets).toHaveBeenCalledTimes(2);
+ });
+--- a/frontend/src/components/schedules/ScheduleCard.tsx
++++ b/frontend/src/components/schedules/ScheduleCard.tsx
+@@ -138,7 +138,7 @@
+     },
+     onSuccess: (res, _variables, context) => {
+       if (!context?.isCurrent()) return;
+-      for (const id of res.sbom_ids) addPendingAnalysis(id, `SBOM #${id}`, context.scopeKey);
++      for (const id of res.sbom_ids) addPendingAnalysis(id, 'Scheduled SBOM', context.scopeKey);
+       showToast(
+         `Enqueued ${res.sbom_ids.length} SBOM analysis${res.sbom_ids.length === 1 ? '' : 'es'}`,
+         'success',
+--- /dev/null
++++ b/frontend/src/components/ui/RecordIdDisplay.test.tsx
+@@ -0,0 +1,23 @@
++// @vitest-environment jsdom
++import { render, screen } from '@testing-library/react';
++import { describe, expect, it } from 'vitest';
++import { RecordIdDisplay, recordIdLabel } from './RecordIdDisplay';
++
++describe('persisted record display labels', () => {
++  it('renders the exact persisted integer, independently of the UUID link', () => {
++    const uuid = 'f5e7f4c4-8a16-4c70-93d8-092173885437';
++    render(<a href={`/sboms/${uuid}`}><RecordIdDisplay kind="SBOM" displayId={567} /></a>);
++    expect(screen.getByText('SBOM #567').closest('a')).toHaveAttribute('href', `/sboms/${uuid}`);
++    expect(screen.getByLabelText('SBOM ID 567')).toBeVisible();
++    expect(screen.queryByText(uuid)).not.toBeInTheDocument();
++  });
++
++  it.each([undefined, null, 0, -1, 1.5, NaN, Infinity, 2 ** 53])('never fabricates an invalid or missing ID: %s', value => {
++    render(<RecordIdDisplay kind="Project" displayId={value} />);
++    expect(screen.getByLabelText('Project ID unavailable')).toHaveTextContent('Project —');
++  });
++
++  it.each(['123', 'f5e7f4c4-8a16-4c70-93d8-092173885437', true])('never parses a selector into a label', value => {
++    expect(recordIdLabel('Run', value)).toBe('Run —');
++  });
++});
+--- /dev/null
++++ b/frontend/src/components/ui/RecordIdDisplay.tsx
+@@ -0,0 +1,22 @@
++'use client';
++
++import { useEffect } from 'react';
++import { recordIdLabel } from '@/lib/recordDisplay';
++
++export { recordIdLabel } from '@/lib/recordDisplay';
++
++const warned = new Set<string>();
++
++export function RecordIdDisplay({ kind = '', displayId }: { kind?: string; displayId?: number | null }) {
++  const available = typeof displayId === 'number' && Number.isSafeInteger(displayId) && displayId > 0;
++  useEffect(() => {
++    if (process.env.NODE_ENV === 'development' && !available && !warned.has(kind)) {
++      warned.add(kind);
++      // No record values, identities, user data or tokens in diagnostics.
++      console.warn('Record display field unavailable; verify the API presentation contract.', kind || 'Record');
++    }
++  }, [available, kind]);
++  return <span className="whitespace-nowrap tabular-nums" data-record-id-state={available ? 'available' : 'unavailable'} aria-label={available ? `${kind || 'Record'} ID ${displayId}` : `${kind || 'Record'} ID unavailable`}>
++    {recordIdLabel(kind, displayId)}
++  </span>;
++}
+--- a/frontend/src/components/vex/VexDecisionEditor.tsx
++++ b/frontend/src/components/vex/VexDecisionEditor.tsx
+@@ -201,7 +201,7 @@
+         <div className="flex flex-wrap gap-x-6 gap-y-1">
+           <span>
+             <span className="text-hcl-muted">Component: </span>
+-            <span className="font-medium">{componentLabel ?? `#${componentId}`}</span>
++            <span className="font-medium">{componentLabel ?? 'Selected component'}</span>
+           </span>
+           <span>
+             <span className="text-hcl-muted">Vulnerability: </span>
+--- a/frontend/src/components/vex/VexRunHistoryPanel.test.tsx
++++ b/frontend/src/components/vex/VexRunHistoryPanel.test.tsx
+@@ -10,7 +10,7 @@
+ vi.mock('@/hooks/useAuth', () => ({useAuth: () => ({activeTenantId: 1})}));
+ beforeEach(() => {
+   vi.clearAllMocks();
+-  api.getVexAnalysisRuns.mockResolvedValue({items: [{id: 5, run_status: 'FINDINGS', completed_on: '2026-10-09', is_current: true}]});
++  api.getVexAnalysisRuns.mockResolvedValue({items: [{id: 5, display_id: 5, run_status: 'FINDINGS', completed_on: '2026-10-09', is_current: true}]});
+ });
+ function view() {
+   render(<QueryClientProvider client={new QueryClient({defaultOptions: {queries: {retry: false}}})}><VexRunHistoryPanel sbomId={3} /></QueryClientProvider>);
+@@ -18,7 +18,7 @@
+ it('shows immutable prior decisions and assignments for a selected run', async () => {
+   api.getVexRunSnapshot.mockResolvedValue({total: 1, snapshot_available: true, obsolete: false, items: [{investigation_id: 1, canonical_vulnerability_id: 'CVE-2026-1000', component_name: 'lib', component_version: '1', effective_status: 'NOT_AFFECTED', reconciliation_status: 'MATCHED', assigned_to: 'membership:7', reviewed_by: 'Analyst'}]});
+   view();
+-  await screen.findByRole('option', {name: /Run 5/});
++  await screen.findByRole('option', {name: /Run #5/});
+   await userEvent.selectOptions(screen.getByLabelText('Historical analysis run'), '5');
+   expect(await screen.findByText(/Previous assignment: membership:7/)).toBeInTheDocument();
+   expect(screen.getByText('NOT_AFFECTED · MATCHED')).toBeInTheDocument();
+@@ -27,7 +27,7 @@
+ it('discloses missing legacy snapshots rather than inventing historical decisions', async () => {
+   api.getVexRunSnapshot.mockResolvedValue({total: 0, snapshot_available: false, obsolete: true, items: []});
+   view();
+-  await screen.findByRole('option', {name: /Run 5/});
++  await screen.findByRole('option', {name: /Run #5/});
+   await userEvent.selectOptions(screen.getByLabelText('Historical analysis run'), '5');
+   expect(await screen.findByText(/Legacy decisions are not reconstructed or inferred/)).toBeInTheDocument();
+   expect(screen.getByText(/cannot supply current security posture/)).toBeInTheDocument();
+--- a/frontend/src/components/vex/VexRunHistoryPanel.tsx
++++ b/frontend/src/components/vex/VexRunHistoryPanel.tsx
+@@ -1,5 +1,6 @@
+ 'use client';
+ 
++import { recordIdLabel } from '@/components/ui/RecordIdDisplay';
+ import { useState } from 'react';
+ import { useQuery } from '@tanstack/react-query';
+ import { useAuth } from '@/hooks/useAuth';
+@@ -19,7 +20,7 @@
+   return <section aria-label="Historical analysis snapshots" className="space-y-3 rounded border border-border p-4">
+     <Select label="Historical analysis run" value={runId} onChange={event => {setRunId(event.target.value); setOffset(0);}}>
+       <option value="">Select run evidence…</option>
+-      {runs.data?.items.map(run => <option key={run.id} value={run.id}>Run {run.id} · {run.run_status} · {run.completed_on ?? 'Incomplete'}{!run.is_current ? ' · Obsolete' : ''}</option>)}
++      {runs.data?.items.map(run => <option key={run.id} value={run.id}>{recordIdLabel('Run', run.display_id)} · {run.run_status} · {run.completed_on ?? 'Incomplete'}{!run.is_current ? ' · Obsolete' : ''}</option>)}
+     </Select>
+     {runs.isError || snapshot.isError ? <Alert variant="error">Historical run evidence could not be loaded.</Alert> : null}
+     {!!runId && snapshot.isPending && <p role="status">Loading historical snapshot…</p>}
+--- a/frontend/src/hooks/useAnalysisStream.ts
++++ b/frontend/src/hooks/useAnalysisStream.ts
+@@ -117,7 +117,7 @@
+         return;
+       }
+ 
+-      addPendingAnalysis(sbomId, `SBOM #${sbomId}`, scope.key);
++      addPendingAnalysis(sbomId, 'Selected SBOM', scope.key);
+       runIdRef.current = null;
+       runningAnalysisRef.current.add(sbomId);
+       const clearPending = () => {
+@@ -239,7 +239,7 @@
+         if (!isCurrent()) return;
+         if (typeof data.runId === 'string') {
+           runIdRef.current = data.runId;
+-          addPendingAnalysis(sbomId, `SBOM #${sbomId}`, scope.key, data.runId);
++          addPendingAnalysis(sbomId, 'Selected SBOM', scope.key, data.runId);
+         }
+         if (eventType === 'progress') {
+           const phase = data.phase as string | undefined;
+--- a/frontend/src/lib/api.ts
++++ b/frontend/src/lib/api.ts
+@@ -1321,6 +1321,9 @@
+ // app/routers/vulnerabilities.py.
+ 
+ export interface VulnerabilityRow {
++  project_display_id?: number | null;
++  product_display_id?: number | null;
++  sbom_display_id?: number | null;
+   finding_id: number;
+   vuln_id: string;
+   severity: string;
+@@ -3276,7 +3279,7 @@
+ }
+ 
+ export function getVexAnalysisRuns(sbomId: (string | number), signal?: AbortSignal) {
+-  return request<{items: Array<{id: string; run_status: string; completed_on: string | null; is_current: boolean}>}>(
++  return request<{items: Array<{display_id?: number | null; id: string; run_status: string; completed_on: string | null; is_current: boolean}>}>(
+     `/api/vex/investigations/analysis-runs?sbom_id=${sbomId}`, {signal});
+ }
+ 
+--- /dev/null
++++ b/frontend/src/lib/recordDisplay.test.ts
+@@ -0,0 +1,19 @@
++import { describe, expect, it } from 'vitest';
++import { cachedRecordLabel } from './recordDisplay';
++
++const id = 'f5e7f4c4-8a16-4c70-93d8-092173885437';
++describe('old pinned label presentation', () => {
++  it('retains the name without inventing the old pin integer', () => {
++    expect(cachedRecordLabel(`Gateway · #${id}`, id, 'Run')).toBe('Gateway');
++    expect(cachedRecordLabel(`Gateway — Run #${id}`, id, 'Run')).toBe('Gateway');
++  });
++  it('uses unavailable labels for identity-only pins', () => {
++    expect(cachedRecordLabel(`Run #${id}`, id, 'Run')).toBe('Run —');
++    expect(cachedRecordLabel(`SBOM #${id}`, id, 'SBOM')).toBe('SBOM —');
++  });
++  it('preserves unrelated technical references and actual integer labels', () => {
++    expect(cachedRecordLabel(`Source-native #${id}`, id, 'SBOM')).toBe(`Source-native #${id}`);
++    expect(cachedRecordLabel('Gateway · Run #891', id, 'Run')).toBe('Gateway · Run #891');
++    expect(cachedRecordLabel('Run #123', 123, 'Run')).toBe('Run #123');
++  });
++});
+--- /dev/null
++++ b/frontend/src/lib/recordDisplay.ts
+@@ -0,0 +1,19 @@
++/** Formatting only. Never use a displayed key as a resource selector. */
++export function recordIdLabel(kind: string, displayId: unknown): string {
++  const valid = typeof displayId === 'number' && Number.isSafeInteger(displayId) && displayId > 0;
++  return `${kind ? `${kind} ` : ''}${valid ? `#${displayId}` : '—'}`;
++}
++
++/** Old pin labels may contain their own UUID. Keep storage, href and key intact. */
++export function cachedRecordLabel(label: string, id: string | number, kind: 'SBOM' | 'Run'): string {
++  if (typeof id !== 'string' || !/^[0-9a-f]{8}-[0-9a-f]{4}-4[0-9a-f]{3}-[89ab][0-9a-f]{3}-[0-9a-f]{12}$/i.test(id)) return label;
++  for (const prefix of ['', 'Run ', 'SBOM ']) {
++    const reference = `${prefix}#${id}`;
++    if (label === reference) return recordIdLabel(kind, undefined);
++    for (const separator of [' · ', ' — ']) {
++      const suffix = separator + reference;
++      if (label.endsWith(suffix)) return label.slice(0, -suffix.length) || recordIdLabel(kind, undefined);
++    }
++  }
++  return label;
++}
+--- a/frontend/src/lib/reportApi.ts
++++ b/frontend/src/lib/reportApi.ts
+@@ -2,7 +2,7 @@
+ import type { ReportConfig, ReportDelivery, ReportPreferences, ReportPreview, ReportSubscription } from '@/types/reports';
+ 
+ export const getReportConfig = () => request<ReportConfig>('/api/report-notifications/config');
+-export const getReportTargets = (scope: string, search: string) => request<Array<{ id: number; label: string }>>(`/api/report-notifications/targets?scope=${encodeURIComponent(scope)}&search=${encodeURIComponent(search)}`);
++export const getReportTargets = (scope: string, search: string) => request<Array<{ id: string | number; display_id?: number | null; label: string }>>(`/api/report-notifications/targets?scope=${encodeURIComponent(scope)}&search=${encodeURIComponent(search)}`);
+ export const getReportSubscriptions = (tenantId?: (string | number)) => request<ReportSubscription[]>(tenantId ? `/api/tenants/${tenantId}/report-subscriptions` : '/api/report-subscriptions');
+ export const getReportDeliveries = (allTenant = false, status = '', deliveryId?: number) => request<ReportDelivery[]>(`/api/report-deliveries?all_tenant=${allTenant}&status=${encodeURIComponent(status)}${deliveryId ? `&delivery_id=${deliveryId}` : ''}`);
+ export const createReportSubscription = (body: ReportPreferences) => request<ReportSubscription>('/api/report-subscriptions', { method: 'POST', body: JSON.stringify(body) });
+--- a/frontend/src/lib/topVulnerableRuns.ts
++++ b/frontend/src/lib/topVulnerableRuns.ts
+@@ -1,4 +1,5 @@
+ import type { AnalysisRun } from '@/types';
++import { recordIdLabel } from '@/lib/recordDisplay';
+ import type { SeverityKey } from '@/lib/severityParam';
+ 
+ export type { SeverityKey };
+@@ -47,7 +48,7 @@
+     if (totalFindings === 0) continue;
+     buckets.set(run.sbom_id, {
+       sbomId: run.sbom_id,
+-      sbomName: run.sbom_name ?? `SBOM #${run.sbom_id}`,
++      sbomName: run.sbom_name ?? recordIdLabel('SBOM', run.sbom_display_id),
+       critical,
+       high,
+       medium,
+--- a/frontend/src/types/compare.ts
++++ b/frontend/src/types/compare.ts
+@@ -47,6 +47,15 @@
+ // =============================================================================
+ 
+ export interface RunSummary {
++  /** Output-only persisted keys. Never use for selection, routing or authorization. */
++  display_id?: number | null;
++  project_display_id?: number | null;
++  product_display_id?: number | null;
++  sbom_display_id?: number | null;
++  current_sbom_display_id?: number | null;
++  latest_sbom_display_id?: number | null;
++  run_display_id?: number | null;
++
+   id: string;
+   sbom_id: (string | number) | null;
+   sbom_name: string | null;
+--- a/frontend/src/types/index.ts
++++ b/frontend/src/types/index.ts
+@@ -1,4 +1,13 @@
+ export interface Project {
++  /** Output-only persisted keys. Never use for selection, routing or authorization. */
++  display_id?: number | null;
++  project_display_id?: number | null;
++  product_display_id?: number | null;
++  sbom_display_id?: number | null;
++  current_sbom_display_id?: number | null;
++  latest_sbom_display_id?: number | null;
++  run_display_id?: number | null;
++
+   id: (string | number);
+   project_name: string;
+   project_details: string | null;
+@@ -11,6 +20,15 @@
+ }
+ 
+ export interface Product {
++  /** Output-only persisted keys. Never use for selection, routing or authorization. */
++  display_id?: number | null;
++  project_display_id?: number | null;
++  product_display_id?: number | null;
++  sbom_display_id?: number | null;
++  current_sbom_display_id?: number | null;
++  latest_sbom_display_id?: number | null;
++  run_display_id?: number | null;
++
+   id: (string | number);
+   tenant_id?: (string | number);
+   project_id: (string | number);
+@@ -78,6 +96,15 @@
+   | 'cancelled';
+ 
+ export interface LatestAnalysisSummary {
++  /** Output-only persisted keys. Never use for selection, routing or authorization. */
++  display_id?: number | null;
++  project_display_id?: number | null;
++  product_display_id?: number | null;
++  sbom_display_id?: number | null;
++  current_sbom_display_id?: number | null;
++  latest_sbom_display_id?: number | null;
++  run_display_id?: number | null;
++
+   run_id?: string | string;
+   status: AnalysisStatus | string;
+   result?: string | null;
+@@ -101,6 +128,15 @@
+ }
+ 
+ export interface SBOMSource {
++  /** Output-only persisted keys. Never use for selection, routing or authorization. */
++  display_id?: number | null;
++  project_display_id?: number | null;
++  product_display_id?: number | null;
++  sbom_display_id?: number | null;
++  current_sbom_display_id?: number | null;
++  latest_sbom_display_id?: number | null;
++  run_display_id?: number | null;
++
+   logical_sbom_id?: (string | number) | null;
+   lifecycle_status?: 'ACTIVE' | 'INACTIVE';
+   lifecycle_revision?: number;
+@@ -436,6 +472,15 @@
+ export type ValidationSessionImportResponse = SBOMSource;
+ 
+ export interface SBOMComponent {
++  /** Output-only persisted keys. Never use for selection, routing or authorization. */
++  display_id?: number | null;
++  project_display_id?: number | null;
++  product_display_id?: number | null;
++  sbom_display_id?: number | null;
++  current_sbom_display_id?: number | null;
++  latest_sbom_display_id?: number | null;
++  run_display_id?: number | null;
++
+   id: (string | number);
+   sbom_id: (string | number);
+   bom_ref?: string | null;
+@@ -733,6 +778,7 @@
+   vex_document_id?: number | null;
+   sbom_id: (string | number);
+   component_id?: (string | number) | null;
++  component_display_id?: number | null;
+   component_name?: string | null;
+   component_version?: string | null;
+   vulnerability_id: string;
+@@ -753,7 +799,7 @@
+ export interface ComponentVulnerability {
+   vulnerability_id: string;
+   severity: string | null;
+-  findings: { id: number; run_id: string; source: string | null; match_reason: string | null; matched_range: string | null; title: string | null }[];
++  findings: { id: number; run_id: string; run_display_id?: number | null; source: string | null; match_reason: string | null; matched_range: string | null; title: string | null }[];
+   current_decision: VexStatement | null;
+ }
+ 
+@@ -943,6 +989,15 @@
+ }
+ 
+ export interface AnalysisRun {
++  /** Output-only persisted keys. Never use for selection, routing or authorization. */
++  display_id?: number | null;
++  project_display_id?: number | null;
++  product_display_id?: number | null;
++  sbom_display_id?: number | null;
++  current_sbom_display_id?: number | null;
++  latest_sbom_display_id?: number | null;
++  run_display_id?: number | null;
++
+   is_current?: boolean;
+   processing_eligibility?: { eligible: boolean; reason_code: string | null; reason: string | null };
+   id: string;
+@@ -1077,6 +1132,7 @@
+   id: number;
+   analysis_run_id: string;          // backend field name
+   component_id?: (string | number) | null;
++  component_display_id?: number | null;
+   vuln_id: string | null;
+   source: string | null;            // e.g. "NVD", "OSV", "NVD,OSV"
+   title: string | null;
+@@ -1368,6 +1424,7 @@
+ }
+ 
+ export interface RecentSbom {
++  display_id?: number | null;
+   id: number;
+   sbom_name: string;
+   created_on: string;
+@@ -1698,8 +1755,8 @@
+ }
+ 
+ export interface CompareRunsResult {
+-  run_a: { id: string; sbom_name: string | null; completed_on: string | null };
+-  run_b: { id: string; sbom_name: string | null; completed_on: string | null };
++  run_a: { display_id?: number | null; id: string; sbom_name: string | null; completed_on: string | null };
++  run_b: { display_id?: number | null; id: string; sbom_name: string | null; completed_on: string | null };
+   new_findings: string[];
+   resolved_findings: string[];
+   common_findings: string[];
+@@ -1777,6 +1834,15 @@
+ }
+ 
+ export interface ScheduleTarget {
++  /** Output-only persisted keys. Never use for selection, routing or authorization. */
++  display_id?: number | null;
++  project_display_id?: number | null;
++  product_display_id?: number | null;
++  sbom_display_id?: number | null;
++  current_sbom_display_id?: number | null;
++  latest_sbom_display_id?: number | null;
++  run_display_id?: number | null;
++
+   project_id: (string | number) | null;
+   project_name: string | null;
+   product_id: (string | number) | null;
+@@ -1880,6 +1946,15 @@
+   | 'updated_at';
+ 
+ export interface VexInvestigationRow {
++  /** Output-only persisted keys. Never use for selection, routing or authorization. */
++  display_id?: number | null;
++  project_display_id?: number | null;
++  product_display_id?: number | null;
++  sbom_display_id?: number | null;
++  current_sbom_display_id?: number | null;
++  latest_sbom_display_id?: number | null;
++  run_display_id?: number | null;
++
+   sbom_version?: string | null;
+   analysis_run_id?: string | null;
+   historical?: boolean;
+@@ -1977,6 +2052,15 @@
+ }
+ 
+ export interface VexInvestigationDetail {
++  /** Output-only persisted keys. Never use for selection, routing or authorization. */
++  display_id?: number | null;
++  project_display_id?: number | null;
++  product_display_id?: number | null;
++  sbom_display_id?: number | null;
++  current_sbom_display_id?: number | null;
++  latest_sbom_display_id?: number | null;
++  run_display_id?: number | null;
++
+   sbom_version?: string | null;
+   previous_decisions?: Array<{ source_name?: string | null; impact_statement?: string | null; action_statement?: string | null; evidence?: Record<string, unknown> | null; investigation_id: number; statement_id: number; sbom_id: (string | number); sbom_version: string; decision: string; justification: string | null; reviewer: string | null; decided_at: string | null; component_name: string; component_version: string; analysis_run_id: string | null; applicability: string; component_version_changed: boolean }>;
+   capabilities?: VexInvestigationCapabilities;
+@@ -2078,6 +2162,15 @@
+ export * from './componentAdvisor';
+ 
+ export interface LogicalSBOM {
++  /** Output-only persisted keys. Never use for selection, routing or authorization. */
++  display_id?: number | null;
++  project_display_id?: number | null;
++  product_display_id?: number | null;
++  sbom_display_id?: number | null;
++  current_sbom_display_id?: number | null;
++  latest_sbom_display_id?: number | null;
++  run_display_id?: number | null;
++
+   id: (string | number); tenant_id: (string | number); product_id: (string | number) | null; name: string;
+   description: string | null; created_by: string | null; created_at: string; updated_at: string;
+   version_count: number; latest_version: SBOMSource | null; version_ordering: string;
+--- a/frontend/src/types/reports.ts
++++ b/frontend/src/types/reports.ts
+@@ -15,6 +15,9 @@
+   enabled: boolean;
+ }
+ export interface ReportSubscription extends ReportPreferences {
++  project_display_id?: number | null;
++  product_display_id?: number | null;
++  sbom_display_id?: number | null;
+   id: number; tenant_id: (string | number); iam_user_id: string;
+   created_on: string; modified_on: string | null; last_delivered_at: string | null;
+ }
+--- a/tests/test_analyze_endpoints_snapshot.py
++++ b/tests/test_analyze_endpoints_snapshot.py
+@@ -40,6 +40,24 @@
+     assert resp.headers["Link"] == f'</api/sboms/{sbom_id}/analyze>; rel="successor-version"'
+ 
+ 
++def _with_persisted_display_ids(expected: dict, body: dict, seeded_sbom: dict) -> dict:
++    """Extend the locked UUID contract with independently read persisted keys."""
++    from app.db import SessionLocal
++
++    result = json.loads(json.dumps(expected))
++    with SessionLocal() as db, verified_fixture_tenant(db, 1):
++        run = public_row(db, AnalysisRun, body["id"])
++        sbom = public_row(db, SBOMSource, seeded_sbom["id"])
++        assert run.sbom_id == sbom.id
++        result.update(display_id=run.id, run_display_id=run.id, sbom_display_id=sbom.id)
++        for name in ("project", "product"):
++            internal = getattr(run, f"{name}_id")
++            if internal is not None:
++                result[f"{name}_display_id"] = internal
++        result["sbom"]["display_id"] = sbom.id
++    return result
++
++
+ @pytest.mark.snapshot
+ def test_analyze_sbom_nvd(client, seeded_sbom, mock_external_sources):
+     resp = client.post(
+@@ -49,7 +67,7 @@
+     assert resp.status_code == 200, resp.text
+     _assert_deprecated(resp, seeded_sbom["id"])
+     actual = normalize(resp.json())
+-    expected = _load_or_write("analyze_sbom_nvd", actual)
++    expected = _with_persisted_display_ids(_load_or_write("analyze_sbom_nvd", actual), resp.json(), seeded_sbom)
+     assert actual == expected
+ 
+ 
+@@ -62,7 +80,7 @@
+     assert resp.status_code == 200, resp.text
+     _assert_deprecated(resp, seeded_sbom["id"])
+     actual = normalize(resp.json())
+-    expected = _load_or_write("analyze_sbom_github", actual)
++    expected = _with_persisted_display_ids(_load_or_write("analyze_sbom_github", actual), resp.json(), seeded_sbom)
+     assert actual == expected
+ 
+ 
+@@ -75,7 +93,7 @@
+     assert resp.status_code == 200, resp.text
+     _assert_deprecated(resp, seeded_sbom["id"])
+     actual = normalize(resp.json())
+-    expected = _load_or_write("analyze_sbom_osv", actual)
++    expected = _with_persisted_display_ids(_load_or_write("analyze_sbom_osv", actual), resp.json(), seeded_sbom)
+     assert actual == expected
+ 
+ 
+@@ -91,7 +109,7 @@
+     assert resp.status_code == 200, resp.text
+     _assert_deprecated(resp, seeded_sbom["id"])
+     actual = normalize(resp.json())
+-    expected = _load_or_write("analyze_sbom_consolidated", actual)
++    expected = _with_persisted_display_ids(_load_or_write("analyze_sbom_consolidated", actual), resp.json(), seeded_sbom)
+     assert actual == expected
+ 
+ 
+--- a/tests/test_component_advisor_recommendations_api.py
++++ b/tests/test_component_advisor_recommendations_api.py
+@@ -181,7 +181,15 @@
+     scoped = create(client, LOG4J, "CRITICAL_FINDING",
+                     params={"project_id": str(product.project.public_id), "product_id": str(product.public_id), "sbom_id": str(sbom.public_id)}).json()
+     assert len({tenant_wide["id"], manual["id"], scoped["id"]}) == 3
+-    assert scoped["context"] == {"project_id": str(product.project.public_id), "product_id": str(product.public_id), "sbom_id": str(sbom.public_id), "level": "SBOM"}
++    assert scoped["context"] == {
++        "project_id": str(product.project.public_id),
++        "product_display_id": product.id,
++        "project_display_id": product.project.id,
++        "product_id": str(product.public_id),
++        "sbom_id": str(sbom.public_id),
++        "sbom_display_id": sbom.id,
++        "level": "SBOM",
++    }
+ 
+ 
+ def test_T20_a_closed_item_does_not_block_a_new_one(client, seeded, db):
+--- a/tests/test_iam_user_uuid_migration.py
++++ b/tests/test_iam_user_uuid_migration.py
+@@ -25,6 +25,9 @@
+         "sbom_iam_public_uuid_upgrade_test",
+         "sbom_public_resource_uuid_upgrade_test",
+         "sbom_public_resource_uuid_focused_upgrade_test",
++        # Explicitly owned by the UI display-ID regression environment.
++        "sbom_ui_integer_display_upgrade_test_20261023",
++        "sbom_ui_integer_display_failures_upgrade_test_20261023",
+     }
+     engine = create_engine(target, hide_parameters=True)
+     with engine.begin() as c:
+--- a/tests/test_public_identity_batch_serialization.py
++++ b/tests/test_public_identity_batch_serialization.py
+@@ -55,6 +55,7 @@
+         event.remove(engine, 'before_cursor_execute', record)
+     assert response.status_code == 200
+     assert [row['id'] for row in response.json()['projects']] == [public for _, public in projects]
++    assert [row['display_id'] for row in response.json()['projects']] == [internal for internal, _ in projects]
+     assert len(statements) == 1, f"Expected one scoped batch query; observed {len(statements)}"
+     assert all('tenant_id' in sql for sql in statements)
+ 
+@@ -68,7 +69,7 @@
+         response = client.get('/api/serialization-unit')
+     assert response.status_code == 200
+     body = response.json()
+-    assert body['projects'] == [{'id': public}, {'id': public}]
++    assert body['projects'] == [{'id': public, 'display_id': internal}, {'id': public, 'display_id': internal}]
+     for key in ('row_version', 'metadata_json', 'raw_document', 'versions', 'run_id'):
+         assert body[key] == payload[key]
+ 
+@@ -107,4 +108,5 @@
+         event.remove(engine, "before_cursor_execute", record)
+     assert response.status_code == 200
+     assert [row["id"] for row in response.json()["projects"]] == [public for _, public in references]
++    assert [row["display_id"] for row in response.json()["projects"]] == [internal for internal, _ in references]
+     assert len(statements) == 2
+--- /dev/null
++++ b/tests/test_record_presentation.py
+@@ -0,0 +1,302 @@
++"""No database connections: exercise the actual HTTP projection with scoped rows."""
++
++from types import SimpleNamespace
++from uuid import uuid4
++
++import pytest
++from app.core.context import CurrentContext
++from app.db import get_db
++from app.public_api import install_public_boundary, install_public_openapi
++from app.record_presentation import ENTITIES, add_display, augment_openapi
++from fastapi import APIRouter, FastAPI, HTTPException, Request
++from fastapi.testclient import TestClient
++
++
++class Rows(list):
++    def all(self):
++        return self
++
++    def first(self):
++        return self[0] if self else None
++
++
++class Database:
++    def __init__(self):
++        self.calls = []
++        self.public = {}
++
++    def execute(self, statement):
++        self.calls.append(statement)
++        name = statement.get_final_froms()[0].name
++        params = statement.compile().params
++        if name not in {"iam_users", "tenants", "platform_user_roles"}:
++            assert 7 in params.values(), "all business queries must retain tenant scoping"
++        ids = next((v for v in params.values() if isinstance(v, list)), None)
++        if ids is None:
++            ids = [i for (table, i), public in self.public.items() if table == name and public in params.values()]
++        return Rows(SimpleNamespace(id=i, public_id=self.public.setdefault((name, i), uuid4())) for i in ids)
++
++
++@pytest.fixture
++def wire():
++    db = Database()
++    app = FastAPI()
++    router = APIRouter()
++
++    @app.middleware("http")
++    async def context(request: Request, call_next):
++        request.state.current_context = CurrentContext(
++            user_id=9,
++            external_user_id="synthetic",
++            email=None,
++            display_name=None,
++            tenant_id=7,
++            external_tenant_id=None,
++            roles=frozenset(),
++            permissions=frozenset(),
++            is_platform_admin=False,
++        )
++        request.state.public_identity_session = db
++        return await call_next(request)
++
++    app.dependency_overrides[get_db] = lambda: db
++
++    @router.get("/api/projects")
++    def projects():
++        return [{"id": i, "project_name": f"Project {i}"} for i in range(1, 602)]
++
++    @router.get("/api/products/{product_id}")
++    def product(product_id: int):
++        return {
++            "id": product_id,
++            "latest_sbom_id": 567,
++            "current_sbom_id": 566,
++            "project_id": 45,
++            "metadata_json": {"id": "native-document-id"},
++        }
++
++    @router.get("/api/runs")
++    def runs():
++        return [{"id": 891, "sbom_id": 567, "sbom_display_id": None, "findings": [{"id": 44, "severity": "LOW"}]}]
++
++    @router.get("/api/v1/runs/{run_id}/ai-fixes")
++    def progress(run_id: int):
++        return {"run_id": run_id, "batch_id": "synthetic", "status": "complete"}
++
++    @router.get("/api/tenants/{tenant_id}/user-candidates")
++    def candidates(tenant_id: int):
++        return [{"id": 23, "display_name": "Authorized candidate"}]
++
++    @router.get("/api/projects/{project_id}")
++    def project(project_id: int):
++        return {"id": project_id}
++
++    @router.patch("/api/products/{product_id}")
++    def change(product_id: int, body: dict):
++        return body
++
++    @router.get("/api/runs/{run_id}")
++    def rejected(run_id: int):
++        raise HTTPException(403, {"run_id": run_id, "message": "Insufficient permission"})
++
++    app.include_router(router)
++    install_public_boundary(app)
++    install_public_openapi(app)
++    with TestClient(app) as client:
++        yield client, db
++
++
++@pytest.mark.parametrize("entity", sorted(ENTITIES))
++def test_only_actual_positive_persisted_integer_is_labelled(entity):
++    result = {}
++    add_display(result, "id", entity, 123)
++    assert result == {"display_id": 123}
++
++
++@pytest.mark.parametrize("bad", [None, 0, -1, True, 1.5, "123", str(uuid4()), 2**53])
++def test_missing_or_invalid_keys_never_invent_label(bad):
++    result = {}
++    add_display(result, "id", "projects", bad)
++    assert result == {}
++
++
++@pytest.mark.parametrize("entity", ["tenants", "iam_users", "tenant_users", "platform_user_roles", None])
++def test_sensitive_sequences_stay_private(entity):
++    result = {}
++    add_display(result, "id", entity, 23)
++    assert not result
++
++
++def test_list_projection_keeps_uuid_and_bounded_tenant_queries(wire):
++    client, db = wire
++    response = client.get("/api/projects")
++    assert response.status_code == 200
++    assert len(db.calls) == 2  # 500 + 101, not one query per row
++    assert response.json()[122] == {
++        "id": str(db.public[("projects", 123)]),
++        "display_id": 123,
++        "project_name": "Project 123",
++    }
++
++
++def test_related_sboms_are_distinct_and_use_existing_projection_batches(wire):
++    client, db = wire
++    public = uuid4()
++    db.public[("products", 45)] = public
++    response = client.get(f"/api/products/{public}")
++    assert response.status_code == 200
++    data = response.json()
++    assert data["id"] == str(public) and data["display_id"] == 45
++    assert data["latest_sbom_display_id"] == 567 and data["current_sbom_display_id"] == 566
++    assert data["latest_sbom_id"] == str(db.public[("sbom_source", 567)])
++    assert data["metadata_json"] == {"id": "native-document-id"}
++    assert len(db.calls) == 3  # selector, batched SBOMs, batched project
++
++
++def test_runs_keep_findings_ids_separate(wire):
++    client, _ = wire
++    data = client.get("/api/runs").json()[0]
++    assert data["display_id"] == 891 and data["sbom_display_id"] == 567
++    assert data["findings"] == [{"id": 44, "severity": "LOW"}]
++
++
++def test_operational_ai_progress_contract_is_unchanged(wire):
++    client, db = wire
++    public = uuid4()
++    db.public[("analysis_run", 891)] = public
++    response = client.get(f"/api/v1/runs/{public}/ai-fixes")
++    assert response.status_code == 200
++    assert response.json() == {"run_id": str(public), "batch_id": "synthetic", "status": "complete"}
++
++
++def test_iam_candidate_does_not_disclose_global_sequence(wire):
++    client, db = wire
++    public = uuid4()
++    db.public[("tenants", 7)] = public
++    response = client.get(f"/api/tenants/{public}/user-candidates")
++    assert response.status_code == 200
++    assert response.json() == [{"id": str(db.public[("iam_users", 23)]), "display_name": "Authorized candidate"}]
++
++
++@pytest.mark.parametrize("selector", ["123", "not-a-uuid", "00000000-0000-1000-8000-000000000001"])
++def test_integer_and_invalid_selectors_remain_422_without_query(wire, selector):
++    client, db = wire
++    assert client.get("/api/projects/" + selector).status_code == 422
++    assert not db.calls
++
++
++def test_foreign_or_missing_resource_remains_concealed(wire):
++    client, db = wire
++    assert client.get("/api/projects/" + str(uuid4())).status_code == 404
++    assert len(db.calls) == 1
++
++
++def test_errors_never_gain_display_labels(wire):
++    client, db = wire
++    public = uuid4()
++    db.public[("analysis_run", 891)] = public
++    response = client.get(f"/api/runs/{public}")
++    assert response.status_code == 403
++    assert response.json()["detail"]["run_id"] == str(public)
++    assert "display_id" not in response.text and "891" not in response.text
++
++
++@pytest.mark.parametrize("field", ["display_id", "project_display_id", "current_sbom_display_id"])
++def test_output_only_fields_refuse_in_requests(wire, field):
++    client, db = wire
++    public = uuid4()
++    db.public[("products", 45)] = public
++    response = client.patch(f"/api/products/{public}", json={field: 123})
++    assert response.status_code == 422 and "output-only" in response.text
++
++
++def test_openapi_output_fields_are_readonly_and_selectors_stay_uuid():
++    doc = {
++        "components": {
++            "schemas": {
++                "ProjectOut": {"title": "ProjectOut", "properties": {"id": {"type": "string", "format": "uuid"}}}
++            }
++        },
++        "paths": {
++            "/api/projects": {
++                "get": {
++                    "responses": {
++                        "200": {
++                            "content": {"application/json": {"schema": {"$ref": "#/components/schemas/ProjectOut"}}}
++                        }
++                    }
++                }
++            }
++        },
++    }
++    from app.public_api import field_entity, schema_entity
++
++    props = augment_openapi(doc, schema_entity, field_entity)["components"]["schemas"]["ProjectOut"]["properties"]
++    assert props["display_id"]["readOnly"] is True
++    assert props["display_id"]["anyOf"][0]["type"] == "integer"
++    assert props["id"] == {"type": "string", "format": "uuid"}
++
++
++def test_report_snapshot_reuses_scoped_batches_and_preserves_machine_uuids():
++    from app.services.report_composer import public_report_snapshot
++
++    db = Database()
++    original = {
++        "tenant_id": 7,
++        "sboms": [{"id": 567, "A": {"run_id": 891}}],
++        "scheduled_outcomes": {"567": {"run_id": 891, "status": "complete"}},
++        "event_id": 44,
++    }
++    result = public_report_snapshot(db, original, 7)
++    assert result["sboms"][0]["id"] == str(db.public[("sbom_source", 567)])
++    assert result["sboms"][0]["display_id"] == 567
++    assert result["sboms"][0]["A"]["run_display_id"] == 891
++    assert result["scheduled_outcomes"][str(db.public[("sbom_source", 567)])]["sbom_display_id"] == 567
++    assert "tenant_display_id" not in result and result["event_id"] == 44
++    assert original["sboms"][0]["A"]["run_id"] == 891
++    assert len(db.calls) == 3  # the original tenant/SBOM/run batches; no per-row lookup
++
++
++def test_report_preview_labels_are_distinct_from_export_resource_references():
++    from itertools import islice
++
++    from app.services.report_rendering import report_sections
++
++    tenant, sbom, run = (str(uuid4()) for _ in range(3))
++    report = {
++        "tenant_id": tenant,
++        "schema_version": 1,
++        "cycle_start": "start",
++        "cycle_end": "end",
++        "generated_at": "now",
++        "timezone": "UTC",
++        "scope": "SBOM",
++        "runs_considered": 1,
++        "severity_floor": "ALL",
++        "summary": {},
++        "comparison_summary": {},
++        "total_sboms": 1,
++        "included_sboms": 1,
++        "truncated_sboms": 0,
++        "scheduled_outcomes": {
++            sbom: {"status": "complete", "run_id": run, "run_display_id": 891, "sbom_display_id": 567}
++        },
++        "sboms": [
++            {
++                "name": "Gateway",
++                "version": "1",
++                "A": {
++                    "run_id": run,
++                    "run_display_id": 891,
++                    "run_status": "OK",
++                    "latest_attempt_status": "OK",
++                    "total_findings": 0,
++                },
++            }
++        ],
++    }
++    human = str(list(islice(report_sections(report, display=True), 5)))
++    assert "Run #891" in human and "SBOM #567" in human
++    assert run not in human and sbom not in human and tenant not in human
++    export = str(list(islice(report_sections(report), 5)))
++    assert run in export and sbom in export and tenant in export
+--- /dev/null
++++ b/tests/test_record_presentation_postgres.py
+@@ -0,0 +1,51 @@
++"""Persisted display keys on an explicitly selected disposable PostgreSQL DB."""
++
++from datetime import UTC, datetime
++from uuid import UUID
++
++from app.db import SessionLocal
++from app.models import AnalysisRun, Projects, SBOMSource
++
++from tests.public_id_fixture import public_row
++from tests.tenant_fixture_scope import verified_fixture_tenant
++
++
++def test_project_and_related_application_display_ids_are_real_keys(client):
++    response = client.post("/api/projects", json={"project_name": "Synthetic display project", "project_status": 1})
++    assert response.status_code == 201, response.text
++    project = response.json()
++    with SessionLocal() as db, verified_fixture_tenant(db, 1):
++        stored = public_row(db, Projects, project["id"])
++        assert project["display_id"] == stored.id
++        assert str(stored.public_id) == project["id"]
++    application = client.post(f"/api/projects/{project['id']}/products", json={"name": "Synthetic display application"})
++    assert application.status_code == 201, application.text
++    assert application.json()["project_display_id"] == project["display_id"]
++    assert application.json()["project_id"] == project["id"]
++    assert client.get(f"/api/projects/{project['display_id']}").status_code == 422
++    assert client.patch(f"/api/projects/{project['id']}", json={"display_id": 999}).status_code == 422
++
++
++def test_sbom_and_run_display_ids_match_persisted_relationships(client, seeded_sbom):
++    sbom_id = seeded_sbom["id"]
++    with SessionLocal() as db, verified_fixture_tenant(db, 1):
++        source = public_row(db, SBOMSource, sbom_id)
++        internal = source.id
++        now = datetime.now(UTC).isoformat()
++        run = AnalysisRun(
++            tenant_id=1, sbom_id=source.id, run_status="OK", source="OSV", started_on=now, completed_on=now
++        )
++        db.add(run)
++        db.flush()
++        run_key, run_public = run.id, str(run.public_id)
++        db.commit()
++    source_wire = client.get(f"/api/sboms/{sbom_id}")
++    assert source_wire.status_code == 200, source_wire.text
++    assert source_wire.json()["display_id"] == internal
++    response = client.get(f"/api/runs/{run_public}")
++    assert response.status_code == 200, response.text
++    assert response.json()["id"] == run_public and UUID(run_public).version == 4
++    assert response.json()["display_id"] == run_key
++    assert response.json()["sbom_id"] == sbom_id and response.json()["sbom_display_id"] == internal
++    assert client.get(f"/api/runs/{run_key}").status_code == 422
++    assert client.get("/api/runs/not-a-uuid").status_code == 422
+--- a/tests/test_sboms_analyze_snapshot.py
++++ b/tests/test_sboms_analyze_snapshot.py
+@@ -57,6 +57,21 @@
+ 
+     actual = normalize(resp.json())
+     expected = _load_or_write("post_sbom_analyze", actual)
++    # Keep the locked UUID/business payload and independently verify the
++    # additive display keys against this persisted synthetic run.
++    from app.db import SessionLocal
++
++    body = resp.json()
++    assert body["sbom_id"] == sbom_id
++    with SessionLocal() as db, verified_fixture_tenant(db, 1):
++        run = public_row(db, AnalysisRun, body["id"])
++        sbom = public_row(db, SBOMSource, sbom_id)
++        assert run.sbom_id == sbom.id
++        expected.update(display_id=run.id, sbom_display_id=sbom.id)
++        for name in ("project", "product"):
++            internal = getattr(run, f"{name}_id")
++            if internal is not None:
++                expected[f"{name}_display_id"] = internal
+ 
+     assert actual == expected, (
+         "POST /api/sboms/{id}/analyze response shape drifted.\n"
