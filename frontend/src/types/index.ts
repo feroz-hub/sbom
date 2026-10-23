@@ -989,6 +989,8 @@ export interface VulnerabilityRemediation {
 }
 
 export interface AnalysisRun {
+  project_name?: string | null;
+  sbom_version?: string | null;
   /** Output-only persisted keys. Never use for selection, routing or authorization. */
   display_id?: number | null;
   project_display_id?: number | null;

@@ -9,7 +9,6 @@ import {
   Clock,
   Database,
   GitBranch,
-  KeyRound,
   Loader2,
   PauseCircle,
   ShieldAlert,
@@ -21,6 +20,7 @@ import { Alert } from '@/components/ui/Alert';
 import { Surface, SurfaceContent, SurfaceFooter, SurfaceHeader } from '@/components/ui/Surface';
 import { PermissionButton as Button } from '@/components/ui/PermissionButton';
 import { AnimatedSeverityBar } from '@/components/ui/AnimatedSeverityBar';
+import { StatusBadge } from '@/components/ui/Badge';
 import { cn, formatDuration } from '@/lib/utils';
 import type {
   AnalysisStreamState,
@@ -194,12 +194,14 @@ export function LiveAnalysisCard({ state, onCancel, onReset }: LiveAnalysisCardP
   const isRunning = phase === 'connecting' || phase === 'parsing' || phase === 'running';
   const isDone = phase === 'done';
   const isError = phase === 'error';
+  const incomplete = state.runStatus === 'PARTIAL' || sourceList.some(source =>
+    source.status === 'error' || source.status === 'skipped' || source.errors > 0);
 
   const phaseLabel = (() => {
     if (phase === 'connecting') return 'Opening live stream';
     if (phase === 'parsing') return 'Parsing SBOM';
     if (phase === 'running') return 'Querying sources';
-    if (phase === 'done') return 'Analysis complete';
+    if (phase === 'done') return 'Analysis finished';
     if (phase === 'error') return 'Analysis interrupted';
     return '';
   })();
@@ -224,7 +226,7 @@ export function LiveAnalysisCard({ state, onCancel, onReset }: LiveAnalysisCardP
             'pointer-events-none absolute inset-x-0 top-0 h-32 blur-3xl',
             summary.critical > 0
               ? 'bg-red-300/30 dark:bg-red-700/20'
-              : summary.total > 0
+              : summary.total > 0 || incomplete
                 ? 'bg-amber-300/30 dark:bg-amber-700/20'
                 : 'bg-emerald-300/30 dark:bg-emerald-700/20',
           )}
@@ -237,13 +239,14 @@ export function LiveAnalysisCard({ state, onCancel, onReset }: LiveAnalysisCardP
             className={cn(
               'inline-flex h-2.5 w-2.5 rounded-full',
               isRunning && 'bg-sky-500 pulse-dot text-sky-500',
-              isDone && 'bg-emerald-500',
+              isDone && (incomplete ? 'bg-amber-500' : 'bg-emerald-500'),
               isError && 'bg-red-500',
             )}
             aria-hidden
           />
           <div className="min-w-0 flex-1">
             <p className="text-sm font-semibold text-hcl-navy">{phaseLabel}</p>
+            {isDone && state.runStatus && <StatusBadge status={state.runStatus} />}
             <p className="font-metric mt-0.5 text-[11px] tabular-nums text-hcl-muted">
               {components > 0 && (
                 <>
@@ -266,7 +269,7 @@ export function LiveAnalysisCard({ state, onCancel, onReset }: LiveAnalysisCardP
           </div>
           {isRunning && onCancel && (
             <Button permission={"analysis:run"} variant="ghost" size="sm" onClick={onCancel}>
-              <X className="h-3.5 w-3.5" aria-hidden /> Cancel
+              <X className="h-3.5 w-3.5" aria-hidden /> Disconnect stream
             </Button>
           )}
         </div>
@@ -275,7 +278,7 @@ export function LiveAnalysisCard({ state, onCancel, onReset }: LiveAnalysisCardP
       {/* Aggregate progress bar */}
       {isRunning && sourceList.length > 0 && (
         <div className="px-6 pt-4">
-          <div className="h-1.5 w-full overflow-hidden rounded-full bg-border-subtle">
+          <div role="progressbar" aria-label="Vulnerability sources finished" aria-valuemin={0} aria-valuemax={sourceList.length} aria-valuenow={finishedSources} className="h-1.5 w-full overflow-hidden rounded-full bg-border-subtle">
             <div
               className="h-full bg-gradient-to-r from-hcl-blue via-hcl-cyan to-emerald-400 transition-[width] duration-slower ease-spring"
               style={{ width: `${progressPct}%` }}
@@ -327,6 +330,7 @@ export function LiveAnalysisCard({ state, onCancel, onReset }: LiveAnalysisCardP
         {/* Animated completion summary */}
         {isDone && summary && (
           <div className="mt-5 space-y-4 motion-rise">
+            {incomplete && <Alert variant="warning">Source coverage is incomplete. Findings may be incomplete; review the source results and run details.</Alert>}
             <AnimatedSeverityBar
               counts={{
                 critical: summary.critical,
@@ -359,6 +363,7 @@ export function LiveAnalysisCard({ state, onCancel, onReset }: LiveAnalysisCardP
                 </div>
               ))}
             </div>
+            <p className="text-xs text-hcl-muted">Zero reported findings does not guarantee security. Disconnecting the live stream does not cancel server processing.</p>
           </div>
         )}
       </SurfaceContent>
@@ -374,7 +379,7 @@ export function LiveAnalysisCard({ state, onCancel, onReset }: LiveAnalysisCardP
         <div className="flex items-center gap-2">
           {(isDone || isError) && onReset && (
             <Button permission={"analysis:run"} variant="secondary" size="sm" onClick={onReset}>
-              Run again
+              Configure another scan
             </Button>
           )}
           {isDone && runId && (

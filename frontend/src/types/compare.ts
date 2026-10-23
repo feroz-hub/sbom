@@ -59,6 +59,7 @@ export interface RunSummary {
   id: string;
   sbom_id: (string | number) | null;
   sbom_name: string | null;
+  sbom_version?: string | null;
   project_id: (string | number) | null;
   project_name: string | null;
   run_status: string;

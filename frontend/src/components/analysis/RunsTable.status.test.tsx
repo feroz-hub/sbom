@@ -82,5 +82,5 @@ it('preserves historical rows while disabling comparison and new PDFs', () => {
   expect(screen.getByRole('checkbox', { name: 'Select Run #1 for comparison' })).toBeDisabled();
   expect(screen.getByRole('button', { name: 'Download PDF' })).toBeDisabled();
   expect(screen.getByRole('button', { name: 'Download PDF' })).toHaveAttribute('title', reason);
-  expect(screen.getByRole('button', { name: 'View run' })).toBeEnabled();
+  expect(screen.getByRole('link', { name: 'View run' })).toHaveAttribute('href', '/analysis/00000000-0000-4000-8000-000000000001');
 });

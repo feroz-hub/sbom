@@ -90,7 +90,7 @@ export function RunPicker({
     staleTime: 5 * 60 * 1000,
   });
   const isLoading = recentQuery.isLoading || searchQuery.isLoading;
-  const baseOptions = (debounced ? searchQuery.data : recentQuery.data) ?? [];
+  const baseOptions = useMemo(() => (debounced ? searchQuery.data : recentQuery.data) ?? [], [debounced, searchQuery.data, recentQuery.data]);
 
   const pairedProjectId = pairedRun?.project_id ?? null;
 
@@ -228,6 +228,8 @@ export function RunPicker({
                 <span aria-hidden>·</span>
               </>
             )}
+            <span>v{run.sbom_version || 'unavailable'}</span>
+            <span aria-hidden>·</span>
             <span>{formatDate(run.completed_on)}</span>
             <span aria-hidden>·</span>
             <span className="uppercase">{run.run_status}</span>

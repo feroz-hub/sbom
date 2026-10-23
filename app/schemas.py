@@ -429,6 +429,8 @@ class AnalysisRunOut(ORMModel):
     project_id: int | None = None
     product_id: int | None = None
     product_name: str | None = None
+    project_name: str | None = None
+    sbom_version: str | None = None
     run_status: str
     sbom_name: str | None = None
     source: str

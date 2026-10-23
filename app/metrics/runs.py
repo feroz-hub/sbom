@@ -8,10 +8,10 @@ from dataclasses import dataclass, field
 from datetime import UTC, datetime, timedelta
 from typing import Literal
 
-from sqlalchemy import func, select
-from sqlalchemy.orm import Session
+from sqlalchemy import String, cast, func, or_, select
+from sqlalchemy.orm import Session, defer, selectinload
 
-from ..models import AnalysisRun
+from ..models import AnalysisRun, Product, Projects, SBOMSource
 from ..services.analysis_service import (
     RUN_STATUS_FINDINGS,
     RUN_STATUS_PARTIAL,
@@ -23,6 +23,77 @@ from ._helpers import latest_run_per_sbom_subquery
 from .base import COMPLETED_RUN_STATUSES
 
 log = logging.getLogger("sbom.metrics.runs")
+
+
+def analysis_run_history(
+    db: Session, *, sbom_id=None, project_id=None, product_id=None,
+    run_status=None, q="", source=None, sort_by="id", sort_direction="desc",
+    page=1, page_size=50, cursor=None, summary_only=False,
+) -> tuple[list[dict], int]:
+    """Convention C: paged historical runs, including obsolete/orphaned runs.
+
+    Uses the existing session tenant/soft-delete rules. Search, count and page
+    share the same predicates; order always has a persisted-ID tie breaker.
+    Summary mode excludes raw reports without changing the default contract.
+    """
+    statement = (
+        select(AnalysisRun)
+        .outerjoin(SBOMSource, AnalysisRun.sbom_id == SBOMSource.id)
+        .outerjoin(Projects, AnalysisRun.project_id == Projects.id)
+        .outerjoin(Product, AnalysisRun.product_id == Product.id)
+    )
+    for column, value in ((AnalysisRun.sbom_id, sbom_id), (AnalysisRun.project_id, project_id),
+                          (AnalysisRun.product_id, product_id)):
+        if value is not None:
+            statement = statement.where(column == value)
+    if run_status:
+        normalized = normalize_run_status(run_status)
+        values = {"OK": ("OK", "PASS"), "FINDINGS": ("FINDINGS", "FAIL")}.get(normalized, (normalized,))
+        statement = statement.where(AnalysisRun.run_status.in_(values))
+    if source:
+        statement = statement.where(AnalysisRun.source.icontains(source, autoescape=True))
+    needle = q.strip()
+    if needle:
+        matches = [column.icontains(needle, autoescape=True) for column in (
+            SBOMSource.sbom_name, AnalysisRun.sbom_name, Projects.project_name, Product.name,
+            AnalysisRun.source, SBOMSource.sbom_version, cast(AnalysisRun.public_id, String),
+        )]
+        if needle.lstrip("#").isascii() and needle.lstrip("#").isdigit():
+            display_id = int(needle.lstrip("#"))
+            if display_id <= 2_147_483_647:
+                matches.append(AnalysisRun.id == display_id)
+        statement = statement.where(or_(*matches))
+    total = db.scalar(select(func.count()).select_from(statement.subquery())) or 0
+    order_columns = {
+        "id": AnalysisRun.id, "sbom_name": func.coalesce(SBOMSource.sbom_name, AnalysisRun.sbom_name),
+        "run_status": AnalysisRun.run_status, "total_findings": AnalysisRun.total_findings,
+        "completed_on": AnalysisRun.completed_on,
+    }
+    column = order_columns[sort_by]
+    ordering = column.asc() if sort_direction == "asc" else column.desc()
+    statement = statement.order_by(ordering.nullslast(), AnalysisRun.id.desc())
+    if cursor is not None:
+        statement = statement.where(AnalysisRun.id < cursor)
+    else:
+        statement = statement.offset((page - 1) * page_size)
+    statement = statement.limit(page_size).options(
+        selectinload(AnalysisRun.sbom).defer(SBOMSource.sbom_data),
+        selectinload(AnalysisRun.project), selectinload(AnalysisRun.product),
+    )
+    if summary_only:
+        statement = statement.options(defer(AnalysisRun.raw_report))
+    items = []
+    for run in db.scalars(statement).unique():
+        item = {k: v for k, v in run.__dict__.items() if not k.startswith("_") and k not in {"sbom", "project", "product"}}
+        item.update(
+            processing_eligibility=run.processing_eligibility,
+            sbom_name=run.sbom.sbom_name if run.sbom else run.sbom_name,
+            sbom_version=(run.sbom.sbom_version or run.sbom.productver) if run.sbom else None,
+            project_name=run.project.project_name if run.project else None,
+            product_name=run.product_name,
+        )
+        items.append(item)
+    return items, total
 
 
 def dashboard_runs(db: Session, *, limit: int, latest_only: bool = False, run_status: str | None = None) -> list[dict]:

@@ -688,6 +688,8 @@ app.add_middleware(
     allow_credentials=False,
     allow_methods=["*"],
     allow_headers=["*"],
+    # Direct frontend API mode must be able to read server pagination metadata.
+    expose_headers=["X-Total-Count", "X-Next-Cursor"],
 )
 
 app.add_middleware(GZipMiddleware, minimum_size=1000)

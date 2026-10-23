@@ -9,6 +9,7 @@ Routes:
 """
 
 import logging
+from typing import Literal
 
 from fastapi import APIRouter, Depends, HTTPException, Query, Response
 from sqlalchemy import func, select
@@ -18,6 +19,7 @@ from ..core.context import CurrentContext
 from ..core.security import get_current_tenant_context
 from ..db import get_db
 from ..metrics import runs_aggregate
+from ..metrics.runs import analysis_run_history
 from ..metrics._helpers import cves_for_finding
 from ..metrics.findings import canonical_finding_metrics_for_run, canonical_findings_for_run
 from ..models import AnalysisFinding, AnalysisRun, EpssScore, Product, SBOMSource
@@ -84,6 +86,11 @@ def list_analysis_runs(
         description="Keyset pagination: return runs with id strictly less than this value (desc by id). When set, page offset is ignored.",
     ),
     response: Response = None,
+    q: str = Query("", max_length=200),
+    source: str | None = Query(None, max_length=40),
+    sort_by: Literal["id", "sbom_name", "run_status", "total_findings", "completed_on"] = Query("id"),
+    sort_direction: Literal["asc", "desc"] = Query("desc"),
+    summary_only: bool = Query(False),
     db: Session = Depends(get_db),
 ):
     sbom_id = _coerce_optional_int(sbom_id)
@@ -92,73 +99,19 @@ def list_analysis_runs(
     page = 1 if page < 1 else page
     page_size = max(1, min(page_size, 500))
 
-    # Subquery: get sbom_name. Use an OUTER join below so that runs whose
-    # parent SBOM has been deleted (orphaned runs) still appear in the list
-    # — otherwise an inner join silently drops them and the user can no
-    # longer access the historical findings/PDF for those runs.
-    sbom_subq = db.query(SBOMSource.id.label("sbom_id"), SBOMSource.sbom_name.label("sbom_name")).subquery()
-
-    # Base queries
-    base = select(AnalysisRun)
-    count = select(func.count(AnalysisRun.id))
-
-    if sbom_id is not None:
-        base = base.where(AnalysisRun.sbom_id == sbom_id)
-        count = count.where(AnalysisRun.sbom_id == sbom_id)
-
-    if project_id is not None:
-        base = base.where(AnalysisRun.project_id == project_id)
-        count = count.where(AnalysisRun.project_id == project_id)
-
-    if product_id is not None:
-        base = base.where(AnalysisRun.product_id == product_id)
-        count = count.where(AnalysisRun.product_id == product_id)
-
-    if run_status:
-        from ..services.analysis_service import normalize_run_status
-
-        norm = normalize_run_status(run_status)
-        status_values = {
-            "OK": ("OK", "PASS"),
-            "FINDINGS": ("FINDINGS", "FAIL"),
-        }.get(norm, (norm,))
-        base = base.where(AnalysisRun.run_status.in_(status_values))
-        count = count.where(AnalysisRun.run_status.in_(status_values))
-
-    # Total count
-    total = db.execute(count).scalar_one()
-
-    # Main query with subquery LEFT OUTER join — preserves orphaned runs.
-    stmt = (
-        base.outerjoin(sbom_subq, AnalysisRun.sbom_id == sbom_subq.c.sbom_id)
-        .add_columns(sbom_subq.c.sbom_name)
-        .order_by(AnalysisRun.id.desc())
+    if cursor is not None and (cursor < 1 or sort_by != "id" or sort_direction != "desc"):
+        raise HTTPException(status_code=422, detail="cursor requires descending ID order and must be >= 1")
+    items, total = analysis_run_history(
+        db, sbom_id=sbom_id, project_id=project_id, product_id=product_id,
+        run_status=run_status, q=q, source=source, sort_by=sort_by,
+        sort_direction=sort_direction, page=page, page_size=page_size,
+        cursor=cursor, summary_only=summary_only,
     )
-    if cursor is not None:
-        if cursor < 1:
-            raise HTTPException(status_code=422, detail="cursor must be >= 1")
-        stmt = stmt.where(AnalysisRun.id < cursor)
-        stmt = stmt.limit(page_size)
-    else:
-        offset = (page - 1) * page_size
-        stmt = stmt.limit(page_size).offset(offset)
-
-    # Execute
-    rows = db.execute(stmt).all()
-
-    # Format response. Fall back to the run's own cached sbom_name (set by
-    # the analytics backfill) when the live SBOMSource row has been deleted.
-    items = []
-    for run, sbom_name in rows:
-        run_dict = {k: v for k, v in run.__dict__.items() if not k.startswith("_")}
-        run_dict["processing_eligibility"] = run.processing_eligibility
-        run_dict["sbom_name"] = sbom_name or run_dict.get("sbom_name")
-        items.append(run_dict)
 
     # Header
     if response is not None:
         response.headers["X-Total-Count"] = str(total)
-        if items and len(items) == page_size:
+        if items and len(items) == page_size and sort_by == "id" and sort_direction == "desc":
             last = items[-1]
             rid = last.get("id") if isinstance(last, dict) else getattr(last, "id", None)
             if rid is not None:
@@ -221,11 +174,11 @@ def list_recent_runs(
     from ..models import Projects
     from ..schemas_compare import RunSummary
 
-    sbom_subq = db.query(SBOMSource.id.label("sbom_id"), SBOMSource.sbom_name.label("sbom_name")).subquery()
+    sbom_subq = db.query(SBOMSource.id.label("sbom_id"), SBOMSource.sbom_name.label("sbom_name"), func.coalesce(SBOMSource.sbom_version, SBOMSource.productver).label("sbom_version")).subquery()
     proj_subq = db.query(Projects.id.label("project_id"), Projects.project_name.label("project_name")).subquery()
     product_subq = db.query(Product.id.label("product_id"), Product.name.label("product_name")).subquery()
     stmt = (
-        select(AnalysisRun, sbom_subq.c.sbom_name, proj_subq.c.project_name, product_subq.c.product_name)
+        select(AnalysisRun, sbom_subq.c.sbom_name, proj_subq.c.project_name, product_subq.c.product_name, sbom_subq.c.sbom_version)
         .where(
             AnalysisRun.is_current.is_(True),
             AnalysisRun.sbom_id.in_(
@@ -248,6 +201,7 @@ def list_recent_runs(
             id=run.id,
             sbom_id=run.sbom_id,
             sbom_name=sbom_name or run.sbom_name,
+            sbom_version=sbom_version,
             project_id=run.project_id,
             project_name=project_name,
             product_id=run.product_id,
@@ -258,7 +212,7 @@ def list_recent_runs(
             total_findings=int(run.total_findings or 0),
             total_components=int(run.total_components or 0),
         ).model_dump()
-        for run, sbom_name, project_name, product_name in rows
+        for run, sbom_name, project_name, product_name, sbom_version in rows
     ]
 
 
@@ -275,11 +229,11 @@ def search_runs(
     from ..schemas_compare import RunSummary
 
     needle = (q or "").strip()
-    sbom_subq = db.query(SBOMSource.id.label("sbom_id"), SBOMSource.sbom_name.label("sbom_name")).subquery()
+    sbom_subq = db.query(SBOMSource.id.label("sbom_id"), SBOMSource.sbom_name.label("sbom_name"), func.coalesce(SBOMSource.sbom_version, SBOMSource.productver).label("sbom_version")).subquery()
     proj_subq = db.query(Projects.id.label("project_id"), Projects.project_name.label("project_name")).subquery()
     product_subq = db.query(Product.id.label("product_id"), Product.name.label("product_name")).subquery()
     stmt = (
-        select(AnalysisRun, sbom_subq.c.sbom_name, proj_subq.c.project_name, product_subq.c.product_name)
+        select(AnalysisRun, sbom_subq.c.sbom_name, proj_subq.c.project_name, product_subq.c.product_name, sbom_subq.c.sbom_version)
         .where(
             AnalysisRun.is_current.is_(True),
             AnalysisRun.sbom_id.in_(
@@ -320,6 +274,7 @@ def search_runs(
             id=run.id,
             sbom_id=run.sbom_id,
             sbom_name=sbom_name or run.sbom_name,
+            sbom_version=sbom_version,
             project_id=run.project_id,
             project_name=project_name,
             product_id=run.product_id,
@@ -330,7 +285,7 @@ def search_runs(
             total_findings=int(run.total_findings or 0),
             total_components=int(run.total_components or 0),
         ).model_dump()
-        for run, sbom_name, project_name, product_name in rows
+        for run, sbom_name, project_name, product_name, sbom_version in rows
     ]
 
 

@@ -44,7 +44,7 @@ export function SelectionBar({
   };
 
   return (
-    <Surface variant="elevated" className="sticky top-2 z-20">
+    <Surface variant="elevated" className="relative z-20">
       <SurfaceContent className="space-y-3 py-4">
         <div className="grid grid-cols-1 items-end gap-3 lg:grid-cols-[1fr_auto_1fr_auto]">
           <RunPicker
@@ -93,6 +93,13 @@ export function SelectionBar({
             </button>
           </div>
         </div>
+        {(runASummary || runBSummary) && <div className="grid gap-3 sm:grid-cols-2" aria-label="Compared SBOM versions">
+          {([['Baseline', runASummary], ['Target', runBSummary]] as const).map(([label, run]) => <div key={label} className="min-w-0 rounded-lg border border-border bg-surface-muted px-3 py-2 text-xs">
+            <p className="font-semibold text-hcl-muted">{label}</p>
+            <p className="mt-1 break-words font-medium text-hcl-navy">{run?.sbom_name || 'Select an analysis run'}</p>
+            <p className="mt-1 text-hcl-muted">Version: {run?.sbom_version || 'Unavailable'}</p>
+          </div>)}
+        </div>}
         {relationship && (
           <RelationshipDescriptor
             relationship={relationship}

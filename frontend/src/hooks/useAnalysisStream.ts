@@ -24,6 +24,8 @@ export interface SourceProgress {
 }
 
 export interface AnalysisStreamState {
+  /** Canonical terminal status supplied by the stream; absent on older responses. */
+  runStatus?: string | null;
   phase: 'idle' | 'connecting' | 'parsing' | 'running' | 'done' | 'error';
   components: number;
   sources: Record<string, SourceProgress>;
@@ -279,6 +281,7 @@ export function useAnalysisStream(sbomId: (string | number)) {
           setState((prev) => ({
             ...prev,
             phase: 'done',
+            runStatus: typeof data.status === 'string' ? data.status : null,
             runId: data.runId as string,
             elapsedMs: (data.duration_ms as number) ?? prev.elapsedMs,
             summary: {

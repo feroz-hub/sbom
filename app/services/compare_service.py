@@ -757,19 +757,19 @@ class CompareService:
 
     def _summarize_run(self, run: AnalysisRun) -> RunSummary:
         sbom_name = run.sbom_name
+        sbom = self._db.get(SBOMSource, run.sbom_id) if run.sbom_id is not None else None
         project_name: str | None = None
         if run.project_id is not None:
             proj = self._db.get(Projects, run.project_id)
             if proj is not None:
                 project_name = proj.project_name
-        if sbom_name is None and run.sbom_id is not None:
-            sbom = self._db.get(SBOMSource, run.sbom_id)
-            if sbom is not None:
-                sbom_name = sbom.sbom_name
+        if sbom_name is None and sbom is not None:
+            sbom_name = sbom.sbom_name
         return RunSummary(
             id=run.id,
             sbom_id=run.sbom_id,
             sbom_name=sbom_name,
+            sbom_version=(sbom.sbom_version or sbom.productver) if sbom else None,
             project_id=run.project_id,
             project_name=project_name,
             run_status=(run.run_status or "").upper(),

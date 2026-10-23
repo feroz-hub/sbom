@@ -1251,13 +1251,16 @@ export interface RunsFilter {
   run_status?: string;
   page?: number;
   page_size?: number;
+  q?: string;
+  source?: string;
+  sort_by?: 'id' | 'sbom_name' | 'run_status' | 'total_findings' | 'completed_on';
+  sort_direction?: 'asc' | 'desc';
+  summary_only?: boolean;
 }
 
 /**
- * Build query params for /api/runs. Positive-integer filters that are NaN,
- * zero, negative, or non-finite are silently dropped — sending them would
- * cause a 422 from the FastAPI validator. This used to happen when a stale
- * select value was passed through `Number()`.
+ * Preserve public UUID selectors as strings. Paging and optional history
+ * search/order fields use the same query builder for the table and export.
  */
 function buildRunsQuery(filter: RunsFilter): URLSearchParams {
   const params = new URLSearchParams();
@@ -1272,12 +1275,28 @@ function buildRunsQuery(filter: RunsFilter): URLSearchParams {
   }
   addPositiveInt('page', filter.page ?? 1);
   addPositiveInt('page_size', filter.page_size ?? 50);
+  for (const key of ['q', 'source', 'sort_by', 'sort_direction'] as const) {
+    if (filter[key]) params.set(key, filter[key]);
+  }
+  if (filter.summary_only) params.set('summary_only', 'true');
   return params;
 }
 
 export function getRuns(filter: RunsFilter = {}, signal?: AbortSignal) {
   const params = buildRunsQuery(filter);
   return request<AnalysisRun[]>(`/api/runs?${params.toString()}`, { signal });
+}
+
+/** Paged history: keep the array API for existing callers and read its count header here. */
+export async function getRunsPage(filter: RunsFilter = {}, signal?: AbortSignal) {
+  const response = await performRequest(`/api/runs?${buildRunsQuery(filter)}`, { signal });
+  const items = await response.json() as AnalysisRun[];
+  const header = response.headers.get('X-Total-Count');
+  const total = header === null ? null : Number(header);
+  if (total === null || !Number.isSafeInteger(total) || total < 0) {
+    throw new ApiError('Analysis pagination count is unavailable. Please try again.', 502);
+  }
+  return { items, total };
 }
 
 // ─── Analysis Runs aggregate (server-side tile values) ───────────────────────

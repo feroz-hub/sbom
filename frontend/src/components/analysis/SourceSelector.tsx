@@ -1,6 +1,6 @@
 'use client';
 
-import { Check, Database, GitBranch, KeyRound, Layers, ShieldAlert } from 'lucide-react';
+import { Check, Database, GitBranch, Layers, ShieldAlert } from 'lucide-react';
 import { cn } from '@/lib/utils';
 import type { AnalysisConfig } from '@/lib/api';
 
@@ -12,7 +12,7 @@ interface SourceMeta {
   hint: string;
   Icon: typeof Database;
   /**
-   * For GHSA/VulDB the source needs a server-side credential. NVD and OSV
+   * GHSA needs a server-side credential. NVD and OSV
    * work without credentials but NVD benefits from an API key (higher rate).
    */
   requiresCredential: boolean;
@@ -36,7 +36,7 @@ const SOURCES: SourceMeta[] = [
   {
     key: 'GITHUB',
     label: 'GHSA',
-    hint: 'GitHub Security Advisories — needs GITHUB_TOKEN env var',
+    hint: 'GitHub Security Advisories — Package/ecosystem matching',
     Icon: GitBranch,
     requiresCredential: true,
   }
@@ -51,7 +51,7 @@ interface SourceSelectorProps {
 }
 
 function isCredentialed(key: SourceKey, config: AnalysisConfig | undefined): boolean {
-  if (!config) return true; // optimistic when config not yet loaded
+  if (!config) return key !== 'GITHUB';
   if (key === 'GITHUB') return !!config.github_configured;
   // NVD works without an API key; OSV is keyless.
   return true;
@@ -76,13 +76,13 @@ export function SourceSelector({ selected, onChange, config, disabled }: SourceS
           Sources
         </p>
         <p className="text-[11px] text-hcl-muted">
-          {selected.length} of {SOURCES.length} selected
+          {selected.filter(key => isCredentialed(key, config)).length} of {SOURCES.length} selected
         </p>
       </div>
-      <div className="grid grid-cols-2 gap-2 sm:grid-cols-4">
+      <div className="grid grid-cols-1 gap-2 sm:grid-cols-3">
         {SOURCES.map(({ key, label, hint, Icon, requiresCredential }) => {
           const credentialed = isCredentialed(key, config);
-          const active = selected.includes(key);
+          const active = selected.includes(key) && credentialed;
           const unavailable = requiresCredential && !credentialed;
           const isLastSelected = active && selected.length === 1;
           const buttonDisabled = disabled || unavailable || isLastSelected;
@@ -95,7 +95,7 @@ export function SourceSelector({ selected, onChange, config, disabled }: SourceS
               aria-pressed={active}
               title={
                 unavailable
-                  ? `${hint} — credential not configured on backend`
+                  ? `${hint} — server credential not configured`
                   : isLastSelected
                     ? 'At least one source must be selected'
                     : hint
@@ -141,8 +141,7 @@ export function SourceSelector({ selected, onChange, config, disabled }: SourceS
         <p className="flex items-start gap-1.5 text-[11px] text-hcl-muted">
           <Layers className="h-3 w-3 mt-0.5" aria-hidden />
           <span>
-            NVD has no API key configured — public rate limits apply (~10s delay between bursts).
-            Add <code className="font-mono">NVD_API_KEY</code> on the backend for faster scans.
+            NVD uses public rate limits. An administrator can configure an API key for faster scans.
           </span>
         </p>
       )}

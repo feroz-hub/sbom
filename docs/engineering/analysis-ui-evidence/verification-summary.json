@@ -1,0 +1,68 @@
+{
+  "date": "2026-10-23",
+  "scope": "Analysis module UI",
+  "frontend": {
+    "full": {
+      "passed": 1852,
+      "files": 205,
+      "command": "node node_modules/vitest/vitest.mjs run --maxWorkers=1"
+    },
+    "focused": {
+      "passed": 194,
+      "files": 25
+    },
+    "typescript": "passed",
+    "scoped_eslint": {
+      "errors": 0,
+      "warnings": 0
+    }
+  },
+  "backend": {
+    "passed": 96,
+    "database": "new disposable PostgreSQL cluster only",
+    "additional_cors_contract_rerun": {
+      "passed": 3
+    }
+  },
+  "production_build": {
+    "webpack": "passed",
+    "default_turbopack": "compilation stalled; attempts interrupted; fresh cache retry also stalled",
+    "configuration_changed": false
+  },
+  "browser": {
+    "passed": 8,
+    "api_mode": "deterministic fixtures, all API calls intercepted",
+    "live_external_sources_verified": false,
+    "https_certificate_verification": true,
+    "runtime_errors": 0,
+    "viewports": [
+      1440,
+      768,
+      390
+    ]
+  },
+  "data_preservation": "No existing database reset, seed or analysis record mutation; no production analysis run.",
+  "git_integration": {
+    "remote_baseline": "212490d6",
+    "frontend_rerun": {
+      "passed": 1855,
+      "failed": 1,
+      "files": 206,
+      "failure": "SbomsTable.analysis.test.tsx: expects View SBOM button replaced by incoming inventory action menu",
+      "clean_remote_baseline_reproduced": true,
+      "baseline_targeted_passed": 9,
+      "baseline_targeted_failed": 1
+    },
+    "typescript_rerun": "passed",
+    "scoped_secret_candidates": 0,
+    "staged_whitespace": "passed",
+    "unrelated_pending_files_preserved": true
+  },
+  "known_limitations": [
+    "Final combined frontend suite has one failure reproduced on the clean remote inventory baseline; pre-integration full pass is recorded separately.",
+    "Existing SBOM choice hook capped at 500; server run history is paged independently.",
+    "Live provider and worker integration and physical mobile devices not verified.",
+    "Existing port 13000 serves another checkout and was left unchanged.",
+    "Default Turbopack build completion remains unverified."
+  ]
+}
