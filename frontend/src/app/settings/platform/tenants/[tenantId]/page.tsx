@@ -12,16 +12,23 @@ import { ConfirmationDialog } from '@/components/ui/ConfirmationDialog';
 import { getApiErrorMessage } from '@/lib/notifications';
 import { useNotifications } from '@/hooks/useNotifications';
 import { invalidatePlatformTenantSurfaces } from '@/lib/queryInvalidation';
+import { TenantAdministratorGovernance } from '@/components/admin/TenantAdministratorGovernance';
 
 export default function PlatformTenantDetailPage({ params }: { params: Promise<{ tenantId: string }> }) {
   const { tenantId } = use(params);
+  const { user, isPlatformContext } = useAuth();
+  return <PlatformTenantDetail key={`${tenantId}:${user?.userId}:${isPlatformContext}`} tenantId={tenantId} />;
+}
+
+function PlatformTenantDetail({ tenantId }: { tenantId: string }) {
   const id = tenantId;
-  const valid = /^[0-9a-f-]{36}$/i.test(tenantId);
-  const {  isLoading } = useAuth();
+  const valid = /^[0-9a-f]{8}-[0-9a-f]{4}-4[0-9a-f]{3}-[89ab][0-9a-f]{3}-[0-9a-f]{12}$/i.test(tenantId);
+  const { isLoading, isPlatformContext } = useAuth();
   const { can: hasPermission } = usePermissions();
-  const canRead = hasPermission('platform:tenant:read');
+  const canRead = isPlatformContext && hasPermission('platform:tenant:read');
   const canStatus = hasPermission('platform:tenant:update_status');
   const canRecover = hasPermission('platform:tenant:recover_admin');
+  const canGovern = isPlatformContext && hasPermission('platform:tenant_admin:manage');
   const qc = useQueryClient();
   const { showSuccess, showError } = useNotifications();
   const [candidate, setCandidate] = useState<UserSearchResult | null>(null);
@@ -49,18 +56,18 @@ export default function PlatformTenantDetailPage({ params }: { params: Promise<{
       { label: 'Tenants', href: '/settings/platform/tenants' },
       { label: value.name },
     ]} />
-    <PlatformTenantOverview tenant={value} canManageUsers={false} canResend={hasPermission('platform:tenant:bootstrap_admin')} />
-    <section className="rounded-xl border p-5">
-      <h2 className="text-lg font-semibold">Tenant Administrator governance</h2>
+    <PlatformTenantOverview tenant={value} showCurrentAdministrators={false} canManageUsers={false} canResend={hasPermission('platform:tenant:bootstrap_admin')} />
+    {canGovern ? <TenantAdministratorGovernance tenantId={id} tenantName={value.name} /> : <section className="rounded-xl border border-border bg-surface p-5">
+      <h2 className="text-lg font-semibold">Tenant Administrators</h2>
       <p>{value.member_count ?? 0} memberships · {value.current_administrators?.length ?? 0} active Tenant Administrators</p>
       <ul>{value.current_administrators?.map(admin => <li key={admin.user_id}>{admin.display_name} — {admin.email}</li>)}</ul>
-      {canRecover && value.status !== 'DISABLED' && <div className="mt-4 space-y-3">
+    </section>}
+    {canRecover && value.status !== 'DISABLED' && <section className="rounded-xl border border-border bg-surface p-5 space-y-3">
         <h3 className="font-medium">Recover Tenant Administrator access</h3>
         <p className="text-sm text-hcl-muted">Add a new active administrator. This does not grant you tenant access or provide a generic tenant-user editor.</p>
         <UserSearchCombobox governance requireEligible selectedUser={candidate} onSelect={setCandidate} placeholder="Search administrator by name or email…" />
         <button disabled={!candidate || recovery.isPending} onClick={() => recovery.mutate()} className="rounded bg-hcl-blue px-4 py-2 text-white disabled:opacity-50">{recovery.isPending ? 'Recovering…' : 'Assign Tenant Administrator'}</button>
-      </div>}
-    </section>
+    </section>}
     {canStatus && <button onClick={() => setConfirm(true)}>{value.status === 'ACTIVE' ? 'Disable tenant' : 'Enable tenant'}</button>}
     <ConfirmationDialog open={confirm} onClose={() => setConfirm(false)} onConfirm={() => status.mutate()} title="Change tenant status?" description="This changes tenant availability, not global accounts." confirmLabel="Confirm" loading={status.isPending} />
   </main>;

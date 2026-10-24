@@ -283,6 +283,10 @@ export interface TenantSummary {
   } | null;
   current_administrators?: Array<{
     user_id: string;
+    membership_id?: string;
+    role_assignment_version?: number;
+    primary_role?: string;
+    roles?: string[];
     display_name: string | null;
     email: string | null;
   }>;
@@ -649,6 +653,61 @@ export async function listPlatformTenants(query = '', page = 1, pageSize = 50): 
 
 export function getPlatformTenant(tenantId: (string | number)): Promise<TenantSummary> {
   return request<TenantSummary>(`/api/platform/tenants/${tenantId}`, adminRequestOptions);
+}
+
+export interface TenantAdministratorState {
+  tenant_id: string;
+  membership_id: string;
+  user_id: string;
+  status: 'ACTIVE' | 'DISABLED' | 'PENDING';
+  roles: string[];
+  primary_role: string;
+  role_assignment_version: number;
+}
+
+export interface TenantAdministratorMembership extends TenantAdministratorState {
+  display_name: string | null;
+  email: string | null;
+  account_status: string;
+  is_effective: boolean;
+}
+
+export interface TenantAdministratorDirectory {
+  tenant_id: string;
+  administrators: TenantAdministratorMembership[];
+  replacement_roles: Array<{ code: string; name: string; scope: 'TENANT' }>;
+}
+
+export interface RevokeTenantAdministratorRequest {
+  expected_version: number;
+  replacement_primary_role_code?: string;
+  reason?: string;
+}
+
+const administratorPath = (tenantId: string, membershipId?: string) =>
+  `/api/platform/tenants/${encodeURIComponent(tenantId)}/administrators${membershipId ? `/${encodeURIComponent(membershipId)}` : ''}`;
+
+export function getPlatformTenantAdministrators(tenantId: string, signal?: AbortSignal): Promise<TenantAdministratorDirectory> {
+  return request(administratorPath(tenantId), { ...adminRequestOptions, signal });
+}
+
+export function revokePlatformTenantAdministrator(tenantId: string, membershipId: string, payload: RevokeTenantAdministratorRequest): Promise<TenantAdministratorState> {
+  return request(`${administratorPath(tenantId, membershipId)}/revoke`, {
+    ...adminRequestOptions, method: 'POST', body: JSON.stringify(payload),
+  });
+}
+
+export function deactivatePlatformTenantAdministrator(tenantId: string, membershipId: string, reason?: string): Promise<TenantAdministratorState> {
+  return request(`${administratorPath(tenantId, membershipId)}/deactivate`, {
+    ...adminRequestOptions, method: 'POST', body: JSON.stringify(reason ? { reason } : {}),
+  });
+}
+
+export function removePlatformTenantAdministrator(tenantId: string, membershipId: string, reason?: string): Promise<void> {
+  const query = reason ? `?${new URLSearchParams({ reason })}` : '';
+  return requestVoid(`${administratorPath(tenantId, membershipId)}${query}`, {
+    ...adminRequestOptions, method: 'DELETE',
+  });
 }
 
 /** Reuse the existing platform activation endpoint; token issuance stays on the server. */

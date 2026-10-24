@@ -31,6 +31,7 @@ IAM_SCHEMA_FIELDS = frozenset(
         "Membership",
         "RecoverTenantAdmin",
         "TenantAdministratorGovernanceResponse",
+        "TenantAdministratorMembership",
     }
 )
 

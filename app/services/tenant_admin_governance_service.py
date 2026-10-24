@@ -12,12 +12,71 @@ from ..authorization_catalog_seed_v6 import TENANT_ADMIN_GOVERNANCE_PERMISSION
 from ..core.context import CurrentContext, minimal_background_context, tenant_scope
 from ..core.identity_states import IdentityErrorCode, identity_http_error
 from ..core.permissions import normalize_role
-from ..models import Tenant, TenantUserRoleAssignmentHistory
+from ..models import (
+    AuthorizationRole,
+    IAMUser,
+    Tenant,
+    TenantUser,
+    TenantUserRoleAssignment,
+    TenantUserRoleAssignmentHistory,
+)
 from . import audit_service, authorization_catalog_service
 from . import tenant_role_assignment_service as roles
 from . import tenant_service as tenants
+from .identity_verification_policy import verification_complete
 
 Operation = Literal["revoke", "deactivate", "remove"]
+
+
+def administrator_directory(db: Session, *, context: CurrentContext, tenant_id: int) -> dict:
+    """Governance metadata only; retained assignments do not imply effective access."""
+    if context.tenant_id is not None or not context.is_platform_admin or not context.has_permission(
+        TENANT_ADMIN_GOVERNANCE_PERMISSION
+    ):
+        raise HTTPException(403, "Platform governance context is required.")
+    if db.get(Tenant, tenant_id) is None:
+        raise HTTPException(404, "Tenant not found")
+    with tenant_scope(minimal_background_context(tenant_id)):
+        administrators = []
+        rows = db.execute(
+            select(TenantUser, IAMUser)
+            .join(IAMUser, IAMUser.id == TenantUser.user_id)
+            .join(TenantUserRoleAssignment, TenantUserRoleAssignment.tenant_user_id == TenantUser.id)
+            .join(AuthorizationRole, AuthorizationRole.id == TenantUserRoleAssignment.role_id)
+            .where(
+                TenantUser.tenant_id == tenant_id,
+                TenantUserRoleAssignment.tenant_id == tenant_id,
+                TenantUserRoleAssignment.status == "ACTIVE",
+                AuthorizationRole.code == "TENANT_ADMIN",
+                AuthorizationRole.scope == "TENANT",
+                AuthorizationRole.status == "ACTIVE",
+            )
+            .order_by(IAMUser.display_name, IAMUser.email, TenantUser.id)
+        ).all()
+        for membership, user in rows:
+            state = _snapshot(db, membership)
+            state.pop("membership_public_id")
+            administrators.append({
+                **state,
+                "display_name": user.display_name,
+                "email": user.email,
+                "account_status": user.status,
+                "is_effective": membership.status == "ACTIVE" and user.status == "ACTIVE"
+                and verification_complete(user),
+            })
+    replacement_roles = db.scalars(
+        select(AuthorizationRole).where(
+            AuthorizationRole.scope == "TENANT",
+            AuthorizationRole.status == "ACTIVE",
+            AuthorizationRole.is_assignable.is_(True),
+            AuthorizationRole.code.not_in(["TENANT_ADMIN", "PLATFORM_ADMIN"]),
+        ).order_by(AuthorizationRole.name, AuthorizationRole.code)
+    )
+    return {
+        "tenant_id": tenant_id,
+        "administrators": administrators,
+        "replacement_roles": [{"code": role.code, "name": role.name, "scope": "TENANT"} for role in replacement_roles],
+    }
 
 
 def _snapshot(db, membership) -> dict:

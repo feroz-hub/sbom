@@ -60,10 +60,12 @@ export function PlatformTenantOverview({
   tenant,
   canResend,
   canManageUsers,
+  showCurrentAdministrators = true,
 }: {
   tenant: TenantSummary;
   canResend: boolean;
   canManageUsers: boolean;
+  showCurrentAdministrators?: boolean;
 }) {
   const queryClient = useQueryClient();
   const pending = tenant.status === "PENDING";
@@ -258,7 +260,7 @@ export function PlatformTenantOverview({
                   tenant.
                 </p>
               )}
-              {!!tenant.current_administrators?.length && (
+              {showCurrentAdministrators && !!tenant.current_administrators?.length && (
                 <div>
                   <h3 className="mb-2 text-xs font-medium text-foreground opacity-70">
                     Current Tenant Administrators

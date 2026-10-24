@@ -59,6 +59,7 @@ SCHEMA_FIELDS = {
     "PdfReportByIdRequest": RUN_FIELDS,
     "PlatformTenantMembershipSummary": MEMBER_FIELDS,
     "TenantAdministratorGovernanceResponse": MEMBER_FIELDS,
+    "TenantAdministratorMembership": MEMBER_FIELDS,
     "PlatformGrantSummary": frozenset({"grant_id"}),
     "PlatformAdministratorGrantResponse": frozenset({"grant_id"}),
 }

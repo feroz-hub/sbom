@@ -32,6 +32,25 @@ class TenantAdministratorGovernanceResponse(BaseModel):
     role_assignment_version: int
 
 
+class TenantAdministratorMembership(TenantAdministratorGovernanceResponse):
+    display_name: str | None
+    email: str | None
+    account_status: str
+    is_effective: bool
+
+
+class TenantAdministratorReplacementRole(BaseModel):
+    code: str
+    name: str
+    scope: Literal["TENANT"] = "TENANT"
+
+
+class TenantAdministratorDirectory(BaseModel):
+    tenant_id: int
+    administrators: list[TenantAdministratorMembership]
+    replacement_roles: list[TenantAdministratorReplacementRole]
+
+
 class PlatformUserSummary(BaseModel):
     first_name: str | None = None
     last_name: str | None = None

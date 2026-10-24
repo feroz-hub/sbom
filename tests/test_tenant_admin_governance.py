@@ -133,6 +133,103 @@ def mutate(scenario, operation, *, body=None, headers=None, url=None):
     )
 
 
+def test_governance_directory_retains_disabled_admins_and_excludes_ordinary_members(scenario):
+    s = scenario
+    with SessionLocal() as db, tenant_scope(minimal_background_context(1)):
+        ordinary = seed_user(db)
+        member(db, ordinary, ("VIEWER",))
+        target = db.get(TenantUser, s["membership_id"])
+        target.role = "SECURITY_ANALYST"
+        db.scalar(select(TenantUserRoleAssignment).where(
+            TenantUserRoleAssignment.tenant_user_id == target.id,
+        )).is_primary = False
+        analyst = db.scalar(select(AuthorizationRole).where(AuthorizationRole.code == "SECURITY_ANALYST"))
+        db.add(TenantUserRoleAssignment(tenant_id=1, tenant_user_id=target.id, role_id=analyst.id,
+            status="ACTIVE", is_primary=True, version=1, assigned_by_user_id=s["actor_id"],
+            assigned_at=now(), assignment_source="PLATFORM_ADMIN", created_at=now(), updated_at=now()))
+        db.commit()
+    assert mutate(s, "deactivate").status_code == 200
+    response = s["client"].get(f"/api/platform/tenants/{tenant_uuid(1)}/administrators", headers=s["headers"])
+    assert response.status_code == 200, response.text
+    result = response.json()
+    assert result["tenant_id"] == tenant_uuid(1)
+    assert len(result["administrators"]) == 2
+    target = next(item for item in result["administrators"] if item["user_id"] == user_uuid(s["target_id"]))
+    assert target["membership_id"] == membership_uuid(s["membership_id"])
+    assert target["status"] == "DISABLED"
+    assert target["is_effective"] is False
+    assert target["primary_role"] == "SECURITY_ANALYST"
+    assert target["roles"] == ["SECURITY_ANALYST", "TENANT_ADMIN"]
+    assert target["role_assignment_version"] == 1
+    assert not {"external_subject", "password_hash", "security_version"} & target.keys()
+    assert {role["code"] for role in result["replacement_roles"]} == {"VIEWER", "DEVELOPER", "SECURITY_ANALYST"}
+    assert all(role["scope"] == "TENANT" and "id" not in role for role in result["replacement_roles"])
+
+
+@pytest.mark.parametrize("code", ["TENANT_ADMIN", "SECURITY_ANALYST", "DEVELOPER", "VIEWER"])
+def test_governance_directory_rejects_tenant_only_roles(scenario, code):
+    s = scenario
+    with SessionLocal() as db:
+        grant = db.scalar(select(PlatformUserRole).where(PlatformUserRole.user_id == s["actor_id"]))
+        grant.status = "DISABLED"
+        actor = db.get(IAMUser, s["actor_id"])
+        member(db, actor, (code,))
+        db.commit()
+    result = s["client"].get(f"/api/platform/tenants/{tenant_uuid(1)}/administrators", headers=s["headers"])
+    assert result.status_code == 403, result.text
+
+
+def test_governance_directory_unauthenticated_and_missing_tenant(scenario):
+    s = scenario
+    assert s["client"].get(f"/api/platform/tenants/{tenant_uuid(1)}/administrators").status_code == 401
+    assert s["client"].get(f"/api/platform/tenants/{uuid4()}/administrators", headers=s["headers"]).status_code == 404
+
+
+def test_governance_directory_is_tenant_bounded_and_custom_catalogue_aware(scenario):
+    s = scenario
+    with SessionLocal() as db:
+        tenant = Tenant(name="Other directory tenant", slug="directory-other", status="ACTIVE", created_at=now(), updated_at=now())
+        db.add(tenant)
+        db.flush()
+        member(db, db.get(IAMUser, s["target_id"]), tenant_id=tenant.id)
+        other_tenant_id = tenant.id
+        for code, scope, status, assignable in [
+            ("CUSTOM_REVIEWER", "TENANT", "ACTIVE", True),
+            ("CUSTOM_DISABLED", "TENANT", "DISABLED", True),
+            ("CUSTOM_INTERNAL", "TENANT", "ACTIVE", False),
+            ("CUSTOM_PLATFORM", "PLATFORM", "ACTIVE", True),
+        ]:
+            db.add(AuthorizationRole(code=code, name=code, scope=scope, status=status, is_assignable=assignable,
+                is_system=False, version=1, created_at=now(), updated_at=now()))
+        db.commit()
+    result = s["client"].get(f"/api/platform/tenants/{tenant_uuid(other_tenant_id)}/administrators", headers=s["headers"])
+    assert result.status_code == 200, result.text
+    data = result.json()
+    assert len(data["administrators"]) == 1
+    assert all(item["tenant_id"] == tenant_uuid(other_tenant_id) for item in data["administrators"])
+    codes = {item["code"] for item in data["replacement_roles"]}
+    assert "CUSTOM_REVIEWER" in codes
+    assert not {"TENANT_ADMIN", "PLATFORM_ADMIN", "CUSTOM_DISABLED", "CUSTOM_INTERNAL", "CUSTOM_PLATFORM"} & codes
+    # Platform routes deliberately resolve platform context despite a stale
+    # browser tenant header; that preference grants no tenant permissions.
+    stale_header = s["client"].get(f"/api/platform/tenants/{tenant_uuid(1)}/administrators",
+        headers={**s["headers"], "X-Tenant-ID": tenant_uuid(1)})
+    assert stale_header.status_code == 200
+    assert stale_header.json()["tenant_id"] == tenant_uuid(1)
+
+
+def test_governance_directory_public_openapi_uuid_contract(scenario):
+    from app.main import app
+
+    doc = app.openapi()
+    operation = doc["paths"]["/api/platform/tenants/{tenant_id}/administrators"]["get"]
+    assert next(p for p in operation["parameters"] if p["name"] == "tenant_id")["schema"]["format"] == "uuid"
+    models = doc["components"]["schemas"]
+    for field in ("tenant_id", "membership_id", "user_id"):
+        assert models["TenantAdministratorMembership"]["properties"][field]["format"] == "uuid"
+    assert models["TenantAdministratorDirectory"]["properties"]["tenant_id"]["format"] == "uuid"
+
+
 @pytest.mark.parametrize("operation", ["revoke", "deactivate", "remove"])
 def test_platform_governance_preserves_identity_other_memberships_and_grants(scenario, operation):
     s = scenario

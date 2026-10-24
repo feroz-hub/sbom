@@ -20,6 +20,7 @@ export async function invalidatePlatformTenantSurfaces(qc: QueryClient, tenantId
     qc.invalidateQueries({ queryKey: ['platform-summary'] }),
     qc.invalidateQueries({ queryKey: ['platform-tenants'] }),
     qc.invalidateQueries({ queryKey: ['platform-tenant', tenantId] }),
+    qc.invalidateQueries({ queryKey: ['platform-tenant-administrators', tenantId] }),
   ]);
 }
 

@@ -5,6 +5,7 @@ import { act, render, screen, waitFor, within } from '@testing-library/react';
 import userEvent from '@testing-library/user-event';
 import { beforeEach, afterEach, describe, expect, it, vi } from 'vitest';
 import type { PlatformAdministrator, TenantSummary } from '@/lib/api';
+import { ToastProvider } from '@/hooks/useToast';
 
 const state = vi.hoisted(() => ({
   allowed: true,
@@ -14,8 +15,8 @@ const state = vi.hoisted(() => ({
 }));
 vi.mock('next/navigation', () => ({ usePathname: () => '/platform', useRouter: () => ({ push: state.push }) }));
 vi.mock('@/hooks/useAuth', () => ({ useAuth: () => ({
-  user: { userId: '00000000-0000-4000-8000-000000000001', isPlatformAdmin: true }, isLoading: false,
-  hasPermission: () => state.allowed,
+  user: { userId: '00000000-0000-4000-8000-000000000001', isPlatformAdmin: true }, isLoading: false, isPlatformContext: true,
+  hasPermission: (permission: string) => state.allowed && permission !== 'platform:tenant_admin:manage',
 }) }));
 vi.mock('@/hooks/useNotifications', () => ({ useNotifications: () => ({
   showSuccess: state.success, showError: state.error, showInfo: vi.fn(), showWarning: vi.fn(),
@@ -46,7 +47,7 @@ const admin: PlatformAdministrator = { grant_id: "00000000-0000-4000-8000-000000
   verification_required: false, is_effective: true, created_at: '2026-10-01T00:00:00Z' };
 let client: QueryClient;
 let detailParams: Promise<{ tenantId: string }>;
-function view(node: ReactNode) { return <QueryClientProvider client={client}><Suspense fallback={<p>Loading</p>}>{node}</Suspense></QueryClientProvider>; }
+function view(node: ReactNode) { return <QueryClientProvider client={client}><ToastProvider><Suspense fallback={<p>Loading</p>}>{node}</Suspense></ToastProvider></QueryClientProvider>; }
 async function renderView(node: ReactNode) {
   let result!: ReturnType<typeof render>;
   await act(async () => { result = render(view(node)); });

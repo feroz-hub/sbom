@@ -31,6 +31,7 @@ from ..schemas_platform import (
     PlatformUserStatusUpdate,
     PlatformUserSummary,
     TenantAdministratorDeactivateRequest,
+    TenantAdministratorDirectory,
     TenantAdministratorGovernanceResponse,
     TenantAdministratorRevokeRequest,
     TenantMembershipBrief,
@@ -45,7 +46,7 @@ from ..services import tenant_role_assignment_service as tras
 from ..services import user_management_service as ums
 from ..services.email_verification_service import ensure_initial_verification_delivery
 from ..services.identity_verification_policy import verification_complete, verification_complete_clause
-from ..services.tenant_admin_governance_service import mutate_administrator
+from ..services.tenant_admin_governance_service import administrator_directory, mutate_administrator
 
 router = APIRouter(prefix="/api/platform", tags=["platform-identity"])
 
@@ -845,6 +846,15 @@ def list_platform_tenants(
         _platform_tenant_dict(db, tenant)
         for tenant in tenants
     ]
+
+
+@router.get("/tenants/{tenant_id}/administrators", response_model=TenantAdministratorDirectory)
+def list_tenant_administrator_memberships(
+    tenant_id: int,
+    context: CurrentContext = Depends(require_platform_permission("platform:tenant_admin:manage")),
+    db: Session = Depends(get_db),
+) -> dict:
+    return administrator_directory(db, context=context, tenant_id=tenant_id)
 
 
 @router.get("/tenants/{tenant_id}")

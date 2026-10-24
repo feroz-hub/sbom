@@ -9,7 +9,7 @@ function client() {
 describe('platform invalidation helpers', () => {
   it('awaits active summary, tenant list and affected detail refreshes while leaving unrelated data fresh', async () => {
     const qc = client();
-    const keys = [['platform-summary'], ['platform-tenants', 'overview'], ['platform-tenant', 7]];
+    const keys = [['platform-summary'], ['platform-tenants', 'overview'], ['platform-tenant', 7], ['platform-tenant-administrators', 7, 'actor']];
     const resolvers: Array<(data: string) => void> = [];
     const unsubscribes = keys.map(queryKey => {
       qc.setQueryData(queryKey, 'before');
@@ -20,13 +20,13 @@ describe('platform invalidation helpers', () => {
     qc.setQueryData(['sboms'], 'business data');
     let finished = false;
     const promise = invalidatePlatformTenantSurfaces(qc, 7).then(() => { finished = true; });
-    expect(resolvers).toHaveLength(3);
+    expect(resolvers).toHaveLength(4);
     resolvers[0]('server summary');
     await Promise.resolve();
     expect(finished).toBe(false);
-    resolvers[1]('server tenants'); resolvers[2]('server detail');
+    resolvers[1]('server tenants'); resolvers[2]('server detail'); resolvers[3]('server administrators');
     await promise;
-    expect(keys.map(key => qc.getQueryData(key))).toEqual(['server summary', 'server tenants', 'server detail']);
+    expect(keys.map(key => qc.getQueryData(key))).toEqual(['server summary', 'server tenants', 'server detail', 'server administrators']);
     expect(qc.getQueryState(['platform-tenant', 99])?.isInvalidated).toBe(false);
     expect(qc.getQueryState(['sboms'])?.isInvalidated).toBe(false);
     unsubscribes.forEach(unsubscribe => unsubscribe()); qc.clear();
