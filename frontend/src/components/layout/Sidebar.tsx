@@ -93,7 +93,7 @@ export function Sidebar() {
       <aside
         aria-label="Primary navigation"
         className={cn(
-          'app-sidebar fixed left-0 top-0 z-40 flex h-screen flex-col sidebar-rail',
+          'app-sidebar fixed left-0 top-0 z-40 flex flex-col sidebar-rail',
           navItems.some(item => item.group) && 'tenant-sidebar',
           'border-r border-white/10 shadow-[4px_0_24px_rgba(0,0,0,0.12)] dark:border-white/10 dark:shadow-[4px_0_32px_rgba(0,0,0,0.45)]',
           'transition-all duration-300 ease-in-out motion-reduce:transition-none',
@@ -144,7 +144,7 @@ export function Sidebar() {
         </div>
 
         {/* Scrollable middle: nav + pinned + recent */}
-        <div className="flex-1 overflow-y-auto">
+        <div className="app-sidebar-scroll min-h-0 flex-1 overflow-y-auto overscroll-y-contain">
           <nav className={cn('space-y-2 px-2 py-3', navItems.some(item => item.section) && 'platform-navigation')} aria-label="Main">
             {navItems.map((item, index) => (
               <Fragment key={`${item.href}-${item.label}`}>
@@ -179,11 +179,14 @@ export function Sidebar() {
           </div>
         </div>
 
-        {/* Footer: status + collapse toggle */}
+        {/* Footer: development status + collapse toggle */}
         <div className="shrink-0 border-t border-white/10 bg-black/10 px-2 py-3 space-y-2">
-          {!collapsed && <p className="px-3 text-[10px] font-semibold uppercase tracking-[0.13em] text-sidebar-muted">System Status</p>}
-          {!collapsed && <SidebarStatus />}
-          {collapsed && <SidebarStatus compact />}
+          {process.env.NODE_ENV === 'development' && (
+            <>
+              {!collapsed && <p className="px-3 text-[10px] font-semibold uppercase tracking-[0.13em] text-sidebar-muted">System Status</p>}
+              <SidebarStatus compact={collapsed} />
+            </>
+          )}
 
           <button
             type="button"

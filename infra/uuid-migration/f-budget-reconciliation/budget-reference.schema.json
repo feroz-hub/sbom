@@ -1,0 +1,87 @@
+{
+  "$comment": "Budget reference only. Does not replace full F operator/source/target/role/expiry/credential/action authority. No live execution approval.",
+  "$schema": "https://json-schema.org/draft/2020-12/schema",
+  "additionalProperties": false,
+  "properties": {
+    "action": {
+      "enum": [
+        "unit_validate",
+        "unit_execute",
+        "unit_readback"
+      ]
+    },
+    "budget_sha256": {
+      "pattern": "^[0-9a-f]{64}$",
+      "type": "string"
+    },
+    "plan_sha256": {
+      "pattern": "^[0-9a-f]{64}$",
+      "type": "string"
+    },
+    "schema": {
+      "const": "w24b-observation-budget-ref-v2"
+    },
+    "source_lock_sha256": {
+      "pattern": "^[0-9a-f]{64}$",
+      "type": "string"
+    },
+    "unit": {
+      "enum": [
+        "047_email_verification_tokens",
+        "048_authorization_catalog",
+        "049_tenant_multi_role_assignments",
+        "050_optional_external_tenant_mapping",
+        "051_report_subscription",
+        "052_report_delivery_artifact",
+        "053_tenant_analysis_schedule",
+        "054_hierarchical_scheduler",
+        "055_ai_model_registry",
+        "056_vex_investigation",
+        "057_vex_audit_hardening",
+        "058_vex_source_format",
+        "059_vex_analyzer_sources",
+        "060_native_identity_foundation",
+        "061_security_mail_outbox",
+        "062_native_platform_bootstrap",
+        "063_microsoft_entra_identity",
+        "064_platform_tenant_v2",
+        "065_scoped_configuration",
+        "066_platform_config_permissions",
+        "067_component_advisor_foundation",
+        "068_component_advisor_policies",
+        "069_component_recommendations",
+        "070_component_recommendation_compatibility",
+        "071_component_recommendation_factors",
+        "072_component_recommendation_review",
+        "073_sbom_operational_lifecycle",
+        "074_sbom_repair_jobs",
+        "075_platform_advisor_policies",
+        "076_logical_sbom_versions",
+        "077_sbom_selection_mode",
+        "078_finding_reconciliation",
+        "079_lifecycle_provider_verification",
+        "080_uuid_public_id_expand",
+        "081_uuid_projects_expand",
+        "082_uuid_products_expand",
+        "083_uuid_logical_sbom_expand",
+        "084_uuid_sbom_source_expand",
+        "085_uuid_sbom_component_expand",
+        "086_uuid_tenants_finalize",
+        "087_uuid_projects_finalize",
+        "088_uuid_products_finalize",
+        "089_uuid_logical_sbom_finalize",
+        "090_uuid_sbom_source_finalize",
+        "091_uuid_sbom_component_finalize"
+      ]
+    }
+  },
+  "required": [
+    "schema",
+    "source_lock_sha256",
+    "plan_sha256",
+    "budget_sha256",
+    "unit",
+    "action"
+  ],
+  "type": "object"
+}

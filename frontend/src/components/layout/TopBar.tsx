@@ -37,11 +37,13 @@ export function TopBar({ title, action, subtitle, breadcrumbs }: TopBarProps) {
   return (
     <header
       className={cn(
-        'sticky top-0 z-20 border-b border-border shadow-topbar',
+        // In the app shell the global header is the only fixed banner.
+        // Page titles scroll with their content instead of covering alerts.
+        shellHeader ? 'relative' : 'sticky top-0',
+        'z-20 shrink-0 border-b border-border shadow-topbar',
         'bg-surface/85 backdrop-blur-md supports-[backdrop-filter]:bg-surface/75',
         'px-4 py-3 md:px-6 md:py-4',
         'flex items-center justify-between gap-3',
-        shellHeader && 'top-14',
       )}
     >
       <div className="flex min-w-0 flex-1 items-center gap-3">

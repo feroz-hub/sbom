@@ -1,0 +1,28 @@
+{
+  "accepted": false,
+  "approvals": {},
+  "no_active_promotion": true,
+  "only_unit": "047_email_verification_tokens",
+  "original_locks_unchanged": true,
+  "retained_input_lock_sha256": "3c0d7302c18e21bf2110a439aaaf25c2525183cc213555af6bfc17c37537aa55",
+  "schema": "w25-f047-source-lock-v1-PROPOSAL",
+  "sources": {
+    "README.md": "e579d4aee7e1a4d3da4ab2a9d136d65d6471690b23e654b5e0ea89b8a0ee31fa",
+    "approval.pending.json": "4a019e45477bb2ced35a1417deaa6dc303add915bb539cdfbe4acf10c8987ee0",
+    "dependencies.w25.json": "a0cf957783bbcf877547404e544b0c29023d2214454f74173bed20457031483c",
+    "expected-schema.w25.json": "c31ca3dce117724c3cd1067d119821cedb217277df148a0250341059fd667a46",
+    "observation-budget.w25.json": "e4d04d4c4e3aac2c7462b7f267c2edaef785a5eda322bb2427ea00784a5aa30b",
+    "retained-inputs.v1.json": "3c0d7302c18e21bf2110a439aaaf25c2525183cc213555af6bfc17c37537aa55",
+    "runtime-acceptance-checklist.md": "a63edf3ab1c822f2920ad96587374a625d5ab5b0adb8bfe7b0a759f7ba98ee76",
+    "sql-allowlist.w25.json": "56f476f8318e3e7999a9cb18aa9530de3d871ab4ee6305e53ad457600d3de49f",
+    "test_w25_offline.py": "0c5b52ca807a8ea8b53f7d474885279fe56eb3c743136a6cf66d4563bba91c45",
+    "w25_catalog.py": "8549a08662600539184ea8f0ff2907e80caecde4582832a80330c46c2be38596",
+    "w25_contract.py": "03ea70b8039d9c6f94c6c2fde67c492149a9038dc45c07ff3b67d2f1a8022a43",
+    "w25_coordinator.py": "dc5f419faa0049a7a97240b2a792a7e38d07550bdec5133188fb60f6d1c921d2",
+    "w25_entry.py": "b34fbcf2475cf3c12f8b6ac255fbf9ba07279dab7e6d78c78e0e23558f62cdb6",
+    "w25_inputs.py": "6531c5aac2afe824fe42bb5878ca861775cdf3d3d2ef2d19e6ea576fd291a929",
+    "w25_runtime.py": "860a652a98440138ca9b07c6ce6e80d90447d621ca67c309b217d48095efddd5",
+    "w25_schema.py": "64d56cee80cbf3b32e225f8a13326f0397a123bba8a3d4ff5086c936ec785db4",
+    "w25_test_support.py": "d27e0e2b8b79bb1fd577f633bb47fc723e9fdde1bc971a29bc50008628519b12"
+  }
+}

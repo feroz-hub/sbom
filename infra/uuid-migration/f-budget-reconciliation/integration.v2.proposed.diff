@@ -1,0 +1,155 @@
+--- infra/uuid-migration/fresh-coordinator/authority.py
++++ infra/uuid-migration/f-execution-v2/authority.py
+@@ -9,6 +9,7 @@
+ from datetime import UTC, datetime
+ from pathlib import Path
+ 
++from budget_policy import execution_bundle, verify_contract
+ from source_registry import DIRECTORY, digest, discover, next_unit, require, sha, unique_json
+ 
+ TARGET = {
+@@ -31,6 +32,7 @@
+ D_CLUSTER = "7697252084555804711"
+ FIELDS = {
+     "schema",
++    "observation_budget",
+     "accepted",
+     "target",
+     "unit",
+@@ -96,7 +98,7 @@
+     )
+     p = unique_json(raw)
+     require(
+-        isinstance(p, dict) and set(p) == FIELDS and p["schema"] == "w23-f-unit-v1", "Unknown/missing manifest field"
++        isinstance(p, dict) and set(p) == FIELDS and p["schema"] == "w24b-f-unit-v2", "Unknown/missing manifest field"
+     )
+     registry = discover(root)
+     unit = next_unit(registry, previous, requested)
+@@ -105,9 +107,16 @@
+         "Exact unaccepted single unit required",
+     )
+     require(p["target"] == TARGET and type(p["target"]["port"]) is int, "Only explicit F target allowed")
+-    require(p["source_sha256"] == source_bundle(root, registry), "Source/implementation bundle changed")
+-    require(
+-        p["budgets"] == unit["budgets"] and all(type(v) is int and v > 0 for v in p["budgets"].values()),
++    require(
++        p["source_sha256"]
++        == {**source_bundle(root, registry), **execution_bundle(root, p["observation_budget"]["source_lock_sha256"])},
++        "Source/implementation bundle changed",
++    )
++    budget_ref = p["observation_budget"]
++    require(budget_ref["unit"] == requested and budget_ref["action"] == action, "Wrong budget action/unit")
++    limits = verify_contract(root, budget_ref["source_lock_sha256"], budget_ref)["limits"]
++    require(
++        p["budgets"] == limits and all(type(v) is int and v > 0 for v in p["budgets"].values()),
+         "Exact per-unit budgets required",
+     )
+     require(p["connection"] == connection_contract(unit), "Connection contract changed")
+--- infra/uuid-migration/f-activation/catalog.py
++++ infra/uuid-migration/f-execution-v2/catalog.py
+@@ -67,6 +67,7 @@
+     require(len(identity) == 1, "Ambiguous F identity")
+     clients, locks = q(base["clients"]), q(base["locks"])
+     ordinary = {r["relname"] for r in catalog["relations"] if r["nspname"] == "public" and r["relkind"] == "r"}
++    meter.prefix(ordinary)  # exact expected relation set before per-table SELECTs
+     acl = {r["relname"]: r for r in catalog["owners_acl"] if r["nspname"] == "public"}
+     business = []
+     for name in sorted(ordinary - REFERENCE_TABLES):
+--- infra/uuid-migration/f-activation/activation.py
++++ infra/uuid-migration/f-execution-v2/activation.py
+@@ -60,30 +60,35 @@
+     commit_ack = False
+     try:
+         authority.recheck()
++        meter.assert_authority(authority.unit_authority)
+         ua = authority.unit_authority
+         require(ua.args[2] == "unit_execute", "Separate execute approval required")
+         require(transport.options == authority.plan["connection"], "Transport differs from approved options")
+         resource_gate(authority)
+         authority.recheck()  # original bytes/source/dependency/expiry immediately before authentication
+         journal.record("CONNECT_REQUESTED")
+-        connection = transport.open()
++        with meter.phase("initialization"):
++            connection = transport.open()
+         journal.record("CONNECTED")
+         control(connection, meter, "BEGIN READ ONLY")
+-        _, verified = observe(authority, connection, meter, text_factory)
++        with meter.phase("preflight"):
++            _, verified = observe(authority, connection, meter, text_factory)
+         journal.record("PREFLIGHT_ACCEPTED")
+         control(connection, meter, "ROLLBACK")
+         control(connection, meter, "BEGIN READ WRITE")
+-        require(
+-            catalog.query(connection, meter, text_factory, catalog.ADVISORY) == [{"acquired": True}],
+-            "Advisory lock unavailable",
+-        )
++        with meter.phase("coordinator"):
++            require(
++                catalog.query(connection, meter, text_factory, catalog.ADVISORY) == [{"acquired": True}],
++                "Advisory lock unavailable",
++            )
+         if ua.unit["previous"] is not None:
+             sql(connection, meter, text_factory, catalog.VERSION_LOCK)
+         for name in verified.table_names:
+             sql(connection, meter, text_factory, "LOCK TABLE ONLY " + catalog.relation(name) + " IN SHARE MODE NOWAIT")
+         resource_gate(authority)
+         authority.recheck()
+-        _, verified = observe(authority, connection, meter, text_factory, readonly=False)
++        with meter.phase("locked_reinspection"):
++            _, verified = observe(authority, connection, meter, text_factory, readonly=False)
+         journal.record("LOCKED")
+         opts = {}
+         if ua.unit["kind"] == "uuid_finalize":
+@@ -114,13 +119,14 @@
+             upgrade = binding.bind(authority, op, context)
+             authority.recheck()
+             journal.record("BODY_REQUESTED")
+-            with meter.scope("migration_statements"):
++            with meter.phase("body"), meter.scope("migration_statements"):
+                 upgrade()
+         journal.record("BODY_ACKNOWLEDGED")
+         if ua.unit["kind"] in {"frozen_047", "historical"}:
+             sql(connection, meter, text_factory, "SET LOCAL search_path = pg_catalog", category="session_statements")
+         authority.recheck()
+-        raw = catalog.collect(authority, connection, meter, text_factory, after=True)
++        with meter.phase("post_body"):
++            raw = catalog.collect(authority, connection, meter, text_factory, after=True)
+         require(
+             raw["marker"] == ([] if ua.unit["previous"] is None else [ua.unit["previous"]]),
+             "Migration body changed the version marker",
+@@ -141,10 +147,11 @@
+             "marker_statements",
+         )
+         marker_rows(result, ua.unit["next"])
+-        require(
+-            catalog.query(connection, meter, text_factory, catalog.MARKER) == [{"version_num": ua.unit["next"]}],
+-            "Extra/wrong marker after DML",
+-        )
++        with meter.phase("coordinator"):
++            require(
++                catalog.query(connection, meter, text_factory, catalog.MARKER) == [{"version_num": ua.unit["next"]}],
++                "Extra/wrong marker after DML",
++            )
+         journal.record("MARKER_ACKNOWLEDGED")
+         authority.recheck()
+         meter.check()
+@@ -206,14 +213,17 @@
+     result = {"accepted": False, "outcome": "BLOCKED"}
+     try:
+         authority.recheck()
++        meter.assert_authority(authority.unit_authority)
+         require(transport.options == authority.plan["connection"], "Unapproved read-only transport")
+         resource_gate(authority)
+         authority.recheck()
+         journal.record("CONNECT_REQUESTED")
+-        connection = transport.open()
++        with meter.phase("initialization"):
++            connection = transport.open()
+         journal.record("CONNECTED")
+         control(connection, meter, "BEGIN READ ONLY")
+-        _, verified = observe(authority, connection, meter, text_factory, after=after)
++        with meter.phase("readback" if after else "preflight"):
++            _, verified = observe(authority, connection, meter, text_factory, after=after)
+         authority.recheck()
+         resource_gate(authority)
+         control(connection, meter, "ROLLBACK")

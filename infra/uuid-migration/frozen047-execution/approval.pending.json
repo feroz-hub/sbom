@@ -1,0 +1,115 @@
+{
+  "accepted": false,
+  "accepted_F_evidence": {
+    "path": "/Users/ferozebasha/.sbom-uuid-w2-review/w24e-20261019T062728003301Z/f-readonly-attempt.jsonl",
+    "sha256": "412ecca1fc065f25ef1b509e300c5bdd12430cef39d8cb4884e7dac4726f1076"
+  },
+  "action": "unit_execute",
+  "approvals": {},
+  "budget": {
+    "body_driver_count_static_exact": true,
+    "body_reservation_basis": {
+      "exact_pinned_body_queries": 0
+    },
+    "deterministic_queries": 191,
+    "limits": {
+      "attempts": 1,
+      "catalog_queries": 256,
+      "connect_seconds": 5,
+      "cooperative_unit_seconds": 120,
+      "idle_transaction_ms": 30000,
+      "lock_ms": 1000,
+      "marker_statements": 2,
+      "migration_statements": 558,
+      "session_statements": 2,
+      "simultaneous_connections": 1,
+      "statement_ms": 30000,
+      "transaction_controls": 4
+    },
+    "phase_cap_sum": 207,
+    "phase_caps": {
+      "body": 0,
+      "coordinator": 2,
+      "initialization": 16,
+      "locked_reinspection": 54,
+      "post_body": 81,
+      "preflight": 54
+    },
+    "rounding_margin": 1,
+    "runtime_upper_bound_proven": false,
+    "unallocated_legacy_headroom": 48
+  },
+  "connection": {
+    "application_name": "sbom_w25_f047_write",
+    "autocommit": false,
+    "connect_timeout": 5,
+    "dbname": "uuid_w2_f_fresh",
+    "gssencmode": "disable",
+    "host": "127.0.0.1",
+    "hostaddr": "127.0.0.1",
+    "options": "-c default_transaction_read_only=on -c statement_timeout=30000 -c lock_timeout=1000 -c idle_in_transaction_session_timeout=30000 -c row_security=on -c search_path=pg_catalog -c check_function_bodies=on -c stats_fetch_consistency=none",
+    "passfile": "/dev/null",
+    "port": 56043,
+    "sslmode": "disable",
+    "user": "uuid_w2_f_bootstrap"
+  },
+  "credential_metadata": {
+    "ctime_ns": 1792390446662579505,
+    "gid": 20,
+    "inode": 76156846,
+    "mode": 384,
+    "mtime_ns": 1792390446662579505,
+    "nlink": 1,
+    "parent_mode": 448,
+    "path": "/Users/ferozebasha/.sbom-uuid-w2-f/postgres-password",
+    "size": 64,
+    "uid": 501
+  },
+  "evidence_directory": "/Users/ferozebasha/.sbom-uuid-w2-review/w25-20261019T075117930822Z/write",
+  "expires_at": "2026-10-20T08:09:44.274290+00:00",
+  "identity": {
+    "database": "uuid_w2_f_fresh",
+    "database_oid": 16384,
+    "system_identifier": "7698258353561202726",
+    "user": "uuid_w2_f_bootstrap",
+    "version": 160015
+  },
+  "integrity_approvals": {},
+  "integrity_attestations": [
+    false,
+    false,
+    false,
+    false,
+    false,
+    false,
+    false
+  ],
+  "model_sha256": "9e64728cfa41fb493c98acadc75c216d7d749aeaa25ec51372e785b50732d9df",
+  "operator": {
+    "F_identity_reviewed": false,
+    "credential_provenance_reviewed": false,
+    "exclusive_ddl_window_reviewed": false,
+    "network_egress_reviewed": false,
+    "post_schema_model_reviewed": false,
+    "privileged_bootstrap_reviewed": false,
+    "source_reviewed": false,
+    "transaction_budget_reviewed": false
+  },
+  "previous": null,
+  "resource_reference": {
+    "path": "/Users/ferozebasha/.sbom-uuid-w2-review/w24e-20261019T062728003301Z/infrastructure-baseline.json",
+    "sha256": "74fa0917195cdcc1c9bb638d8597aa9b40004229d6efca7612899c8608bcfaad"
+  },
+  "schema": "w25-f047-unit-v1",
+  "sources_lock_sha256": null,
+  "sql_allowlist_sha256": "56f476f8318e3e7999a9cb18aa9530de3d871ab4ee6305e53ad457600d3de49f",
+  "target": {
+    "dbname": "uuid_w2_f_fresh",
+    "host": "127.0.0.1",
+    "hostaddr": "127.0.0.1",
+    "port": 56043,
+    "user": "uuid_w2_f_bootstrap"
+  },
+  "unit": "047_email_verification_tokens",
+  "write_evidence": null
+}

@@ -1,0 +1,70 @@
+{
+  "affected_attempt": "backend-full-attempt1",
+  "confirmed_main_worker_receipts": [
+    {
+      "timestamp": "2026-10-21 06:54:42",
+      "message": "[INFO    ] 2026-10-21 06:54:42  celery.worker.strategy  Task ai_fix.generate_run_fixes[e3cbbea1-e8a6-4c6a-b189-071333bfb826] received",
+      "metadata": {}
+    },
+    {
+      "timestamp": "2026-10-21 06:54:42",
+      "message": "[INFO    ] 2026-10-21 06:54:42  sbom.ai.tasks  ai.task.generate_run_fixes.start: run=1 batch=7fb66bf7-1d77-4989-be54-ff4f37c3a017 provider=None force=False budget=None scope=None findings=3",
+      "metadata": {
+        "tenant_id": 1
+      }
+    },
+    {
+      "timestamp": "2026-10-21 06:54:42",
+      "message": "[INFO    ] 2026-10-21 06:54:42  celery.app.trace  Celery task diagnostic (arguments and results omitted)",
+      "metadata": {
+        "tenant_id": 1,
+        "task_name": "ai_fix.generate_run_fixes",
+        "runtime": 0.6705618749838322
+      }
+    },
+    {
+      "timestamp": "2026-10-21 06:54:44",
+      "message": "[INFO    ] 2026-10-21 06:54:44  celery.worker.strategy  Task ai_fix.generate_run_fixes[d7f5d07f-9245-4fd9-ae4f-22777b94cbd4] received",
+      "metadata": {}
+    },
+    {
+      "timestamp": "2026-10-21 06:54:44",
+      "message": "[INFO    ] 2026-10-21 06:54:44  sbom.ai.tasks  ai.task.generate_run_fixes.start: run=1 batch=c64f9bdd-6bbb-4fbd-8767-e256a8868c03 provider=None force=False budget=None scope=None findings=3",
+      "metadata": {
+        "tenant_id": 1
+      }
+    },
+    {
+      "timestamp": "2026-10-21 06:54:44",
+      "message": "[INFO    ] 2026-10-21 06:54:44  celery.app.trace  Celery task diagnostic (arguments and results omitted)",
+      "metadata": {
+        "tenant_id": 1,
+        "task_name": "ai_fix.generate_run_fixes",
+        "runtime": 0.01569062500493601
+      }
+    },
+    {
+      "timestamp": "2026-10-21 06:54:54",
+      "message": "[INFO    ] 2026-10-21 06:54:54  celery.worker.strategy  Task ai_fix.generate_run_fixes[698d3aa6-52c1-4511-a9e8-87b2a95f7434] received",
+      "metadata": {}
+    },
+    {
+      "timestamp": "2026-10-21 06:54:54",
+      "message": "[INFO    ] 2026-10-21 06:54:54  sbom.ai.tasks  ai.task.generate_run_fixes.start: run=1 batch=8a1c12e5-2646-4584-b1cf-54da01afd022 provider=None force=False budget=None scope=None findings=3",
+      "metadata": {
+        "tenant_id": 1
+      }
+    },
+    {
+      "timestamp": "2026-10-21 06:54:54",
+      "message": "[INFO    ] 2026-10-21 06:54:54  celery.app.trace  Celery task diagnostic (arguments and results omitted)",
+      "metadata": {
+        "tenant_id": 1,
+        "task_name": "ai_fix.generate_run_fixes",
+        "runtime": 0.039340834016911685
+      }
+    }
+  ],
+  "correction": "Removed all inherited application routing/settings from future test child environment. Subsequent broker target must be explicit task-only.",
+  "unknowns": "Main worker processing occurred. Its resulting database changes require bounded read-only reconciliation; no automatic cleanup or claim of preservation."
+}

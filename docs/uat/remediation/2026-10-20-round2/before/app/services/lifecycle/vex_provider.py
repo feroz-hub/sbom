@@ -1,0 +1,1373 @@
+"""VEX import, statement mapping, and manual override services."""
+
+from __future__ import annotations
+
+import hashlib
+import json
+import logging
+from typing import Any
+
+from fastapi import HTTPException
+from sqlalchemy import func, select
+from sqlalchemy.orm import Session
+
+from ...metrics.vex import vex_component_findings, vex_sbom_finding_pairs
+from ...models import (
+    SBOMComponent,
+    SBOMSource,
+    VexDocument,
+    VexOverrideAudit,
+    VexStatement,
+)
+from ..sbom_workflow_logging import workflow_event
+from ..vex.enums import EffectiveVexStatus
+from ..vex.matching import match_component, version_applies
+from .types import HIGH, LOW, MEDIUM, UNKNOWN_CONFIDENCE, VexResult, now_iso
+
+ALLOWED_VEX_STATUSES = {"affected", "not_affected", "fixed", "under_investigation", "unknown"}
+
+CYCLONEDX_ANALYSIS_STATUS_MAP = {
+    "resolved": "fixed",
+    "resolved_with_pedigree": "fixed",
+    "exploitable": "affected",
+    "in_triage": "under_investigation",
+    "false_positive": "not_affected",
+    "not_affected": "not_affected",
+}
+
+#: CycloneDX ``affects[].versions[].status``. This describes whether a version
+#: falls inside the vulnerable range — it is NOT the VEX determination, which
+#: lives in ``analysis.state``. Used only as a fallback when a producer omits
+#: the analysis block entirely, and as version-applicability evidence.
+CYCLONEDX_AFFECTED_STATUS_MAP = {
+    "affected": "affected",
+    "unaffected": "not_affected",
+    "unknown": "unknown",
+}
+
+
+def is_vex_assertion(vulnerability: Any) -> bool:
+    """Does a CycloneDX ``vulnerabilities[]`` entry carry a VEX determination?
+
+    VEX-ING-001. A CycloneDX document may list vulnerabilities purely as
+    disclosure data; that is not an exploitability determination and must not
+    become one. An entry qualifies only with actual impact-analysis evidence:
+    an ``analysis`` block with state/justification/response, or per-product
+    ``affects[].versions[].status``.
+    """
+    if not isinstance(vulnerability, dict):
+        return False
+    analysis = vulnerability.get("analysis")
+    if isinstance(analysis, dict) and any(
+        analysis.get(key) for key in ("state", "justification", "response", "detail")
+    ):
+        return True
+    for affected in vulnerability.get("affects") or []:
+        if not isinstance(affected, dict):
+            continue
+        for version in affected.get("versions") or []:
+            if isinstance(version, dict) and version.get("status"):
+                return True
+    return False
+
+
+class VexProvider:
+    """Parse VEX-like statements from supported JSON documents."""
+
+    name = "VEX"
+
+    def parse_document(
+        self,
+        document: dict[str, Any],
+        *,
+        sbom: SBOMSource,
+        components: list[SBOMComponent],
+        source_name: str = "Uploaded VEX",
+        source_url: str | None = None,
+    ) -> list[VexResult]:
+        if not isinstance(document, dict):
+            raise HTTPException(status_code=422, detail="VEX document must be a JSON object")
+        if _is_csaf_document(document):
+            return self._parse_csaf(
+                document, sbom=sbom, components=components, source_name=source_name, source_url=source_url
+            )
+        if "vulnerabilities" in document:
+            return self._parse_cyclonedx(
+                document, sbom=sbom, components=components, source_name=source_name, source_url=source_url
+            )
+        if "statements" in document:
+            return self._parse_openvex(
+                document, sbom=sbom, components=components, source_name=source_name, source_url=source_url
+            )
+        raise HTTPException(status_code=422, detail="Unsupported VEX document format")
+
+    def _parse_cyclonedx(
+        self,
+        document: dict[str, Any],
+        *,
+        sbom: SBOMSource,
+        components: list[SBOMComponent],
+        source_name: str,
+        source_url: str | None,
+    ) -> list[VexResult]:
+        results: list[VexResult] = []
+        for vuln in document.get("vulnerabilities") or []:
+            if not isinstance(vuln, dict):
+                continue
+            vuln_id = _vulnerability_id(vuln)
+            if not vuln_id:
+                continue
+            if not is_vex_assertion(vuln):
+                # Disclosure data only — retained in the SBOM, but it is not a
+                # VEX determination and must not become one (VEX-ING-001).
+                continue
+            analysis = vuln.get("analysis") if isinstance(vuln.get("analysis"), dict) else {}
+            native_state = str(analysis.get("state") or "").strip().lower() or None
+            base_status = _normalize_vex_status(
+                CYCLONEDX_ANALYSIS_STATUS_MAP.get(native_state or "", "unknown")
+            )
+            published = vuln.get("published") or vuln.get("updated")
+            affected_entries = vuln.get("affects") or []
+            if not isinstance(affected_entries, list) or not affected_entries:
+                results.append(_result_from_payload(
+                    vuln, None, vuln_id, base_status, sbom, source_name, source_url,
+                    source_status=native_state, asserted_at=published,
+                ))
+                continue
+            for affected in affected_entries:
+                if not isinstance(affected, dict):
+                    continue
+                ref = affected.get("ref")
+                component = _match_component(components, ref)
+                versions = affected.get("versions") if isinstance(affected.get("versions"), list) else []
+                status = base_status
+                fixed_version = _fixed_version(analysis)
+                if versions:
+                    for version in versions:
+                        if not isinstance(version, dict):
+                            continue
+                        native_version_state = str(version.get("status") or "").strip().lower() or None
+                        # `analysis.state` is the VEX determination; a version's
+                        # `status` only says whether that version falls in the
+                        # vulnerable range. They answer different questions, so
+                        # the version must not overwrite the determination:
+                        # "not_affected because the code is unreachable" stays
+                        # not_affected even when this version is in range.
+                        #
+                        # Only when the producer gave no analysis state at all
+                        # does the version status stand in as the best evidence
+                        # available.
+                        if native_state:
+                            status = base_status
+                        else:
+                            mapped = CYCLONEDX_AFFECTED_STATUS_MAP.get(native_version_state or "")
+                            status = _normalize_vex_status(mapped or status)
+                        if version.get("version") and status == "fixed":
+                            fixed_version = str(version.get("version"))
+                        results.append(
+                            _result_from_payload(
+                                vuln,
+                                component,
+                                vuln_id,
+                                status,
+                                sbom,
+                                source_name,
+                                source_url,
+                                fixed_version=fixed_version,
+                                affected_ref=ref,
+                                affected_version=version,
+                                source_status=native_version_state or native_state,
+                                asserted_at=published,
+                            )
+                        )
+                else:
+                    results.append(
+                        _result_from_payload(
+                            vuln,
+                            component,
+                            vuln_id,
+                            status,
+                            sbom,
+                            source_name,
+                            source_url,
+                            fixed_version=fixed_version,
+                            affected_ref=ref,
+                            source_status=native_state,
+                            asserted_at=published,
+                        )
+                    )
+        return [_validate_vex_result(result) for result in results]
+
+    def _parse_openvex(
+        self,
+        document: dict[str, Any],
+        *,
+        sbom: SBOMSource,
+        components: list[SBOMComponent],
+        source_name: str,
+        source_url: str | None,
+    ) -> list[VexResult]:
+        results: list[VexResult] = []
+        for statement in document.get("statements") or []:
+            if not isinstance(statement, dict):
+                continue
+            vulnerability = statement.get("vulnerability") or {}
+            vuln_id = (
+                (vulnerability.get("name") if isinstance(vulnerability, dict) else None)
+                or statement.get("vulnerability_id")
+                or statement.get("vuln_id")
+            )
+            if not vuln_id:
+                continue
+            products = statement.get("products") or []
+            if not isinstance(products, list):
+                products = []
+            native_status = str(statement.get("status") or "").strip().lower() or None
+            status = _normalize_vex_status(statement.get("status"))
+            statement_timestamp = statement.get("timestamp") or document.get("timestamp")
+            for product in products or [None]:
+                component = _match_component(components, product)
+                evidence = {"statement": statement, "product": product}
+                if component:
+                    evidence["matched_component_id"] = component.id
+                results.append(
+                    _validate_vex_result(
+                        VexResult(
+                            component_name=component.name if component else str(product or sbom.sbom_name),
+                            component_version=component.version if component else None,
+                            vulnerability_id=str(vuln_id),
+                            cve_id=_cve_id(str(vuln_id)),
+                            product_context=sbom.sbom_name,
+                            vex_status=status,
+                            vex_justification=statement.get("justification"),
+                            impact_statement=statement.get("impact_statement"),
+                            action_statement=statement.get("action_statement"),
+                            fixed_version=statement.get("fixed_version"),
+                            mitigation=statement.get("mitigation"),
+                            source_name=source_name,
+                            source_url=source_url,
+                            evidence=evidence,
+                            confidence=MEDIUM if component else LOW,
+                            source_format="openvex",
+                            source_status=native_status,
+                            asserted_at=str(statement_timestamp) if statement_timestamp else None,
+                        )
+                    )
+                )
+        return results
+
+    def _parse_csaf(
+        self,
+        document: dict[str, Any],
+        *,
+        sbom: SBOMSource,
+        components: list[SBOMComponent],
+        source_name: str,
+        source_url: str | None,
+    ) -> list[VexResult]:
+        _validate_csaf_structure(document)
+        products = _csaf_products(document)
+        metadata = document.get("document") if isinstance(document.get("document"), dict) else {}
+        publisher = metadata.get("publisher") if isinstance(metadata.get("publisher"), dict) else {}
+        tracking = metadata.get("tracking") if isinstance(metadata.get("tracking"), dict) else {}
+        author = publisher.get("name") or metadata.get("title") or source_name or "CSAF VEX"
+        timestamp = tracking.get("current_release_date") or tracking.get("initial_release_date") or now_iso()
+        results: list[VexResult] = []
+
+        for vuln in document.get("vulnerabilities") or []:
+            if not isinstance(vuln, dict):
+                continue
+            vuln_id = _csaf_vulnerability_id(vuln)
+            if not vuln_id:
+                continue
+            emitted = False
+            product_status = vuln.get("product_status") if isinstance(vuln.get("product_status"), dict) else {}
+            for csaf_status, raw_product_ids in product_status.items():
+                status = _csaf_status(csaf_status)
+                if status is None:
+                    continue
+                product_ids = raw_product_ids if isinstance(raw_product_ids, list) else [raw_product_ids]
+                for product_id in product_ids:
+                    if not product_id:
+                        continue
+                    product_key = str(product_id)
+                    product = products.get(product_key, {"product_id": product_key, "name": product_key})
+                    component = _match_component(components, product)
+                    evidence: dict[str, Any] = {
+                        "format": "CSAF",
+                        "product_id": product_key,
+                        "product": product,
+                        "vulnerability": vuln,
+                        "csaf_status": csaf_status,
+                        "author": author,
+                        "timestamp": timestamp,
+                        "mapping": "matched" if component else "unmatched",
+                    }
+                    if component:
+                        evidence["matched_component_id"] = component.id
+                    results.append(
+                        _validate_vex_result(
+                            VexResult(
+                                component_name=component.name if component else str(product.get("name") or product_key),
+                                component_version=component.version if component else _text(product.get("version")),
+                                vulnerability_id=str(vuln_id),
+                                cve_id=_cve_id(str(vuln_id)),
+                                product_context=sbom.sbom_name,
+                                vex_status=status,
+                                vex_justification=_csaf_justification(vuln, product_key),
+                                impact_statement=_csaf_impact_statement(vuln, product_key),
+                                action_statement=_csaf_action_statement(vuln, product_key),
+                                fixed_version=_csaf_fixed_version(vuln, product_key),
+                                mitigation=_csaf_mitigation(vuln, product_key),
+                                source_name=str(author),
+                                source_url=source_url,
+                                evidence=evidence,
+                                confidence=MEDIUM if component else LOW,
+                                checked_at=str(timestamp),
+                                source_format="csaf",
+                                source_status=str(csaf_status).strip().lower() or None,
+                                asserted_at=str(timestamp),
+                            )
+                        )
+                    )
+                    emitted = True
+
+            if not emitted:
+                results.append(
+                    _validate_vex_result(
+                        VexResult(
+                            component_name=sbom.sbom_name,
+                            component_version=sbom.productver,
+                            vulnerability_id=str(vuln_id),
+                            cve_id=_cve_id(str(vuln_id)),
+                            product_context=sbom.sbom_name,
+                            vex_status="unknown",
+                            impact_statement=_csaf_impact_statement(vuln, None),
+                            action_statement=_csaf_action_statement(vuln, None),
+                            source_name=str(author),
+                            source_url=source_url,
+                            evidence={
+                                "format": "CSAF",
+                                "vulnerability": vuln,
+                                "mapping": "unmatched",
+                                "reason": "No CSAF product_status entry mapped this vulnerability to a product.",
+                                "author": author,
+                                "timestamp": timestamp,
+                            },
+                            confidence=LOW,
+                            checked_at=str(timestamp),
+                            source_format="csaf",
+                            source_status="unknown",
+                            asserted_at=str(timestamp),
+                        )
+                    )
+                )
+        return results
+
+
+@workflow_event("vex_import", completed_event="vex_processing_completed")
+def import_vex_document(
+    db: Session,
+    sbom_id: int,
+    document: dict[str, Any],
+    *,
+    source_type: str = "uploaded",
+    source_name: str = "Uploaded VEX",
+    source_url: str | None = None,
+    author: str | None = None,
+    uploaded_by: str | None = None,
+    discovery_evidence: dict[str, Any] | None = None,
+    last_refresh_status: str | None = None,
+    provider_errors: list[dict[str, Any]] | None = None,
+) -> dict[str, Any]:
+    sbom = db.get(SBOMSource, sbom_id)
+    if sbom is None:
+        raise HTTPException(status_code=404, detail="SBOM not found")
+
+    # Idempotency (VEX-ING-002): an identical document is a no-op, a new
+    # version of a known document appends and supersedes its predecessor.
+    source_hash = document_source_hash(document)
+    source_document_id, source_document_version, asserted_at = _document_identity(document)
+    existing = db.scalars(
+        select(VexDocument).where(
+            VexDocument.sbom_id == sbom_id,
+            VexDocument.source_hash == source_hash,
+            VexDocument.superseded_by_id.is_(None),
+        )
+    ).first()
+    if existing is not None:
+        return {
+            "document_id": existing.id,
+            "sbom_id": sbom_id,
+            "statements_imported": 0,
+            "matched_statements": 0,
+            "unmatched_statements": 0,
+            "format": existing.format,
+            "validation_status": existing.validation_status,
+            "already_imported": True,
+            "source_hash": source_hash,
+        }
+
+    components = db.execute(select(SBOMComponent).where(SBOMComponent.sbom_id == sbom_id)).scalars().all()
+    results = VexProvider().parse_document(
+        document,
+        sbom=sbom,
+        components=list(components),
+        source_name=source_name,
+        source_url=source_url,
+    )
+    now = now_iso()
+    vex_document = VexDocument(
+        sbom_id=sbom_id,
+        source_type=source_type,
+        format=_detect_format(document),
+        author=author or _author(document),
+        source_url=source_url,
+        discovery_evidence_json=discovery_evidence,
+        last_refresh_status=last_refresh_status,
+        provider_errors_json=provider_errors,
+        uploaded_by=uploaded_by,
+        uploaded_at=now,
+        raw_document_json=document,
+        validation_status="accepted",
+        source_document_id=source_document_id,
+        source_document_version=source_document_version,
+        source_hash=source_hash,
+        asserted_at=asserted_at,
+    )
+    db.add(vex_document)
+    db.flush()
+
+    # A new version of a document we already hold: keep the old row as history
+    # and point it at its replacement rather than deleting anything.
+    superseded_ids: list[int] = []
+    if source_document_id:
+        for prior in db.scalars(
+            select(VexDocument).where(
+                VexDocument.sbom_id == sbom_id,
+                VexDocument.source_document_id == source_document_id,
+                VexDocument.id != vex_document.id,
+                VexDocument.superseded_by_id.is_(None),
+            )
+        ).all():
+            prior.superseded_by_id = vex_document.id
+            superseded_ids.append(prior.id)
+    statements = [
+        _statement_from_result(
+            result, sbom_id=sbom_id, vex_document_id=vex_document.id, components=list(components), created_at=now
+        )
+        for result in results
+    ]
+    for statement in statements:
+        db.add(statement)
+    db.flush()
+    # Reconciliation trigger (spec section 11): new assertions change the
+    # context set, so refresh before the commit rather than after it.
+    _reconcile_vex(db, tenant_id=vex_document.tenant_id, sbom_id=sbom_id)
+    db.commit()
+    db.refresh(vex_document)
+    return {
+        "document_id": vex_document.id,
+        "sbom_id": sbom_id,
+        "statements_imported": len(statements),
+        "matched_statements": sum(1 for statement in statements if statement.component_id is not None),
+        "unmatched_statements": sum(1 for statement in statements if statement.component_id is None),
+        "format": vex_document.format,
+        "validation_status": vex_document.validation_status,
+        "already_imported": False,
+        "source_hash": source_hash,
+        "source_document_id": source_document_id,
+        "source_document_version": source_document_version,
+        "superseded_document_ids": superseded_ids,
+    }
+
+
+def process_embedded_vex_for_sbom(db: Session, sbom_id: int) -> dict[str, Any]:
+    """Best-effort import of VEX statements embedded in a trusted SBOM."""
+    sbom = db.get(SBOMSource, sbom_id)
+    if sbom is None or not sbom.sbom_data:
+        return {"sbom_id": sbom_id, "statements_imported": 0}
+    try:
+        document = json.loads(sbom.sbom_data)
+    except (TypeError, ValueError):
+        return {"sbom_id": sbom_id, "statements_imported": 0}
+    if not isinstance(document, dict) or "vulnerabilities" not in document:
+        return {"sbom_id": sbom_id, "statements_imported": 0}
+    try:
+        return import_vex_document(
+            db,
+            sbom_id,
+            document,
+            source_type="embedded",
+            source_name="Embedded CycloneDX VEX",
+        )
+    except HTTPException:
+        return {"sbom_id": sbom_id, "statements_imported": 0, "validation_status": "ignored"}
+
+
+def _reconcile_vex(db: Session, *, tenant_id: int, sbom_id: int) -> None:
+    """Refresh VEX contexts for one SBOM; never fatal to the caller.
+
+    Imported late to avoid a circular import: the reconciliation engine reads
+    this module's status helpers.
+    """
+    from ..vex.reconciliation import recompute_for_sbom
+
+    # SAVEPOINT so a reconciliation failure cannot poison the caller's
+    # transaction; see the matching note in analysis_service.
+    try:
+        with db.begin_nested():
+            recompute_for_sbom(db, tenant_id=tenant_id, sbom_id=sbom_id)
+    except Exception:  # noqa: BLE001 — an import or decision must still land
+        logging.getLogger("sbom.vex").exception(
+            "vex.reconciliation.failed", extra={"sbom_id": sbom_id}
+        )
+
+
+def effective_vex_statements(statements):
+    """Resolve current decisions; manual decisions survive subsequent imports.
+
+    Keep unmatched evidence distinct because no component identity is known.
+    """
+    current = {}
+    for row in statements:
+        key = (row.tenant_id, row.sbom_id, row.component_id,
+               row.vulnerability_id.strip().casefold(), row.id if row.component_id is None else None)
+        rank = (row.vex_document_id is None and row.source_name == "Manual VEX Override", row.id)
+        previous = current.get(key)
+        if previous is None or rank > (previous.vex_document_id is None and previous.source_name == "Manual VEX Override", previous.id):
+            current[key] = row
+    return list(current.values())
+
+
+def component_vulnerabilities(db: Session, *, tenant_id: int, sbom_id: int, component_id: int):
+    """Detected findings and VEX evidence for an exact tenant/SBOM/component."""
+    component = db.scalar(select(SBOMComponent).where(
+        SBOMComponent.id == component_id, SBOMComponent.sbom_id == sbom_id,
+        SBOMComponent.tenant_id == tenant_id,
+    ))
+    if component is None:
+        raise HTTPException(status_code=404, detail="Component not found in this SBOM")
+    statements = db.scalars(select(VexStatement).where(
+        VexStatement.tenant_id == tenant_id, VexStatement.sbom_id == sbom_id,
+        VexStatement.component_id == component_id,
+    )).all()
+    decisions = {row.vulnerability_id.strip().upper(): row for row in effective_vex_statements(statements)}
+    entries = {}
+    findings = vex_component_findings(
+        db, tenant_id=tenant_id, sbom_id=sbom_id, component_id=component_id
+    )
+    for finding in findings:
+        key = finding.vuln_id.strip().upper()
+        entry = entries.setdefault(key, {"vulnerability_id": key, "severity": finding.severity,
+                                        "findings": []})
+        entry["findings"].append({"id": finding.id, "run_id": finding.analysis_run_id,
+            "source": finding.source, "match_reason": finding.match_reason,
+            "matched_range": finding.matched_range, "title": finding.title})
+    for key in decisions:
+        entries.setdefault(key, {"vulnerability_id": key, "severity": None, "findings": []})
+    for key, entry in entries.items():
+        entry["current_decision"] = _statement_dict(decisions.get(key))
+    return {"tenant_id": tenant_id, "sbom_id": sbom_id, "component_id": component_id,
+            "component_name": component.name, "component_version": component.version,
+            "vulnerabilities": [entries[key] for key in sorted(entries)]}
+
+
+def pair_history(db: Session, *, tenant_id: int, sbom_id: int, component_id: int, vulnerability_id: str):
+    rows = db.scalars(select(VexStatement).where(
+        VexStatement.tenant_id == tenant_id, VexStatement.sbom_id == sbom_id,
+        VexStatement.component_id == component_id,
+        func.lower(VexStatement.vulnerability_id) == vulnerability_id.strip().lower(),
+    ).order_by(VexStatement.id.desc())).all()
+    current = effective_vex_statements(rows)
+    return {"current_decision": _statement_dict(current[0]) if current else None,
+            "statements": [_statement_dict(row) for row in rows]}
+
+
+def effective_vex_for_sbom(db: Session, *, tenant_id: int, sbom_id: int):
+    return {(row.component_id, row.vulnerability_id.strip().upper()): row
+            for row in effective_vex_statements(db.scalars(select(VexStatement).where(
+                VexStatement.tenant_id == tenant_id, VexStatement.sbom_id == sbom_id,
+                VexStatement.component_id.is_not(None),
+            )).all())}
+
+
+def list_vex_statements(db: Session, sbom_id: int) -> dict[str, Any]:
+    sbom = db.get(SBOMSource, sbom_id)
+    if sbom is None:
+        raise HTTPException(status_code=404, detail="SBOM not found")
+    statements = db.execute(select(VexStatement).where(VexStatement.sbom_id == sbom_id)).scalars().all()
+    options = {(row.component_id, row.vulnerability_id.strip().upper()) for row in statements if row.component_id}
+    findings = vex_sbom_finding_pairs(db, sbom_id=sbom_id)
+    options.update((component_id, vuln.strip().upper()) for component_id, vuln in findings if vuln)
+    return {"sbom_id": sbom_id,
+            "statements": [_statement_dict(row) for row in effective_vex_statements(statements)],
+            "vulnerability_options": [{"component_id": cid, "vulnerability_id": vuln}
+                                      for cid, vuln in sorted(options)]}
+
+
+def vex_report(db: Session, sbom_id: int, *, status_filter: str | None = None) -> dict[str, Any]:
+    data = list_vex_statements(db, sbom_id)
+    statements = data["statements"]
+    if status_filter:
+        status = _normalize_vex_status(status_filter)
+        statements = [statement for statement in statements if _normalize_vex_status(statement.get("status")) == status]
+    counts = {status: 0 for status in ALLOWED_VEX_STATUSES}
+    unmatched = 0
+    for statement in statements:
+        if statement.get("component_id") is None:
+            unmatched += 1
+            continue
+        counts[_normalize_vex_status(statement.get("status"))] += 1
+    return {
+        **data,
+        "generated_at": now_iso(),
+        "summary": {**counts, "total": len(statements) - unmatched, "unmatched": unmatched},
+        "statements": statements,
+    }
+
+
+def vex_report_csv(db: Session, sbom_id: int, *, status_filter: str | None = None) -> str:
+    import csv
+    import io
+
+    report = vex_report(db, sbom_id, status_filter=status_filter)
+    out = io.StringIO()
+    writer = csv.DictWriter(
+        out,
+        fieldnames=[
+            "vulnerability_id",
+            "cve_id",
+            "component_name",
+            "component_version",
+            "status",
+            "justification",
+            "impact_statement",
+            "action_statement",
+            "fixed_version",
+            "mitigation",
+            "source_name",
+            "source_url",
+            "confidence",
+            "created_at",
+            "matched",
+        ],
+    )
+    writer.writeheader()
+    for statement in report["statements"]:
+        writer.writerow(
+            {
+                "vulnerability_id": statement.get("vulnerability_id"),
+                "cve_id": statement.get("cve_id"),
+                "component_name": statement.get("component_name"),
+                "component_version": statement.get("component_version"),
+                "status": statement.get("status"),
+                "justification": statement.get("justification"),
+                "impact_statement": statement.get("impact_statement"),
+                "action_statement": statement.get("action_statement"),
+                "fixed_version": statement.get("fixed_version"),
+                "mitigation": statement.get("mitigation"),
+                "source_name": statement.get("source_name"),
+                "source_url": statement.get("source_url"),
+                "confidence": statement.get("confidence"),
+                "created_at": statement.get("created_at"),
+                "matched": statement.get("component_id") is not None,
+            }
+        )
+    return out.getvalue()
+
+
+@workflow_event("vex_override", completed_event="vex_processing_completed")
+def apply_vex_override(
+    db: Session,
+    component_id: int,
+    vulnerability_id: str,
+    payload: dict[str, Any],
+    *,
+    changed_by: str | None = None,
+    commit: bool = True,
+) -> VexStatement:
+    vulnerability_id = vulnerability_id.strip().upper()
+    if not vulnerability_id or any(char.isspace() for char in vulnerability_id) or any(char in vulnerability_id for char in ",/\\"):
+        raise HTTPException(status_code=422, detail="Supply one vulnerability identifier")
+    if vulnerability_id.startswith("CVE-"):
+        import re
+        if not re.fullmatch(r"CVE-\d{4}-\d{4,}", vulnerability_id):
+            raise HTTPException(status_code=422, detail="Invalid CVE identifier")
+    payload = {key: value.strip() if isinstance(value, str) else value for key, value in payload.items()}
+    component = db.get(SBOMComponent, component_id)
+    if component is None:
+        raise HTTPException(status_code=404, detail="Component not found")
+    status = _normalize_vex_status(payload.get("status") or payload.get("vex_status"))
+    if status == "fixed" and not (
+        payload.get("fixed_version")
+        or payload.get("evidence_url")
+        or payload.get("source_url")
+    ):
+        raise HTTPException(status_code=422, detail="Manual VEX fixed override requires fixed version or evidence")
+    result = _validate_vex_result(
+        VexResult(
+            component_name=component.name,
+            component_version=component.version,
+            vulnerability_id=vulnerability_id,
+            cve_id=_cve_id(vulnerability_id),
+            product_context=component.sbom.sbom_name if component.sbom else None,
+            vex_status=status,
+            vex_justification=payload.get("justification") or payload.get("vex_justification"),
+            impact_statement=payload.get("impact_statement"),
+            action_statement=payload.get("action_statement"),
+            fixed_version=payload.get("fixed_version"),
+            mitigation=payload.get("mitigation"),
+            source_name="Manual VEX Override",
+            source_url=payload.get("evidence_url") or payload.get("source_url"),
+            evidence={"reason": payload.get("reason"), "evidence_url": payload.get("evidence_url")},
+            confidence=HIGH if payload.get("evidence_url") else MEDIUM,
+            source_format="manual",
+            source_status=str(payload.get("status") or status).strip().lower() or None,
+            asserted_at=now_iso(),
+        )
+    )
+    if not payload.get("reason"):
+        raise HTTPException(status_code=422, detail="Manual VEX override requires reason")
+    previous = effective_vex_statements(db.scalars(
+        select(VexStatement).where(VexStatement.component_id == component_id,
+            VexStatement.sbom_id == component.sbom_id, VexStatement.tenant_id == component.tenant_id)
+        .where(func.lower(VexStatement.vulnerability_id) == vulnerability_id.lower())
+    ).all())
+    existing = previous[0] if previous else None
+    old = _statement_dict(existing) if existing else None
+    statement = _statement_from_result(
+        result,
+        sbom_id=component.sbom_id,
+        vex_document_id=None,
+        components=[component],
+        created_at=now_iso(),
+    )
+    statement.tenant_id = component.tenant_id
+    db.add(statement)
+    db.flush()
+    db.add(
+        VexOverrideAudit(
+            tenant_id=component.tenant_id,
+            component_id=component_id,
+            sbom_id=component.sbom_id,
+            vulnerability_id=vulnerability_id,
+            action=VexOverrideAudit.ACTION_DECISION,
+            # Statuses are columns as well as JSON since migration 057, so
+            # "who set this to AFFECTED" is a query (VEX-AUD-001).
+            previous_status=effective_status_for((old or {}).get("status")) if old else None,
+            new_status=effective_status_for(statement.status),
+            old_value_json=old,
+            new_value_json=_statement_dict(statement),
+            reason=str(payload.get("reason")),
+            evidence_url=payload.get("evidence_url"),
+            changed_by=changed_by,
+            changed_at=now_iso(),
+        )
+    )
+    # Reconciliation trigger (spec section 11): a manual decision is the
+    # highest-authority input, so the context must reflect it immediately.
+    _reconcile_vex(db, tenant_id=component.tenant_id, sbom_id=component.sbom_id)
+    if commit:
+        db.commit()
+    else:
+        db.flush()
+    db.refresh(statement)
+    return statement
+
+
+def vex_dashboard_summary(
+    db: Session, *, tenant_id: int | None = None, sbom_ids: Any | None = None
+) -> dict[str, Any]:
+    """Portfolio VEX metrics over reconciled contexts (VEX-DASH-001/002/003).
+
+    Aggregates :class:`~app.models.VexInvestigation` rather than
+    ``VexStatement``, which is GAP-002: an analyser finding with no VEX
+    statement used to contribute nothing to this dashboard, and now appears as
+    an ANALYZER_ONLY / UNDER_INVESTIGATION context.
+
+    ``tenant_id`` and ``sbom_ids`` make the scope explicit. Passing them is
+    strongly preferred: without them the function falls back to the ambient
+    ``dashboard_scope`` in the session (``app/db.py``), which works for the
+    dashboard router but silently returns cross-tenant counts to any caller
+    outside a scoped session.
+
+    Every pre-existing response field is retained, ``unknown_count`` included.
+    It is **deprecated**: the four canonical statuses have no UNKNOWN member,
+    so the new metrics fold it into ``under_investigation_count`` (spec
+    section 8) and this key is reported as 0 unless legacy statements are
+    being counted.
+    """
+    from ...metrics.vex import vex_context_counts, vex_top_affected_components
+
+    scope = db.info.get("dashboard_scope")
+    if tenant_id is None:
+        tenant_id = getattr(scope, "tenant_id", None)
+    if tenant_id is None:
+        raise HTTPException(status_code=403, detail="Tenant context required for VEX metrics")
+    if sbom_ids is None:
+        if scope is None:
+            raise HTTPException(status_code=400, detail="Dashboard scope required for VEX metrics")
+        sbom_ids = scope.eligible_sbom_ids()
+
+    counts = vex_context_counts(db, tenant_id=tenant_id, sbom_ids=sbom_ids)
+
+    component_names = {
+        row.id: row
+        for row in db.scalars(
+            select(SBOMComponent).where(
+                SBOMComponent.id.in_(
+                    [cid for cid, _, _ in vex_top_affected_components(
+                        db, tenant_id=tenant_id, sbom_ids=sbom_ids
+                    ) if cid is not None]
+                )
+            )
+        ).all()
+    }
+    top_affected = [
+        {
+            "component_id": component_id,
+            "component_name": getattr(component_names.get(component_id), "name", None),
+            "component_version": getattr(component_names.get(component_id), "version", None),
+            "vulnerability_id": vulnerability_id,
+            "status": "affected",
+        }
+        for component_id, vulnerability_id, _ in vex_top_affected_components(
+            db, tenant_id=tenant_id, sbom_ids=sbom_ids
+        )
+    ]
+
+    return {
+        # --- legacy shape, unchanged for backward compatibility ---
+        "affected_count": counts["affected_count"],
+        "not_affected_count": counts["not_affected_count"],
+        "fixed_count": counts["fixed_count"],
+        "under_investigation_count": counts["under_investigation_count"],
+        "unknown_count": 0,  # deprecated; folded into under_investigation_count
+        "vulnerabilities_reduced_by_vex": counts["not_affected_count"] + counts["fixed_count"],
+        "vulnerabilities_requiring_action": counts["affected_count"]
+        + counts["under_investigation_count"],
+        "top_affected_components": top_affected,
+        # --- reconciliation metrics (VEX-API-001) ---
+        "total_contexts": counts["total_contexts"],
+        "matched_count": counts["matched_count"],
+        "analyzer_only_count": counts["analyzer_only_count"],
+        "vex_only_count": counts["vex_only_count"],
+        "conflict_review_count": counts["conflict_review_count"],
+        "revalidation_required_count": counts["revalidation_required_count"],
+        "unresolved_mapping_count": counts["unresolved_mapping_count"],
+        "needs_review_count": counts["needs_review_count"],
+    }
+
+
+def _result_from_payload(
+    vuln: dict[str, Any],
+    component: SBOMComponent | None,
+    vuln_id: str,
+    status: str,
+    sbom: SBOMSource,
+    source_name: str,
+    source_url: str | None,
+    *,
+    fixed_version: str | None = None,
+    affected_ref: Any | None = None,
+    affected_version: Any | None = None,
+    source_status: str | None = None,
+    asserted_at: str | None = None,
+) -> VexResult:
+    analysis = vuln.get("analysis") if isinstance(vuln.get("analysis"), dict) else {}
+    evidence = {"vulnerability": vuln, "affected_ref": affected_ref, "affected_version": affected_version}
+    if component:
+        evidence["matched_component_id"] = component.id
+    return VexResult(
+        component_name=component.name if component else str(affected_ref or sbom.sbom_name),
+        component_version=component.version if component else None,
+        vulnerability_id=vuln_id,
+        cve_id=_cve_id(vuln_id),
+        product_context=sbom.sbom_name,
+        vex_status=_normalize_vex_status(status),
+        vex_justification=analysis.get("justification") or vuln.get("justification"),
+        impact_statement=analysis.get("detail") or vuln.get("description"),
+        action_statement=_response_text(analysis),
+        fixed_version=fixed_version,
+        mitigation=vuln.get("recommendation"),
+        source_name=source_name,
+        source_url=source_url,
+        evidence=evidence,
+        confidence=MEDIUM if component else LOW,
+        source_format="cyclonedx",
+        source_status=source_status,
+        asserted_at=asserted_at,
+    )
+
+
+def _statement_from_result(
+    result: VexResult,
+    *,
+    sbom_id: int,
+    vex_document_id: int | None,
+    components: list[SBOMComponent],
+    created_at: str,
+) -> VexStatement:
+    # Candidate-aware mapping (VEX-MAP-001): several components satisfying a
+    # weak match yields no binding at all rather than an arbitrary first pick.
+    # The legacy single-component matcher stays as the fallback for references
+    # the structured matcher cannot read.
+    evidence = result.evidence if isinstance(result.evidence, dict) else {}
+    reference = evidence.get("affected_ref") or evidence.get("product") or result.component_name
+    match = match_component(reference, components)
+
+    matched_id = evidence.get("matched_component_id")
+    component = next((c for c in components if c.id == matched_id), None) if matched_id else None
+    if component is None and match.component_id is not None:
+        component = next((c for c in components if c.id == match.component_id), None)
+    if component is None and not match.is_ambiguous:
+        component = _match_component(components, result.component_name)
+
+    # Version applicability (VEX-MAP-002): a statement that does not cover the
+    # component's version is kept as evidence but cannot become effective.
+    affected_version = evidence.get("affected_version")
+    specification = None
+    if isinstance(affected_version, dict):
+        specification = affected_version.get("range") or affected_version.get("version")
+    version_applicable = (
+        version_applies(component.version, specification) if component is not None else None
+    )
+
+    return VexStatement(
+        vex_document_id=vex_document_id,
+        sbom_id=sbom_id,
+        component_id=component.id if component else None,
+        vulnerability_id=result.vulnerability_id,
+        cve_id=result.cve_id,
+        status=result.vex_status,
+        justification=result.vex_justification,
+        impact_statement=result.impact_statement,
+        action_statement=result.action_statement,
+        fixed_version=result.fixed_version,
+        mitigation=result.mitigation,
+        source_name=result.source_name,
+        source_url=result.source_url,
+        confidence=result.confidence,
+        evidence_json=result.evidence,
+        created_at=created_at,
+        source_format=result.source_format,
+        source_status=result.source_status,
+        normalized_status=effective_status_for(result.vex_status),
+        asserted_at=result.asserted_at,
+        match_strategy=match.strategy.value,
+        match_confidence=match.confidence.value,
+        version_applicable=version_applicable,
+    )
+
+
+def _validate_vex_result(result: VexResult) -> VexResult:
+    result.vex_status = _normalize_vex_status(result.vex_status)
+    if result.vex_status == "not_affected" and not (result.vex_justification or result.impact_statement):
+        raise HTTPException(status_code=422, detail="VEX not_affected requires justification or impact statement")
+    if result.vex_status == "fixed" and not (result.fixed_version or result.impact_statement or result.evidence):
+        raise HTTPException(status_code=422, detail="VEX fixed requires fixed version or evidence")
+    return result
+
+
+def _normalize_vex_status(value: Any) -> str:
+    text = str(value or "unknown").strip().lower().replace("-", "_").replace(" ", "_")
+    aliases = {
+        "unaffected": "not_affected",
+        "notaffected": "not_affected",
+        "resolved": "fixed",
+        "resolved_with_pedigree": "fixed",
+        "in_triage": "under_investigation",
+        "investigating": "under_investigation",
+        "exploitable": "affected",
+    }
+    text = aliases.get(text, text)
+    if text not in ALLOWED_VEX_STATUSES:
+        raise HTTPException(status_code=422, detail="Invalid VEX status")
+    return text
+
+
+#: Legacy five-value VEX status -> the four canonical effective statuses
+#: (VEX-STAT-001). ``unknown`` is source evidence only: per spec section 8 its
+#: effective status is UNDER_INVESTIGATION, while the native term survives on
+#: ``VexStatement.source_status``.
+_EFFECTIVE_STATUS_BY_NORMALIZED: dict[str, str] = {
+    "affected": EffectiveVexStatus.AFFECTED.value,
+    "not_affected": EffectiveVexStatus.NOT_AFFECTED.value,
+    "fixed": EffectiveVexStatus.FIXED.value,
+    "under_investigation": EffectiveVexStatus.UNDER_INVESTIGATION.value,
+    "unknown": EffectiveVexStatus.UNDER_INVESTIGATION.value,
+}
+
+
+def effective_status_for(normalized_status: Any) -> str:
+    """Map a legacy lowercase VEX status to its canonical effective status."""
+    key = str(normalized_status or "unknown").strip().lower()
+    return _EFFECTIVE_STATUS_BY_NORMALIZED.get(key, EffectiveVexStatus.UNDER_INVESTIGATION.value)
+
+
+def document_source_hash(document: Any) -> str:
+    """Stable SHA-256 identity for an imported VEX document (VEX-ING-002).
+
+    Hashes a canonical JSON serialisation — sorted keys, no insignificant
+    whitespace — so re-uploading the same document with different formatting
+    is still recognised as already imported rather than duplicating every
+    statement.
+    """
+    canonical = json.dumps(document, sort_keys=True, separators=(",", ":"), default=str)
+    return hashlib.sha256(canonical.encode("utf-8")).hexdigest()
+
+
+def _document_identity(document: Any) -> tuple[str | None, str | None, str | None]:
+    """Best-effort ``(document_id, version, asserted_at)`` across VEX formats."""
+    if not isinstance(document, dict):
+        return None, None, None
+    tracking = {}
+    metadata = document.get("document") if isinstance(document.get("document"), dict) else {}
+    if isinstance(metadata.get("tracking"), dict):
+        tracking = metadata["tracking"]
+    doc_id = (
+        document.get("@id")                      # OpenVEX
+        or document.get("serialNumber")          # CycloneDX
+        or tracking.get("id")                    # CSAF
+        or None
+    )
+    version = document.get("version") or tracking.get("version")
+    asserted_at = (
+        document.get("timestamp")                # OpenVEX
+        or tracking.get("current_release_date")  # CSAF
+        or tracking.get("initial_release_date")
+        or ((document.get("metadata") or {}).get("timestamp") if isinstance(document.get("metadata"), dict) else None)
+    )
+    return (
+        str(doc_id) if doc_id is not None else None,
+        str(version) if version is not None else None,
+        str(asserted_at) if asserted_at is not None else None,
+    )
+
+
+def _match_component(components: list[SBOMComponent], ref: Any) -> SBOMComponent | None:
+    if ref is None:
+        return None
+    ref_data = ref if isinstance(ref, dict) else {}
+    text = _component_ref_text(ref)
+    for component in components:
+        if text and text in _component_candidates(component):
+            return component
+        if ref_data and _component_matches_product(component, ref_data):
+            return component
+    return None
+
+
+def _component_candidates(component: SBOMComponent) -> set[str]:
+    name = _norm(component.name)
+    version = _norm(component.version)
+    supplier = _norm(component.supplier)
+    candidates = {
+        _norm(component.id),
+        _norm(component.bom_ref),
+        _norm(component.purl),
+        _norm(component.cpe),
+        name,
+    }
+    if name and version:
+        candidates.update({f"{name}@{version}", f"{name}:{version}", f"{name} {version}"})
+    if supplier and name and version:
+        candidates.update(
+            {f"{supplier}/{name}@{version}", f"{supplier}:{name}:{version}", f"{supplier} {name} {version}"}
+        )
+    return {candidate for candidate in candidates if candidate}
+
+
+def _component_matches_product(component: SBOMComponent, product: dict[str, Any]) -> bool:
+    helper = (
+        product.get("product_identification_helper")
+        if isinstance(product.get("product_identification_helper"), dict)
+        else {}
+    )
+    purls = _as_list(product.get("purl")) + _as_list(helper.get("purl"))
+    cpes = _as_list(product.get("cpe")) + _as_list(helper.get("cpe")) + _as_list(helper.get("cpe23Uri"))
+    product_name = _norm(product.get("name") or product.get("product_name"))
+    product_version = _norm(product.get("version") or helper.get("version"))
+    product_supplier = _norm(product.get("supplier") or product.get("vendor") or helper.get("supplier"))
+    if component.purl and any(_norm(component.purl) == _norm(purl) for purl in purls):
+        return True
+    if component.cpe and any(_norm(component.cpe) == _norm(cpe) for cpe in cpes):
+        return True
+    comp_name = _norm(component.name)
+    comp_version = _norm(component.version)
+    comp_supplier = _norm(component.supplier)
+    if product_name and product_name == comp_name and (not product_version or product_version == comp_version):
+        return True
+    return bool(
+        product_supplier
+        and comp_supplier
+        and product_supplier == comp_supplier
+        and product_name == comp_name
+        and (not product_version or product_version == comp_version)
+    )
+
+
+def _component_ref_text(ref: Any) -> str:
+    if isinstance(ref, dict):
+        for key in ("product_id", "productId", "id", "bom_ref", "bom-ref", "purl", "cpe", "name"):
+            value = ref.get(key)
+            if value:
+                return _norm(value)
+        return ""
+    return _norm(ref)
+
+
+def _vulnerability_id(payload: dict[str, Any]) -> str | None:
+    value = payload.get("id") or payload.get("bom-ref")
+    if value:
+        return str(value)
+    ratings = payload.get("ratings") if isinstance(payload.get("ratings"), list) else []
+    for rating in ratings:
+        if isinstance(rating, dict) and rating.get("source"):
+            return str(rating["source"])
+    return None
+
+
+def _cve_id(value: str) -> str | None:
+    upper = value.upper()
+    return upper if upper.startswith("CVE-") else None
+
+
+def _fixed_version(analysis: dict[str, Any]) -> str | None:
+    value = analysis.get("fixedVersion") or analysis.get("fixed_version")
+    return str(value) if value else None
+
+
+def _response_text(analysis: dict[str, Any]) -> str | None:
+    responses = analysis.get("response")
+    if isinstance(responses, list) and responses:
+        return ", ".join(str(item) for item in responses)
+    return str(responses) if responses else None
+
+
+def _detect_format(document: dict[str, Any]) -> str:
+    if _is_csaf_document(document):
+        return "CSAF VEX"
+    if "vulnerabilities" in document and "bomFormat" in document:
+        return "CycloneDX VEX"
+    if "statements" in document:
+        return "OpenVEX"
+    return "VEX JSON"
+
+
+def _author(document: dict[str, Any]) -> str | None:
+    csaf_doc = document.get("document") if isinstance(document.get("document"), dict) else {}
+    publisher = csaf_doc.get("publisher") if isinstance(csaf_doc.get("publisher"), dict) else {}
+    metadata = document.get("metadata") if isinstance(document.get("metadata"), dict) else {}
+    supplier = metadata.get("supplier") if isinstance(metadata.get("supplier"), dict) else {}
+    value = document.get("author") or publisher.get("name") or supplier.get("name")
+    return str(value) if value else None
+
+
+def _statement_dict(statement: VexStatement | None) -> dict[str, Any] | None:
+    if statement is None:
+        return None
+    return {
+        "id": statement.id,
+        "vex_document_id": statement.vex_document_id,
+        "sbom_id": statement.sbom_id,
+        "component_id": statement.component_id,
+        "component_name": statement.component.name if statement.component else None,
+        "component_version": statement.component.version if statement.component else None,
+        "vulnerability_id": statement.vulnerability_id,
+        "cve_id": statement.cve_id,
+        "status": statement.status,
+        "justification": statement.justification,
+        "impact_statement": statement.impact_statement,
+        "action_statement": statement.action_statement,
+        "fixed_version": statement.fixed_version,
+        "mitigation": statement.mitigation,
+        "source_name": statement.source_name,
+        "source_url": statement.source_url,
+        "confidence": statement.confidence or UNKNOWN_CONFIDENCE,
+        "evidence_json": statement.evidence_json,
+        "created_at": statement.created_at,
+    }
+
+
+def _is_csaf_document(document: dict[str, Any]) -> bool:
+    return (
+        isinstance(document.get("document"), dict)
+        and isinstance(document.get("product_tree"), dict)
+        and isinstance(document.get("vulnerabilities"), list)
+    )
+
+
+def _validate_csaf_structure(document: dict[str, Any]) -> None:
+    if not isinstance(document.get("document"), dict):
+        raise HTTPException(status_code=422, detail="CSAF document missing document metadata")
+    if not isinstance(document.get("product_tree"), dict):
+        raise HTTPException(status_code=422, detail="CSAF document missing product_tree")
+    if not isinstance(document.get("vulnerabilities"), list):
+        raise HTTPException(status_code=422, detail="CSAF document missing vulnerabilities")
+
+
+def _csaf_products(document: dict[str, Any]) -> dict[str, dict[str, Any]]:
+    products: dict[str, dict[str, Any]] = {}
+    tree = document.get("product_tree") if isinstance(document.get("product_tree"), dict) else {}
+
+    def add_product(payload: dict[str, Any]) -> None:
+        product_id = payload.get("product_id") or payload.get("productId")
+        if not product_id:
+            return
+        products[str(product_id)] = {
+            "product_id": str(product_id),
+            "name": payload.get("name") or payload.get("product_name") or str(product_id),
+            "product_identification_helper": payload.get("product_identification_helper") or {},
+            "version": payload.get("version"),
+            "supplier": payload.get("supplier"),
+        }
+
+    for full in tree.get("full_product_names") or []:
+        if isinstance(full, dict):
+            add_product(full)
+    for relationship in tree.get("relationships") or []:
+        if isinstance(relationship, dict) and isinstance(relationship.get("full_product_name"), dict):
+            add_product(relationship["full_product_name"])
+
+    def walk_branch(branch: dict[str, Any], inherited: list[str] | None = None) -> None:
+        inherited = inherited or []
+        name_parts = inherited + ([str(branch.get("name"))] if branch.get("name") else [])
+        if isinstance(branch.get("product"), dict):
+            product = dict(branch["product"])
+            product.setdefault("name", " ".join(name_parts) or product.get("product_id"))
+            add_product(product)
+        for child in branch.get("branches") or []:
+            if isinstance(child, dict):
+                walk_branch(child, name_parts)
+
+    for branch in tree.get("branches") or []:
+        if isinstance(branch, dict):
+            walk_branch(branch)
+    return products
+
+
+def _csaf_vulnerability_id(vuln: dict[str, Any]) -> str | None:
+    if vuln.get("cve"):
+        return str(vuln["cve"])
+    for item in vuln.get("ids") or []:
+        if isinstance(item, dict) and item.get("text"):
+            return str(item["text"])
+    return _text(vuln.get("title"))
+
+
+def _csaf_status(status: str) -> str | None:
+    key = str(status or "").strip().lower()
+    if key in {"known_affected", "first_affected", "last_affected", "affected"}:
+        return "affected"
+    if key in {"known_not_affected", "not_affected"}:
+        return "not_affected"
+    if key in {"fixed", "first_fixed", "recommended"}:
+        return "fixed"
+    if key == "under_investigation":
+        return "under_investigation"
+    if key == "unknown":
+        return "unknown"
+    return None
+
+
+def _csaf_justification(vuln: dict[str, Any], product_id: str | None) -> str | None:
+    for flag in vuln.get("flags") or []:
+        if not isinstance(flag, dict):
+            continue
+        products = {str(item) for item in flag.get("product_ids") or []}
+        if product_id is None or not products or product_id in products:
+            return _text(flag.get("label")) or _text(flag.get("description"))
+    return None
+
+
+def _csaf_impact_statement(vuln: dict[str, Any], product_id: str | None) -> str | None:
+    for threat in vuln.get("threats") or []:
+        if not isinstance(threat, dict):
+            continue
+        products = {str(item) for item in threat.get("product_ids") or []}
+        if product_id is None or not products or product_id in products:
+            if str(threat.get("category") or "").lower() in {"impact", "exploit_status"}:
+                return _text(threat.get("details"))
+    for note in vuln.get("notes") or []:
+        if isinstance(note, dict) and str(note.get("category") or "").lower() in {"description", "summary"}:
+            return _text(note.get("text"))
+    return None
+
+
+def _csaf_action_statement(vuln: dict[str, Any], product_id: str | None) -> str | None:
+    actions: list[str] = []
+    for remediation in vuln.get("remediations") or []:
+        if not isinstance(remediation, dict):
+            continue
+        products = {str(item) for item in remediation.get("product_ids") or []}
+        if product_id is not None and products and product_id not in products:
+            continue
+        category = str(remediation.get("category") or "").replace("_", " ")
+        details = _text(remediation.get("details"))
+        if details:
+            actions.append(f"{category}: {details}" if category else details)
+    return "; ".join(actions) if actions else None
+
+
+def _csaf_fixed_version(vuln: dict[str, Any], product_id: str | None) -> str | None:
+    for remediation in vuln.get("remediations") or []:
+        if not isinstance(remediation, dict):
+            continue
+        products = {str(item) for item in remediation.get("product_ids") or []}
+        if product_id is not None and products and product_id not in products:
+            continue
+        if str(remediation.get("category") or "").lower() in {"vendor_fix", "update"}:
+            for key in ("fixed_version", "version"):
+                value = remediation.get(key)
+                if isinstance(value, str) and value.strip():
+                    return value.strip()
+    return None
+
+
+def _csaf_mitigation(vuln: dict[str, Any], product_id: str | None) -> str | None:
+    mitigations: list[str] = []
+    for remediation in vuln.get("remediations") or []:
+        if not isinstance(remediation, dict):
+            continue
+        products = {str(item) for item in remediation.get("product_ids") or []}
+        if product_id is not None and products and product_id not in products:
+            continue
+        if str(remediation.get("category") or "").lower() in {"mitigation", "workaround", "no_fix_planned"}:
+            details = _text(remediation.get("details"))
+            if details:
+                mitigations.append(details)
+    return "; ".join(mitigations) if mitigations else None
+
+
+def _as_list(value: Any) -> list[Any]:
+    if value is None:
+        return []
+    if isinstance(value, list):
+        return value
+    return [value]
+
+
+def _text(value: Any) -> str | None:
+    if value is None:
+        return None
+    text = str(value).strip()
+    return text or None
+
+
+def _norm(value: Any) -> str:
+    return str(value or "").strip().lower()
+
+
+__all__ = [
+    "ALLOWED_VEX_STATUSES",
+    "VexProvider",
+    "apply_vex_override",
+    "import_vex_document",
+    "list_vex_statements",
+    "process_embedded_vex_for_sbom",
+    "vex_report",
+    "vex_report_csv",
+    "vex_dashboard_summary",
+]

@@ -1,0 +1,840 @@
+"""
+SBOM Analyzer — FastAPI application entry point.
+
+This module is intentionally slim. After the principles-driven refactor it
+contains ONLY:
+
+  * FastAPI app construction
+  * CORS + request-logging middleware
+  * Startup hook (DB seed / backfill / migrations)
+  * Router registration
+
+All routes live in `app/routers/`, all business logic in `app/services/`,
+all DB access in `app/repositories/`, and all configuration in
+`app/settings.py`.
+
+Design principles applied here:
+  - Single Responsibility: this file only wires the app together.
+  - Separation of Concerns: routes, services, repositories, settings split.
+  - Dependency Inversion: routers depend on service abstractions.
+  - Explicit over Implicit: every router is registered by name below.
+"""
+
+from __future__ import annotations
+
+from contextlib import asynccontextmanager
+from pathlib import Path
+
+from fastapi import Depends, FastAPI, Request
+from fastapi.middleware.cors import CORSMiddleware
+from slowapi.errors import RateLimitExceeded
+from slowapi.middleware import SlowAPIMiddleware
+from sqlalchemy import MetaData, Table, func, select, update
+from starlette.middleware.gzip import GZipMiddleware
+from starlette.routing import compile_path
+
+from .logger import get_logger, setup_logging
+
+# Initialise logging FIRST so subsequent imports inherit the config.
+setup_logging()
+log = get_logger("api")
+
+from datetime import UTC, datetime
+
+from . import error_handlers
+from .auth import validate_auth_setup
+from .core.route_policies import ROUTE_POLICIES
+from .core.security import enforce_request_access
+from .db import Base, SessionLocal, engine
+from .http_client import close_async_http_client, init_async_http_client
+from .middleware import MaxBodySizeMiddleware
+from .middleware.request_logging import RequestLoggingMiddleware
+
+# --- Routers --------------------------------------------------------------
+from .nvd_mirror.api import router as nvd_mirror_admin_router
+from .rate_limit import limiter, rate_limit_exceeded_handler
+from .routers import (
+    ai_copilot,
+    ai_credentials,
+    ai_fixes,
+    ai_usage,
+    analyze_endpoints,
+    authorization_catalog,
+    compare,
+    component_advisor,
+    cves,
+    dashboard_advanced,
+    dashboard_main,
+    health,
+    kev,
+    lifecycle,
+    lifecycle_admin,
+    logical_sboms,
+    pdf,
+    platform,
+    products,
+    projects,
+    remediation,
+    reports,
+    runs,
+    sbom_auto_repair,
+    sbom_upload,
+    sbom_validation_sessions,
+    sbom_versions,
+    sboms_crud,
+    schedules,
+    tenants,
+    verification,
+    vex,
+    vex_investigations,
+    vulnerabilities,
+)
+from .routers import analysis as analysis_export_router
+from .routers import dashboard as dashboard_trend_router
+from .routers import sbom as sbom_features_router
+from .services.analysis_service import backfill_analytics_tables, reconcile_stale_analysis_runs
+from .services.sbom_service import now_iso  # re-exported for tests/back-compat
+from .settings import get_settings
+
+# --- App construction ----------------------------------------------------
+settings = get_settings()
+APP_VERSION = settings.APP_VERSION
+
+
+def _sync_postgres_sequence(db, table_name: str, column_name: str) -> None:
+    """Keep PostgreSQL sequences aligned after startup seeds explicit ids."""
+    if engine.dialect.name != "postgresql":
+        return
+    from .models import IAMUser, Tenant
+
+    allowed_columns = {
+        ("tenants", "id"): Tenant.id,
+        ("iam_users", "id"): IAMUser.id,
+    }
+    model_column = allowed_columns.get((table_name, column_name))
+    if model_column is None:
+        raise RuntimeError("Unsupported PostgreSQL sequence target")
+
+    sequence = db.execute(
+        select(func.pg_get_serial_sequence(table_name, column_name)),
+    ).scalar()
+    if not sequence:
+        return
+    max_value = int(db.execute(select(func.coalesce(func.max(model_column), 0))).scalar_one() or 0)
+    db.execute(
+        select(func.setval(func.to_regclass(sequence), max(max_value, 1), max_value > 0)),
+    )
+
+
+def _ensure_seed_data() -> None:
+    """Prepare legacy SQLite or validate PostgreSQL, then seed reference data."""
+    # Enforce schema check before doing any operations
+    _verify_schema_is_current()
+
+    if engine.dialect.name == "sqlite":
+        Base.metadata.create_all(bind=engine)
+    elif engine.dialect.name == "postgresql":
+        # Handled by _verify_schema_is_current
+        pass
+    else:
+        raise RuntimeError(f"Unsupported database dialect: {engine.dialect.name}")
+
+    db = SessionLocal()
+    try:
+        # Seed the local development identity. Production HCL IAM users are
+        # mapped from validated claims and explicit tenant memberships.
+        from .models import (
+            IAMUser,
+            SBOMSource,
+            Tenant,
+            TenantUser,
+            TenantUserRoleAssignment,
+        )
+        from .services.tenant_role_assignment_service import (
+            create_initial_assignment,
+        )
+
+        now = datetime.now(UTC)
+        from .services.maintenance_scope import active_tenant_ids, maintenance_tenant
+
+        for tenant_id in active_tenant_ids():
+            with maintenance_tenant(tenant_id, "startup.sbom_status_repair"):
+                db.execute(
+                    update(SBOMSource)
+                    .where(SBOMSource.tenant_id == tenant_id, SBOMSource.validated_at.is_(None), SBOMSource.status == "validated")
+                    .values(status="pending")
+                )
+                # Release this tenant's write transaction before the separate
+                # completion-audit session (also required by SQLite).
+                db.commit()
+        if not get_settings().auth_enabled:
+            tenant = db.get(Tenant, 1)
+            if tenant is None:
+                tenant = Tenant(
+                    id=1,
+                    name="Default Tenant",
+                    slug="default",
+                    external_iam_tenant_id="local-default",
+                    status="ACTIVE",
+                    created_at=now,
+                    updated_at=now,
+                )
+                db.add(tenant)
+            else:
+                tenant.status = "ACTIVE"
+            user = db.get(IAMUser, 1)
+            if user is None:
+                user = IAMUser(
+                    id=1,
+                    external_iam_user_id="dev-user",
+                    external_issuer="https://local-dev.invalid",
+                    external_subject="dev-user",
+                    email="dev@local",
+                    display_name="Dev User",
+                    user_principal_name="dev@local",
+                    employee_id="LOCAL-DEV",
+                    status="ACTIVE",
+                    email_verified=True,
+                    email_verified_at=now,
+                    verification_required=False,
+                    last_claim_sync_at=now,
+                    created_at=now,
+                    updated_at=now,
+                    last_login_at=now,
+                )
+                db.add(user)
+            else:
+                if user.external_iam_user_id == "local-dev-admin":
+                    user.external_iam_user_id = "dev-user"
+                    user.email = user.email or "dev@local"
+                    user.display_name = user.display_name or "Dev User"
+                user.status = "ACTIVE"
+                user.external_issuer = user.external_issuer or "https://local-dev.invalid"
+                user.external_subject = user.external_subject or "dev-user"
+                user.user_principal_name = user.user_principal_name or "dev@local"
+                user.employee_id = user.employee_id or "LOCAL-DEV"
+                user.email_verified = True
+                user.email_verified_at = user.email_verified_at or now
+                user.verification_required = False
+            db.flush()
+            _sync_postgres_sequence(db, "tenants", "id")
+            _sync_postgres_sequence(db, "iam_users", "id")
+            membership = db.execute(
+                select(TenantUser).where(TenantUser.tenant_id == 1, TenantUser.user_id == 1)
+            ).scalar_one_or_none()
+            if membership is None:
+                membership = TenantUser(
+                    tenant_id=1,
+                    user_id=1,
+                    role="TENANT_ADMIN",
+                    status="ACTIVE",
+                    created_at=now,
+                    updated_at=now,
+                )
+                db.add(membership)
+                db.flush()
+            else:
+                membership.role = "TENANT_ADMIN"
+                membership.status = "ACTIVE"
+            from .core.context import minimal_background_context, tenant_scope
+            with tenant_scope(minimal_background_context(membership.tenant_id)):
+                assignment_exists = db.scalar(
+                    select(TenantUserRoleAssignment.id).where(
+                        TenantUserRoleAssignment.tenant_id == membership.tenant_id,
+                        TenantUserRoleAssignment.tenant_user_id == membership.id,
+                        TenantUserRoleAssignment.status == "ACTIVE",
+                    )
+                )
+            if assignment_exists is None:
+                create_initial_assignment(
+                    db,
+                    membership,
+                    role_code="TENANT_ADMIN",
+                    actor_user_id=user.id,
+                    source="SYSTEM",
+                )
+        else:
+            bootstrap = db.execute(
+                select(IAMUser).where(IAMUser.external_iam_user_id.in_(("local-dev-admin", "dev-user")))
+            ).scalars().all()
+            if any(user.status == "ACTIVE" for user in bootstrap):
+                log.warning("Authenticated deployment contains an active local bootstrap identity; disable it")
+        db.commit()
+
+        # Seed default SBOM types
+        from .models import SBOMType
+
+        existing = {(row.typename or "").strip().lower() for row in db.execute(select(SBOMType)).scalars().all()}
+        seeds = []
+        if "cyclonedx" not in existing:
+            seeds.append(
+                SBOMType(
+                    typename="CycloneDX",
+                    type_details="CycloneDX format",
+                    created_on=now_iso(),
+                    created_by="system",
+                )
+            )
+        if "spdx" not in existing:
+            seeds.append(
+                SBOMType(
+                    typename="SPDX",
+                    type_details="SPDX format",
+                    created_on=now_iso(),
+                    created_by="system",
+                )
+            )
+        if seeds:
+            db.add_all(seeds)
+            db.commit()
+
+        # Tenant-owned analytics backfill runs separately through
+        # _backfill_analytics_per_tenant(), where each tenant receives an
+        # explicit context, session and transaction.
+        from .services.lifecycle.provider_config_service import LifecycleProviderConfigService
+
+        LifecycleProviderConfigService().bootstrap_defaults(db)
+        db.commit()
+    finally:
+        db.close()
+
+
+def _verify_schema_is_current() -> None:
+    """Verify that the database schema is current and not stale before starting the API."""
+    from alembic.config import Config
+    from alembic.script import ScriptDirectory
+    from sqlalchemy import inspect
+
+    try:
+        inspector = inspect(engine)
+        table_names = inspector.get_table_names()
+    except Exception as exc:
+        exc_str = str(exc)
+        if (
+            "password authentication failed" in exc_str
+            or "authentication failed" in exc_str
+            or "fe_sendauth" in exc_str
+        ):
+            import sys
+
+            msg = "PostgreSQL authentication failed for user 'sbom'. Check DATABASE_URL password or reset the PostgreSQL user password."
+            print(f"\nERROR: {msg}\n", file=sys.stderr)
+            raise RuntimeError(msg) from None
+        raise
+
+    # If the database is completely empty, it's either SQLite waiting for create_all or Postgres waiting for migrations
+    if not table_names:
+        return
+
+    # Check Alembic migrations status if alembic_version table exists
+    if "alembic_version" in table_names:
+        config = Config(str(Path(__file__).resolve().parent.parent / "alembic.ini"))
+        config.set_main_option("script_location", str(Path(__file__).resolve().parent.parent / "alembic"))
+        expected_heads = set(ScriptDirectory.from_config(config).get_heads())
+        try:
+            alembic_version = Table("alembic_version", MetaData(), autoload_with=engine)
+            with engine.connect() as conn:
+                actual_heads = {str(row[0]) for row in conn.execute(select(alembic_version.c.version_num))}
+        except Exception as exc:
+            exc_str = str(exc)
+            if (
+                "password authentication failed" in exc_str
+                or "authentication failed" in exc_str
+                or "fe_sendauth" in exc_str
+            ):
+                import sys
+
+                msg = "PostgreSQL authentication failed for user 'sbom'. Check DATABASE_URL password or reset the PostgreSQL user password."
+                print(f"\nERROR: {msg}\n", file=sys.stderr)
+                raise RuntimeError(msg) from None
+            raise RuntimeError(
+                "Database schema is missing or unreadable; run 'alembic upgrade head' before starting the API."
+            ) from exc
+        if actual_heads != expected_heads:
+            raise RuntimeError(
+                "Database schema is not at Alembic head; run 'alembic upgrade head' before starting the API. "
+                f"Expected {sorted(expected_heads)}, found {sorted(actual_heads)}."
+            )
+    else:
+        # If alembic_version is missing but key tables exist, check for required columns
+        if "sbom_source" in table_names:
+            columns = [col["name"] for col in inspector.get_columns("sbom_source")]
+            if "tenant_id" not in columns:
+                raise RuntimeError("Database schema is not up to date. Run alembic upgrade head.")
+
+
+def _load_active_tenant_ids() -> list[int]:
+    """Return sorted active tenant IDs using a short-lived lookup session."""
+    from .models import Tenant
+
+    with SessionLocal() as lookup_db:
+        return list(
+            lookup_db.execute(
+                select(Tenant.id)
+                .where(Tenant.status == "ACTIVE")
+                .order_by(Tenant.id.asc())
+            ).scalars()
+        )
+
+
+def _backfill_analytics_per_tenant() -> None:
+    """Run analytics backfill once per active tenant with proper isolation.
+
+    Each tenant gets:
+    - its own ``CurrentContext`` via ``minimal_background_context``
+    - its own ``SessionLocal`` session
+    - its own transaction (commit on success, rollback on failure)
+    - automatic context cleanup via ``tenant_scope``
+    """
+    from .core.context import minimal_background_context, tenant_scope
+
+    tenant_ids = _load_active_tenant_ids()
+    log.info(
+        "analysis.startup_backfill.tenants_loaded",
+        extra={"tenant_count": len(tenant_ids)},
+    )
+
+    for tenant_id in tenant_ids:
+        ctx = minimal_background_context(tenant_id=tenant_id)
+        with tenant_scope(ctx):
+            with SessionLocal() as tenant_db:
+                try:
+                    log.info(
+                        "analysis.startup_backfill.started",
+                        extra={"tenant_id": tenant_id},
+                    )
+                    backfill_analytics_tables(tenant_db, tenant_id=tenant_id)
+                    tenant_db.commit()
+                    log.info(
+                        "analysis.startup_backfill.completed",
+                        extra={"tenant_id": tenant_id},
+                    )
+                except Exception:
+                    tenant_db.rollback()
+                    log.exception(
+                        "analysis.startup_backfill.tenant_failed",
+                        extra={"tenant_id": tenant_id},
+                    )
+                    raise
+
+
+def _update_sbom_names() -> None:
+    """Backfill analysis_run.sbom_name from sbom_source for legacy rows."""
+    from .core.context import minimal_background_context, tenant_scope
+    from .models import AnalysisRun, SBOMSource
+
+    for tenant_id in _load_active_tenant_ids():
+        ctx = minimal_background_context(tenant_id=tenant_id)
+        with tenant_scope(ctx):
+            sbom_name = select(SBOMSource.sbom_name).where(SBOMSource.id == AnalysisRun.sbom_id).scalar_subquery()
+            with SessionLocal() as db:
+                db.execute(
+                    update(AnalysisRun)
+                    .where(
+                        AnalysisRun.tenant_id == tenant_id,
+                        AnalysisRun.sbom_name.is_(None),
+                    )
+                    .values(sbom_name=sbom_name)
+                )
+                db.commit()
+
+
+def _reconcile_zombie_ai_fix_batches() -> None:
+    """Mark batches that were in-flight when the previous process exited
+    as failed.
+
+    The progress store is in-memory by default, so a restart loses every
+    live progress envelope. Without this pass, the durable ``ai_fix_batch``
+    row stays in (queued|pending|in_progress|paused_budget) forever,
+    keeping the run-detail page's banner stuck on a worker that no longer
+    exists.
+
+    Threshold: 5 minutes since ``created_at``. Anything younger is
+    plausibly a worker that's still booting; anything older has missed
+    every realistic deadline (the inline-fallback path completes in
+    seconds; even a slow paid batch finishes well inside 5 min).
+    """
+    from datetime import datetime, timedelta
+
+    from .core.context import minimal_background_context, tenant_scope
+
+    now = datetime.now(tz=UTC)
+    threshold = (now - timedelta(minutes=5)).isoformat()
+    from .models import AiFixBatch
+
+    for tenant_id in _load_active_tenant_ids():
+        ctx = minimal_background_context(tenant_id=tenant_id)
+        with tenant_scope(ctx):
+            with SessionLocal() as db:
+                result = db.execute(
+                    update(AiFixBatch)
+                    .where(
+                        AiFixBatch.tenant_id == tenant_id,
+                        AiFixBatch.status.in_(("queued", "pending", "in_progress", "paused_budget")),
+                        AiFixBatch.created_at < threshold,
+                        AiFixBatch.completed_at.is_(None),
+                    )
+                    .values(
+                        status="failed",
+                        completed_at=now.isoformat(),
+                        last_error="interrupted - the server restarted before this batch finished; re-run to retry",
+                    )
+                )
+                db.commit()
+                if result.rowcount:
+                    log.info("ai.startup.reconciled_zombie_batches: tenant=%d count=%d", tenant_id, result.rowcount)
+
+
+def _reconcile_stale_analysis_runs() -> None:
+    """Mark old in-process analysis runs interrupted after an API restart."""
+    from .core.context import minimal_background_context, tenant_scope
+
+    for tenant_id in _load_active_tenant_ids():
+        ctx = minimal_background_context(tenant_id=tenant_id)
+        with tenant_scope(ctx):
+            with SessionLocal() as db:
+                interrupted = reconcile_stale_analysis_runs(db)
+                if interrupted:
+                    db.commit()
+                    log.info(
+                        "analysis.startup.reconciled_stale_runs: tenant=%d count=%d",
+                        tenant_id,
+                        len(interrupted),
+                    )
+                else:
+                    db.rollback()
+
+
+def _log_ai_configuration_readiness() -> None:
+    """Emit one secret-safe startup summary for the effective AI snapshot."""
+    from .ai.config_loader import get_loader
+    from .ai.registry import get_registry
+    from .security.secrets import encryption_config_diagnostic
+
+    encryption_available, encryption_status = encryption_config_diagnostic()
+    try:
+        loader = get_loader()
+        configs, effective = loader.resolve()
+        configured_names = sorted({cfg.name for cfg in configs if cfg.enabled})
+        unavailable = sorted(
+            {cfg.config_error for cfg in configs if cfg.config_error is not None}
+        )
+        try:
+            default_config = get_registry().get_default_config()
+        except Exception:  # noqa: BLE001 — summarized below without secrets
+            default_config = None
+        default_selection = default_config.selection_key if default_config is not None else None
+        reason = "available"
+        if effective.kill_switch_active:
+            reason = "kill_switch_active"
+        elif not effective.feature_enabled:
+            reason = "feature_disabled"
+        elif default_config is None:
+            reason = "no_default_credential"
+        elif not default_config.enabled:
+            reason = default_config.config_error or "default_credential_disabled"
+        elif not configured_names:
+            reason = "no_enabled_provider"
+        log_method = log.info if reason == "available" else log.warning
+        log_method(
+            "ai.startup.readiness: reason=%s settings_source=%s default=%s "
+            "providers=%s encryption=%s provider_issues=%s",
+            reason,
+            effective.source,
+            default_selection,
+            configured_names,
+            encryption_status,
+            unavailable,
+        )
+    except Exception as exc:  # noqa: BLE001
+        log.warning(
+            "ai.startup.readiness: reason=configuration_unavailable encryption=%s error_type=%s",
+            encryption_status,
+            type(exc).__name__,
+        )
+    if not encryption_available:
+        log.warning(
+            "ai.startup.encryption_unavailable: status=%s; DB-backed provider keys cannot be saved or decrypted",
+            encryption_status,
+        )
+
+
+@asynccontextmanager
+async def lifespan(app: FastAPI):
+    # Re-apply logging config AFTER uvicorn has fully initialised. Uvicorn
+    # runs `logging.config.dictConfig(LOGGING_CONFIG)` during its own
+    # startup which replaces the root logger's handlers — without this
+    # re-apply step, our formatter and rotating file handler would be lost
+    # for the remainder of the process.
+    setup_logging()
+    from .core.route_policy import validate_route_policies
+    validate_route_policies(app)
+    validate_auth_setup()
+    await init_async_http_client()
+    log.info("SBOM Analyzer starting up — initialising database …")
+
+    # Securely log database details
+    from sqlalchemy.engine import make_url
+
+    try:
+        url = make_url(engine.url)
+        safe_host = f"{url.host or ''}:{url.port or ''}" if url.port else (url.host or "")
+        log.info("Database dialect: %s", engine.dialect.name)
+        log.info("Database URL host/db: %s/%s", safe_host, url.database or "")
+    except Exception as e:
+        log.error("Failed to parse database URL for logging: %s", e)
+
+    from .services.native_operations import validate_configuration
+    validate_configuration()
+    _ensure_seed_data()
+    _backfill_analytics_per_tenant()
+    _update_sbom_names()
+    _reconcile_zombie_ai_fix_batches()
+    _reconcile_stale_analysis_runs()
+    _log_ai_configuration_readiness()
+    from .services.report_storage import configuration_errors
+    log.info("reports.startup enabled=%s authenticated=%s smtp_enabled=%s diagnostics=%s",
+             settings.report_notifications_enabled, settings.auth_enabled, settings.email_delivery_enabled,
+             ",".join(configuration_errors(settings)) or "ready")
+    log.info("Startup complete. API ready.")
+    yield
+    await close_async_http_client()
+    log.info("Async HTTP client closed.")
+
+
+app = FastAPI(title="SBOM & Projects API", version=APP_VERSION, lifespan=lifespan)
+
+_generate_openapi = app.openapi
+
+
+def custom_openapi():
+    """Document the existing route policy without changing runtime dependencies."""
+    if app.openapi_schema is not None:
+        return app.openapi_schema
+    schema = _generate_openapi()
+    schema.setdefault("components", {}).setdefault("securitySchemes", {})["BearerAuth"] = {
+        "type": "http",
+        "scheme": "bearer",
+        "bearerFormat": "JWT",
+    }
+    # OpenAPI omits Starlette path converters (e.g. {family_key:path}).
+    policies = {
+        (method, compile_path(path)[1]): policy
+        for key, policy in ROUTE_POLICIES.items()
+        for method, path in [key.split(" ", 1)]
+    }
+    for path, path_item in schema["paths"].items():
+        for method, operation in path_item.items():
+            policy = policies.get((method.upper(), path))
+            if policy is None or policy == "public":
+                continue
+            operation["security"] = [{"BearerAuth": []}]
+            if "parameters" in operation:
+                operation["parameters"] = [
+                    parameter for parameter in operation["parameters"]
+                    if not (parameter.get("in") == "header" and parameter.get("name", "").lower() == "authorization")
+                ]
+    return schema
+
+
+app.openapi = custom_openapi
+
+app.state.limiter = limiter
+app.add_exception_handler(RateLimitExceeded, rate_limit_exceeded_handler)
+
+from fastapi.responses import JSONResponse
+from sqlalchemy.exc import TimeoutError as SQLAlchemyTimeoutError
+
+
+@app.exception_handler(SQLAlchemyTimeoutError)
+async def sqlalchemy_timeout_exception_handler(request: Request, exc: SQLAlchemyTimeoutError):
+    from .db import engine
+
+    pool = engine.pool
+    log.error(
+        "Database connection pool checkout timeout occurred! "
+        "Pool stats: size=%s, checked_in=%s, checked_out=%s, overflow=%s",
+        getattr(pool, "size", lambda: "N/A")()
+        if callable(getattr(pool, "size", None))
+        else getattr(pool, "size", "N/A"),
+        pool.checkedin() if hasattr(pool, "checkedin") else "N/A",
+        pool.checkedout() if hasattr(pool, "checkedout") else "N/A",
+        getattr(pool, "overflow", lambda: "N/A")()
+        if callable(getattr(pool, "overflow", None))
+        else getattr(pool, "overflow", "N/A"),
+        exc_info=(type(exc), exc, exc.__traceback__),
+        extra={"event": "database_pool_timeout"},
+    )
+    return JSONResponse(
+        status_code=503,
+        content={"detail": {"error_code": "DATABASE_BUSY", "message": "Database is busy. Please retry shortly."}},
+    )
+
+
+app.add_middleware(SlowAPIMiddleware)
+
+app.add_middleware(
+    CORSMiddleware,
+    allow_origins=settings.cors_origins_list,
+    allow_credentials=False,
+    allow_methods=["*"],
+    allow_headers=["*"],
+)
+
+app.add_middleware(GZipMiddleware, minimum_size=1000)
+
+# --- Request / response logging middleware ------------------------------
+@app.middleware("http")
+async def log_requests(request: Request, call_next):
+    """Preserve existing security audit writes; ASGI middleware logs HTTP."""
+    response = await call_next(request)
+    context = getattr(request.state, "current_context", None)
+    audit_action = None
+    if request.url.path == "/api/auth/me":
+        audit_action = "auth.login_mapping"
+    elif request.headers.get("X-Tenant-ID"):
+        audit_action = "tenant.switch"
+    elif request.method in {"POST", "PUT", "PATCH", "DELETE"}:
+        audit_action = f"api.{request.method.lower()}"
+    elif request.method == "GET" and any(value in request.url.path for value in ("/export", "/reports/")):
+        audit_action = "export.download"
+    if context is not None and audit_action and response.status_code < 400:
+        try:
+            from .core.context import tenant_scope
+            from .models import AuditLog
+
+            with tenant_scope(context), SessionLocal() as audit_db:
+                audit_db.add(
+                    AuditLog(
+                        tenant_id=context.tenant_id,
+                        user_id=context.external_user_id,
+                        user_ref_id=context.user_id,
+                        action=audit_action,
+                        target_kind=request.url.path.split("/")[2] if request.url.path.count("/") >= 2 else "api",
+                        detail=f"{request.method} {request.url.path}"[:240],
+                        entity_type=request.url.path.split("/")[2] if request.url.path.count("/") >= 2 else "api",
+                        entity_id=next(
+                            (part for part in reversed(request.url.path.split("/")) if part.isdigit()),
+                            None,
+                        ),
+                        ip_address=request.client.host if request.client else None,
+                        user_agent=(request.headers.get("user-agent") or "")[:512] or None,
+                        created_at=datetime.now(UTC).isoformat(),
+                    )
+                )
+                audit_db.commit()
+        except Exception:
+            log.exception("security_audit_write_failed")
+    return response
+
+
+# --- Body-size enforcement (BE-001) -------------------------------------
+# Added LAST so Starlette's `add_middleware` (insert-at-0) puts this
+# OUTERMOST in the stack — oversize requests are rejected with 413
+# before any other middleware spends cycles on them.
+app.add_middleware(MaxBodySizeMiddleware, max_bytes=settings.MAX_UPLOAD_BYTES)
+# Wrap body-size checks too, so early 413 responses receive an ID and event.
+app.add_middleware(RequestLoggingMiddleware)
+
+# --- Global exception handler (BE-002) ----------------------------------
+# Converts unhandled exceptions into a canonical, non-leaky 500 envelope
+# with a correlation_id linking the response to the server log line.
+# HTTPException + RequestValidationError continue to use FastAPI's
+# default handlers — we only intercept Exception.
+error_handlers.install(app)
+
+
+# --- Router registration -------------------------------------------------
+# Routers already declare their own prefixes where appropriate, so we
+# include them here without overriding.
+#
+# Every business router inherits the explicit method/path policy guard.
+# Health/account/proof-token routes declare their own reviewed policies and
+# dependencies; startup validates coverage before database initialization.
+
+_protected = [Depends(enforce_request_access)]
+
+from .routers import report_notifications
+
+app.include_router(report_notifications.router, dependencies=_protected)
+
+app.include_router(health.router)  # intentionally unprotected
+app.include_router(sbom_versions.router, dependencies=_protected)
+app.include_router(sboms_crud.router, dependencies=_protected)
+# New multipart upload route running the eight-stage validation pipeline.
+# Path /api/sboms/upload — see ADR-0007.
+app.include_router(sbom_upload.router, dependencies=_protected)
+app.include_router(sbom_auto_repair.router, dependencies=_protected)
+app.include_router(sbom_validation_sessions.router, dependencies=_protected)
+app.include_router(sbom_validation_sessions.compat_router, dependencies=_protected)
+app.include_router(sbom_validation_sessions.workspace_router, dependencies=_protected)
+app.include_router(runs.router, dependencies=_protected)
+app.include_router(vulnerabilities.router, dependencies=_protected)
+app.include_router(projects.router, dependencies=_protected)
+app.include_router(products.router, dependencies=_protected)
+app.include_router(reports.router, dependencies=_protected)
+app.include_router(analyze_endpoints.router, dependencies=_protected)
+app.include_router(pdf.router, dependencies=_protected)
+app.include_router(dashboard_main.router, dependencies=_protected)
+app.include_router(dashboard_advanced.router, dependencies=_protected)
+app.include_router(ai_copilot.router, dependencies=_protected)
+app.include_router(schedules.router, dependencies=_protected)
+app.include_router(cves.router, dependencies=_protected)
+app.include_router(kev.router, dependencies=_protected)
+app.include_router(compare.router, dependencies=_protected)
+app.include_router(ai_usage.router, dependencies=_protected)
+app.include_router(ai_fixes.router, dependencies=_protected)
+app.include_router(ai_credentials.router, dependencies=_protected)
+app.include_router(ai_credentials.platform_router, dependencies=_protected)
+app.include_router(lifecycle.router, dependencies=_protected)
+app.include_router(lifecycle_admin.router, dependencies=_protected)
+app.include_router(lifecycle_admin.platform_router, dependencies=_protected)
+app.include_router(vex.router, dependencies=_protected)
+app.include_router(vex_investigations.router, dependencies=_protected)
+app.include_router(logical_sboms.router, dependencies=_protected)
+app.include_router(component_advisor.router, dependencies=_protected)
+app.include_router(component_advisor.platform_policy_router, dependencies=_protected)
+app.include_router(remediation.router, dependencies=_protected)
+# Identity onboarding routes in this router perform JWT validation and local
+# state resolution themselves; its application routes retain explicit
+# tenant/permission dependencies at the route level.
+app.include_router(tenants.router)
+app.include_router(verification.router)
+from .routers import entra_auth, native_auth
+
+app.include_router(native_auth.router)
+app.include_router(entra_auth.router)
+app.include_router(platform.router, dependencies=_protected)
+app.include_router(authorization_catalog.router, dependencies=_protected)
+
+
+# Feature routers (kept from earlier refactor) — additive paths.
+app.include_router(
+    analysis_export_router.router,
+    prefix="/api/analysis-runs",
+    tags=["analysis-export"],
+    dependencies=_protected,
+)
+app.include_router(
+    sbom_features_router.router,
+    prefix="/api/sboms",
+    tags=["sbom-features"],
+    dependencies=_protected,
+)
+app.include_router(
+    dashboard_trend_router.router,
+    prefix="/dashboard",
+    tags=["dashboard-trend"],
+    dependencies=_protected,
+)
+
+# NVD mirror operations require explicit platform authority in the route catalog.
+app.include_router(nvd_mirror_admin_router, dependencies=_protected)
+
+
+# Public UUIDs terminate at the HTTP boundary; internal services retain integer FKs.
+from .public_api import install_public_boundary, install_public_openapi
+
+install_public_boundary(app)
+
+install_public_openapi(app)

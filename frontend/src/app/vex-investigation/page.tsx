@@ -192,6 +192,7 @@ function VexInvestigationContent() {
   const { user, activeTenant, activeTenantId } = useAuth();
   const workingRole = (activeTenant?.roles ?? user?.roles ?? []).some(role => ['TENANT_ADMIN', 'SECURITY_ANALYST', 'DEVELOPER'].includes(role));
   const [mobileFiltersOpen, setMobileFiltersOpen] = useState(false);
+  const [versionToolsOpen, setVersionToolsOpen] = useState(false);
   const [assigneeSearch, setAssigneeSearch] = useState('');
   const [debouncedAssigneeSearch, setDebouncedAssigneeSearch] = useState('');
   const [assigneeLabel, setAssigneeLabel] = useState('');
@@ -336,6 +337,12 @@ function VexInvestigationContent() {
   }, [page, totalPages, listQuery.isFetching, listQuery.isPlaceholderData, listQuery.data]);
 
   const rows = listQuery.data?.items ?? [];
+  // The list response carries product-wide provenance, even for an SBOM filter.
+  // Match the backend posture projection's target/evidence identity (VEX-DASH-004).
+  const postureItems = useMemo(() => (listQuery.data?.posture ?? []).filter(item => !scope.sbomId
+    || String(item.target_sbom_id) === String(scope.sbomId)
+    || String(item.posture_sbom_id) === String(scope.sbomId)), [listQuery.data?.posture, scope.sbomId]);
+  const comparisonSbomId = scope.sbomId ?? (scope.applicationId && postureItems.length === 1 ? postureItems[0].current_sbom?.id : null);
   const summary = summaryQuery.data;
 
   const currentView = currentViewQuery.data;
@@ -439,11 +446,8 @@ function VexInvestigationContent() {
   return (
     <>
       <TopBar title="VEX Investigation" />
-      <div className="space-y-4 p-6">
+      <div className="min-w-0 space-y-4 p-4 sm:p-6">
         {filters.versionScope !== 'current' && <Alert variant="info">Historical investigation evidence is read-only. Historical assignments do not grant authority on a new version.</Alert>}
-        {filters.versionScope !== 'current' && scope.sbomId && <VexRunHistoryPanel key={scope.sbomId} sbomId={scope.sbomId} />}
-        {listQuery.data?.posture && filters.versionScope === 'current' && <PostureEvidence items={listQuery.data.posture} />}
-        {(scope.sbomId || scope.applicationId && listQuery.data?.posture?.length === 1 && listQuery.data.posture[0].current_sbom) && <VexVersionComparisonPanel sbomId={scope.sbomId ?? listQuery.data!.posture![0].current_sbom!.id} />}
         <section aria-labelledby="vex-current-view-heading" className="space-y-2">
           <div className="flex flex-wrap items-baseline justify-between gap-2">
             <h2 id="vex-current-view-heading" className="text-sm font-semibold text-hcl-navy dark:text-gray-100">{filters.versionScope === 'current' ? 'Current view' : filters.versionScope === 'historical' ? 'Historical view' : 'All versions view'}</h2>
@@ -455,7 +459,7 @@ function VexInvestigationContent() {
                   : filters.versionScope === 'current' ? 'All current posture versions in this tenant · latest successful analysis' : 'Explicit version/history scope · independent of current posture'}
             </p>
           </div>
-          <div className="grid grid-cols-2 gap-3 md:grid-cols-6">
+          <div className="grid grid-cols-2 gap-3 sm:grid-cols-3 xl:grid-cols-6">
             {currentCards.map((card) => {
               const content = (
                 <>
@@ -494,6 +498,9 @@ function VexInvestigationContent() {
           </dl>
         </details>
 
+        {listQuery.data?.posture && filters.versionScope === 'current' && <PostureEvidence
+          key={`${activeTenantId}-${scope.projectId}-${scope.applicationId}-${scope.sbomId}`} items={postureItems} />}
+
         <Card>
           <div className="hidden border-b border-gray-200 p-3 sm:block dark:border-gray-800">
             {!mobileFiltersOpen ? scopeControls : null}
@@ -530,7 +537,7 @@ function VexInvestigationContent() {
           </div>
           {listQuery.isError ? <Alert variant="error">Unable to load investigations. <Button size="sm" variant="ghost" onClick={() => listQuery.refetch()}>Retry</Button></Alert> : null}
 
-          <Table>
+          <Table ariaLabel="VEX investigations">
             <TableHead>
               <tr>
                 <SortableTh
@@ -614,6 +621,18 @@ function VexInvestigationContent() {
             itemNoun="investigation"
           />
         </Card>
+        {comparisonSbomId && <section aria-label="Version history and comparison" className="rounded-xl border border-border bg-surface p-4">
+          <div className="flex flex-wrap items-center justify-between gap-3">
+            <div><h2 className="text-sm font-semibold text-hcl-navy">Version history and comparison</h2>
+              <p className="mt-1 text-xs text-hcl-muted">Review previous version evidence after triaging the investigation queue.</p></div>
+            <Button size="sm" variant="outline" aria-expanded={versionToolsOpen} aria-controls="vex-version-tools"
+              onClick={() => setVersionToolsOpen(value => !value)}>{versionToolsOpen ? 'Collapse version tools' : 'Open version tools'}</Button>
+          </div>
+          {versionToolsOpen && <div id="vex-version-tools" className="mt-4 space-y-4">
+            {filters.versionScope !== 'current' && scope.sbomId && <VexRunHistoryPanel key={`${activeTenantId}-${scope.sbomId}`} sbomId={scope.sbomId} />}
+            <VexVersionComparisonPanel key={`${activeTenantId}-${comparisonSbomId}`} sbomId={comparisonSbomId} />
+          </div>}
+        </section>}
       </div>
 
       <VexInvestigationDialog

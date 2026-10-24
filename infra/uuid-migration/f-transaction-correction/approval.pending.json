@@ -1,0 +1,32 @@
+{
+  "accepted": false,
+  "actual_f_cluster_id": null,
+  "actual_f_database_oid": null,
+  "execution_approvals": {},
+  "expires_at": null,
+  "integrity_approvals": {},
+  "integrity_attestations": [
+    false,
+    false,
+    false,
+    false,
+    false,
+    false,
+    false
+  ],
+  "live_enabled": false,
+  "operator_approved_manifest_byte_sha256": null,
+  "operator_reviews": {
+    "authentication": false,
+    "budget_policy": false,
+    "catalog_prefix": false,
+    "credential": false,
+    "network_egress": false,
+    "role_acl": false,
+    "source": false,
+    "target": false,
+    "writer_lock": false
+  },
+  "schema": "w24c-transaction-review-only",
+  "source_lock_sha256": null
+}

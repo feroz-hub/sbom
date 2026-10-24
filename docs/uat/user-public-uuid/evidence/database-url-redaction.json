@@ -1,0 +1,23 @@
+{
+  "reason": "Existing test assertion introspection rendered PostgreSQL URL; public evidence sanitized",
+  "files": [
+    {
+      "file": "backend-complete-attempt5.xml",
+      "credential_literal_found": true,
+      "original_private_path": "/Users/ferozebasha/.sbom-iam-public-uuid/original-test-evidence/backend-complete-attempt5.xml.credential-original",
+      "original_sha256": "3ab427580e86dc3dcee26bdcf647140b469ca5992761e8ecb9ca0b07f569962f",
+      "sanitized_sha256": "2910d5f41942f6e687704ffba7adb62b2ee0aeae98db7f02fd54b903af32153b"
+    },
+    {
+      "file": "backend-complete-attempt5.log",
+      "credential_literal_found": true,
+      "original_private_path": "/Users/ferozebasha/.sbom-iam-public-uuid/original-test-evidence/backend-complete-attempt5.log.credential-original",
+      "original_sha256": "0039a1d54d909e72cbc5cef03c8772b2f7a8a904811c96a1112fd1517bbd4f26",
+      "sanitized_sha256": "1e465190505abbce6ae65fa2578aae697acdd631ba7a2ba82f0bc6d3eb6cb05c"
+    }
+  ],
+  "existing_credential_rotated": true,
+  "operator_review_required": false,
+  "rotation_evidence": "approved-setup-rotation-attempt2.json",
+  "rotation_report_copy_initially_refused_overwrite": true
+}

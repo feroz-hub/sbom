@@ -474,3 +474,16 @@ SBO-70 / UAT-DEF-003: normalize the stored numeric analyzer confidence to the ex
 ### UAT remediation Round 2 — 20 October 2026
 
 SBO-54: reproduced the original 13 UUID-boundary fixture failures (55 passed/13 failed), corrected only public HTTP resource identifiers and corresponding wire expectations, and retained integer DB/audit keys. The original suite now passes 69 tests including explicit integer-ID rejection with unchanged row_version. Expanded VEX fixtures were reconciled against the same UUID contract. Final expanded VEX/policy/dashboard/version regressions passed 320 tests plus 8 subtests; Native/IAM/KEV/RBAC regressions passed 287 tests, with no failures or skips. The broader run also exposed source-native CSAF product identifiers being passed through application Product resolution; `app/public_api.py` now preserves the VEX import document body after the addressed SBOM's existing UUID/auth/tenant resolution. Regression controls cover source-document preservation, invalid internal IDs and foreign targets. No VEX precedence, severity, assignment, concurrency or audit policy changed. Final checks and remaining limits are recorded in `docs/uat/remediation/2026-10-20-round2/RESULTS.md`; the original 485-case baseline remains historical.
+
+### Shared version evidence UI — 23 October 2026
+
+VEX-UI-001/002/003, VEX-INV-002 and VEX-DASH-004/005: audited every shared
+version-evidence renderer. Replaced the unbounded paragraph feed centrally
+with collapsed, searchable, paginated provenance; preserved visible missing,
+last-known and incomplete-coverage notices. Moved optional history/comparison
+after the operational queue and constrained selected-SBOM provenance. The same
+correction applies to product/SBOM details. No backend, schema, authorization,
+decision, severity or evidence-calculation changes. See
+[`shared-version-evidence-ui.md`](../engineering/shared-version-evidence-ui.md)
+for affected and unaffected routes, executed checks, the known remote inventory
+test failure, and remaining payload/deployment limitations.

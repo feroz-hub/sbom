@@ -1,0 +1,213 @@
+--- a/app/routers/vex_investigations.py
++++ b/app/routers/vex_investigations.py
+@@ -847,7 +847,12 @@
+             or [s for s in [getattr(finding, "source", None)] if s],
+             "analysis_run_id": investigation.last_analysis_run_id,
+             "match_strategy": getattr(finding, "match_strategy", None),
+-            "match_confidence": getattr(finding, "match_confidence", None),
++            # VEX-UI-003: findings store a numeric score; this evidence DTO
++            # retains its existing nullable text contract (including zero).
++            "match_confidence": (
++                str(finding.match_confidence)
++                if finding is not None and finding.match_confidence is not None else None
++            ),
+             "matched_range": getattr(finding, "matched_range", None),
+             "first_seen_at": investigation.first_seen_at,
+             "last_seen_at": investigation.last_seen_at,
+--- a/tests/test_vex_investigations_api.py
++++ b/tests/test_vex_investigations_api.py
+@@ -70,6 +70,7 @@
+         AnalysisFinding(
+             analysis_run_id=run.id, component_id=openssl.id, vuln_id="CVE-2026-5001",
+             tenant_id=1, source="NVD", severity="HIGH", description="analyser finding",
++            match_confidence=0.95,
+             reference_url="https://example.test/1",
+         )
+     )
+--- /dev/null
++++ b/tests/test_vex_confidence_serialization.py
+@@ -0,0 +1,68 @@
++"""SBO-70: numeric evidence must serialize on reads, writes and conflicts."""
++
++import pytest
++from app.models import AnalysisFinding, VexOverrideAudit, VexStatement
++from sqlalchemy import select
++
++from tests import test_vex_investigations_api as fixtures
++
++db = fixtures.db
++seeded = fixtures.seeded
++
++
++def snapshot(db, context):
++    db.refresh(context)
++    return {
++        "version": context.row_version,
++        "status": context.effective_status,
++        "audits": list(db.scalars(select(VexOverrideAudit.id).where(
++            VexOverrideAudit.investigation_id == context.id,
++        ).order_by(VexOverrideAudit.id))),
++        "statements": list(db.scalars(select(VexStatement.id).where(
++            VexStatement.sbom_id == context.sbom_id,
++            VexStatement.component_id == context.component_id,
++        ).order_by(VexStatement.id))),
++    }
++
++
++@pytest.mark.parametrize("confidence", [None, 0.0, 0.875, 1.0])
++def test_numeric_confidence_detail__VEX_UI_003(client, seeded, db, confidence):
++    finding = db.scalar(select(AnalysisFinding).where(
++        AnalysisFinding.analysis_run_id == seeded["run"].id,
++        AnalysisFinding.component_id == seeded["openssl"].id,
++    ))
++    finding.match_confidence = confidence
++    db.commit()
++    detail = fixtures.detail(client, db, "CVE-2026-5001")
++    expected = None if confidence is None else str(confidence)
++    assert detail["analyzer_evidence"]["match_confidence"] == expected
++
++
++def test_numeric_confidence_success_conflict_no_duplicate__VEX_AUD_001_002(client, seeded, db):
++    context = fixtures.context_for(db, "CVE-2026-5001")
++    before = snapshot(db, context)
++    response = fixtures.decide(client, context)
++    assert response.status_code == 200, response.text
++    assert response.json()["analyzer_evidence"]["match_confidence"] == "0.95"
++    saved = snapshot(db, context)
++    assert response.json()["row_version"] == saved["version"] > before["version"]
++    assert saved["status"] == "NOT_AFFECTED"
++    assert len(saved["audits"]) == len(before["audits"]) + 1
++    assert len(saved["statements"]) == len(before["statements"]) + 1
++    stale = client.put(f"{fixtures.BASE}/{context.id}/decision", json={
++        "status": "AFFECTED", "row_version": before["version"], "reason": "stale editor",
++    })
++    assert stale.status_code == 409, stale.text
++    assert stale.json()["analyzer_evidence"]["match_confidence"] == "0.95"
++    assert stale.json()["row_version"] == saved["version"]
++    assert snapshot(db, context) == saved
++
++
++def test_invalid_decision_preserves_numeric_evidence_and_state__VEX_VAL_001(client, seeded, db):
++    context = fixtures.context_for(db, "CVE-2026-5001")
++    before = snapshot(db, context)
++    response = client.put(f"{fixtures.BASE}/{context.id}/decision", json={
++        "status": "NOT_AFFECTED", "row_version": before["version"], "reason": "missing evidence",
++    })
++    assert response.status_code == 422
++    assert snapshot(db, context) == before
+--- a/frontend/src/lib/dashboardScopeUrl.ts
++++ b/frontend/src/lib/dashboardScopeUrl.ts
+@@ -1,18 +1,14 @@
+ import type { DashboardFilterScope } from '@/lib/api';
+-
+-function positiveId(raw: string | null): number | null {
+-  const value = Number(raw);
+-  return raw && Number.isSafeInteger(value) && value > 0 ? value : null;
+-}
++import { publicId } from '@/lib/publicId';
+ 
+ /** Discard orphaned child IDs from edited URLs before requesting data. */
+ export function parseDashboardScope(params: Pick<URLSearchParams, 'get'>): DashboardFilterScope {
+-  const projectId = positiveId(params.get('project'));
+-  const applicationId = projectId ? positiveId(params.get('application')) : null;
++  const projectId = publicId(params.get('project'));
++  const applicationId = projectId ? publicId(params.get('application')) : null;
+   return {
+     projectId,
+     applicationId,
+-    sbomId: applicationId ? positiveId(params.get('sbom')) : null,
++    sbomId: applicationId ? publicId(params.get('sbom')) : null,
+   };
+ }
+ 
+--- a/frontend/src/lib/dashboardScopeUrl.test.ts
++++ b/frontend/src/lib/dashboardScopeUrl.test.ts
+@@ -2,19 +2,42 @@
+ import { dashboardDrilldownUrl, parseDashboardScope } from './dashboardScopeUrl';
+ 
+ describe('dashboard URL scope', () => {
++  const project = 'd4828e7c-e71c-40f7-bb6c-dde0f4d48d09';
++  const application = '60de2b20-c45c-4a49-9b36-e0af7b5790fc';
++  const sbom = '729992e8-b107-4d3d-96a9-5cac4bcf5f8d';
++  const empty = { projectId: null, applicationId: null, sbomId: null };
+   it('preserves valid hierarchy on refresh and drilldown', () => {
+-    const scope = parseDashboardScope(new URLSearchParams('project=1&application=2&sbom=3'));
+-    expect(scope).toEqual({ projectId: 1, applicationId: 2, sbomId: 3 });
++    const scope = parseDashboardScope(new URLSearchParams(`project=${project}&application=${application}&sbom=${sbom}`));
++    expect(scope).toEqual({ projectId: project, applicationId: application, sbomId: sbom });
+     expect(dashboardDrilldownUrl('/analysis?tab=vulnerabilities', scope))
+-      .toBe('/analysis?tab=vulnerabilities&project=1&product=2&sbom=3');
++      .toBe(`/analysis?tab=vulnerabilities&project=${project}&product=${application}&sbom=${sbom}`);
+   });
+ 
+   it('ignores orphaned or malformed child IDs', () => {
+-    expect(parseDashboardScope(new URLSearchParams('application=2&sbom=3')))
+-      .toEqual({ projectId: null, applicationId: null, sbomId: null });
+-    expect(parseDashboardScope(new URLSearchParams('project=1&sbom=3')))
+-      .toEqual({ projectId: 1, applicationId: null, sbomId: null });
+-    expect(parseDashboardScope(new URLSearchParams('project=NaN&application=2')))
+-      .toEqual({ projectId: null, applicationId: null, sbomId: null });
++    expect(parseDashboardScope(new URLSearchParams(`application=${application}&sbom=${sbom}`))).toEqual(empty);
++    expect(parseDashboardScope(new URLSearchParams(`project=${project}&sbom=${sbom}`)))
++      .toEqual({ projectId: project, applicationId: null, sbomId: null });
++    expect(parseDashboardScope(new URLSearchParams(`project=NaN&application=${application}`))).toEqual(empty);
++    expect(parseDashboardScope(new URLSearchParams(`project=${project}&application=invalid&sbom=${sbom}`)))
++      .toEqual({ projectId: project, applicationId: null, sbomId: null });
++  });
++
++  it('normalizes uppercase UUIDs through the existing public ID boundary', () => {
++    expect(parseDashboardScope(new URLSearchParams(`project=${project.toUpperCase()}`)))
++      .toEqual({ projectId: project, applicationId: null, sbomId: null });
++  });
++
++  it.each(['', '1', '0', '-1', '1e3', 'NaN', 'Infinity', 'undefined',
++    '00000000-0000-0000-0000-000000000000',
++    'd4828e7c-e71c-10f7-bb6c-dde0f4d48d09',
++    'd4828e7c-e71c-40f7-0b6c-dde0f4d48d09',
++    ` ${project}`, `${project}/extra`, '<script>alert(1)</script>',
++  ])('rejects invalid public ID %j without retaining child scope', value => {
++    expect(parseDashboardScope(new URLSearchParams({project:value,application,sbom}))).toEqual(empty);
++  });
++
++  it('keeps unfiltered drilldowns unchanged', () => {
++    expect(parseDashboardScope(new URLSearchParams())).toEqual(empty);
++    expect(dashboardDrilldownUrl('/projects?sort=name', empty)).toBe('/projects?sort=name');
+   });
+ });
+--- a/frontend/src/app/__tests__/dashboard-drilldown.integration.test.tsx
++++ b/frontend/src/app/__tests__/dashboard-drilldown.integration.test.tsx
+@@ -171,7 +171,7 @@
+     expect(screen.getByRole('region', { name: 'Portfolio metrics' })).toBeInTheDocument();
+   });
+   it('renders filter-specific guidance and clears the URL when a scope is empty', async () => {
+-    queryString = 'project=1&application=2';
++    queryString = 'project=00000000-0000-4000-8000-000000000001&application=00000000-0000-4000-8000-000000000002';
+     getDashboardSummary.mockResolvedValue({ posture: { total_sboms: 0 } });
+     render(wrap(<DashboardPage />));
+     expect(await screen.findByText('No data matches the current filters')).toBeInTheDocument();
+@@ -180,21 +180,21 @@
+     expect(push).toHaveBeenCalledWith('/', { scroll: false });
+   });
+   it('clears the URL hierarchy without switching tenants', () => {
+-    queryString = 'project=1&application=2&sbom=3';
++    queryString = 'project=00000000-0000-4000-8000-000000000001&application=00000000-0000-4000-8000-000000000002&sbom=00000000-0000-4000-8000-000000000003';
+     render(wrap(<DashboardPage />));
+     fireEvent.click(screen.getByRole('button', { name: 'Reset filters' }));
+     expect(push).toHaveBeenCalledWith('/', { scroll: false });
+   });
+ 
+   it('loads and propagates the selected hierarchy to findings', async () => {
+-    queryString = 'project=1&application=2&sbom=3';
++    queryString = 'project=00000000-0000-4000-8000-000000000001&application=00000000-0000-4000-8000-000000000002&sbom=00000000-0000-4000-8000-000000000003';
+     render(wrap(<DashboardPage />));
+     const buttons = await screen.findAllByRole('button', { name: /View Critical findings/i });
+     expect(getDashboardSummary).toHaveBeenCalledWith(expect.anything(), {
+-      projectId: 1, applicationId: 2, sbomId: 3,
++      projectId: '00000000-0000-4000-8000-000000000001', applicationId: '00000000-0000-4000-8000-000000000002', sbomId: '00000000-0000-4000-8000-000000000003',
+     });
+     fireEvent.click(buttons[0]!);
+-    expect(push).toHaveBeenCalledWith('/analysis?tab=vulnerabilities&severity=critical&project=1&product=2&sbom=3');
++    expect(push).toHaveBeenCalledWith('/analysis?tab=vulnerabilities&severity=critical&project=00000000-0000-4000-8000-000000000001&product=00000000-0000-4000-8000-000000000002&sbom=00000000-0000-4000-8000-000000000003');
+   });
+ 
+   it('opens the portfolio-wide Vulnerabilities tab for the clicked severity', async () => {

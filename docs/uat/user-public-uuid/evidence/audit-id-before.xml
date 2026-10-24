@@ -1,0 +1,5 @@
+<?xml version="1.0" encoding="utf-8"?><testsuites name="pytest tests"><testsuite name="pytest" errors="0" failures="1" skipped="0" tests="1" time="4.726" timestamp="2026-10-21T13:02:34.200889+05:30" hostname="Ferozes-MacBook-Air.local"><testcase classname="tests.test_iam_user_public_uuid" name="test_platform_user_audit_event_id_is_not_a_user_reference" time="2.923"><failure message="AssertionError: {&quot;detail&quot;:{&quot;code&quot;:&quot;IAM_PLATFORM_PERMISSION_DENIED&quot;,&quot;message&quot;:&quot;Platform permission is required for this action.&quot;}}&#10;assert 403 == 200&#10; +  where 403 = &lt;Response [403 Forbidden]&gt;.status_code">tests/test_iam_user_public_uuid.py:298: in test_platform_user_audit_event_id_is_not_a_user_reference
+    assert response.status_code == 200, response.text
+E   AssertionError: {"detail":{"code":"IAM_PLATFORM_PERMISSION_DENIED","message":"Platform permission is required for this action."}}
+E   assert 403 == 200
+E    +  where 403 = &lt;Response [403 Forbidden]&gt;.status_code</failure></testcase></testsuite></testsuites>

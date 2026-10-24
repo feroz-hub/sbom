@@ -1,0 +1,193 @@
+"""Stage 5 — cross-reference integrity.
+
+Operates on :class:`InternalSbom` produced by stage 4. Three checks:
+
+* **Dangling refs** — every dependency node and relationship target must resolve to
+  a declared component or to a valid ``DocumentRef-…`` (SPDX). Unresolved
+  refs are hard errors.
+* **Self-edges** — ``A → A`` is never legitimate; emit
+  :data:`E071_DEPENDENCY_REF_SELF`.
+* **Cycles** — Tarjan SCCs of size > 1 (or singleton SCCs with a self-edge,
+  which we already caught above). Emitted as :data:`W074_DEPENDENCY_CYCLE_DETECTED`
+  warnings — *real BOMs frequently have cycles*, especially in JS / Rust.
+* **Orphans** — components with neither inbound nor outbound edges. Emitted
+  as :data:`I075_ORPHAN_COMPONENT` (info level, never blocks).
+
+Algorithm: iterative Tarjan, no recursion (we run on the JSON-pinned 1e6
+component limit and stack depth is real).
+"""
+
+from __future__ import annotations
+
+import re
+from collections import Counter, defaultdict
+
+from .. import errors as E
+from ..context import ValidationContext
+
+_STAGE = "integrity"
+
+
+def run(ctx: ValidationContext) -> ValidationContext:
+    sbom = ctx.internal_model
+    if sbom is None:
+        return ctx
+
+    declared = sbom.declared_refs.copy()
+    if sbom.spec == "spdx":
+        declared.update(sbom.document_refs)
+        declared.add("SPDXRef-DOCUMENT")
+
+    external_refs = Counter()
+    if sbom.spec == "spdx":
+        for record in (ctx.parsed_dict or {}).get("externalDocumentRefs") or []:
+            if isinstance(record, dict) and isinstance(record.get("externalDocumentId"), str):
+                external_refs[record["externalDocumentId"]] += 1
+    edges_by_source: dict[str, list[str]] = defaultdict(list)
+    # CycloneDX dependency nodes are retained separately from their edges so
+    # entries with an empty dependsOn list are still validated. Hand-built
+    # models and SPDX relationships without nodes retain the edge fallback.
+    reported_sources: set[tuple[str, str]] = set()
+    for node in sbom.dependency_nodes:
+        reported_sources.add((node.path, node.ref))
+        if node.ref not in declared:
+            _emit_dangling(ctx, sbom.spec, sbom.spec_version, node.path, node.ref, external_refs)
+    for index, dep in enumerate(sbom.dependencies):
+        source_path = dep.source_path or f"dependencies[{index}].ref"
+        target_path = dep.target_path or f"dependencies[{index}].dependsOn"
+        if dep.source == dep.target:
+            ctx.report.add(
+                E.E071_DEPENDENCY_REF_SELF,
+                stage=_STAGE,
+                path=source_path,
+                message=f"Dependency entry '{dep.source}' depends on itself.",
+                remediation="Self-edges are never legitimate. Remove the entry.",
+                spec_reference=f"CycloneDX {sbom.spec_version} §6" if sbom.spec == "cyclonedx" else "SPDX 2.3 §11",
+            )
+        if (dep.source not in declared or (sbom.spec == "spdx" and dep.source.startswith("DocumentRef-"))) and (source_path, dep.source) not in reported_sources:
+            reported_sources.add((source_path, dep.source))
+            _emit_dangling(ctx, sbom.spec, sbom.spec_version, source_path, dep.source, external_refs)
+        if dep.target not in declared or (sbom.spec == "spdx" and dep.target.startswith("DocumentRef-")):
+            _emit_dangling(ctx, sbom.spec, sbom.spec_version, target_path, dep.target, external_refs, allow_sentinel=True)
+        edges_by_source[dep.source].append(dep.target)
+
+    cycles = _tarjan_scc(declared, edges_by_source)
+    for cycle in cycles:
+        if len(cycle) <= 1:
+            continue  # singletons (without self-edge) are not cycles
+        ctx.report.add(
+            E.W074_DEPENDENCY_CYCLE_DETECTED,
+            stage=_STAGE,
+            path="dependencies",
+            message=f"Dependency cycle detected: {' -> '.join(cycle)} -> {cycle[0]}.",
+            remediation=("Cycles are common in real BOMs and are reported for visibility, not rejected."),
+        )
+
+    inbound: dict[str, int] = defaultdict(int)
+    outbound: dict[str, int] = defaultdict(int)
+    for dep in sbom.dependencies:
+        outbound[dep.source] += 1
+        inbound[dep.target] += 1
+
+    for comp in sbom.components:
+        if inbound[comp.ref] == 0 and outbound[comp.ref] == 0:
+            ctx.report.add(
+                E.I075_ORPHAN_COMPONENT,
+                stage=_STAGE,
+                path=comp.raw_path,
+                message=f"Component '{comp.ref}' has no inbound or outbound dependency edges.",
+                remediation=("Informational. Consider declaring the relationship that brought this component in."),
+            )
+    return ctx
+
+
+def _emit_dangling(ctx: ValidationContext, spec: str, spec_version: str, path: str, ref: str, external_refs=None, allow_sentinel=False) -> None:
+    if spec == "spdx":
+        if allow_sentinel and ref in {"NONE", "NOASSERTION"}:
+            return
+        if ref.startswith("DocumentRef-"):
+            match = re.fullmatch(r"(DocumentRef-[a-zA-Z0-9.\-]+):SPDXRef-[a-zA-Z0-9.\-]+", ref)
+            if match and external_refs and external_refs[match[1]] == 1:
+                return
+            ctx.report.add(E.E073_EXTERNAL_DOC_REF_INVALID, stage=_STAGE, path=path,
+                           message="External relationship reference is malformed, undeclared or ambiguous.",
+                           remediation="Retain external semantics and provide a valid unique externalDocumentRefs declaration.")
+            return
+        ctx.report.add(
+            E.E072_RELATIONSHIP_ELEMENT_DANGLING,
+            stage=_STAGE,
+            path=path,
+            message=f"Relationship references SPDXID '{ref}' that is not declared.",
+            remediation="Declare the element, or use a valid DocumentRef-* form.",
+            spec_reference="SPDX 2.3 §11",
+        )
+    else:
+        ctx.report.add(
+            E.E070_DEPENDENCY_REF_DANGLING,
+            stage=_STAGE,
+            path=path,
+            message=(
+                f"{'dependsOn' if '.dependsOn[' in path else 'dependencies'} ref '{ref}' "
+                "does not match any declared bom-ref."
+            ),
+            remediation="Declare a component or service with that bom-ref, or remove the reference.",
+            spec_reference=f"CycloneDX {spec_version} §6",
+        )
+
+
+def _tarjan_scc(nodes: set[str], edges: dict[str, list[str]]) -> list[list[str]]:
+    """Iterative Tarjan SCC. Returns SCCs in reverse topological order."""
+    index_counter = [0]
+    stack: list[str] = []
+    on_stack: dict[str, bool] = {}
+    indices: dict[str, int] = {}
+    lowlinks: dict[str, int] = {}
+    result: list[list[str]] = []
+
+    # Iterative implementation to avoid Python recursion-limit pitfalls on
+    # large dependency graphs.
+    for start in nodes:
+        if start in indices:
+            continue
+
+        # Each work item is (node, edge_iterator). The iterator is materialised
+        # eagerly so successive pops resume where the previous one left off.
+        work: list[tuple[str, list[str]]] = [(start, list(edges.get(start, [])))]
+        indices[start] = index_counter[0]
+        lowlinks[start] = index_counter[0]
+        index_counter[0] += 1
+        stack.append(start)
+        on_stack[start] = True
+
+        while work:
+            node, remaining = work[-1]
+            if remaining:
+                target = remaining.pop(0)
+                if target not in indices:
+                    indices[target] = index_counter[0]
+                    lowlinks[target] = index_counter[0]
+                    index_counter[0] += 1
+                    stack.append(target)
+                    on_stack[target] = True
+                    work.append((target, list(edges.get(target, []))))
+                elif on_stack.get(target):
+                    lowlinks[node] = min(lowlinks[node], indices[target])
+                # else: already-explored cross-edge, skip
+                continue
+
+            # finished node — propagate lowlink upward and possibly emit SCC
+            work.pop()
+            if work:
+                parent, _ = work[-1]
+                lowlinks[parent] = min(lowlinks[parent], lowlinks[node])
+            if lowlinks[node] == indices[node]:
+                scc: list[str] = []
+                while True:
+                    popped = stack.pop()
+                    on_stack[popped] = False
+                    scc.append(popped)
+                    if popped == node:
+                        break
+                if len(scc) > 1:
+                    result.append(scc)
+    return result

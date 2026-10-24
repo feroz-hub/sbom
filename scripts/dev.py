@@ -1065,6 +1065,8 @@ def start_application(args) -> None:
             raise SetupError(str(error)) from error
         except dev_greenfield.migrations.SchemaUpgradeError as error:
             raise SetupError(str(error)) from None
+        except dev_greenfield.stack.ServicePortError as error:
+            raise SetupError(str(error)) from None
         return
     if not args.check:
         ensure_dependencies()

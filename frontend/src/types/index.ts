@@ -2190,6 +2190,7 @@ export interface SbomPosture {
   latest_uploaded: {id: (string | number); name: string; version: string | null} | null;
   posture_sbom: {id: (string | number); name: string; version: string | null} | null;
   analysis_run_id: string | null; analysis_status: string; analysis_finding_rows?: number | null;
+  analysis_completed_on?: string | null;
   last_known_posture: boolean; coverage_incomplete: boolean; warning: string | null;
   designation_required: boolean;
 }

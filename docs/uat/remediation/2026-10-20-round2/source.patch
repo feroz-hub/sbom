@@ -1,0 +1,1791 @@
+--- a/app/public_api.py
++++ b/app/public_api.py
+@@ -47,7 +47,6 @@
+     "designated_current_sbom_id": "sbom_source",
+     "latest_sbom_id": "sbom_source",
+     "previous_sbom_id": "sbom_source",
+-    "version_id": "sbom_source",
+     "parent_sbom_id": "sbom_source",
+     "baseline_sbom_id": "sbom_source",
+     "target_sbom_id": "sbom_source",
+@@ -93,13 +92,18 @@
+     "latest_uploaded": "sbom_source",
+     "posture_sbom": "sbom_source",
+     "child_sboms": "sbom_source",
+-    "versions": "sbom_source",
+     "components": "sbom_component",
+     "component": "sbom_component",
+     "current_component": "sbom_component",
+     "previous_component": "sbom_component",
+     "sample_matched_components": "sbom_component",
+     "sample_unknown_components": "sbom_component",
++}
++
++SOURCE_VERSION_COLLECTIONS = {
++    "/api/sboms/{id}/versions",
++    "/api/logical-sboms/{logical_id}/versions",
++    "/api/vex/investigations/versions",
+ }
+ 
+ 
+@@ -131,11 +135,21 @@
+ 
+ def route_entity(path):
+     # The final resource collection controls the unqualified id field.
++    # "versions" is not a resource: advisor policy histories have their own
++    # integer identities. Only these SBOM version collections contain sources.
++    if path in SOURCE_VERSION_COLLECTIONS:
++        return "sbom_source"
+     entity = None
+     for part in path.replace("-", "_").split("/"):
+         if part in CONTEXT:
+             entity = CONTEXT[part]
+     return entity
++
++
++def field_entity(key, path):
++    if key == "version_id" and path == "/api/sboms/{id}/restore/{version_id}":
++        return "sbom_source"
++    return FIELDS.get(key)
+ 
+ 
+ def scoped_table(db, entity, context):
+@@ -182,7 +196,7 @@
+             return row.id
+ 
+         for key, value in list(request.path_params.items()):
+-            entity = FIELDS.get(key)
++            entity = field_entity(key, request.scope["route"].path)
+             if key == "id":
+                 entity = route_entity(request.scope["route"].path)
+             if entity:
+@@ -205,7 +219,7 @@
+         for key, value in request.query_params.multi_items():
+             if key in BATCH_FIELDS and value:
+                 value = ",".join(str(resolve(BATCH_FIELDS[key], part)) for part in value.split(","))
+-            entity = FIELDS.get(key)
++            entity = field_entity(key, request.scope["route"].path)
+             if request.scope["route"].path.endswith("/compare-versions") and key in ("version_a", "version_b"):
+                 entity = "sbom_source"
+             if request.scope["route"].path.rstrip("/") == "/api/sboms" and key == "cursor":
+@@ -220,7 +234,7 @@
+             form = await request.form()
+             pairs = []
+             for key, value in form.multi_items():
+-                entity = FIELDS.get(key)
++                entity = field_entity(key, request.scope["route"].path)
+                 if entity and value not in ("", None):
+                     value = str(resolve(entity, value))
+                 pairs.append((key, value))
+@@ -243,10 +257,17 @@
+                     if str(body["id"]).lower() not in expected_ids:
+                         raise HTTPException(422, "Public identity is immutable")
+ 
++            if request.scope["route"].path == "/api/sboms/{sbom_id}/vex" and request.method == "POST":
++                # This endpoint accepts a source-native VEX document, either
++                # wrapped in "document" or directly. CSAF product_id/product_ids
++                # and OpenVEX identifiers belong to that document, not our DB.
++                # The path's SBOM UUID was already resolved and tenant scoped.
++                return
++
+             def convert(obj):
+                 if isinstance(obj, dict):
+                     for key, value in obj.items():
+-                        entity = FIELDS.get(key)
++                        entity = field_entity(key, request.scope["route"].path)
+                         if key in ("metadata_json", "evidence_json", "sbom_data", "validation_report", "raw_document"):
+                             continue
+                         if key in BATCH_FIELDS and value is not None:
+@@ -370,6 +391,7 @@
+                     root = (
+                         route_entity(path)
+                         if path.split("/")[-1] in CONTEXT
++                        or path in SOURCE_VERSION_COLLECTIONS
+                         or path.split("/")[-1]
+                         in (
+                             "{tenant_id}",
+@@ -450,7 +472,7 @@
+                 for parameter in operation.get("parameters", []):
+                     key = parameter["name"]
+                     if (
+-                        key in FIELDS
++                        field_entity(key, path)
+                         or key == "X-Tenant-ID"
+                         or (key == "id" and route_entity(path))
+                         or (path.endswith("/compare-versions") and key in ("version_a", "version_b"))
+--- a/docs/plans/vex-implementation-plan.md
++++ b/docs/plans/vex-implementation-plan.md
+@@ -470,3 +470,7 @@
+ ## UAT remediation Round 1 — 20 October 2026
+ 
+ SBO-70 / UAT-DEF-003: normalize the stored numeric analyzer confidence to the existing nullable-text investigation DTO at serialization. No public schema, authorization, evidence precedence, audit or transaction policy changes. Regression coverage exercises null/zero/fraction/unit confidence, successful responses, stale 409 responses, one persisted statement/context audit, validation rejection and the existing live membership authorization matrix (VEX-UI-003, VEX-AUD-001/002, VEX-VAL-001, VEX-SEC-001/002). See docs/uat/remediation/2026-10-20-round1/ for before/after evidence and exact check results. The original 485-case baseline and full-UAT sign-off remain separate.
++
++### UAT remediation Round 2 — 20 October 2026
++
++SBO-54: reproduced the original 13 UUID-boundary fixture failures (55 passed/13 failed), corrected only public HTTP resource identifiers and corresponding wire expectations, and retained integer DB/audit keys. The original suite now passes 69 tests including explicit integer-ID rejection with unchanged row_version. Expanded VEX fixtures were reconciled against the same UUID contract. Final expanded VEX/policy/dashboard/version regressions passed 320 tests plus 8 subtests; Native/IAM/KEV/RBAC regressions passed 287 tests, with no failures or skips. The broader run also exposed source-native CSAF product identifiers being passed through application Product resolution; `app/public_api.py` now preserves the VEX import document body after the addressed SBOM's existing UUID/auth/tenant resolution. Regression controls cover source-document preservation, invalid internal IDs and foreign targets. No VEX precedence, severity, assignment, concurrency or audit policy changed. Final checks and remaining limits are recorded in `docs/uat/remediation/2026-10-20-round2/RESULTS.md`; the original 485-case baseline remains historical.
+--- a/docs/secure-component-advisor/implementation-plan.md
++++ b/docs/secure-component-advisor/implementation-plan.md
+@@ -493,3 +493,7 @@
+ - Windows: a stopped background pytest leaves orphan processes on the test DB. Kill them before the next run.
+ - Regression runs must use a frozen worktree: twice, a migration added mid-run made later app-startup tests fail
+   with "schema not at head", which invalidated those runs.
++
++### UAT remediation Round 2 — 20 October 2026
++
++SBO-76: policy history IDs remain the policy subsystem's integers. Removed generic `versions` inference from the public UUID boundary and explicitly identified the three genuine SBOM-source version collections, including the VEX version picker. Restore-version request IDs retain explicit SBOM UUID resolution. Tenant/platform policy permissions, append-only publication and row_version conflicts are unchanged. Regression cases cover empty/nonempty histories for all kinds, same-number policy/SBOM collisions, no-SBOM tenants, platform/tenant separation and role denials. Live disposable-tenant HTTP and browser history checks passed for trust, accepted-risk and scoring; publication 201 and stale 409 remain intact. Final exact suite results and evidence are in `docs/uat/remediation/2026-10-20-round2/RESULTS.md`. No original UAT sign-off is implied.
+--- a/frontend/src/app/kev/page.tsx
++++ b/frontend/src/app/kev/page.tsx
+@@ -311,7 +311,8 @@
+         subtitle="Known Exploited Vulnerabilities catalog"
+         action={
+           <Button
+-            permission="tenant:settings:update" onClick={() => syncMutation.mutate()}
++            permission="platform:admin" disabledReason="The global KEV catalog is synchronized by a Platform Administrator."
++            onClick={() => syncMutation.mutate()}
+             loading={syncMutation.isPending}
+             loadingLabel="Syncing KEV catalog"
+           >
+--- a/frontend/src/app/platform/page.tsx
++++ b/frontend/src/app/platform/page.tsx
+@@ -24,6 +24,7 @@
+ import { TenantStatusBadge } from '@/components/admin/StatusBadges';
+ import { InfoTooltip } from '@/components/ui/InfoTooltip';
+ import { cn } from '@/lib/utils';
++import { PlatformKevSync } from '@/components/admin/PlatformKevSync';
+ 
+ const tenantsHref = '/settings/platform/tenants';
+ const focus =
+@@ -202,6 +203,7 @@
+         action={<div className="hidden md:block">{createAction}</div>}
+       />
+       <main className="mx-auto w-full min-w-0 max-w-[1440px] space-y-6 p-4 md:p-6 xl:p-8">
++        <PlatformKevSync />
+         <div className="flex flex-wrap items-center justify-between gap-3">
+           <p className="text-sm text-foreground/70">
+             Monitor tenant provisioning, platform configuration and governance.
+--- a/frontend/src/app/settings/platform/page.test.tsx
++++ b/frontend/src/app/settings/platform/page.test.tsx
+@@ -115,7 +115,7 @@
+       screen.getByPlaceholderText('Search existing SBOM users by email or name…'),
+       'Candidate',
+     );
+-    await user.click(await screen.findByRole('button', { name: /Candidate Admin/ }));
++    await user.click(await screen.findByRole('option', { name: /Candidate Admin/ }));
+     await user.click(screen.getByRole('button', { name: 'Grant Platform Administrator' }));
+     await waitFor(() => expect(api.grantPlatformAdministrator).toHaveBeenCalledWith(3));
+   });
+--- a/frontend/src/app/settings/platform/tenants/page.test.tsx
++++ b/frontend/src/app/settings/platform/tenants/page.test.tsx
+@@ -98,7 +98,7 @@
+     /Search existing SBOM users/,
+   );
+   await user.type(userSearch, 'Feroze');
+-  const option = await screen.findByRole('button', { name: /Feroze Basha/ });
++  const option = await screen.findByRole('option', { name: /Feroze Basha/ });
+   await user.click(option);
+   return { user, form };
+ }
+--- a/frontend/src/app/settings/tenant/page.test.tsx
++++ b/frontend/src/app/settings/tenant/page.test.tsx
+@@ -161,7 +161,7 @@
+     expect(screen.queryByRole('button', { name: 'Add Member' })).not.toBeInTheDocument();
+     await user.click(screen.getByRole('button', { name: 'Add Existing Member' }));
+     await waitFor(() => expect(screen.getByRole('dialog', { name: 'Add Existing Member' })).toHaveFocus());
+-    await user.type(screen.getByRole('textbox', { name: 'Search existing user' }), query);
++    await user.type(screen.getByRole('combobox', { name: 'Search existing user' }), query);
+     await user.click(await screen.findByText('New User'));
+     expect(screen.getByRole('group', { name: 'Initial roles' })).toBeInTheDocument();
+     await user.click(screen.getByRole('button', { name: 'Add Member' }));
+@@ -188,7 +188,7 @@
+     await screen.findAllByText('Example User');
+     await user.click(screen.getByRole('button', { name: 'Add Existing Member' }));
+     await waitFor(() => expect(screen.getByRole('dialog', { name: 'Add Existing Member' })).toHaveFocus());
+-    const input = screen.getByRole('textbox', { name: 'Search existing user' });
++    const input = screen.getByRole('combobox', { name: 'Search existing user' });
+     await user.type(input, 'New');
+     const foundUser = await screen.findByText('New User');
+     await user.click(foundUser);
+@@ -330,7 +330,7 @@
+     const open = screen.getByRole('button', { name: 'Add Existing Member' });
+     await user.click(open);
+     await waitFor(() => expect(screen.getByRole('dialog', { name: 'Add Existing Member' })).toHaveFocus());
+-    await user.type(screen.getByRole('textbox', { name: 'Search existing user' }), 'New');
++    await user.type(screen.getByRole('combobox', { name: 'Search existing user' }), 'New');
+     await user.click(await screen.findByText('New User'));
+     expect(screen.getByRole('checkbox', { name: /Viewer/ })).toBeChecked();
+     await user.click(screen.getByRole('button', { name: 'Cancel' }));
+@@ -354,7 +354,7 @@
+     const invalidate = vi.spyOn(client, 'invalidateQueries');
+     await user.click(screen.getByRole('button', { name: 'Add Existing Member' }));
+     await waitFor(() => expect(screen.getByRole('dialog', { name: 'Add Existing Member' })).toHaveFocus());
+-    await user.type(screen.getByRole('textbox', { name: 'Search existing user' }), 'New');
++    await user.type(screen.getByRole('combobox', { name: 'Search existing user' }), 'New');
+     await user.click(await screen.findByText('New User'));
+     await user.click(screen.getByRole('checkbox', { name: /Viewer/ }));
+     expect(screen.getByRole('button', { name: 'Add Member' })).toBeDisabled();
+@@ -379,7 +379,7 @@
+     renderPage();
+     await user.click(screen.getByRole('button', { name: 'Add Existing Member' }));
+     await waitFor(() => expect(screen.getByRole('dialog', { name: 'Add Existing Member' })).toHaveFocus());
+-    await user.type(screen.getByRole('textbox', { name: 'Search existing user' }), 'New');
++    await user.type(screen.getByRole('combobox', { name: 'Search existing user' }), 'New');
+     await user.click(await screen.findByText('New User'));
+     expect(screen.queryByRole('checkbox', { name: /Viewer/ })).not.toBeInTheDocument();
+     expect(screen.queryByRole('checkbox', { name: /Tenant Admin/ })).not.toBeInTheDocument();
+@@ -401,7 +401,7 @@
+     await user.type(screen.getByRole('searchbox', { name: 'Search members' }), 'Example');
+     await user.click(screen.getByRole('button', { name: 'Add Existing Member' }));
+     await waitFor(() => expect(screen.getByRole('dialog', { name: 'Add Existing Member' })).toHaveFocus());
+-    await user.type(screen.getByRole('textbox', { name: 'Search existing user' }), 'New');
++    await user.type(screen.getByRole('combobox', { name: 'Search existing user' }), 'New');
+     await user.click(await screen.findByText('New User'));
+     await user.click(screen.getByRole('button', { name: 'Add Member' }));
+     switchTenant(2);
+@@ -416,7 +416,7 @@
+     expect(api.getAssignableTenantRoles).toHaveBeenCalledWith(2);
+     await user.click(screen.getByRole('button', { name: 'Add Existing Member' }));
+     await waitFor(() => expect(screen.getByRole('dialog', { name: 'Add Existing Member' })).toHaveFocus());
+-    await user.type(screen.getByRole('textbox', { name: 'Search existing user' }), 'Other');
++    await user.type(screen.getByRole('combobox', { name: 'Search existing user' }), 'Other');
+     await screen.findByText('New User');
+     expect(api.searchTenantUserCandidates).toHaveBeenLastCalledWith(2, 'Other');
+   });
+@@ -458,7 +458,7 @@
+     renderPage();
+     await user.click(screen.getByRole('button', { name: 'Add Existing Member' }));
+     await waitFor(() => expect(screen.getByRole('dialog')).toHaveFocus());
+-    await user.type(screen.getByRole('textbox', { name: 'Search existing user' }), 'New');
++    await user.type(screen.getByRole('combobox', { name: 'Search existing user' }), 'New');
+     await user.click(await screen.findByText('New User'));
+     expect(await screen.findByRole('alert')).toHaveTextContent('Could not load assignable roles.');
+     expect(screen.getByRole('button', { name: 'Add Member' })).toBeDisabled();
+@@ -475,7 +475,7 @@
+     renderPage();
+     await user.click(screen.getByRole('button', { name: 'Add Existing Member' }));
+     await waitFor(() => expect(screen.getByRole('dialog')).toHaveFocus());
+-    await user.type(screen.getByRole('textbox', { name: 'Search existing user' }), 'My');
++    await user.type(screen.getByRole('combobox', { name: 'Search existing user' }), 'My');
+     await user.click(await screen.findByText('My Account'));
+     await user.click(screen.getByRole('button', { name: 'Add Member' }));
+     await waitFor(() => expect(refreshSession).toHaveBeenCalledWith({ authorizationChanged: true }));
+--- a/frontend/src/components/admin/MembershipConfirmDialogs.tsx
++++ b/frontend/src/components/admin/MembershipConfirmDialogs.tsx
+@@ -59,7 +59,7 @@
+ 
+         <p className="text-sm text-hcl-muted">
+           <strong className="text-foreground">{displayName || 'This user'}</strong> will no longer be able to access{' '}
+-          <strong className="text-foreground">{tenantName}</strong>. Their HCL.CS identity and SBOM user account will remain unchanged. Their tenant membership record and assigned roles will be retained.
++          <strong className="text-foreground">{tenantName}</strong>. Their sign-in identity and SBOM user account will remain unchanged. Their tenant membership record and assigned roles will be retained.
+         </p>
+ 
+         {isSelf && (
+@@ -197,7 +197,7 @@
+         <div className="rounded-xl border border-border bg-surface-elevated p-3 text-xs text-hcl-muted space-y-1">
+           <span className="font-semibold text-foreground">This does not delete:</span>
+           <ul className="list-disc list-inside space-y-0.5 ml-1">
+-            <li>their HCL.CS identity</li>
++            <li>their sign-in identity</li>
+             <li>their SBOM user account</li>
+             <li>memberships in other tenants</li>
+             <li>their platform-level role, when present</li>
+--- a/frontend/src/components/admin/TenantUsersAccess.tsx
++++ b/frontend/src/components/admin/TenantUsersAccess.tsx
+@@ -1,6 +1,6 @@
+ 'use client';
+ 
+-import { useRef, useState, FormEvent } from 'react';
++import { useRef, useState, useId, FormEvent } from 'react';
+ import { Search, X, UserPlus, MailPlus, Users } from 'lucide-react';
+ import { Button } from '@/components/ui/Button';
+ import { ROLE_DESCRIPTIONS } from './StatusBadges';
+@@ -43,6 +43,7 @@
+ }
+ 
+ function TenantUsersAccessContent() {
++  const addFormId = useId();
+   const { user, tenants, activeTenant, activeTenantId, isTenantContextLoading, isLoading: authLoading,  refreshSession } = useAuth();
+   const { can: hasPermission } = usePermissions();
+   const router = useRouter();
+@@ -314,8 +315,13 @@
+       <TenantAuditHistory tenantId={currentTenantId} />
+ 
+       {canInvite && <>
+-        <Dialog open={addOpen} title="Add Existing Member" maxWidth="lg" dismissOnBackdrop={!addMemberMutation.isPending} onClose={closeAdd}>
+-          <form onSubmit={submitMember}>
++        <Dialog open={addOpen} title="Add Existing Member" maxWidth="lg" dismissOnBackdrop={!addMemberMutation.isPending} onClose={closeAdd} footer={
++          <div className="flex justify-end gap-3 px-6 py-4">
++            <Button variant="secondary" onClick={closeAdd} disabled={addMemberMutation.isPending}>Cancel</Button>
++            <Button type="submit" form={addFormId} loading={addMemberMutation.isPending} loadingLabel="Adding member" disabled={!selectedUser || !validInitialRoles}>{addMemberMutation.isPending ? 'Adding…' : 'Add Member'}</Button>
++          </div>
++        }>
++          <form id={addFormId} onSubmit={submitMember}>
+             <DialogBody className="space-y-5">
+               <p className="text-sm leading-6 text-hcl-muted">Add an existing SBOM Analyzer account to <strong className="text-foreground">{tenantName}</strong>. This does not create a new user account.</p>
+               {addMemberMutation.error && <p role="alert" className="rounded-lg border border-red-200 bg-red-50 p-3 text-sm text-red-700 dark:border-red-900/50 dark:bg-red-950/20 dark:text-red-300">{getApiErrorMessage(addMemberMutation.error, 'Failed to add member to tenant.')}</p>}
+@@ -342,10 +348,7 @@
+                 {!roles.isPending && !roles.error && !validInitialRoles && <p className="text-xs text-amber-700 dark:text-amber-300">Select at least one assignable role. Unavailable roles cannot be assigned.</p>}
+               </fieldset>}
+             </DialogBody>
+-            <div className="flex justify-end gap-3 border-t border-border bg-surface-muted/80 px-6 py-4">
+-              <Button variant="secondary" onClick={closeAdd} disabled={addMemberMutation.isPending}>Cancel</Button>
+-              <Button type="submit" loading={addMemberMutation.isPending} loadingLabel="Adding member" disabled={!selectedUser || !validInitialRoles}>{addMemberMutation.isPending ? 'Adding…' : 'Add Member'}</Button>
+-            </div>
++
+           </form>
+         </Dialog>
+         <Dialog open={inviteOpen} title="Invite new user" maxWidth="xl" dismissOnBackdrop={!inviteBusy} onClose={() => { if (!inviteBusy) setInviteOpen(false); }}><DialogBody>
+--- a/frontend/src/components/admin/UserSearchCombobox.test.tsx
++++ b/frontend/src/components/admin/UserSearchCombobox.test.tsx
+@@ -15,9 +15,52 @@
+ });
+ 
+ describe('UserSearchCombobox', () => {
++  it('keeps results in layout flow and supports keyboard selection without submitting the dialog', async () => {
++    const candidate = { id: 31, email: 'keyboard@example.test', display_name: 'Keyboard Candidate', status: 'ACTIVE', email_verified: true, verification_required: false };
++    vi.mocked(api.searchTenantUserCandidates).mockResolvedValue([candidate]);
++    const select = vi.fn();
++    render(<UserSearchCombobox tenantId="cd9e3737-67fe-4d06-8e6c-8d185854e11b" onSelect={select} selectedUser={null} />);
++    const input = screen.getByRole('combobox');
++    fireEvent.change(input, { target: { value: 'keyboard' } });
++    const option = await screen.findByRole('option');
++    expect(screen.getByRole('listbox')).not.toHaveClass('absolute');
++    fireEvent.keyDown(input, { key: 'ArrowDown' });
++    expect(input).toHaveAttribute('aria-activedescendant', option.id);
++    fireEvent.keyDown(input, { key: 'Enter' });
++    expect(select).toHaveBeenCalledExactlyOnceWith(candidate);
++    expect(screen.queryByRole('listbox')).not.toBeInTheDocument();
++  });
++
++  it('Escape dismisses results, keeps input focus and does not dismiss the parent dialog', async () => {
++    vi.mocked(api.searchTenantUserCandidates).mockResolvedValue([]);
++    const bubble = vi.fn();
++    render(<div onKeyDown={bubble}><UserSearchCombobox tenantId={1} onSelect={vi.fn()} selectedUser={null} /></div>);
++    const input = screen.getByRole('combobox');
++    input.focus();
++    fireEvent.change(input, { target: { value: 'missing' } });
++    await screen.findByRole('listbox');
++    fireEvent.keyDown(input, { key: 'Escape' });
++    expect(screen.queryByRole('listbox')).not.toBeInTheDocument();
++    expect(input).toHaveFocus();
++    expect(bubble).not.toHaveBeenCalled();
++  });
++
++  it('keeps the popup in place until an outside pointer click completes', async () => {
++    vi.mocked(api.searchTenantUserCandidates).mockResolvedValue([]);
++    const cancel = vi.fn();
++    render(<><UserSearchCombobox tenantId={1} onSelect={vi.fn()} selectedUser={null} /><button onClick={cancel}>Cancel</button></>);
++    fireEvent.change(screen.getByRole('combobox'), { target: { value: 'missing' } });
++    await screen.findByRole('listbox');
++    const button = screen.getByRole('button', { name: 'Cancel' });
++    fireEvent.mouseDown(button);
++    expect(screen.getByRole('listbox')).toBeInTheDocument();
++    fireEvent.click(button);
++    expect(cancel).toHaveBeenCalledTimes(1);
++    expect(screen.queryByRole('listbox')).not.toBeInTheDocument();
++  });
+   it('does not search tenant candidates before two trimmed characters', async () => {
+     render(<UserSearchCombobox tenantId={1} onSelect={() => {}} selectedUser={null} />);
+-    fireEvent.change(screen.getByRole('textbox', { name: 'Search existing user' }), { target: { value: ' a ' } });
++    fireEvent.change(screen.getByRole('combobox', { name: 'Search existing user' }), { target: { value: ' a ' } });
+     await new Promise(resolve => setTimeout(resolve, 300));
+     expect(api.searchTenantUserCandidates).not.toHaveBeenCalled();
+     expect(api.searchPlatformUsers).not.toHaveBeenCalled();
+@@ -181,7 +224,7 @@
+     fireEvent.change(screen.getByPlaceholderText(/Search existing SBOM users/i), {
+       target: { value: 'Disabled User' },
+     });
+-    const option = await screen.findByRole('button', { name: /Disabled User/ });
++    const option = await screen.findByRole('option', { name: /Disabled User/ });
+     expect(option).toBeDisabled();
+     fireEvent.click(option);
+     expect(onSelect).not.toHaveBeenCalled();
+@@ -201,12 +244,12 @@
+   const candidate = { id: 55, display_name: 'New member', email: 'member@example.test', status: 'ACTIVE', email_verified: true, verification_required: false };
+   vi.mocked(api.searchTenantUserCandidates).mockResolvedValue([candidate]);
+   const view = render(<UserSearchCombobox tenantId={7} revision={0} onSelect={() => {}} selectedUser={null} />);
+-  const input = screen.getByRole('textbox', { name: 'Search existing user' });
++  const input = screen.getByRole('combobox', { name: 'Search existing user' });
+   fireEvent.change(input, { target: { value: 'member' } });
+   await screen.findByText('New member');
+   vi.mocked(api.searchTenantUserCandidates).mockResolvedValue([]);
+   view.rerender(<UserSearchCombobox tenantId={7} revision={1} onSelect={() => {}} selectedUser={null} />);
+   await waitFor(() => expect(screen.queryByText('New member')).not.toBeInTheDocument());
+   expect(input).toHaveValue('member');
+-  expect(api.searchTenantUserCandidates).toHaveBeenCalledTimes(2);
+-});
++  await waitFor(() => expect(api.searchTenantUserCandidates).toHaveBeenCalledTimes(2));
++});
+--- a/frontend/src/components/admin/UserSearchCombobox.tsx
++++ b/frontend/src/components/admin/UserSearchCombobox.tsx
+@@ -1,6 +1,6 @@
+ 'use client';
+ 
+-import { useState, useEffect, useRef } from 'react';
++import { useState, useEffect, useRef, useId } from 'react';
+ import { Search, UserCheck, ChevronDown, ChevronUp, Loader2 } from 'lucide-react';
+ import { type UserSearchResult, searchPlatformUsers, searchTenantUserCandidates, searchPlatformTenantAdminCandidates } from '@/lib/api';
+ import { VerificationBadge, UserStatusBadge } from './StatusBadges';
+@@ -51,6 +51,16 @@
+   const [showTechDetails, setShowTechDetails] = useState(false);
+   const containerRef = useRef<HTMLDivElement>(null);
+   const requestIdRef = useRef(0);
++  const listId = useId();
++  const [activeIndex, setActiveIndex] = useState(-1);
++  const isDisabled = (user: UserSearchResult) =>
++    (requireEligible && !isEligibleAdministrator(user)) || Boolean(tenantId && user.tenant_membership);
++  const selectUser = (user: UserSearchResult) => {
++    if (isDisabled(user)) return;
++    onSelect(user);
++    setOpen(false);
++    setQuery('');
++  };
+ 
+   useEffect(() => {
+     function handleClickOutside(e: MouseEvent) {
+@@ -59,14 +69,16 @@
+       }
+     }
+     if (open) {
+-      document.addEventListener('mousedown', handleClickOutside);
+-      return () => document.removeEventListener('mousedown', handleClickOutside);
++      document.addEventListener('click', handleClickOutside);
++      return () => document.removeEventListener('click', handleClickOutside);
+     }
+   }, [open]);
+ 
+   useEffect(() => {
+     const currentRequestId = ++requestIdRef.current;
+     let cancelled = false;
++    setActiveIndex(-1);
++    setResults([]);
+     if (query.trim().length < 2) {
+       setResults([]);
+       setLoading(false);
+@@ -77,6 +89,7 @@
+ 
+     const timer = setTimeout(async () => {
+       setLoading(true);
++      setOpen(true);
+       setSearchError(null);
+       try {
+         const data = tenantId
+@@ -189,11 +202,42 @@
+         <Search className="absolute left-3 top-2.5 h-4 w-4 text-hcl-muted" />
+         <input
+           type="text"
++          role="combobox"
++          aria-autocomplete="list"
++          aria-haspopup="listbox"
++          aria-expanded={open}
++          aria-controls={open ? listId : undefined}
++          aria-activedescendant={open && activeIndex >= 0 ? `${listId}-${activeIndex}` : undefined}
+           aria-label={tenantId ? 'Search existing user' : 'Search users by email or name'}
+           value={query}
+           onChange={(e) => setQuery(e.target.value)}
+           onFocus={() => {
+-            if (results.length > 0) setOpen(true);
++            if (query.trim().length >= 2) setOpen(true);
++          }}
++          onKeyDown={event => {
++            if (event.key === 'Escape' && (open || loading)) {
++              event.preventDefault();
++              event.stopPropagation();
++              ++requestIdRef.current;
++              setLoading(false);
++              setOpen(false);
++            } else if (event.key === 'Tab') {
++              setOpen(false);
++            } else if (event.key === 'ArrowDown' || event.key === 'ArrowUp') {
++              event.preventDefault();
++              setOpen(true);
++              const eligible = results.map((user, index) => isDisabled(user) ? -1 : index).filter(index => index >= 0);
++              if (!eligible.length) return;
++              const position = eligible.indexOf(activeIndex);
++              const next = event.key === 'ArrowDown'
++                ? eligible[(position + 1) % eligible.length]
++                : eligible[(position <= 0 ? eligible.length : position) - 1];
++              setActiveIndex(next);
++              document.getElementById(`${listId}-${next}`)?.scrollIntoView?.({ block: 'nearest' });
++            } else if (event.key === 'Enter' && open && activeIndex >= 0) {
++              event.preventDefault();
++              selectUser(results[activeIndex]);
++            }
+           }}
+           placeholder={placeholder}
+           className="w-full rounded-lg border border-border bg-background pl-9 pr-9 py-2 text-sm text-foreground focus:border-hcl-blue focus:outline-none"
+@@ -207,7 +251,9 @@
+       </div>
+ 
+       {open && (
+-        <div className="absolute left-0 right-0 top-full mt-1 z-50 max-h-64 overflow-y-auto rounded-xl border border-border bg-surface shadow-elev-3 p-1">
++        <div id={listId} role="listbox" aria-label="Existing user candidates" aria-busy={loading}
++          className="relative mt-1 max-h-64 overflow-y-auto overscroll-contain rounded-xl border border-border bg-surface shadow-elev-3 p-1">
++          {loading && <p className="p-4 text-center text-xs text-hcl-muted">Searching users…</p>}
+           {results.length === 0 && !loading && (
+             <div className="p-4 text-center text-xs text-hcl-muted">
+               {searchError
+@@ -217,24 +263,20 @@
+                   : 'No matching existing SBOM users found. Users must sign in to SBOM Analyser at least once to be discoverable.'}
+             </div>
+           )}
+-          {results.map((user) => {
+-            const disabled = (
+-              (requireEligible && !isEligibleAdministrator(user))
+-              || Boolean(tenantId && user.tenant_membership)
+-            );
++          {results.map((user, index) => {
++            const disabled = isDisabled(user);
+             return (
+             <button
+               key={user.id}
++              id={`${listId}-${index}`}
++              role="option"
++              aria-selected={activeIndex === index}
++              tabIndex={-1}
+               type="button"
+               disabled={disabled}
+               aria-disabled={disabled}
+-              onClick={() => {
+-                if (disabled) return;
+-                onSelect(user);
+-                setOpen(false);
+-                setQuery('');
+-              }}
+-              className="flex w-full items-start justify-between rounded-lg p-2.5 text-left text-sm hover:bg-surface-muted disabled:cursor-not-allowed disabled:opacity-50 transition-colors border-b border-border/30 last:border-0"
++              onClick={() => selectUser(user)}
++              className={`flex w-full items-start justify-between rounded-lg p-2.5 text-left text-sm hover:bg-surface-muted disabled:cursor-not-allowed disabled:opacity-50 transition-colors border-b border-border/30 last:border-0 ${activeIndex === index ? 'bg-surface-muted' : ''}`}
+             >
+               <div className="min-w-0 flex-1">
+                 <p className="font-semibold text-foreground truncate">
+--- a/frontend/src/components/admin/__tests__/MembershipConfirmDialogs.test.tsx
++++ b/frontend/src/components/admin/__tests__/MembershipConfirmDialogs.test.tsx
+@@ -21,6 +21,8 @@
+ 
+       expect(screen.getByText('Disable tenant membership?')).toBeInTheDocument();
+       expect(screen.getByText(/will no longer be able to access/i)).toBeInTheDocument();
++      expect(screen.getByText(/Their sign-in identity and SBOM user account will remain unchanged/)).toBeInTheDocument();
++      expect(screen.queryByText(/HCL\.CS|Microsoft Entra/)).not.toBeInTheDocument();
+       expect(screen.getByText(/Warning: You are disabling your own membership/i)).toBeInTheDocument();
+       expect(screen.getByRole('button', { name: 'Disable membership' })).toBeInTheDocument();
+     });
+@@ -62,6 +64,8 @@
+ 
+       expect(screen.getByText('Remove user from tenant?')).toBeInTheDocument();
+       expect(screen.getByText(/This does not delete:/i)).toBeInTheDocument();
++      expect(screen.getByText('their sign-in identity')).toBeInTheDocument();
++      expect(screen.queryByText(/HCL\.CS|Microsoft Entra/)).not.toBeInTheDocument();
+       expect(screen.getByText(/Warning: You are removing yourself from this tenant/i)).toBeInTheDocument();
+ 
+       const confirmButton = screen.getByRole('button', { name: 'Remove from tenant' });
+--- a/frontend/src/components/admin/__tests__/UserSearchCombobox.test.tsx
++++ b/frontend/src/components/admin/__tests__/UserSearchCombobox.test.tsx
+@@ -41,7 +41,7 @@
+ 
+     render(<UserSearchCombobox tenantId={7} onSelect={vi.fn()} selectedUser={null} />);
+ 
+-    const input = screen.getByRole('textbox');
++    const input = screen.getByRole('combobox');
+     fireEvent.change(input, { target: { value: 'feroze' } });
+ 
+     await waitFor(() => expect(searchTenantUserCandidatesMock).toHaveBeenCalledTimes(1));
+@@ -56,7 +56,7 @@
+ 
+     render(<UserSearchCombobox tenantId={7} onSelect={vi.fn()} selectedUser={null} />);
+ 
+-    fireEvent.change(screen.getByRole('textbox'), { target: { value: 'feroze' } });
++    fireEvent.change(screen.getByRole('combobox'), { target: { value: 'feroze' } });
+ 
+     expect(await screen.findByText('Feroze Basha')).toBeInTheDocument();
+     expect(screen.getByText('ferozebasha.s@hcltech.com')).toBeInTheDocument();
+@@ -67,7 +67,7 @@
+ 
+     render(<UserSearchCombobox tenantId={7} onSelect={vi.fn()} selectedUser={null} />);
+ 
+-    fireEvent.change(screen.getByRole('textbox'), { target: { value: 'existing.member' } });
++    fireEvent.change(screen.getByRole('combobox'), { target: { value: 'existing.member' } });
+ 
+     expect(await screen.findByText('No eligible users found for this tenant.')).toBeInTheDocument();
+   });
+@@ -78,28 +78,28 @@
+     // 401 error
+     searchTenantUserCandidatesMock.mockRejectedValueOnce(new ApiError('Unauthorized', 401));
+     const { unmount: u1 } = render(<UserSearchCombobox tenantId={7} onSelect={onSelect} selectedUser={null} />);
+-    fireEvent.change(screen.getByRole('textbox'), { target: { value: 'test' } });
++    fireEvent.change(screen.getByRole('combobox'), { target: { value: 'test' } });
+     expect(await screen.findByText('Your session has expired. Sign in again.')).toBeInTheDocument();
+     u1();
+ 
+     // 403 error
+     searchTenantUserCandidatesMock.mockRejectedValueOnce(new ApiError('Forbidden', 403));
+     const { unmount: u2 } = render(<UserSearchCombobox tenantId={7} onSelect={onSelect} selectedUser={null} />);
+-    fireEvent.change(screen.getByRole('textbox'), { target: { value: 'test' } });
++    fireEvent.change(screen.getByRole('combobox'), { target: { value: 'test' } });
+     expect(await screen.findByText('You do not have permission to add members to this tenant.')).toBeInTheDocument();
+     u2();
+ 
+     // 404 error
+     searchTenantUserCandidatesMock.mockRejectedValueOnce(new ApiError('Not found', 404));
+     const { unmount: u3 } = render(<UserSearchCombobox tenantId={7} onSelect={onSelect} selectedUser={null} />);
+-    fireEvent.change(screen.getByRole('textbox'), { target: { value: 'test' } });
++    fireEvent.change(screen.getByRole('combobox'), { target: { value: 'test' } });
+     expect(await screen.findByText('The selected tenant could not be found.')).toBeInTheDocument();
+     u3();
+ 
+     // 500 error
+     searchTenantUserCandidatesMock.mockRejectedValueOnce(new Error('Network error'));
+     render(<UserSearchCombobox tenantId={7} onSelect={onSelect} selectedUser={null} />);
+-    fireEvent.change(screen.getByRole('textbox'), { target: { value: 'test' } });
++    fireEvent.change(screen.getByRole('combobox'), { target: { value: 'test' } });
+     expect(await screen.findByText('User search could not be completed. Try again.')).toBeInTheDocument();
+   });
+ 
+@@ -117,7 +117,7 @@
+ 
+     render(<UserSearchCombobox tenantId={7} onSelect={vi.fn()} selectedUser={null} />);
+ 
+-    const input = screen.getByRole('textbox');
++    const input = screen.getByRole('combobox');
+ 
+     // First query "fer"
+     fireEvent.change(input, { target: { value: 'fer' } });
+@@ -143,9 +143,9 @@
+ 
+     render(<UserSearchCombobox tenantId={7} onSelect={onSelect} selectedUser={null} />);
+ 
+-    fireEvent.change(screen.getByRole('textbox'), { target: { value: 'feroze' } });
++    fireEvent.change(screen.getByRole('combobox'), { target: { value: 'feroze' } });
+ 
+-    const candidateButton = await screen.findByRole('button', { name: /Feroze Basha/i });
++    const candidateButton = await screen.findByRole('option', { name: /Feroze Basha/i });
+     fireEvent.click(candidateButton);
+ 
+     expect(onSelect).toHaveBeenCalledWith(ferozeCandidate);
+--- a/tests/test_logical_sbom_versions.py
++++ b/tests/test_logical_sbom_versions.py
+@@ -1,6 +1,7 @@
+ """Multiple independently versioned SBOMs per Product, with stable evidence IDs."""
+ 
+ import json
++from uuid import UUID
+ 
+ from app.db import SessionLocal
+ from app.models import AnalysisRun, SBOMComponent, SBOMSource
+@@ -104,14 +105,14 @@
+         analyzed = client.post(f"/api/sboms/{value['sbom_id']}/analyze")
+         assert analyzed.status_code in (200, 201), analyzed.text
+     with SessionLocal() as db, verified_fixture_tenant(db, 1):
+-        assert {c.name for c in db.scalars(select(SBOMComponent).where(SBOMComponent.sbom_id == first["sbom_id"]))} == {
++        assert {c.name for c in db.scalars(select(SBOMComponent).where(SBOMComponent.sbom_id == select(SBOMSource.id).where(SBOMSource.public_id == UUID(first["sbom_id"])).scalar_subquery()))} == {
+             "alpha"
+         }
+         assert {
+-            c.name for c in db.scalars(select(SBOMComponent).where(SBOMComponent.sbom_id == second["sbom_id"]))
++            c.name for c in db.scalars(select(SBOMComponent).where(SBOMComponent.sbom_id == select(SBOMSource.id).where(SBOMSource.public_id == UUID(second["sbom_id"])).scalar_subquery()))
+         } == {"beta"}
+         for value in (first, second):
+-            assert db.scalar(select(AnalysisRun.id).where(AnalysisRun.sbom_id == value["sbom_id"]))
++            assert db.scalar(select(AnalysisRun.id).where(AnalysisRun.sbom_id == select(SBOMSource.id).where(SBOMSource.public_id == UUID(value["sbom_id"])).scalar_subquery()))
+ 
+ 
+ def test_empty_master_first_upload_and_other_product_cannot_reuse_it(client):
+@@ -136,7 +137,7 @@
+     product = _product(client, project["id"])
+     first = upload(client, project, product, "1.0").json()
+     with SessionLocal() as db, verified_fixture_tenant(db, 1):
+-        original = db.get(SBOMSource, first["sbom_id"])
++        original = db.scalar(select(SBOMSource).where(SBOMSource.public_id == UUID(first["sbom_id"])))
+         db.add(
+             SBOMSource(
+                 tenant_id=original.tenant_id,
+--- a/tests/test_native_tenant_provisioning.py
++++ b/tests/test_native_tenant_provisioning.py
+@@ -1,6 +1,7 @@
+ """Provisioning transactions and direct HTTP authorization against PostgreSQL."""
+ 
+ import base64
++from uuid import UUID
+ 
+ import pytest
+ from app.core.security import get_current_claims
+@@ -14,6 +15,7 @@
+ from tests.phase6_helpers import identity_claims, seed_user
+ from tests.phase7_helpers import seed_requester
+ from tests.phase9_helpers import seed_role_membership
++from tests.tenant_fixture_scope import declare_fixture_tenant
+ 
+ 
+ @pytest.fixture
+@@ -50,15 +52,15 @@
+     tid, uid = result["tenant"]["id"], result["initial_administrator"]["user_id"]
+     assert result["tenant"]["status"] == "PENDING"
+     with SessionLocal() as db:
+-        assert db.scalar(select(TenantUser.id).where(TenantUser.tenant_id == tid, TenantUser.user_id == actor_id)) is None
+-        member = db.scalar(select(TenantUser).where(TenantUser.tenant_id == tid, TenantUser.user_id == uid))
++        assert db.scalar(select(TenantUser.id).where(TenantUser.tenant_id == select(Tenant.id).where(Tenant.public_id == UUID(tid)).scalar_subquery(), TenantUser.user_id == actor_id)) is None
++        member = db.scalar(select(TenantUser).where(TenantUser.tenant_id == select(Tenant.id).where(Tenant.public_id == UUID(tid)).scalar_subquery(), TenantUser.user_id == uid))
+         assert effective_role_codes(db, member) == {"TENANT_ADMIN"}
+         assert db.get(IAMUser, uid).status == "PENDING_EMAIL_VERIFICATION"
+         raw = activation_secret(db, uid)
+         assert raw not in response.text
+         native_auth_service.activate(db, raw, "a long native test passphrase")
+         db.commit()
+-        assert db.get(Tenant, tid).status == "ACTIVE"
++        assert db.scalar(select(Tenant).where(Tenant.public_id == UUID(tid))).status == "ACTIVE"
+         assert db.get(IAMUser, uid).email_verified
+ 
+ 
+@@ -112,10 +114,10 @@
+     assert client.patch(f"/api/platform/tenants/{tid}", json={"status": "ACTIVE"}).status_code == 409
+     assert client.patch(f"/api/platform/tenants/{tid}", json={"status": "DISABLED"}).status_code == 200
+     with SessionLocal() as db:
+-        uid = db.scalar(select(TenantUser.user_id).where(TenantUser.tenant_id == tid))
++        uid = db.scalar(select(TenantUser.user_id).where(TenantUser.tenant_id == select(Tenant.id).where(Tenant.public_id == UUID(tid)).scalar_subquery()))
+         native_auth_service.activate(db, activation_secret(db, uid), "a long native test passphrase")
+         db.commit()
+-        assert db.get(Tenant, tid).status == "DISABLED"
++        assert db.scalar(select(Tenant).where(Tenant.public_id == UUID(tid))).status == "DISABLED"
+ 
+ 
+ def test_platform_can_resend_pending_tenant_activation_without_tenant_context(provisioning, monkeypatch):
+@@ -161,20 +163,23 @@
+     with SessionLocal() as db:
+         actor, member, _ = seed_role_membership(db, role="TENANT_ADMIN")
+         member_id = member.id
++        declare_fixture_tenant(db, 2)
++        tenant_ids = {key: str(db.get(Tenant, key).public_id) for key in (1, 2)}
++        db.commit()
+         claims = identity_claims(actor)
+     client.app.dependency_overrides[get_current_claims] = lambda: claims
+     try:
+-        invitation = {**payload()["initial_admin_invitation"], "tenant_id": 1, "role_codes": [role]}
+-        response = client.post("/api/tenants/1/native-users", json=invitation, headers={"X-Tenant-ID": "1"})
++        invitation = {**payload()["initial_admin_invitation"], "tenant_id": tenant_ids[1], "role_codes": [role]}
++        response = client.post(f"/api/tenants/{tenant_ids[1]}/native-users", json=invitation, headers={"X-Tenant-ID": tenant_ids[1]})
+         assert response.status_code == expected, response.text
+-        invitation["tenant_id"] = 2
+-        assert client.post("/api/tenants/2/native-users", json=invitation, headers={"X-Tenant-ID": "1"}).status_code == 403
++        invitation["tenant_id"] = tenant_ids[2]
++        assert client.post(f"/api/tenants/{tenant_ids[2]}/native-users", json=invitation, headers={"X-Tenant-ID": tenant_ids[1]}).status_code == 404
+         assert client.post("/api/tenants", json=payload()).status_code == 403
+         assert client.get("/api/platform/users/search?q=ajmer").status_code == 403
+         with SessionLocal() as db:
+             db.get(TenantUser, member_id).status = "DISABLED"
+             db.commit()
+-        invitation["tenant_id"] = 1
+-        assert client.post("/api/tenants/1/native-users", json=invitation, headers={"X-Tenant-ID": "1"}).status_code == 403
++        invitation["tenant_id"] = tenant_ids[1]
++        assert client.post(f"/api/tenants/{tenant_ids[1]}/native-users", json=invitation, headers={"X-Tenant-ID": tenant_ids[1]}).status_code == 403
+     finally:
+         client.app.dependency_overrides.pop(get_current_claims, None)
+--- a/tests/test_scoped_configuration.py
++++ b/tests/test_scoped_configuration.py
+@@ -62,6 +62,7 @@
+         seed_membership(db, viewer, tenant_id=1, role="VIEWER")
+         seed_membership(db, analyst, tenant_id=1, role="SECURITY_ANALYST")
+         seed_membership(db, developer, tenant_id=1, role="DEVELOPER")
++        tenant_headers = {"olympus": str(db.get(Tenant, 1).public_id), "astra": str(db.get(Tenant, 2).public_id)}
+         identities = {
+             "platform": identity_claims(platform),
+             "olympus": identity_claims(olympus),
+@@ -76,7 +77,7 @@
+         app.dependency_overrides[get_current_user] = lambda: identities[actor]
+         headers = kwargs.pop("headers", {})
+         if actor != "platform":
+-            headers.setdefault("X-Tenant-ID", "2" if actor == "astra" else "1")
++            headers.setdefault("X-Tenant-ID", tenant_headers["astra" if actor == "astra" else "olympus"])
+         return client.request(method, path, headers=headers, **kwargs)
+ 
+     yield call
+--- a/tests/test_tenant_user_candidates.py
++++ b/tests/test_tenant_user_candidates.py
+@@ -3,7 +3,6 @@
+ from __future__ import annotations
+ 
+ import pytest
+-
+ from app.core.security import get_current_user
+ from app.db import SessionLocal
+ from app.models import Tenant, TenantUser
+@@ -42,9 +41,9 @@
+     _override_user(app, claims)
+     try:
+         res = client.get(
+-            f"/api/tenants/{wellysis.id}/user-candidates",
++            f"/api/tenants/{wellysis.public_id}/user-candidates",
+             params={"q": "eligible"},
+-            headers={"X-Tenant-ID": str(wellysis.id)},
++            headers={"X-Tenant-ID": str(wellysis.public_id)},
+         )
+     finally:
+         _clear_override(app)
+@@ -80,9 +79,9 @@
+     _override_user(app, claims)
+     try:
+         res = client.get(
+-            f"/api/tenants/{wellysis.id}/user-candidates",
++            f"/api/tenants/{wellysis.public_id}/user-candidates",
+             params={"q": "aswini"},
+-            headers={"X-Tenant-ID": str(wellysis.id)},
++            headers={"X-Tenant-ID": str(wellysis.public_id)},
+         )
+     finally:
+         _clear_override(app)
+@@ -119,9 +118,9 @@
+     _override_user(app, claims)
+     try:
+         res = client.get(
+-            f"/api/tenants/{wellysis.id}/user-candidates",
++            f"/api/tenants/{wellysis.public_id}/user-candidates",
+             params={"q": "feroze"},
+-            headers={"X-Tenant-ID": str(wellysis.id)},
++            headers={"X-Tenant-ID": str(wellysis.public_id)},
+         )
+     finally:
+         _clear_override(app)
+@@ -148,14 +147,14 @@
+     _override_user(app, claims)
+     try:
+         res = client.get(
+-            f"/api/tenants/{wellysis.id}/user-candidates",
++            f"/api/tenants/{wellysis.public_id}/user-candidates",
+             params={"q": "existing.member"},
+-            headers={"X-Tenant-ID": str(wellysis.id)},
++            headers={"X-Tenant-ID": str(wellysis.public_id)},
+         )
+         added = client.post(
+-            f"/api/tenants/{wellysis.id}/users",
++            f"/api/tenants/{wellysis.public_id}/users",
+             json={"user_id": existing_id, "roles": ["VIEWER"]},
+-            headers={"X-Tenant-ID": str(wellysis.id)},
++            headers={"X-Tenant-ID": str(wellysis.public_id)},
+         )
+     finally:
+         _clear_override(app)
+@@ -185,9 +184,9 @@
+     _override_user(app, claims)
+     try:
+         res = client.get(
+-            f"/api/tenants/{wellysis.id}/user-candidates",
++            f"/api/tenants/{wellysis.public_id}/user-candidates",
+             params={"q": "disabled.member"},
+-            headers={"X-Tenant-ID": str(wellysis.id)},
++            headers={"X-Tenant-ID": str(wellysis.public_id)},
+         )
+     finally:
+         _clear_override(app)
+@@ -218,9 +217,9 @@
+     _override_user(app, claims)
+     try:
+         res = client.get(
+-            f"/api/tenants/{wellysis.id}/user-candidates",
++            f"/api/tenants/{wellysis.public_id}/user-candidates",
+             params={"q": "active.verified"},
+-            headers={"X-Tenant-ID": str(wellysis.id)},
++            headers={"X-Tenant-ID": str(wellysis.public_id)},
+         )
+     finally:
+         _clear_override(app)
+@@ -250,9 +249,9 @@
+     _override_user(app, claims)
+     try:
+         res = client.get(
+-            f"/api/tenants/{wellysis.id}/user-candidates",
++            f"/api/tenants/{wellysis.public_id}/user-candidates",
+             params={"q": "unverified"},
+-            headers={"X-Tenant-ID": str(wellysis.id)},
++            headers={"X-Tenant-ID": str(wellysis.public_id)},
+         )
+     finally:
+         _clear_override(app)
+@@ -283,9 +282,9 @@
+     _override_user(app, claims)
+     try:
+         res = client.get(
+-            f"/api/tenants/{wellysis.id}/user-candidates",
++            f"/api/tenants/{wellysis.public_id}/user-candidates",
+             params={"q": "verif.req"},
+-            headers={"X-Tenant-ID": str(wellysis.id)},
++            headers={"X-Tenant-ID": str(wellysis.public_id)},
+         )
+     finally:
+         _clear_override(app)
+@@ -315,9 +314,9 @@
+     _override_user(app, claims)
+     try:
+         res = client.get(
+-            f"/api/tenants/{wellysis.id}/user-candidates",
++            f"/api/tenants/{wellysis.public_id}/user-candidates",
+             params={"q": "disabled.account"},
+-            headers={"X-Tenant-ID": str(wellysis.id)},
++            headers={"X-Tenant-ID": str(wellysis.public_id)},
+         )
+     finally:
+         _clear_override(app)
+@@ -342,9 +341,9 @@
+     _override_user(app, claims)
+     try:
+         res = client.get(
+-            f"/api/tenants/{wellysis.id}/user-candidates",
++            f"/api/tenants/{wellysis.public_id}/user-candidates",
+             params={"q": "unique.email.match"},
+-            headers={"X-Tenant-ID": str(wellysis.id)},
++            headers={"X-Tenant-ID": str(wellysis.public_id)},
+         )
+     finally:
+         _clear_override(app)
+@@ -368,9 +367,9 @@
+     _override_user(app, claims)
+     try:
+         res = client.get(
+-            f"/api/tenants/{wellysis.id}/user-candidates",
++            f"/api/tenants/{wellysis.public_id}/user-candidates",
+             params={"q": "Unique Display Name"},
+-            headers={"X-Tenant-ID": str(wellysis.id)},
++            headers={"X-Tenant-ID": str(wellysis.public_id)},
+         )
+     finally:
+         _clear_override(app)
+@@ -395,9 +394,9 @@
+     _override_user(app, claims)
+     try:
+         res = client.get(
+-            f"/api/tenants/{wellysis.id}/user-candidates",
++            f"/api/tenants/{wellysis.public_id}/user-candidates",
+             params={"q": "unique_principal_username"},
+-            headers={"X-Tenant-ID": str(wellysis.id)},
++            headers={"X-Tenant-ID": str(wellysis.public_id)},
+         )
+     finally:
+         _clear_override(app)
+@@ -418,9 +417,9 @@
+     _override_user(app, claims)
+     try:
+         res = client.get(
+-            f"/api/tenants/{wellysis.id}/user-candidates",
++            f"/api/tenants/{wellysis.public_id}/user-candidates",
+             params={"q": "search"},
+-            headers={"X-Tenant-ID": str(wellysis.id)},
++            headers={"X-Tenant-ID": str(wellysis.public_id)},
+         )
+     finally:
+         _clear_override(app)
+@@ -442,14 +441,14 @@
+     _override_user(app, claims)
+     try:
+         res = client.get(
+-            f"/api/tenants/{tenant_b.id}/user-candidates",
++            f"/api/tenants/{tenant_b.public_id}/user-candidates",
+             params={"q": "search"},
+-            headers={"X-Tenant-ID": str(tenant_a.id)},
+-        )
+-    finally:
+-        _clear_override(app)
+-
+-    assert res.status_code == 403
++            headers={"X-Tenant-ID": str(tenant_a.public_id)},
++        )
++    finally:
++        _clear_override(app)
++
++    assert res.status_code == 404
+ 
+ 
+ def test_unknown_tenant_receives_404(app, client):
+@@ -464,9 +463,9 @@
+     _override_user(app, claims)
+     try:
+         res = client.get(
+-            "/api/tenants/999999/user-candidates",
++            "/api/tenants/00000000-0000-4000-8000-000000000000/user-candidates",
+             params={"q": "search"},
+-            headers={"X-Tenant-ID": str(tenant.id)},
++            headers={"X-Tenant-ID": str(tenant.public_id)},
+         )
+     finally:
+         _clear_override(app)
+@@ -486,14 +485,14 @@
+     _override_user(app, claims)
+     try:
+         res_empty = client.get(
+-            f"/api/tenants/{tenant.id}/user-candidates",
++            f"/api/tenants/{tenant.public_id}/user-candidates",
+             params={"q": ""},
+-            headers={"X-Tenant-ID": str(tenant.id)},
++            headers={"X-Tenant-ID": str(tenant.public_id)},
+         )
+         res_long = client.get(
+-            f"/api/tenants/{tenant.id}/user-candidates",
++            f"/api/tenants/{tenant.public_id}/user-candidates",
+             params={"q": "a" * 201},
+-            headers={"X-Tenant-ID": str(tenant.id)},
++            headers={"X-Tenant-ID": str(tenant.public_id)},
+         )
+     finally:
+         _clear_override(app)
+@@ -518,9 +517,9 @@
+     _override_user(app, claims)
+     try:
+         res = client.get(
+-            f"/api/tenants/{tenant.id}/user-candidates",
++            f"/api/tenants/{tenant.public_id}/user-candidates",
+             params={"q": "special_user%test"},
+-            headers={"X-Tenant-ID": str(tenant.id)},
++            headers={"X-Tenant-ID": str(tenant.public_id)},
+         )
+     finally:
+         _clear_override(app)
+@@ -550,9 +549,9 @@
+     _override_user(app, claims)
+     try:
+         res = client.get(
+-            f"/api/tenants/{tenant.id}/user-candidates",
++            f"/api/tenants/{tenant.public_id}/user-candidates",
+             params={"q": "candidate"},
+-            headers={"X-Tenant-ID": str(tenant.id)},
++            headers={"X-Tenant-ID": str(tenant.public_id)},
+         )
+     finally:
+         _clear_override(app)
+@@ -578,17 +577,17 @@
+         db.commit()
+     _override_user(app, claims)
+     try:
+-        response = client.get(f"/api/tenants/{tenant.id}/user-candidates", params={"q": query},
+-                              headers={"X-Tenant-ID": str(tenant.id)})
++        response = client.get(f"/api/tenants/{tenant.public_id}/user-candidates", params={"q": query},
++                              headers={"X-Tenant-ID": str(tenant.public_id)})
+         assert response.status_code == 200, response.text
+         assert [item["id"] for item in response.json()["items"]] == [candidate_id]
+-        added = client.post(f"/api/tenants/{tenant.id}/users",
++        added = client.post(f"/api/tenants/{tenant.public_id}/users",
+                             json={"user_id": candidate_id, "roles": ["VIEWER"]},
+-                            headers={"X-Tenant-ID": str(tenant.id)})
++                            headers={"X-Tenant-ID": str(tenant.public_id)})
+         assert added.status_code == 201, added.text
+         assert added.json()["user_id"] == candidate_id
+-        response = client.get(f"/api/tenants/{tenant.id}/user-candidates", params={"q": query},
+-                              headers={"X-Tenant-ID": str(tenant.id)})
++        response = client.get(f"/api/tenants/{tenant.public_id}/user-candidates", params={"q": query},
++                              headers={"X-Tenant-ID": str(tenant.public_id)})
+         assert response.json()["items"] == []
+     finally:
+         _clear_override(app)
+@@ -607,17 +606,17 @@
+     _override_user(app, claims)
+     try:
+         for query in [str(candidate_id).zfill(2), "private-subject", candidate.external_iam_user_id]:
+-            response = client.get(f"/api/tenants/{tenant.id}/user-candidates", params={"q": query},
+-                                  headers={"X-Tenant-ID": str(tenant.id)})
++            response = client.get(f"/api/tenants/{tenant.public_id}/user-candidates", params={"q": query},
++                                  headers={"X-Tenant-ID": str(tenant.public_id)})
+             assert response.status_code == 200, response.text
+             assert response.json()["items"] == []
+         for query in ["p", " p ", "  "]:
+-            response = client.get(f"/api/tenants/{tenant.id}/user-candidates", params={"q": query},
+-                                  headers={"X-Tenant-ID": str(tenant.id)})
++            response = client.get(f"/api/tenants/{tenant.public_id}/user-candidates", params={"q": query},
++                                  headers={"X-Tenant-ID": str(tenant.public_id)})
+             assert response.status_code == 422
+-        response = client.get(f"/api/tenants/{tenant.id}/user-candidates",
++        response = client.get(f"/api/tenants/{tenant.public_id}/user-candidates",
+                               params={"q": "person", "page_size": 51},
+-                              headers={"X-Tenant-ID": str(tenant.id)})
++                              headers={"X-Tenant-ID": str(tenant.public_id)})
+         assert response.status_code == 422
+     finally:
+         _clear_override(app)
+--- a/tests/test_vex_acceptance_e2e.py
++++ b/tests/test_vex_acceptance_e2e.py
+@@ -446,7 +446,7 @@
+ 
+     payload = summary(db, project)
+     response = client.get(
+-        "/api/vex/investigations", params={"sbom_id": project["sbom"].id}
++        "/api/vex/investigations", params={"sbom_id": str(project["sbom"].public_id)}
+     )
+     assert response.status_code == 200, response.text
+     assert payload["total_contexts"] == response.json()["total"]
+@@ -473,7 +473,7 @@
+ def test_vex_pack_zip_still_builds__DoD_19(client, db, project):
+     import_vex_document(db, project["sbom"].id, project["document"], source_type="embedded")
+     db.commit()
+-    response = client.get(f"/api/sboms/{project['sbom'].id}/reports/vex-pack")
++    response = client.get(f"/api/sboms/{project['sbom'].public_id}/reports/vex-pack")
+     assert response.status_code == 200, response.text
+     assert response.headers["content-type"] == "application/zip"
+ 
+--- a/tests/test_vex_audit_concurrency.py
++++ b/tests/test_vex_audit_concurrency.py
+@@ -184,7 +184,7 @@
+     for path, body in (
+         ("decision", {"status": "AFFECTED", "reason": "x"}),
+         ("assignment", {"assigned_to": "analyst", "reason": "x"}),
+-        ("component", {"component_id": seeded["component"].id, "reason": "x"}),
++        ("component", {"component_id": str(seeded["component"].public_id), "reason": "x"}),
+     ):
+         response = client.put(f"{BASE}/{context.id}/{path}", json=body)
+         assert response.status_code == 422, f"{path} must require row_version"
+@@ -283,7 +283,7 @@
+     response = client.put(
+         f"{BASE}/{context.id}/component",
+         json={
+-            "component_id": seeded["component"].id,
++            "component_id": str(seeded["component"].public_id),
+             "row_version": context.row_version,
+             "reason": "supplier confirmed this is the 1.1.1 build",
+         },
+@@ -300,7 +300,7 @@
+     client.put(
+         f"{BASE}/{context.id}/component",
+         json={
+-            "component_id": seeded["component"].id,
++            "component_id": str(seeded["component"].public_id),
+             "row_version": context.row_version,
+             "reason": "confirmed",
+         },
+@@ -316,7 +316,7 @@
+     response = client.put(
+         f"{BASE}/{context.id}/component",
+         json={
+-            "component_id": seeded["other"].id,
++            "component_id": str(seeded["other"].public_id),
+             "row_version": context.row_version,
+             "reason": "should not be allowed",
+         },
+@@ -336,7 +336,7 @@
+     response = client.put(
+         f"{BASE}/{context.id}/component",
+         json={
+-            "component_id": foreign.id,
++            "component_id": str(foreign.public_id),
+             "row_version": context.row_version,
+             "reason": "wrong sbom",
+         },
+@@ -369,7 +369,7 @@
+     for path, body in (
+         ("decision", {"status": "AFFECTED", "row_version": foreign["row_version"], "reason": "x"}),
+         ("assignment", {"assigned_to": "mallory", "row_version": foreign["row_version"], "reason": "x"}),
+-        ("component", {"component_id": seeded["component"].id, "row_version": foreign["row_version"], "reason": "x"}),
++        ("component", {"component_id": str(seeded["component"].public_id), "row_version": foreign["row_version"], "reason": "x"}),
+     ):
+         assert client.put(f"{BASE}/{foreign['context_id']}/{path}", json=body).status_code == 404
+     assert foreign_vex_snapshot(db, 2, foreign["context_id"]) == before
+--- a/tests/test_vex_enrichment.py
++++ b/tests/test_vex_enrichment.py
+@@ -47,15 +47,15 @@
+                     ],
+                 }
+             }
+-            response = client.post(f"/api/sboms/{sbom.id}/vex", json=payload)
++            response = client.post(f"/api/sboms/{sbom.public_id}/vex", json=payload)
+             assert response.status_code == 200
+             assert response.json()["statements_imported"] == 1
+ 
+-            listed = client.get(f"/api/sboms/{sbom.id}/vex")
++            listed = client.get(f"/api/sboms/{sbom.public_id}/vex")
+             assert listed.status_code == 200
+             statements = listed.json()["statements"]
+             assert statements[0]["status"] == "not_affected"
+-            assert statements[0]["component_id"] == component.id
++            assert statements[0]["component_id"] == str(component.public_id)
+ 
+             dashboard = client.get("/dashboard/vex")
+             assert dashboard.status_code == 200
+@@ -75,7 +75,7 @@
+             db.commit()
+ 
+             response = client.post(
+-                f"/api/sboms/{sbom.id}/vex",
++                f"/api/sboms/{sbom.public_id}/vex",
+                 json={
+                     "document": {
+                         "bomFormat": "CycloneDX",
+@@ -101,7 +101,7 @@
+             db.commit()
+ 
+             response = client.patch(
+-                f"/api/components/{component.id}/vulnerabilities/CVE-2023-1234/vex-override",
++                f"/api/components/{component.public_id}/vulnerabilities/CVE-2023-1234/vex-override",
+                 json={
+                     "status": "affected",
+                     "reason": "Confirmed by product security review.",
+--- a/tests/test_vex_investigations_api.py
++++ b/tests/test_vex_investigations_api.py
+@@ -165,8 +165,27 @@
+ 
+ 
+ def test_filter_by_sbom__VEX_UI_002(client, seeded):
+-    assert fetch(client, sbom_id=seeded["sbom"].id)["total"] == 2
+-    assert fetch(client, sbom_id=seeded["sbom"].id + 9999)["total"] == 0
++    assert fetch(client, sbom_id=str(seeded["sbom"].public_id))["total"] == 2
++    from uuid import uuid4
++    assert client.get(BASE, params={"sbom_id": str(uuid4())}).status_code == 404
++
++
++def test_integer_resource_ids_are_rejected_at_public_boundary(client, seeded, db):
++    """SBO-54: UUID fixture corrections must not re-enable integer API IDs."""
++    sbom, component = seeded["sbom"], seeded["zlib"]
++    assert client.get(BASE, params={"sbom_id": sbom.id}).status_code == 422
++    assert client.get(f"/api/sboms/{sbom.id}/vex").status_code == 422
++    assert client.get(RESOLVE, params={
++        "sbom_id": str(sbom.public_id), "component_id": component.id,
++        "vulnerability_id": "CVE-2026-5002",
++    }).status_code == 422
++    context = context_for(db, "CVE-2026-5002")
++    before = context.row_version
++    assert client.put(f"{BASE}/{context.id}/component", json={
++        "component_id": component.id, "row_version": before, "reason": "Integer ID negative control",
++    }).status_code == 422
++    db.refresh(context)
++    assert context.row_version == before
+ 
+ 
+ def test_search_by_vulnerability_id__VEX_UI_002(client, seeded):
+@@ -209,7 +228,7 @@
+ 
+ def test_tile_counts_equal_row_counts_for_the_same_filters__VEX_DASH_004(client, seeded, db):
+     summary = vex_dashboard_summary(db, tenant_id=1, sbom_ids=[seeded["sbom"].id])
+-    rows = fetch(client, sbom_id=seeded["sbom"].id)
++    rows = fetch(client, sbom_id=str(seeded["sbom"].public_id))
+     assert summary["total_contexts"] == rows["total"]
+ 
+ 
+@@ -355,14 +374,14 @@
+ 
+ def test_component_vulnerabilities_endpoint_still_responds(client, seeded):
+     response = client.get(
+-        f"/api/sboms/{seeded['sbom'].id}/components/{seeded['zlib'].id}/vulnerabilities"
++        f"/api/sboms/{seeded['sbom'].public_id}/components/{seeded['zlib'].public_id}/vulnerabilities"
+     )
+     assert response.status_code == 200, response.text
+     assert "vulnerabilities" in response.json()
+ 
+ 
+ def test_sbom_vex_list_endpoint_still_responds(client, seeded):
+-    response = client.get(f"/api/sboms/{seeded['sbom'].id}/vex")
++    response = client.get(f"/api/sboms/{seeded['sbom'].public_id}/vex")
+     assert response.status_code == 200, response.text
+     assert "statements" in response.json()
+ 
+@@ -379,8 +398,8 @@
+     return client.get(
+         RESOLVE,
+         params={
+-            "sbom_id": seeded["sbom"].id,
+-            "component_id": (component or seeded["zlib"]).id,
++            "sbom_id": str(seeded["sbom"].public_id),
++            "component_id": str((component or seeded["zlib"]).public_id),
+             "vulnerability_id": vuln_id,
+         },
+     )
+@@ -391,7 +410,7 @@
+     assert response.status_code == 200, response.text
+     payload = response.json()
+     assert payload["vulnerability"]["canonical_vulnerability_id"] == "CVE-2026-5002"
+-    assert payload["component"]["component_id"] == seeded["zlib"].id
++    assert payload["component"]["component_id"] == str(seeded["zlib"].public_id)
+     # Carries the concurrency token the SBOM page previously had no way to get.
+     assert payload["row_version"] >= 1
+ 
+@@ -414,8 +433,8 @@
+ def test_resolve_is_tenant_scoped__VEX_SEC_002(client, seeded, db):
+     foreign = foreign_vex_fixture(db, vuln_id="CVE-2026-5002")
+     before = foreign_vex_snapshot(db, 2, foreign["context_id"])
+-    assert client.get(f"{BASE}/resolve", params={"sbom_id": foreign["sbom_id"],
+-                      "component_id": foreign["component_id"], "vulnerability_id": "CVE-2026-5002"}).status_code == 404
++    assert client.get(f"{BASE}/resolve", params={"sbom_id": foreign["sbom_public_id"],
++                      "component_id": foreign["component_public_id"], "vulnerability_id": "CVE-2026-5002"}).status_code == 404
+     assert foreign_vex_snapshot(db, 2, foreign["context_id"]) == before
+ 
+ 
+--- a/tests/test_vex_lifecycle_completion.py
++++ b/tests/test_vex_lifecycle_completion.py
+@@ -3,7 +3,7 @@
+ import json
+ 
+ import pytest
+-from app.models import AnalysisRun, VexInvestigation, VexStatement
++from app.models import AnalysisRun, SBOMComponent, VexInvestigation, VexStatement
+ from app.services.dashboard_scope import DashboardScope
+ from app.services.vex.reconciliation import MANUAL_SOURCE_NAME
+ from sqlalchemy import event, select
+@@ -14,7 +14,7 @@
+ 
+ 
+ def comparison(client, sbom):
+-    response = client.get("/api/vex/investigations/comparison", params={"sbom_id": sbom.id})
++    response = client.get("/api/vex/investigations/comparison", params={"sbom_id": str(sbom.public_id)})
+     assert response.status_code == 200, response.text
+     return response.json()
+ 
+@@ -27,11 +27,11 @@
+     b = app_line.version("A1.1.0", parent=a)
+     data = queue(client)
+     assert data["total"] == tiles(client)["total_contexts"] == 81
+-    assert data["posture"][0]["current_sbom"]["id"] == b.id
+-    assert data["posture"][0]["posture_sbom"]["id"] == a.id
++    assert data["posture"][0]["current_sbom"]["id"] == str(b.public_id)
++    assert data["posture"][0]["posture_sbom"]["id"] == str(a.public_id)
+     assert data["posture"][0]["analysis_status"] == "ANALYSIS_PENDING"
+     assert "last known security posture from A1.0.0" in data["posture"][0]["warning"]
+-    assert client.get("/api/vex/investigations/comparison", params={"sbom_id": b.id}).status_code == 409
++    assert client.get("/api/vex/investigations/comparison", params={"sbom_id": str(b.public_id)}).status_code == 409
+ 
+ 
+ @pytest.mark.parametrize("inactive", ["lifecycle", "soft_delete"])
+@@ -53,7 +53,7 @@
+     data = queue(client)
+     assert data["total"] == tiles(client)["total_contexts"] == 3
+     assert data["posture"][0]["designation_required"]
+-    assert data["posture"][0]["current_sbom"]["id"] == a.id
++    assert data["posture"][0]["current_sbom"]["id"] == str(a.public_id)
+     app_line.product.current_sbom_id = b.id
+     db.commit()
+     assert queue(client)["total"] == 2
+@@ -115,9 +115,9 @@
+         diff["new"],
+         diff["no_longer_observed"],
+     ) == (81, 15, 12, 3, 69)
+-    historical = queue(client, version_scope="historical", sbom_id=a.id, limit=5)
++    historical = queue(client, version_scope="historical", sbom_id=str(a.public_id), limit=5)
+     summary = client.get(
+-        "/api/vex/investigations/summary", params={"version_scope": "historical", "sbom_id": a.id}
++        "/api/vex/investigations/summary", params={"version_scope": "historical", "sbom_id": str(a.public_id)}
+     ).json()
+     assert historical["total"] == summary["total"] == 81
+     assert all(row["historical"] for row in historical["items"])
+@@ -291,7 +291,7 @@
+         as_actor(client, developer)
+         assert (
+             client.patch(
+-                f"/api/components/{old.component_id}/vulnerabilities/{old.canonical_vulnerability_id}/vex-override",
++                f"/api/components/{db.get(SBOMComponent, old.component_id).public_id}/vulnerabilities/{old.canonical_vulnerability_id}/vex-override",
+                 json={"status": "affected", "reason": "bypass"},
+             ).status_code
+             == 403
+@@ -320,17 +320,16 @@
+     try:
+         for url in [
+             f"/api/vex/investigations/{row.id}",
+-            f"/api/vex/investigations?version_scope=all&sbom_id={a.id}",
+-            f"/api/vex/investigations/summary?version_scope=all&sbom_id={a.id}",
+-            f"/api/vex/investigations/comparison?sbom_id={b.id}",
++            f"/api/vex/investigations?version_scope=all&sbom_id={a.public_id}",
++            f"/api/vex/investigations/summary?version_scope=all&sbom_id={a.public_id}",
++            f"/api/vex/investigations/comparison?sbom_id={b.public_id}",
+         ]:
+             response = client.get(url)
+             assert response.status_code == 404, response.text
+             assert a.sbom_name not in response.text and "CVE-2026-1001" not in response.text
+-        assert (
+-            client.get("/api/vex/investigations/versions", params={"product_id": app_line.product.id}).json()["items"]
+-            == []
+-        )
++        versions = client.get("/api/vex/investigations/versions", params={"product_id": str(app_line.product.public_id)})
++        assert versions.status_code == 404, versions.text
++        assert a.sbom_name not in versions.text and "CVE-2026-1001" not in versions.text
+     finally:
+         client.app.dependency_overrides.pop(get_current_tenant_context, None)
+ 
+@@ -386,7 +385,7 @@
+     summary = client.get("/api/vex/investigations/summary").json()
+     assert summary["total"] == 3 and summary["vex_only_count"] == 1
+     assert comparison(client, b)["current_findings"] == 2
+-    assert queue(client, version_scope="historical", sbom_id=a.id)["total"] == 3
++    assert queue(client, version_scope="historical", sbom_id=str(a.public_id))["total"] == 3
+ 
+ 
+ def test_run_bound_severity_ignores_failed_newer_findings(client, app_line):
+@@ -414,14 +413,14 @@
+     app_line.run(tip, [(ct, "CVE-2026-1002")])
+     app_line.reconcile(tip)
+     assert queue(client)["total"] == 1
+-    assert queue(client)["items"][0]["sbom_id"] == tip.id
++    assert queue(client)["items"][0]["sbom_id"] == str(tip.public_id)
+ 
+ 
+ def test_direct_historical_url_and_inactive_history_remain_read_only(client, app_line, db):
+     a, b = two_versions(app_line)
+     b.lifecycle_status = "INACTIVE"
+     db.commit()
+-    data = queue(client, version_scope="all", sbom_id=b.id)
++    data = queue(client, version_scope="all", sbom_id=str(b.public_id))
+     assert data["total"] == 2 and all(row["historical"] for row in data["items"])
+     detail = client.get(f"/api/vex/investigations/{data['items'][0]['id']}").json()
+     assert detail["historical"] and not detail["capabilities"]["can_update"]
+@@ -480,7 +479,7 @@
+     app_line.run(a, [], status="OK")
+     app_line.reconcile(a)
+     response = client.patch(
+-        f"/api/components/{component.id}/vulnerabilities/{identifier}/vex-override",
++        f"/api/components/{component.public_id}/vulnerabilities/{identifier}/vex-override",
+         json={"status": "affected", "reason": "old context bypass"},
+     )
+     assert response.status_code == 403
+@@ -497,11 +496,11 @@
+     db.commit()
+     result = queue(client)
+     assert result["total"] == tiles(client)["total_contexts"] == 1
+-    assert result["posture"][0]["current_sbom"]["id"] == b.id
+-    assert result["posture"][0]["posture_sbom"]["id"] == a.id
++    assert result["posture"][0]["current_sbom"]["id"] == str(b.public_id)
++    assert result["posture"][0]["posture_sbom"]["id"] == str(a.public_id)
+     assert "another declared lineage" in result["posture"][0]["warning"]
+     assert b.parent_id is None
+-    assert client.get("/api/vex/investigations/comparison", params={"sbom_id": b.id}).status_code == 409
++    assert client.get("/api/vex/investigations/comparison", params={"sbom_id": str(b.public_id)}).status_code == 409
+ 
+ 
+ def test_same_failed_source_coverage_cannot_prove_absence(client, app_line, db):
+--- a/tests/test_vex_roadmap.py
++++ b/tests/test_vex_roadmap.py
+@@ -97,7 +97,7 @@
+             db.commit()
+ 
+             response = client.post(
+-                f"/api/sboms/{sbom.id}/vex",
++                f"/api/sboms/{sbom.public_id}/vex",
+                 json={"document": _csaf_document(), "source_name": "CSAF upload"},
+             )
+ 
+@@ -108,9 +108,9 @@
+             assert body["matched_statements"] == 1
+             assert body["unmatched_statements"] == 1
+ 
+-            listed = client.get(f"/api/sboms/{sbom.id}/vex").json()["statements"]
++            listed = client.get(f"/api/sboms/{sbom.public_id}/vex").json()["statements"]
+             by_status = {row["status"]: row for row in listed}
+-            assert by_status["not_affected"]["component_id"] == component.id
++            assert by_status["not_affected"]["component_id"] == str(component.public_id)
+             assert by_status["not_affected"]["confidence"] == MEDIUM
+             assert by_status["affected"]["component_id"] is None
+             assert by_status["affected"]["confidence"] == LOW
+@@ -245,7 +245,7 @@
+             )
+             db.commit()
+ 
+-            response = client.get(f"/api/sboms/{sbom.id}/vex/report?format=csv&report_type=affected")
++            response = client.get(f"/api/sboms/{sbom.public_id}/vex/report?format=csv&report_type=affected")
+             assert response.status_code == 200
+             assert response.headers["content-type"].startswith("text/csv")
+             rows = list(csv.DictReader(io.StringIO(response.text)))
+@@ -268,13 +268,13 @@
+             db.commit()
+ 
+             invalid = client.patch(
+-                f"/api/components/{component.id}/vulnerabilities/CVE-2026-0002/vex-override",
++                f"/api/components/{component.public_id}/vulnerabilities/CVE-2026-0002/vex-override",
+                 json={"status": "fixed", "reason": "reviewed"},
+             )
+             assert invalid.status_code == 422
+ 
+             valid = client.patch(
+-                f"/api/components/{component.id}/vulnerabilities/CVE-2026-0002/vex-override",
++                f"/api/components/{component.public_id}/vulnerabilities/CVE-2026-0002/vex-override",
+                 json={
+                     "status": "fixed",
+                     "fixed_version": "3.0.8",
+@@ -284,7 +284,7 @@
+             )
+             assert valid.status_code == 200
+ 
+-            history = client.get(f"/api/components/{component.id}/vulnerabilities/CVE-2026-0002/vex-override/history")
++            history = client.get(f"/api/components/{component.public_id}/vulnerabilities/CVE-2026-0002/vex-override/history")
+             assert history.status_code == 200
+             body = history.json()
+             assert len(body["history"]) == 1
+@@ -316,7 +316,7 @@
+             )
+             db.commit()
+ 
+-            response = client.get(f"/api/sboms/{sbom.id}/lifecycle/report?format=csv&report_type=eol_eos_eof")
++            response = client.get(f"/api/sboms/{sbom.public_id}/lifecycle/report?format=csv&report_type=eol_eos_eof")
+             assert response.status_code == 200
+             rows = list(csv.DictReader(io.StringIO(response.text)))
+             assert rows[0]["name"] == "legacy-lib"
+@@ -346,11 +346,11 @@
+             )
+             db.commit()
+ 
+-            vex_pack = client.get(f"/api/sboms/{sbom.id}/reports/vex-pack")
++            vex_pack = client.get(f"/api/sboms/{sbom.public_id}/reports/vex-pack")
+             assert vex_pack.status_code == 200
+             assert vex_pack.headers["content-type"].startswith("application/zip")
+ 
+-            lifecycle_pack = client.get(f"/api/sboms/{sbom.id}/reports/lifecycle-pack")
++            lifecycle_pack = client.get(f"/api/sboms/{sbom.public_id}/reports/lifecycle-pack")
+             assert lifecycle_pack.status_code == 200
+             assert lifecycle_pack.headers["content-type"].startswith("application/zip")
+     finally:
+@@ -449,14 +449,14 @@
+ 
+             app.dependency_overrides[get_current_tenant_context] = _viewer_dep
+             blocked = client.patch(
+-                f"/api/components/{component.id}/vulnerabilities/CVE-2026-9999/vex-override",
++                f"/api/components/{component.public_id}/vulnerabilities/CVE-2026-9999/vex-override",
+                 json=payload,
+             )
+             assert blocked.status_code == 403
+ 
+             app.dependency_overrides[get_current_tenant_context] = _analyst_dep
+             allowed = client.patch(
+-                f"/api/components/{component.id}/vulnerabilities/CVE-2026-9999/vex-override",
++                f"/api/components/{component.public_id}/vulnerabilities/CVE-2026-9999/vex-override",
+                 json=payload,
+             )
+             assert allowed.status_code == 200
+--- a/tests/test_vex_version_lifecycle.py
++++ b/tests/test_vex_version_lifecycle.py
+@@ -172,7 +172,7 @@
+ 
+ def test_tiles_equal_queue_total_for_project_and_application_filters__VEX_DASH_004(client, app_line):
+     two_versions(app_line)
+-    scope = {"project_id": app_line.project.id, "product_id": app_line.product.id}
++    scope = {"project_id": str(app_line.project.public_id), "product_id": str(app_line.product.public_id)}
+     assert tiles(client, **scope)["total_contexts"] == queue(client, **scope)["total"] == 2
+ 
+ 
+@@ -218,7 +218,7 @@
+ 
+ def test_filtered_metrics_honour_scope_filters__VEX_DASH_004(client, app_line):
+     two_versions(app_line)
+-    scope = {"project_id": app_line.project.id, "product_id": app_line.product.id}
++    scope = {"project_id": str(app_line.project.public_id), "product_id": str(app_line.product.public_id)}
+     cards = summary(client, **scope)
+     assert cards["total"] == queue(client, **scope)["total"] == tiles(client, **scope)["total_contexts"]
+ 
+--- a/tests/test_vex_work_queue.py
++++ b/tests/test_vex_work_queue.py
+@@ -175,10 +175,11 @@
+     seeded["sbom"].projectid = project.id
+     seeded["sbom"].product_id = application.id
+     db.commit()
+-    params = {"project_id": project.id, "product_id": application.id, "sbom_id": seeded["sbom"].id,
++    params = {"project_id": str(project.public_id), "product_id": str(application.public_id), "sbom_id": str(seeded["sbom"].public_id),
+               "assignee": membership_key(people["DEVELOPER"]), "q": "CVE-2026-5001", "component": "openssl 1.1.1"}
+     result = fetch(client, **params, limit=1)
+     assert result["total"] == 1
+     assert result["items"][0]["project_name"] == "Queue project"
+     assert result["items"][0]["product_name"] == "Queue app"
+-    assert fetch(client, **{**params, "project_id": project.id + 1})["total"] == 0
++    from uuid import uuid4
++    assert client.get(BASE, params={**params, "project_id": str(uuid4())}).status_code == 404
+--- a/tests/vex_foreign_fixture.py
++++ b/tests/vex_foreign_fixture.py
+@@ -31,7 +31,8 @@
+                             VexInvestigation.canonical_vulnerability_id == vuln_id))
+         assert context is not None
+         return {"sbom_id": sbom.id, "component_id": component.id, "context_id": context.id,
+-                "row_version": context.row_version}
++                "row_version": context.row_version, "sbom_public_id": str(sbom.public_id),
++                "component_public_id": str(component.public_id)}
+ 
+ 
+ def foreign_vex_snapshot(db, tenant_id, context_id):
+--- /dev/null
++++ b/tests/test_policy_public_identity.py
+@@ -0,0 +1,94 @@
++"""SBO-76: policy history integers must never resolve as SBOM identities."""
++
++import pytest
++
++from tests import test_component_advisor_policies_api as policies
++from tests import test_scoped_configuration as scoped
++
++configured_actors = scoped.configured_actors
++
++db = policies.db
++seeded = policies.seeded
++reset_overrides = policies.reset_overrides
++
++
++@pytest.mark.parametrize("kind", ["trust", "accepted-risk", "scoring"])
++def test_history_without_any_sbom_never_resolves_an_sbom(client, db, reset_overrides, kind):
++    policies.as_role(client, "TENANT_ADMIN")
++    saved = policies.publish(client, kind, status="DISABLED")
++    assert saved.status_code == 201, saved.text
++    response = client.get(f"{policies.BASE}/policies/{kind}/versions")
++    assert response.status_code == 200, response.text
++    item = response.json()["items"][0]
++    assert item["id"] == saved.json()["version"]["id"]
++    assert isinstance(item["id"], int)
++
++
++@pytest.mark.parametrize("kind", ["trust", "accepted-risk", "scoring"])
++def test_tenant_history_preserves_policy_identity_with_sbom_collision(client, seeded, kind):
++    path = f"{policies.BASE}/policies/{kind}/versions"
++    empty = client.get(path)
++    assert empty.status_code == 200
++    assert empty.json() == {"total": 0, "items": []}
++    published = policies.publish(client, kind, status="DISABLED")
++    assert published.status_code == 201, published.text
++    version = published.json()["version"]
++    # The first policy version and first SBOM deliberately share integer 1.
++    assert version["id"] == seeded["sboms"][0].id
++    history = client.get(path)
++    assert history.status_code == 200, history.text
++    assert history.json()["total"] == 1
++    item = history.json()["items"][0]
++    assert {key: item[key] for key in version} == version
++    assert item["reason"] == "test"
++    assert "created_by" in item
++    assert isinstance(history.json()["items"][0]["id"], int)
++    conflict = policies.publish(client, kind, status="DISABLED")
++    assert conflict.status_code == 409
++    assert client.get(path).json() == history.json()
++
++
++@pytest.mark.parametrize("kind", ["trust", "accepted-risk", "scoring"])
++def test_platform_history_is_platform_scoped_and_numeric(configured_actors, kind):
++    call = configured_actors
++    path = f"/api/platform/configuration/advisor-policies/{kind}/versions"
++    assert call("platform", "GET", path).json() == {"total": 0, "items": []}
++    saved = call("platform", "POST", path, json={
++        "status": "DISABLED", "rules": None, "row_version": 0, "reason": "SBO-76 regression",
++    })
++    assert saved.status_code == 201, saved.text
++    history = call("platform", "GET", path)
++    assert history.status_code == 200, history.text
++    version = saved.json()["version"]
++    item = history.json()["items"][0]
++    assert {key: item[key] for key in version} == version
++    assert item["reason"] == "SBO-76 regression"
++    assert "created_by" in item
++    for role in ("olympus", "astra", "analyst", "developer", "viewer"):
++        assert call(role, "GET", path).status_code == 403
++    for role, status in (("olympus", 200), ("astra", 200), ("analyst", 200), ("developer", 403), ("viewer", 403)):
++        tenant = call(role, "GET", f"{policies.BASE}/policies/{kind}/versions")
++        assert tenant.status_code == status
++        if status == 200:
++            assert tenant.json()["items"] == []
++
++
++def test_sbom_versions_still_have_public_uuid_identities(client, seeded):
++    from app.public_api import route_entity
++
++    assert route_entity("/api/logical-sboms/{logical_id}/versions") == "sbom_source"
++    assert route_entity("/api/component-advisor/policies/{kind}/versions") is None
++    assert route_entity("/api/platform/configuration/advisor-policies/{kind}/versions") is None
++    sbom = seeded["sboms"][0]
++    response = client.get(f"/api/sboms/{sbom.public_id}")
++    assert response.status_code == 200, response.text
++    assert response.json()["id"] == str(sbom.public_id)
++    versions = client.get(f"/api/sboms/{sbom.public_id}/versions")
++    assert versions.status_code == 200
++    assert versions.json()[0]["id"] == str(sbom.public_id)
++    picker = client.get("/api/vex/investigations/versions")
++    assert picker.status_code == 200
++    assert {row["id"] for row in picker.json()["items"]} == {str(row.public_id) for row in seeded["sboms"]}
++    # Restore keeps its explicit SBOM version identity contract.
++    rejected = client.post(f"/api/sboms/{sbom.public_id}/restore/{sbom.id}")
++    assert rejected.status_code == 422
+--- /dev/null
++++ b/tests/test_vex_source_public_identity.py
+@@ -0,0 +1,37 @@
++"""SBO-54 broader regression: source-native IDs are not business UUIDs."""
++import json
++from pathlib import Path
++
++from tests import test_component_advisor_policies_api as fixtures
++
++db = fixtures.db
++seeded = fixtures.seeded
++
++
++def test_csaf_native_product_ids_survive_public_boundary(client, seeded, db):
++    from app.models import VexDocument
++    from sqlalchemy import select
++
++    document = json.loads((Path(__file__).parent / "fixtures/vex/supplier-csaf.json").read_text())
++    body = {"document": document}
++    sbom = seeded["sboms"][0]
++    result = client.post(f"/api/sboms/{sbom.public_id}/vex", json=body)
++    assert result.status_code == 200, result.text
++    assert result.json()["statements_imported"] > 0
++    stored = db.scalar(select(VexDocument).where(VexDocument.sbom_id == sbom.id))
++    assert stored.raw_document_json == document
++    # Accepting source-native identifiers must not accept internal resource IDs.
++    assert client.post(f"/api/sboms/{sbom.id}/vex", json=body).status_code == 422
++
++
++def test_source_document_does_not_bypass_tenant_resolution(client, seeded, db):
++    from app.models import SBOMSource
++    from sqlalchemy import select
++
++    from tests.tenant_fixture_scope import verified_fixture_tenant
++
++    with verified_fixture_tenant(db, 2):
++        foreign = db.scalar(select(SBOMSource))
++        public_id = str(foreign.public_id)
++    response = client.post(f"/api/sboms/{public_id}/vex", json={"document": {}})
++    assert response.status_code == 404
+--- /dev/null
++++ b/frontend/src/components/admin/PlatformKevSync.tsx
+@@ -0,0 +1,35 @@
++'use client';
++
++import { useMutation, useQueryClient } from '@tanstack/react-query';
++import { useAuth } from '@/hooks/useAuth';
++import { usePermissions } from '@/hooks/usePermission';
++import { useToast } from '@/hooks/useToast';
++import { syncKevCatalog } from '@/lib/api';
++import { PermissionButton } from '@/components/ui/PermissionButton';
++
++/** KEV synchronization owns global data and requires current platform authority. */
++export function PlatformKevSync() {
++  const { isPlatformContext } = useAuth();
++  const { can } = usePermissions();
++  if (!isPlatformContext || !can('platform:admin')) return null;
++  return <SyncAction />;
++}
++
++function SyncAction() {
++  const qc = useQueryClient();
++  const { showToast } = useToast();
++  const sync = useMutation({
++    mutationFn: () => syncKevCatalog(),
++    onSuccess: async () => {
++      await Promise.all(['kev-catalog', 'kev-filter-options', 'kev-detail'].map(key =>
++        qc.invalidateQueries({ queryKey: [key] })));
++      showToast('KEV catalog synced successfully', 'success');
++    },
++    onError: () => showToast('KEV catalog sync failed. Try again.', 'error'),
++  });
++  return <section aria-label="Global KEV catalog" className="rounded-xl border border-border bg-surface p-5 space-y-3">
++    <h2 className="font-semibold">Global KEV catalog</h2>
++    <p className="text-sm text-hcl-muted">Synchronize the shared CISA Known Exploited Vulnerabilities catalog for all tenants.</p>
++    <PermissionButton permission="platform:admin" loading={sync.isPending} loadingLabel="Syncing KEV catalog" onClick={() => sync.mutate()}>Sync KEV Catalog</PermissionButton>
++  </section>;
++}
+--- /dev/null
++++ b/frontend/src/components/admin/PlatformKevSync.test.tsx
+@@ -0,0 +1,29 @@
++// @vitest-environment jsdom
++import { QueryClient, QueryClientProvider } from '@tanstack/react-query';
++import { fireEvent, render, screen, waitFor } from '@testing-library/react';
++import { beforeEach, expect, it, vi } from 'vitest';
++import { ToastProvider } from '@/hooks/useToast';
++import { PlatformKevSync } from './PlatformKevSync';
++
++const state = vi.hoisted(() => ({ platform: true, allowed: true, sync: vi.fn() }));
++vi.mock('@/hooks/useAuth', () => ({ useAuth: () => ({ isPlatformContext: state.platform }) }));
++vi.mock('@/hooks/usePermission', () => ({ usePermissions: () => ({ can: (permission: string) => state.allowed && permission === 'platform:admin', permissionsLoaded: true }) }));
++vi.mock('@/lib/api', () => ({ syncKevCatalog: () => state.sync() }));
++beforeEach(() => { state.platform = true; state.allowed = true; state.sync.mockReset().mockResolvedValue({ ok: true }); });
++function mount() {
++  const qc = new QueryClient();
++  const invalidate = vi.spyOn(qc, 'invalidateQueries');
++  render(<QueryClientProvider client={qc}><ToastProvider><PlatformKevSync /></ToastProvider></QueryClientProvider>);
++  return invalidate;
++}
++it('allows platform synchronization and invalidates every KEV surface', async () => {
++  const invalidate = mount();
++  fireEvent.click(screen.getByRole('button', { name: 'Sync KEV Catalog' }));
++  await waitFor(() => expect(state.sync).toHaveBeenCalledTimes(1));
++  for (const key of ['kev-catalog', 'kev-filter-options', 'kev-detail']) expect(invalidate).toHaveBeenCalledWith({ queryKey: [key] });
++});
++it.each([[false, true], [true, false], [false, false]])('requires platform context %s and effective permission %s', (platform, allowed) => {
++  state.platform = platform; state.allowed = allowed; mount();
++  expect(screen.queryByRole('button', { name: 'Sync KEV Catalog' })).not.toBeInTheDocument();
++  expect(state.sync).not.toHaveBeenCalled();
++});

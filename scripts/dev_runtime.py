@@ -6,6 +6,7 @@ Popen child and is matched against OS birth identity before every signal.
 from __future__ import annotations
 
 import ctypes
+import errno
 import json
 import os
 import signal
@@ -83,8 +84,15 @@ def process_info(pid: int) -> dict | None:
             if info.status == 5:  # SZOMB
                 return None
             path = ctypes.create_string_buffer(4096)
+            ctypes.set_errno(0)
             if lib.proc_pidpath(pid, path, len(path)) <= 0:
-                raise OwnershipError(f"Cannot inspect executable for PID {pid}.")
+                if ctypes.get_errno() != errno.ENOENT:
+                    raise OwnershipError(f"Cannot inspect executable for PID {pid}.")
+                # A runtime update can move/unlink a running executable. Its
+                # vnode path disappears while BSD birth identity stays valid.
+                # Only an existing complete record may use this exception.
+                return {"pid": pid, "birth": f"{info.sec}:{info.usec}", "exe": "", "exe_unavailable": "ENOENT",
+                        "pgid": info.pgid, "ppid": info.ppid, "uid": info.uid, "sid": os.getsid(pid)}
             return {"pid": pid, "birth": f"{info.sec}:{info.usec}", "exe": os.fsdecode(path.value),
                     "pgid": info.pgid, "ppid": info.ppid, "uid": info.uid, "sid": os.getsid(pid)}
         raise OwnershipError("Process ownership inspection is unsupported on this OS.")
@@ -107,9 +115,14 @@ def matches(record: dict, current: dict | None) -> bool:
         and ((sys.platform == "darwin" and "cwd" not in record and "cwd" not in current)
              or ("cwd" in record and record["cwd"] == current.get("cwd")))
     )
+    missing_macos_path = bool(
+        sys.platform == "darwin" and current and current.get("exe") == ""
+        and current.get("exe_unavailable") == "ENOENT"
+        and all(key in record and key in current and record[key] == current[key] for key in ("uid", "pgid", "sid"))
+    )
     return bool(current and all(record.get(key) == current.get(key) for key in ("pid", "birth"))
                 and record.get("birth") and record.get("exe")
-                and (record["exe"] == current.get("exe") or npm_exec)
+                and (record["exe"] == current.get("exe") or npm_exec or missing_macos_path)
                 and all(record.get(key) == current.get(key) for key in ("uid", "pgid", "sid", "cwd") if key in record))
 
 
@@ -235,7 +248,7 @@ class Runtime:
 
     def begin(self) -> None:
         launcher = process_info(os.getpid())
-        if not launcher:
+        if not launcher or not launcher.get("exe"):
             raise OwnershipError("Could not establish launcher identity.")
         self.stop_path.unlink(missing_ok=True)
         self.state = {"version": 1, "root": str(self.root), "instance": uuid.uuid4().hex,
@@ -256,10 +269,21 @@ class Runtime:
         info = process_info(pid)
         if not info:
             raise OwnershipError(f"{name} exited before ownership could be recorded.")
+        if not info.get("exe"):
+            raise OwnershipError(f"Cannot establish executable identity for {name}.")
         if sys.platform != "win32" and (info.get("pgid") != pid or info.get("sid") != pid):
             raise OwnershipError(f"{name} did not start in an isolated process group.")
         self.state["services"][name] = {**info, "port": port, "members": [info]}
         atomic_json(self.path, self.state)
+
+    def _snapshot_members(self, record: dict) -> list[dict]:
+        members = windows_children(record["pid"]) if sys.platform == "win32" else group_members(record["pid"])
+        saved = {info["pid"]: info for info in [record, *record.get("members", [])]}
+        # Retain the previously verified executable if its path has vanished.
+        # Otherwise losing the leader would discard a child's ownership proof.
+        return [{**info, "exe": saved[info["pid"]]["exe"]}
+                if not info.get("exe") and info["pid"] in saved and matches(saved[info["pid"]], info)
+                else info for info in members]
 
     def refresh(self) -> None:
         self.check_stop()
@@ -270,7 +294,7 @@ class Runtime:
             if child := self.processes.get(record["pid"]):
                 child.poll()
             if matches(record, process_info(record["pid"])):
-                record["members"] = windows_children(record["pid"]) if sys.platform == "win32" else group_members(record["pid"])
+                record["members"] = self._snapshot_members(record)
         atomic_json(self.path, self.state)
 
     def service_status(self, record: dict) -> str:
@@ -308,7 +332,7 @@ class Runtime:
         if status == "RUNNING":
             # Capture descendants before TERM: the leader may exit first while
             # a child ignores TERM. Its birth identity must survive escalation.
-            record["members"] = windows_children(pid) if sys.platform == "win32" else group_members(pid)
+            record["members"] = self._snapshot_members(record)
             if not matches(record, process_info(pid)):
                 return False
         if sys.platform == "win32":

@@ -1,0 +1,58 @@
+[
+  {
+    "name": "admin: login, UUID context, refresh, logout/login stability",
+    "result": "PASS",
+    "observations": {},
+    "time": "2026-10-21T09:34:40.404Z"
+  },
+  {
+    "name": "analyst: login, UUID context, refresh, logout/login stability",
+    "result": "PASS",
+    "observations": {},
+    "time": "2026-10-21T09:35:00.603Z"
+  },
+  {
+    "name": "developer: login, UUID context, refresh, logout/login stability",
+    "result": "PASS",
+    "observations": {},
+    "time": "2026-10-21T09:35:19.859Z"
+  },
+  {
+    "name": "viewer: login, UUID context, refresh, logout/login stability",
+    "result": "PASS",
+    "observations": {},
+    "time": "2026-10-21T09:35:38.754Z"
+  },
+  {
+    "name": "foreign: login, UUID context, refresh, logout/login stability",
+    "result": "PASS",
+    "observations": {},
+    "time": "2026-10-21T09:35:57.059Z"
+  },
+  {
+    "name": "platform: login, UUID context, refresh, logout/login stability",
+    "result": "PASS",
+    "observations": {},
+    "time": "2026-10-21T09:36:06.288Z"
+  },
+  {
+    "name": "Tenant Admin: actual Users & Access find/add/change roles/remove UUID user",
+    "result": "PASS",
+    "observations": {},
+    "time": "2026-10-21T09:36:16.284Z"
+  },
+  {
+    "name": "Platform Admin: purpose-limited UUID selection, actual grant/revoke UI",
+    "result": "FAIL",
+    "observations": {
+      "error": "TimeoutError: locator.fill: Timeout 25000ms exceeded.\nCall log:\n\u001b[2m  - waiting for getByRole('combobox', { name: 'Search existing user' })\u001b[22m\n"
+    },
+    "time": "2026-10-21T09:36:46.042Z"
+  },
+  {
+    "name": "Admin UUID path syntax, missing identities and membership separation",
+    "result": "PASS",
+    "observations": {},
+    "time": "2026-10-21T09:36:52.315Z"
+  }
+]

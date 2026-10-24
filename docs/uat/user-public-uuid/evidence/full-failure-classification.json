@@ -1,0 +1,68 @@
+{
+  "full_run": {
+    "pass": 4404,
+    "fail": 9,
+    "skip": 7,
+    "passing_subtests": 12,
+    "elapsed_seconds": 5451.01
+  },
+  "failures": [
+    {
+      "case": "tests.test_entra_auth::test_approval_suspension_and_resume_use_existing_admin_api",
+      "classification_and_correction": "HTTP fixture still asserted/selected integer User ID; changed wire fixture only."
+    },
+    {
+      "case": "tests.test_entra_migration::test_upgrade_preserves_existing_providers_and_downgrade_protects_entra",
+      "classification_and_correction": "Historical revision-063 fixture used current ORM with new column; now reflects actual historical table."
+    },
+    {
+      "case": "tests.test_entra_migration::test_downgrade_preserves_suspended_accounts",
+      "classification_and_correction": "Same historical fixture incompatibility; no historical migration source changed."
+    },
+    {
+      "case": "tests.test_hierarchical_scheduler_migration::test_hierarchical_scheduler_is_single_head",
+      "classification_and_correction": "Graph assertion expected old head100; now verifies101->100->079 and existing ancestor."
+    },
+    {
+      "case": "tests.test_native_iam_foundation::test_legacy_membership_endpoint_cannot_bypass_role_delegation",
+      "classification_and_correction": "Integer selector hit422 before intended delegation403; valid UUID fixture retains authorization assertion."
+    },
+    {
+      "case": "tests.test_native_iam_phase2::test_public_and_admin_http_boundaries",
+      "classification_and_correction": "Real validation wrapper defect bypassed registered Native error redaction; corrected registered-handler dispatch."
+    },
+    {
+      "case": "tests.test_phase7_tenant_creation_authorization::test_effective_platform_admin_may_assign_self",
+      "classification_and_correction": "Public initial-admin User ID expectation remained integer; internal grant FK remains integer."
+    },
+    {
+      "case": "tests.test_phase9_role_assignment_api::test_role_assignment_api_grant_list_replace_and_revoke",
+      "classification_and_correction": "Three HTTP role paths used integer User selectors; now UUID with internal test keys unchanged."
+    },
+    {
+      "case": "tests.test_postgresql_integration::test_migration_script_copies_rows_and_resets_sequences",
+      "classification_and_correction": "Copy fixture shared DB containing task broker tables; now a separately created exact schema DB. No copy validation bypass."
+    }
+  ],
+  "corrected_affected_run": {
+    "tests": 204,
+    "failures": 0,
+    "errors": 0,
+    "skip": 0
+  },
+  "full_final_run": "backend-complete-attempt6: interrupted, no final outcome",
+  "final_acceptance_run": {
+    "generated_at": "2026-10-21T11:53:53.494854+00:00",
+    "run": "backend-complete-attempt8",
+    "collected": 4421,
+    "pass": 4414,
+    "skip": 7,
+    "fail": 0,
+    "error": 0,
+    "passing_subtests": 12,
+    "pytest_elapsed_seconds": 5893.26,
+    "launcher_elapsed_seconds": 5907.77,
+    "source_changed_during_run": [],
+    "junit_sha256": "7c7d0ad6de410580cb62984f94b4514a24f81344893c86de03447a66e6544917"
+  }
+}

@@ -1,0 +1,32 @@
+{
+  "F_identity": null,
+  "accepted": false,
+  "approvals": {},
+  "expires_at": null,
+  "integrity_approvals": {},
+  "integrity_attestations": [
+    false,
+    false,
+    false,
+    false,
+    false,
+    false,
+    false
+  ],
+  "live_execution_enabled": false,
+  "observation_budget": {
+    "action": null,
+    "budget_sha256": null,
+    "plan_sha256": null,
+    "schema": null,
+    "source_lock_sha256": null,
+    "unit": null
+  },
+  "operator_reviews": {
+    "budget_accounting": false,
+    "integration_diff": false,
+    "runtime_reservations": false,
+    "sources": false
+  },
+  "schema": "w24b-review-pending"
+}

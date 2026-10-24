@@ -1,0 +1,7 @@
+{
+  "result": "PASS",
+  "python_files": 29,
+  "source_files": 72,
+  "branch": "feat/native-user-management",
+  "head": "aa264cd3673b074b3f9c15c9cc72a4ed95bdb222"
+}

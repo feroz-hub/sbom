@@ -1,0 +1,9 @@
+{
+  "result": "FAIL",
+  "scope": "task browser DB only",
+  "sqlstate": "23514",
+  "constraint": "ck_iam_users_email_verification_timestamp",
+  "reason": "Probe fixture set email_verified=true without required timestamp",
+  "commit_attempted": false,
+  "correction": "Supply required email_verified_at alongside verified flag; no constraint change"
+}

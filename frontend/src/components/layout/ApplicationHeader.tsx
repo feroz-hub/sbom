@@ -18,7 +18,7 @@ export function ApplicationHeader() {
   return (
     <header
       aria-label="Authenticated application header"
-      className="sticky top-0 z-30 flex h-14 shrink-0 items-center justify-between gap-2 border-b border-border bg-surface/95 px-4 backdrop-blur-md md:px-6"
+      className="relative z-30 flex h-14 shrink-0 items-center justify-between gap-2 border-b border-border bg-surface px-4 backdrop-blur-md md:px-6"
     >
       <div className="flex min-w-0 items-center gap-2">
         <button

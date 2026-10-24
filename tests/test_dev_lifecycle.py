@@ -1,6 +1,7 @@
 """Lifecycle safety tests: all process inspection and termination are mocked."""
 from __future__ import annotations
 
+import errno
 import json
 import os
 from types import SimpleNamespace
@@ -448,3 +449,118 @@ def test_npm_exec_exception_does_not_accept_unrelated_process(tmp_path, changed)
     recorded = identity(exe='/usr/bin/env', cwd=str(tmp_path / 'frontend'))
     current = {**recorded, 'exe': '/opt/node/bin/node', **changed}
     assert not lifecycle.matches(recorded, current)
+
+
+@pytest.fixture
+def macos_missing_executable(monkeypatch):
+    def bsd_info(pid, flavor, arg, pointer, size):
+        info = pointer._obj
+        info.sec, info.usec = 1700000000, 123456
+        info.pid, info.ppid, info.pgid, info.uid = pid, 99, pid, 1000
+        info.status = 2
+        return size
+
+    def missing_path(pid, buffer, size):
+        lifecycle.ctypes.set_errno(errno.ENOENT)
+        return 0
+
+    library = SimpleNamespace(proc_pidinfo=bsd_info, proc_pidpath=missing_path)
+    monkeypatch.setattr(lifecycle.sys, 'platform', 'darwin')
+    monkeypatch.setattr(lifecycle.ctypes, 'CDLL', lambda *args, **kwargs: library)
+    monkeypatch.setattr(lifecycle.os, 'getsid', lambda pid: pid)
+    return library
+
+
+def test_macos_missing_executable_retains_kernel_birth_identity(macos_missing_executable):
+    current = process_info_adapter(100)
+    assert current == {**identity(birth='1700000000:123456', exe='', ppid=99), 'exe_unavailable': 'ENOENT'}
+    assert lifecycle.matches(identity(birth=current['birth']), current)
+
+
+@pytest.mark.parametrize('error', [0, errno.EPERM, errno.EACCES, errno.EIO, errno.ESRCH])
+def test_macos_executable_inspection_errors_remain_fail_closed(macos_missing_executable, error):
+    def failed_path(pid, buffer, size):
+        lifecycle.ctypes.set_errno(error)
+        return 0
+
+    macos_missing_executable.proc_pidpath = failed_path
+    with pytest.raises(lifecycle.OwnershipError, match='Cannot inspect executable'):
+        process_info_adapter(100)
+
+
+@pytest.mark.parametrize('changed', [
+    {'pid': 200}, {'birth': 'reused-pid'}, {'uid': 2000}, {'pgid': 200},
+    {'sid': 200}, {'cwd': '/another/repository'}, {'exe': '/another/program'},
+    {'exe_unavailable': 'EACCES'}, {'exe_unavailable': None},
+])
+def test_macos_missing_executable_never_accepts_changed_identity(monkeypatch, changed):
+    monkeypatch.setattr(lifecycle.sys, 'platform', 'darwin')
+    current = {**identity(exe='', cwd='/repository'), 'exe_unavailable': 'ENOENT', **changed}
+    assert not lifecycle.matches(identity(cwd='/repository'), current)
+
+
+@pytest.mark.parametrize('missing', ['uid', 'pgid', 'sid', 'birth', 'exe'])
+def test_macos_missing_executable_requires_complete_saved_identity(monkeypatch, missing):
+    monkeypatch.setattr(lifecycle.sys, 'platform', 'darwin')
+    recorded = identity()
+    del recorded[missing]
+    current = {**identity(exe=''), 'exe_unavailable': 'ENOENT'}
+    assert not lifecycle.matches(recorded, current)
+
+
+@pytest.mark.parametrize('missing', ['pid', 'uid', 'pgid', 'sid', 'birth', 'exe'])
+def test_macos_missing_executable_requires_complete_current_identity(monkeypatch, missing):
+    monkeypatch.setattr(lifecycle.sys, 'platform', 'darwin')
+    current = {**identity(exe=''), 'exe_unavailable': 'ENOENT'}
+    del current[missing]
+    assert not lifecycle.matches(identity(), current)
+
+
+@pytest.mark.parametrize('platform', ['linux', 'win32'])
+def test_missing_executable_exception_is_macos_only(monkeypatch, platform):
+    monkeypatch.setattr(lifecycle.sys, 'platform', platform)
+    assert not lifecycle.matches(identity(), {**identity(exe=''), 'exe_unavailable': 'ENOENT'})
+
+
+def test_missing_executable_cannot_establish_new_service_ownership(monkeypatch, tmp_path):
+    runtime = lifecycle.Runtime(tmp_path)
+    runtime.state = state(runtime)
+    monkeypatch.setattr(lifecycle, 'process_info', lambda pid: {**identity(pid, exe=''), 'exe_unavailable': 'ENOENT'})
+    with pytest.raises(lifecycle.OwnershipError, match='Cannot establish executable identity'):
+        runtime.register('Frontend', 100)
+    assert runtime.load()['services'] == {}
+
+
+def test_macos_missing_executable_preserves_member_proof_during_refresh(monkeypatch, tmp_path):
+    monkeypatch.setattr(lifecycle.sys, 'platform', 'darwin')
+    child = identity(101, pgid=100, sid=100)
+    recorded = {**identity(), 'members': [child]}
+    current = {pid: {**info, 'exe': '', 'exe_unavailable': 'ENOENT'} for pid, info in [(100, identity()), (101, child)]}
+    monkeypatch.setattr(lifecycle, 'process_info', current.get)
+    monkeypatch.setattr(lifecycle, 'group_members', lambda pgid: list(current.values()))
+    runtime = lifecycle.Runtime(tmp_path)
+    runtime.state = state(runtime, {'Frontend': recorded})
+    runtime.refresh()
+    assert runtime.service_status(recorded) == 'RUNNING'
+    assert {info['pid']: info['exe'] for info in recorded['members']} == {100: '/venv/python', 101: '/venv/python'}
+
+
+def test_macos_missing_executable_stops_recorded_surviving_child(monkeypatch, tmp_path):
+    monkeypatch.setattr(lifecycle.sys, 'platform', 'darwin')
+    child = identity(101, pgid=100, sid=100)
+    recorded = {**identity(), 'members': [child]}
+    current = {pid: {**info, 'exe': '', 'exe_unavailable': 'ENOENT'} for pid, info in [(100, identity()), (101, child)]}
+    monkeypatch.setattr(lifecycle, 'process_info', current.get)
+    monkeypatch.setattr(lifecycle, 'group_members', lambda pgid: list(current.values()))
+    signals = []
+
+    def terminate(pgid, sig):
+        signals.append((pgid, sig))
+        if sig == lifecycle.signal.SIGTERM:
+            del current[100]
+        else:
+            current.clear()
+
+    monkeypatch.setattr(lifecycle.os, 'killpg', terminate)
+    assert lifecycle.Runtime(tmp_path).terminate(recorded, timeout=0)
+    assert signals == [(100, lifecycle.signal.SIGTERM), (100, lifecycle.signal.SIGKILL)]

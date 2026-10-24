@@ -941,7 +941,7 @@ export function SbomDetail({ sbom }: SbomDetailProps) {
 
   return (
     <div className="space-y-6">
-      {sbom.projectid && sbom.product_id && <SbomPostureNotice scope={{projectId: sbom.projectid, applicationId: sbom.product_id, sbomId: null}} />}
+      {sbom.projectid && sbom.product_id && <SbomPostureNotice scope={{projectId: sbom.projectid, applicationId: sbom.product_id, sbomId: sbom.id}} />}
       {/* Back button */}
       <button
         onClick={() => router.back()}

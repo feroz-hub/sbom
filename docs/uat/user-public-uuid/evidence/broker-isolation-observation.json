@@ -1,0 +1,17 @@
+{
+  "celery": {
+    "type": "none"
+  },
+  "greenfield_reports": {
+    "type": "none"
+  },
+  "greenfield_security_mail": {
+    "type": "none"
+  },
+  "reports": {
+    "type": "none"
+  },
+  "security_mail": {
+    "type": "none"
+  }
+}

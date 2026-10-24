@@ -1,0 +1,111 @@
+{
+  "acceptance_evidence": {
+    "catalog_overall_acceptance": "NOT_EVALUATED_HERE",
+    "catalog_scope": "CATALOG_OBSERVATIONS_ONLY",
+    "checks": [
+      "catalog_observations",
+      "authentication_evidence",
+      "transaction_rollback",
+      "physical_closure",
+      "infrastructure_preservation"
+    ],
+    "overall": "Complete probe plus durable STOP required; no live_accepted field in catalog assessment",
+    "probe_scope": "COMPLETE_READ_ONLY_PROBE"
+  },
+  "accepted": false,
+  "approvals": {},
+  "current_database_acceptance": "NOT_ACCEPTED",
+  "matrix": {
+    "authentication": {
+      "exact_mechanism": "NOT_PROVEN_BY_USED_PASSWORD",
+      "expected": "Actual libpq.used_password True, dedicated correlated secret, SCRAM storage boolean; HBA FILE parse/method only",
+      "loaded_hba_policy": "NOT_PROVEN",
+      "queries": [
+        "hba_file",
+        "roles",
+        "settings"
+      ]
+    },
+    "extension": {
+      "expected": "Only plpgsql1.0 inpg_catalog, bootstrapowner/three C handlers/defaultsecurity; no D/E owner exception inherited",
+      "queries": [
+        "extensions",
+        "plpgsql_functions"
+      ]
+    },
+    "freshness": {
+      "expected": "Four standard schemas; no non-system user/application/reference objects or version table; catalog only/no table records",
+      "queries": [
+        "relations",
+        "columns",
+        "functions",
+        "types",
+        "operators",
+        "other_objects",
+        "triggers",
+        "rules",
+        "event_triggers",
+        "foreign_objects",
+        "replication",
+        "default_acl",
+        "role_settings",
+        "clients",
+        "locks",
+        "alembic",
+        "schemas"
+      ]
+    },
+    "identity": {
+      "expected": "New F16.15 systemID/databaseOID from actual PG; fixed target/current+session user/internalIP5432/PGDATA/read-only/nonrecovery/defaultlocale; existing DclusterID refused",
+      "queries": [
+        "identity",
+        "ownership_acl",
+        "databases",
+        "tablespaces"
+      ],
+      "unknown_now": true
+    },
+    "lifecycle": {
+      "connection_attempts": 1,
+      "controls": [
+        "BEGIN READ ONLY",
+        "ROLLBACK"
+      ],
+      "cooperative_seconds": 60,
+      "idle_ms": 5000,
+      "known_rollback_and_close_required": true,
+      "lock_ms": 250,
+      "planned_queries": 33,
+      "query_ceiling": 40,
+      "statement_ms": 2000
+    },
+    "preservation": {
+      "expected": "No competing client/writer/lock; current exact wholeDocker resource baseline equal beforeauth/afterclose",
+      "queries": [
+        "clients",
+        "locks"
+      ]
+    },
+    "roles_security": {
+      "expected": "Only exact PG16builtin roles + privileged Fbootstrap; three pg_monitor memberships/defaultACL/nooverrides/catalog privileges; separate restricted runtime role needed; no grant/create",
+      "queries": [
+        "roles",
+        "memberships",
+        "privileges",
+        "schema_privileges",
+        "ownership_acl",
+        "default_acl",
+        "role_settings",
+        "shared_dependencies"
+      ],
+      "schema_privileges": "Exact11-row schema/owner/grantee/grantor/privilege/grantability multiset plus4complete owners/rawACLs; source-derived PG16.15 expectations, actual runtime pending"
+    }
+  },
+  "runtime_uncertainties": [
+    "Catalog/role/ACL representation must pass PG16observations without predicate relaxation",
+    "No full loadedHBA rule proof",
+    "Native file pins are not every OSloadedlibrary provenance",
+    "Cooperative budget is not hard wallclock kill"
+  ],
+  "schema": "w24e1-acceptance-matrix-v2"
+}

@@ -5,6 +5,7 @@ from __future__ import annotations
 
 import argparse
 import base64
+import errno
 import json
 import os
 import secrets
@@ -405,15 +406,41 @@ def node_binary():
     return bundled if bundled.exists() else Path(shutil.which("node") or "node")
 
 
+class ServicePortError(RuntimeError):
+    """A required application port cannot be bound; no service was started."""
+
+
+def check_service_ports(ports=(18000, 13000)):
+    for port in ports:
+        with socket.socket() as sock:
+            # Match asyncio/Uvicorn's POSIX listener policy. A stopped service
+            # can leave accepted connections in TIME_WAIT, which a plain bind
+            # wrongly treats as a live conflict on macOS. Do not use this on
+            # Windows, where SO_REUSEADDR can allow a second live listener.
+            if sys.platform != "win32":
+                sock.setsockopt(socket.SOL_SOCKET, socket.SO_REUSEADDR, 1)
+            try:
+                sock.bind(("127.0.0.1", port))
+            except OSError as error:
+                if error.errno in (errno.EADDRINUSE, 10048):
+                    raise ServicePortError(
+                        f"Greenfield application port {port} on 127.0.0.1 is already in use. "
+                        f"Inspect with: lsof -nP -iTCP:{port} -sTCP:LISTEN. "
+                        "Stop a separately launched instance using its own launcher. No process was stopped."
+                    ) from None
+                raise ServicePortError(
+                    f"Cannot bind Greenfield application port {port} on 127.0.0.1 "
+                    f"(OS error {error.errno}). No service was started."
+                ) from None
+
+
 def start_services(runtime=None):
     from scripts import greenfield_https
 
+    check_service_ports()
     cert, key, _, _ = greenfield_https.ensure_certificate(STATE, prepare=True)
     verify_resources()
     env = settings()
-    for port in (18000, 13000):
-        with socket.socket() as sock:
-            sock.bind(("127.0.0.1", port))
     node = node_binary()
     env["PATH"] = str(node.parent) + ":/usr/bin:/bin:/usr/local/bin"
     ui = frontend_workspace("frontend")

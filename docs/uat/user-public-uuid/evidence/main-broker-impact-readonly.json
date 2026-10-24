@@ -1,0 +1,13 @@
+{
+  "revision": "100_greenfield_uuid_final",
+  "matching_test_batch_rows": 0,
+  "ai_batch_rows_in_impact_window": 0,
+  "ai_usage_rows_in_impact_window": 0,
+  "ai_cache_writes_in_impact_window": 0,
+  "iam_users_count": 19,
+  "user_identities_count": 19,
+  "native_user_credentials_count": 18,
+  "tenant_users_count": 21,
+  "tenant_user_role_assignments_count": 21,
+  "platform_user_roles_count": 4
+}

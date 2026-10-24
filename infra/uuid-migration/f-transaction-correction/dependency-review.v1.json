@@ -1,0 +1,36 @@
+{
+  "accepted": false,
+  "dependencies": {
+    "SQLAlchemy": {
+      "files": {
+        "sqlalchemy/dialects/postgresql/base.py": "33583a59aa207629be39b3bac507b0e2115b49679c6dcf6540632b2743e5d1b2",
+        "sqlalchemy/dialects/postgresql/psycopg.py": "12ee64e58213fc58369c06097f44bd4e89fd9e6fd9bc4a517bed97c6421b38bd",
+        "sqlalchemy/engine/base.py": "53f38e544004d329ac38e243104bf4bbbaf7d0f0cecabd112b1923b78dde5614",
+        "sqlalchemy/engine/create.py": "49d840a1060f46f7c994e202f2c43b4b715b34e3bd35afe1006b334acc28b972",
+        "sqlalchemy/engine/default.py": "43886cde55bc6ec1da223a20319c811f8d46a81282c60455691df2cb632a0c2f",
+        "sqlalchemy/pool/base.py": "5dbe91e32ec424f1e4cfee5db84896b96cfb23c601020e291d0a6644ff50883f"
+      },
+      "version": "2.0.51"
+    },
+    "alembic": {
+      "files": {
+        "alembic/operations/base.py": "60a66c080fb5e16885db30849c49c300b9e92facf40aa390700874a762794cc5",
+        "alembic/runtime/migration.py": "991d847b587d632e8e3057832f82ce628acb61bcb69767fcf7d5862bf6e8102c"
+      },
+      "version": "1.18.5"
+    },
+    "psycopg": {
+      "files": {
+        "psycopg/_connection_base.py": "7add2044e037e5042f582c2a1436fbb5d00d41db2cea20980d6f270e5469d5e0",
+        "psycopg/_typeinfo.py": "561535866953c59f90f809054dbf427f5a8f127231e74867b2b83e76e40e076c",
+        "psycopg/types/hstore.py": "0ad1386aafc27396d5ce3411387ecd1d5e433b12bcf675d3559a253e646b2fb1"
+      },
+      "version": "3.3.4"
+    }
+  },
+  "hstore_lookup": "Same PG16 projection and to_regtype predicate, no native Cursor/nested transaction; requires independent source and runtime review",
+  "native_libpq_backend_origin": "NOT_VERIFIED",
+  "runtime_acceptance": false,
+  "schema": "w24c-installed-source-evidence-v1",
+  "sqlalchemy_initialization": "Explicit dialect initialize in owned RO transaction; no Engine.connect initializer/finally rollback"
+}

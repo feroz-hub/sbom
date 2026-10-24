@@ -3,10 +3,10 @@
 import { QueryClient, QueryClientProvider } from '@tanstack/react-query';
 import { fireEvent, render, screen, within } from '@testing-library/react';
 import type { ReactNode } from 'react';
-import { beforeEach, describe, expect, it, vi } from 'vitest';
+import { afterEach, beforeEach, describe, expect, it, vi } from 'vitest';
 import { Sidebar } from './Sidebar';
 import { SidebarProvider } from './SidebarContext';
-import { getRecentSboms, getRuns } from '@/lib/api';
+import { getHealth, getRecentSboms, getRuns } from '@/lib/api';
 
 const navigationState = vi.hoisted(() => ({
   pathname: '/sboms',
@@ -46,6 +46,7 @@ vi.mock('@/lib/api', async () => {
   const actual = await vi.importActual<typeof import('@/lib/api')>('@/lib/api');
   return {
     ...actual,
+    getHealth: vi.fn().mockResolvedValue({ status: 'ok' }),
     getRecentSboms: vi.fn().mockResolvedValue([]),
     getRuns: vi.fn().mockResolvedValue([]),
   };
@@ -73,6 +74,34 @@ function collapseSidebar() {
 }
 
 describe('Sidebar analysis navigation', () => {
+  it('shows API health in expanded and collapsed development sidebars', async () => {
+    renderSidebar();
+
+    expect(screen.getByText('System Status')).toBeInTheDocument();
+    expect(await screen.findByText('API healthy')).toBeInTheDocument();
+    expect(getHealth).toHaveBeenCalled();
+
+    collapseSidebar();
+
+    expect(screen.queryByText('System Status')).not.toBeInTheDocument();
+    expect(await screen.findByLabelText('Status: API healthy')).toBeInTheDocument();
+  });
+
+  it('omits API health and its polling in expanded and collapsed production sidebars', () => {
+    vi.stubEnv('NODE_ENV', 'production');
+    renderSidebar();
+
+    expect(screen.queryByText('System Status')).not.toBeInTheDocument();
+    expect(screen.queryByRole('status')).not.toBeInTheDocument();
+    expect(getHealth).not.toHaveBeenCalled();
+
+    collapseSidebar();
+
+    expect(screen.queryByLabelText(/^Status:/)).not.toBeInTheDocument();
+    expect(getHealth).not.toHaveBeenCalled();
+    expect(screen.getByRole('button', { name: 'Expand sidebar' })).toBeInTheDocument();
+  });
+
   it('groups only authorized tenant working areas and preserves the selected route', () => {
     navigationState.permissions = new Set(['dashboard:read', 'project:read', 'sbom:read', 'analysis:read', 'vex:read', 'schedule:read', 'tenant:user:read']);
     renderSidebar('/projects');
@@ -135,9 +164,14 @@ describe('Sidebar analysis navigation', () => {
   });
   beforeEach(() => {
     vi.clearAllMocks();
+    vi.stubEnv('NODE_ENV', 'development');
     navigationState.pathname = '/sboms';
     navigationState.search = '';
     navigationState.permissions = new Set(['*']);
+  });
+
+  afterEach(() => {
+    vi.unstubAllEnvs();
   });
 
   it('shows Analysis children in expanded mode and exposes Runs navigation', () => {

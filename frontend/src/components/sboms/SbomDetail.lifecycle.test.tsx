@@ -8,7 +8,7 @@ import { beforeEach, describe, expect, it, vi } from 'vitest';
 const back = vi.fn();
 const push = vi.fn();
 const access = vi.hoisted(() => ({ readOnly: false, excludedPermission: null as string | null }));
-vi.mock('@/hooks/useAuth', async () => { const { authorizedAuth } = await import('@/test/authorizedAuth'); return { useAuth: () => ({ ...authorizedAuth(), hasPermission: (p: string) => !access.readOnly && p !== access.excludedPermission && authorizedAuth().hasPermission(p) }) }; });
+vi.mock('@/hooks/useAuth', async () => { const { authorizedAuth } = await import('@/test/authorizedAuth'); return { useAuth: () => ({ ...authorizedAuth(), activeTenantId: '00000000-0000-4000-8000-000000000001', hasPermission: (p: string) => !access.readOnly && p !== access.excludedPermission && authorizedAuth().hasPermission(p) }) }; });
 
 vi.mock('next/navigation', () => ({
   useRouter: () => ({ back, push, replace: vi.fn() }),
@@ -37,6 +37,7 @@ vi.mock('@/hooks/useToast', () => ({
 }));
 
 const getSbomComponents = vi.fn();
+const getDashboardPostureVersions = vi.fn();
 const getRuns = vi.fn();
 const getSbomInfo = vi.fn();
 const getSbomRiskSummary = vi.fn();
@@ -67,6 +68,7 @@ vi.mock('@/lib/api', async () => {
     BASE_URL: 'http://test.local',
     getProjects: async () => [],
     getProducts: async () => ({ items: [], total: 0 }),
+    getDashboardPostureVersions: (...args: unknown[]) => getDashboardPostureVersions(...args),
     updateSbom: (...args: unknown[]) => editSbom(...args),
     // These legacy override scenarios have no investigation context; keep resolver refetches local.
     getVexInvestigationByTriple: async () => null,
@@ -158,6 +160,7 @@ function wrap(children: ReactNode) {
 }
 
 beforeEach(() => {
+  getDashboardPostureVersions.mockResolvedValue({ items: [] });
   access.readOnly = false;
   access.excludedPermission = null;
   window.localStorage.clear();
@@ -732,5 +735,13 @@ describe('Operational lifecycle processing restrictions', () => {
     expect(screen.getByRole('button', { name: /Run Analysis/i })).toBeEnabled();
     const exports = screen.getAllByRole('button').filter(button => /Export|Report/i.test(button.textContent || ''));
     exports.forEach(button => expect(button).toBeDisabled());
+  });
+
+  it('requests version evidence for this SBOM instead of the whole product', async () => {
+    const selected = { ...SBOM, projectid: '00000000-0000-4000-8000-000000000007', product_id: '00000000-0000-4000-8000-000000000008' };
+    render(wrap(<SbomDetail sbom={selected} />));
+    await waitFor(() => expect(getDashboardPostureVersions).toHaveBeenCalledWith({
+      projectId: selected.projectid, applicationId: selected.product_id, sbomId: selected.id,
+    }, expect.any(AbortSignal)));
   });
 });

@@ -1,0 +1,36 @@
+{
+  "accepted": false,
+  "conditional_lookup": "psycopg TypeInfo.fetch(hstore), driver type/connection compatibility not accepted",
+  "files": {
+    "psycopg/_typeinfo.py": {
+      "distribution": "psycopg",
+      "sha256": "561535866953c59f90f809054dbf427f5a8f127231e74867b2b83e76e40e076c",
+      "version": "3.3.4"
+    },
+    "sqlalchemy/dialects/postgresql/base.py": {
+      "distribution": "SQLAlchemy",
+      "sha256": "33583a59aa207629be39b3bac507b0e2115b49679c6dcf6540632b2743e5d1b2",
+      "version": "2.0.51"
+    },
+    "sqlalchemy/dialects/postgresql/psycopg.py": {
+      "distribution": "SQLAlchemy",
+      "sha256": "12ee64e58213fc58369c06097f44bd4e89fd9e6fd9bc4a517bed97c6421b38bd",
+      "version": "2.0.51"
+    },
+    "sqlalchemy/engine/default.py": {
+      "distribution": "SQLAlchemy",
+      "sha256": "43886cde55bc6ec1da223a20319c811f8d46a81282c60455691df2cb632a0c2f",
+      "version": "2.0.51"
+    }
+  },
+  "not_runtime_observed": true,
+  "reservation": 16,
+  "review": "16is an independently reviewable hard ceiling, not a proven runtime upper bound. Four core queries plus optional hstore/type lookup are visible; cache/driver/backend paths remain runtime dependent. Overflow refuses before driver.",
+  "schema": "w24b-installed-initialization-source-review-v1",
+  "visible_queries": [
+    "select pg_catalog.version()",
+    "select current_schema()",
+    "show transaction isolation level",
+    "show standard_conforming_strings"
+  ]
+}

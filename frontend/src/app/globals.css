@@ -2,6 +2,21 @@
 @tailwind components;
 @tailwind utilities;
 
+/* The authenticated shell owns the viewport; only main and the sidebar's
+   middle section scroll. Keep public/auth pages on normal document scrolling. */
+.app-shell,
+.app-sidebar {
+  height: 100vh;
+  height: 100dvh;
+}
+
+/* Lock the independent scrollports whenever a modal is present. Use the
+   modal itself: another mounted dialog can clear the shared body flag. */
+body:has([role='dialog'][aria-modal='true']) .app-content,
+body:has([role='dialog'][aria-modal='true']) .app-sidebar-scroll {
+  overflow-y: hidden;
+}
+
 /* ── Enterprise blue dashboard theme ── */
 :root {
   --color-background: #FFFFFF;

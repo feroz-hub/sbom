@@ -1,0 +1,279 @@
+// @vitest-environment jsdom
+/**
+ * AddProviderDialog — flow + invariant tests.
+ *
+ * Three load-bearing checks:
+ *
+ *   1. Save eligibility independent of provider availability.
+ *   2. Test → Save sequence creates a credential via the API.
+ *   3. Provider switch resets the form (no stale API key from a
+ *      prior provider attempt).
+ */
+
+import { afterEach, beforeEach, describe, expect, it, vi } from 'vitest';
+import { screen, waitFor } from '@testing-library/react';
+import userEvent from '@testing-library/user-event';
+import { AddProviderDialog } from '../AddProviderDialog/AddProviderDialog';
+import {
+  SAMPLE_CATALOG,
+  makeCredential,
+  makeTestResult,
+  renderWithProviders,
+} from './test-utils';
+
+
+vi.mock('@/hooks/usePermission', () => ({ usePermission: () => true }));
+const listAiProviderCatalog = vi.fn();
+const testAiCredentialUnsaved = vi.fn();
+const createAiCredential = vi.fn();
+const listAiCredentials = vi.fn();
+
+vi.mock('@/lib/api', () => ({
+  listAiProviderCatalog: () => listAiProviderCatalog(),
+  testAiCredentialUnsaved: (body: unknown) => testAiCredentialUnsaved(body),
+  createAiCredential: (body: unknown) => createAiCredential(body),
+  listAiCredentials: () => listAiCredentials(),
+}));
+
+
+beforeEach(() => {
+  listAiProviderCatalog.mockResolvedValue(SAMPLE_CATALOG);
+  listAiCredentials.mockResolvedValue([]);
+  testAiCredentialUnsaved.mockReset();
+  createAiCredential.mockReset();
+});
+
+
+afterEach(() => {
+  vi.restoreAllMocks();
+});
+
+
+describe('AddProviderDialog', () => {
+  it('renders nothing when open=false', () => {
+    const { container } = renderWithProviders(
+      <AddProviderDialog open={false} onClose={() => {}} />,
+    );
+    expect(container.firstChild).toBeNull();
+  });
+
+  it('allows Save before testing when local fields are valid', async () => {
+    renderWithProviders(<AddProviderDialog open onClose={() => {}} />);
+    // The API key label only renders after the catalog query resolves.
+    const apiKey = await screen.findByLabelText('API key');
+    await userEvent.type(apiKey, 'sk-ant-FAKE-TEST-KEY');
+
+    const saveBtn = screen.getByRole('button', { name: /save provider/i });
+    expect(saveBtn).toBeEnabled();
+  });
+
+  it('test → success → save sends create payload', async () => {
+    testAiCredentialUnsaved.mockResolvedValue(
+      makeTestResult({ success: true, provider: 'anthropic', detected_models: ['claude-sonnet-4-5'] }),
+    );
+    createAiCredential.mockResolvedValue(
+      makeCredential({ id: 99, provider_name: 'anthropic' }),
+    );
+
+    const onClose = vi.fn();
+    renderWithProviders(<AddProviderDialog open onClose={onClose} />);
+    await waitFor(() =>
+      expect(screen.getByLabelText('API key')).toBeInTheDocument(),
+    );
+
+    await userEvent.type(screen.getByLabelText('API key'), 'sk-ant-FAKE-KEY');
+
+    await userEvent.click(screen.getByRole('button', { name: /test connection/i }));
+
+    await waitFor(() =>
+      expect(screen.getByTestId('test-result-success')).toBeInTheDocument(),
+    );
+
+    const saveBtn = screen.getByRole('button', { name: /save provider/i });
+    expect(saveBtn).not.toBeDisabled();
+    await userEvent.click(saveBtn);
+
+    await waitFor(() => expect(createAiCredential).toHaveBeenCalled());
+    const payload = createAiCredential.mock.calls[0][0];
+    expect(payload.provider_name).toBe('anthropic');
+    expect(payload.api_key).toBe('sk-ant-FAKE-KEY');
+    expect(payload.tier).toBe('paid');
+    await waitFor(() => expect(onClose).toHaveBeenCalled());
+  });
+
+  it('shows the free-tier rate limit when Gemini is selected', async () => {
+    renderWithProviders(<AddProviderDialog open onClose={() => {}} />);
+    // Wait until the catalog query has resolved so the dropdown has
+    // populated with both options. Anchoring on the API-key field is
+    // a reliable signal that ``entry`` has resolved and the form is
+    // rendered.
+    await screen.findByLabelText('API key');
+
+    await userEvent.selectOptions(
+      screen.getByRole('combobox', { name: /provider/i }),
+      'gemini',
+    );
+
+    // Tier select appears (free tier supported).
+    await waitFor(() => {
+      expect(screen.getByLabelText(/tier/i)).toBeInTheDocument();
+    });
+    // The "15 req/min" string can appear in multiple places (option
+    // text + tier badge) — assert at least one match.
+    expect(screen.getAllByText(/15 req\/min/i).length).toBeGreaterThan(0);
+  });
+
+  it('Save disabled when test fails (auth)', async () => {
+    testAiCredentialUnsaved.mockResolvedValue(
+      makeTestResult({
+        success: false,
+        error_kind: 'auth',
+        error_message: 'bad key',
+        detected_models: [],
+        latency_ms: null,
+      }),
+    );
+
+    renderWithProviders(<AddProviderDialog open onClose={() => {}} />);
+    await waitFor(() =>
+      expect(screen.getByLabelText('API key')).toBeInTheDocument(),
+    );
+    await userEvent.type(screen.getByLabelText('API key'), 'sk-ant-WRONG');
+    await userEvent.click(screen.getByRole('button', { name: /test connection/i }));
+
+    await waitFor(() =>
+      expect(screen.getByTestId('test-result-auth')).toBeInTheDocument(),
+    );
+    expect(screen.getByRole('button', { name: /save provider/i })).toBeDisabled();
+  });
+
+  it('shows a request error when the test endpoint rejects the payload', async () => {
+    testAiCredentialUnsaved.mockRejectedValue(new Error('request rejected'));
+
+    renderWithProviders(<AddProviderDialog open onClose={() => {}} />);
+    await screen.findByLabelText('API key');
+    await userEvent.type(screen.getByLabelText('API key'), 'sk-ant-FAKE-KEY');
+    await userEvent.click(screen.getByRole('button', { name: /test connection/i }));
+
+    await waitFor(() =>
+      expect(screen.getByTestId('test-result-request-error')).toHaveTextContent(
+        'The connection test could not be completed.',
+      ),
+    );
+    expect(screen.queryByText(/not tested/i)).not.toBeInTheDocument();
+    expect(screen.getByRole('button', { name: /save provider/i })).toBeEnabled();
+  });
+
+  it('validates custom OpenAI URL/model and keeps its API key optional', async () => {
+    listAiProviderCatalog.mockResolvedValue([
+      ...SAMPLE_CATALOG,
+      {
+        name: 'custom_openai',
+        display_name: 'Custom OpenAI-compatible',
+        requires_api_key: false,
+        requires_base_url: true,
+        is_local: true,
+        supports_free_tier: false,
+        free_tier_rate_limit_rpm: null,
+        free_tier_daily_token_limit: null,
+        available_models: [],
+        docs_url: '',
+        api_key_url: '',
+        notes: 'Custom endpoint.',
+      },
+    ]);
+    testAiCredentialUnsaved.mockResolvedValue(makeTestResult({ provider: 'custom_openai' }));
+
+    renderWithProviders(<AddProviderDialog open onClose={() => {}} />);
+    await screen.findByLabelText('API key');
+    await userEvent.selectOptions(screen.getByRole('combobox', { name: /provider/i }), 'custom_openai');
+
+    const optionalKey = await screen.findByLabelText(/API key \(optional\)/i);
+    expect(optionalKey).toHaveValue('');
+    await userEvent.type(screen.getByLabelText('Base URL'), 'http://example.com/v1');
+    await userEvent.type(screen.getByLabelText('Model'), 'custom-model');
+    expect(screen.getByText(/HTTPS for remote endpoints/i)).toBeInTheDocument();
+    expect(screen.getByRole('button', { name: /test connection/i })).toBeDisabled();
+
+    await userEvent.clear(screen.getByLabelText('Base URL'));
+    await userEvent.type(screen.getByLabelText('Base URL'), 'http://localhost:1234/v1');
+    expect(screen.getByRole('button', { name: /test connection/i })).not.toBeDisabled();
+    await userEvent.click(screen.getByRole('button', { name: /test connection/i }));
+    await waitFor(() => expect(testAiCredentialUnsaved).toHaveBeenCalled());
+    expect(testAiCredentialUnsaved.mock.calls[0][0]).toMatchObject({
+      api_key: null,
+      base_url: 'http://localhost:1234/v1',
+      default_model: 'custom-model',
+    });
+  });
+});
+
+it.each([
+  ['provider_unavailable', 503], ['rate_limit', 429], ['network', undefined], ['unknown', undefined],
+] as const)('allows saving after %s without leaking provider text', async (kind, status) => {
+  const secret = 'SENTINEL-PRIVATE-KEY';
+  testAiCredentialUnsaved.mockResolvedValue(makeTestResult({ success: false, error_kind: kind, http_status: status, error_message: `raw provider payload ${secret}` }));
+  createAiCredential.mockResolvedValue(makeCredential());
+  renderWithProviders(<AddProviderDialog open onClose={() => {}} />);
+  await userEvent.type(await screen.findByLabelText('API key'), secret);
+  await userEvent.click(screen.getByRole('button', { name: /test connection/i }));
+  await screen.findByRole('button', { name: 'Test again' });
+  expect(screen.queryByText(new RegExp(secret))).not.toBeInTheDocument();
+  const save = screen.getByRole('button', { name: /save provider/i });
+  expect(save).toBeEnabled(); await userEvent.click(save);
+  await waitFor(() => expect(createAiCredential).toHaveBeenCalledWith(expect.objectContaining({ api_key: secret })));
+});
+
+it('keeps Save enabled while testing and rejects missing keys', async () => {
+  testAiCredentialUnsaved.mockImplementation(() => new Promise(() => {}));
+  renderWithProviders(<AddProviderDialog open onClose={() => {}} />);
+  const key = await screen.findByLabelText('API key');
+  expect(screen.getByRole('button', { name: /save provider/i })).toBeDisabled();
+  await userEvent.type(key, 'example-key');
+  await userEvent.click(screen.getByRole('button', { name: /test connection/i }));
+  expect(screen.getByRole('button', { name: /save provider/i })).toBeEnabled();
+});
+
+it('clears rejected credential results when the key changes', async () => {
+  testAiCredentialUnsaved.mockResolvedValue(makeTestResult({ success: false, error_kind: 'auth' }));
+  renderWithProviders(<AddProviderDialog open onClose={() => {}} />);
+  const key = await screen.findByLabelText('API key');
+  await userEvent.type(key, 'bad-key');
+  await userEvent.click(screen.getByRole('button', { name: /test connection/i }));
+  await screen.findByText('Authentication failed');
+  expect(screen.getByRole('button', { name: /save provider/i })).toBeDisabled();
+  await userEvent.clear(key); await userEvent.type(key, 'corrected-key');
+  expect(screen.getByRole('button', { name: /save provider/i })).toBeEnabled();
+  expect(screen.queryByText('Authentication failed')).not.toBeInTheDocument();
+});
+
+it('ignores a late rejected result after the candidate key changes', async () => {
+  let resolve!: (result: ReturnType<typeof makeTestResult>) => void;
+  testAiCredentialUnsaved.mockImplementation(() => new Promise(r => { resolve = r; }));
+  renderWithProviders(<AddProviderDialog open onClose={() => {}} />);
+  const key = await screen.findByLabelText('API key');
+  await userEvent.type(key, 'old-key');
+  await userEvent.click(screen.getByRole('button', { name: /test connection/i }));
+  await userEvent.clear(key); await userEvent.type(key, 'new-key');
+  resolve(makeTestResult({ success: false, error_kind: 'auth' }));
+  await waitFor(() => expect(screen.getByRole('button', { name: /save provider/i })).toBeEnabled());
+  expect(screen.queryByText('Authentication failed')).not.toBeInTheDocument();
+});
+
+describe('provider dialog accessibility and unsaved changes', () => {
+  it('keeps a changed form open until discarding is deliberate', async () => {
+    const close = vi.fn();
+    renderWithProviders(<AddProviderDialog open onClose={close} />);
+    const key = await screen.findByLabelText('API key');
+    await userEvent.type(key, 'fixture-secret');
+    expect(key).toHaveAttribute('type', 'password');
+    await userEvent.click(screen.getByRole('button', { name: 'Cancel' }));
+    expect(close).not.toHaveBeenCalled();
+    expect(screen.getByText('Discard unsaved provider changes?')).toBeInTheDocument();
+    await userEvent.click(screen.getByRole('button', { name: 'Keep editing' }));
+    expect(key).toHaveValue('fixture-secret');
+    await userEvent.keyboard('{Escape}');
+    await userEvent.click(screen.getByRole('button', { name: 'Discard changes' }));
+    expect(close).toHaveBeenCalledOnce();
+  });
+});

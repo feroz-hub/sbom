@@ -1,0 +1,9 @@
+{
+  "exit_code": 2,
+  "elapsed_seconds": 409.34,
+  "frozen_source_file_count": 855,
+  "source_changed_during_run": [
+    "tests/test_component_advisor_review_api.py"
+  ],
+  "public_evidence_sanitized": true
+}

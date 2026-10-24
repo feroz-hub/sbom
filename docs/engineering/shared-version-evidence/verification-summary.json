@@ -1,0 +1,36 @@
+{
+  "date": "2026-10-23",
+  "scope": "Shared SBOM version evidence rendering and VEX hierarchy",
+  "backend_source_changes": false,
+  "existing_data_mutations": false,
+  "affected_surfaces": ["VEX Investigation", "Product details", "SBOM details"],
+  "baseline_frontend": { "passed": 256, "files": 24 },
+  "focused_frontend": { "passed": 500, "files": 47 },
+  "full_frontend": {
+    "passed": 1863,
+    "failed": 1,
+    "files": 206,
+    "failure": "Pre-existing inventory test expects View SBOM button replaced by remote inventory action menu",
+    "prior_clean_remote_reproduction": "212490d6"
+  },
+  "backend": { "passed": 117, "target": "New disposable PostgreSQL cluster, port 56424", "exit_code": 0 },
+  "browser": {
+    "vex_and_product_passed": 7,
+    "existing_analysis_passed": 8,
+    "mode": "Actual frontend, intercepted API fixtures",
+    "https_certificate_verification": true,
+    "viewports": [1440, 768, 390]
+  },
+  "typescript": "passed",
+  "production_build_webpack": "passed",
+  "default_turbopack": "Not rerun; previously recorded environment stall remains open",
+  "scoped_eslint": { "errors": 0, "warnings": 26, "warnings_reproduced_on_HEAD": true },
+  "pre_existing_tracked_changes_preserved": 11,
+  "services": "Temporary verification frontend and PostgreSQL stopped; existing application services unchanged",
+  "limitations": [
+    "Provenance transport is still a full in-scope array; only rendering is paginated.",
+    "Severity buckets are not available in the lineage DTO and are not fabricated.",
+    "No full backend suite, live provider/worker or physical-device acceptance.",
+    "Source changes are not deployed into the separate port-13000 snapshot."
+  ]
+}

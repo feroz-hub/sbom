@@ -1,0 +1,2372 @@
+> **20 October 2026 — Remediation Round 1:** SBO-70 and SBO-71 are FIXED_AND_RETETESTED. The original 485-case baseline below is preserved verbatim; full sign-off remains WITHHELD. [Current remediation results](#remediation-round-1--20-october-2026).
+
+# SBOM Analyzer — Full Role-Based UAT Report
+
+Run date: **19 October 2026, Asia/Kolkata**. Sign-off: **WITHHELD**.
+
+This report records current execution, not acceptance claims from earlier runs. Full UAT completion is **not claimed**: the explicit BLOCKED and NOT RUN cases below remain acceptance limits. No application remediation was authorized or performed.
+
+## Environment and safeguards
+
+- Frontend: `https://localhost:13000`; API: `http://127.0.0.1:18000`.
+- The running API process was checked: database name `sbom_greenfield_uuid`, database host `127.0.0.1`; SMTP `127.0.0.1:1026`, delivery enabled, security outbox enabled. Mailpit is `http://127.0.0.1:8026`.
+- Chrome runs with `ignoreHTTPSErrors=false`. System curl reported TLS verification result 0. Chrome reported TLS 1.3 with the existing mkcert issuer. No trust-store change or T
+### UAT-DEF-001 — Medium — Candidate results overlap the Cancel button
+
+Reproduce as Olympus Admin: open Users & Access, Add Existing Member; search `admin@olympus.example.test`; wait for “No eligible users found for this tenant”; click Cancel normally. The floating empty-results panel intercepts the pointer. No API failure accompanies this issue. Escape dismisses the dialog.
+
+
+### UAT-DEF-002 — Medium — Global account discovery conflicts with the strict no-enumeration UAT criterion
+
+Reproduce as Isolation Control Admin with no Olympus membership: call own-tenant `/api/tenants/{isolation-control-uuid}/user-candidates?q=olympus`. HTTP 200 returns five matching global IAM accounts: the four Olympus tenant identities and the platform account, including email/display name/account status. Business-resource and Olympus member-directory isolation probes still reject foreign access.
+
+This is an **acceptance-policy gap**: the implemented `tenant:user:invite` policy intentionally allows global eligible IAM account lookup for Add Existing Member. The query excludes current members, inactive and unverified accounts but does not constrain candidates to a tenant relationship. It does not return Olympus membership records. This report does not infer unrestricted cross-tenant business access from candidate discovery.
+
+
+### UAT-DEF-004 — Low — Native membership confirmation names HCL.CS
+
+The disable-membership confirmation for the activated Native UAT account states “Their HCL.CS identity ... will remain unchanged.” This environment has Native authentication enabled and HCL.CS disabled. Reproduce by opening the disposable Native member's action menu and choosing Disable membership. The membership mutation itself passed, preserving the user's account status and assigned role.
+
+
+### UAT-DEF-005 — Medium — Tenant Admin KEV Sync control disagrees with platform-only API policy
+
+As Olympus Tenant Admin, the Sync KEV Catalog button is enabled. Clicking it returns 403; the observed UI response specifically reports `IAM_TENANT_SELECTION_REQUIRED`. The frontend gates the control with `tenant:settings:update`, whereas the route policy and handler require current platform authority. A separate direct request with the valid Olympus tenant context is also rejected. The button therefore cannot complete under its displayed tenant authority, regardless of the first rejection layer. Server-side protection works: these requests do not modify the global catalog. 
+### UAT-DEF-007 — Medium — Advisor policy version histories return HTTP 500
+
+Reproduce in the UAT-created tenant as its administrator: publish a DISABLED trust, accepted-risk or scoring policy version; GET `/api/component-advisor/policies/{kind}/versions`. Publication succeeds with 201 and stale-version publication returns the correct 409, but each nonempty history returns 500 `Unresolvable public resource reference`. Correlation IDs: `8f7ac6766b8e`, `8c98bc6cca5b`, `4ffa41c1be7c`. The tenant had no SBOM rows that could accidentally satisfy the wrong lookup.
+
+`app/public_api.py` maps every `versions` path segment to `sbom_source`. Its route-entity inference therefore treats a policy version's separate integer ID as an SBOM internal ID when serializing the generic `items` list. The tenant-scoped SBOM lookup fails, generating the observed error. The actual route inference was evaluated separately without database mutation. This also creates a risk of incorrect IDs when an unrelated same-tenant SBOM happens to share that integer; that collision variant was **not executed** and is not a sepa
+### UAT-USER-001 — PASS
+
+Module: Users & Access. Role: Admin. Time (UTC): 2026-10-19T15:12:27.525Z.
+
+Preconditions: Isolated Chrome context; Native Login; trusted HTTPS; seeded development identity
+
+Steps executed: Native Login; choose Olympus; open /settings/users; compare table with GET tenant users
+
+Expected: Olympus active; current membership active; exactly four correctly verified active seeded members with expected roles
+
+Actual / sanitized evidence:
+
+```json
+{
+  "tenant": "3a900179-36bf-4b5f-b2e1-2a4a9d06e6af",
+  "rows": [
+    {
+      "membership_id": 1,
+      "user_id": 1,
+      "external_iam_user_id": null,
+      "email": "admin@olympus.example.test",
+      "display_name": "Synthetic Olympus admin",
+      "user_status": "ACTIVE",
+      "email_verified": true,
+      "verification_required": false,
+      "role": "TENANT_ADMIN",
+      "roles": [
+        "TENANT_ADMIN"
+      ],
+      "role_assignment_version": 1,
+      "status": "ACTIVE"
+    },
+    {
+      "membership_id": 2,
+      "user_id": 2,
+      "external_iam_user_id": null,
+      "email": "analyst@olympus.example.test",
+     
+### UAT-USER-007 — PASS
+
+Module: Users & Access. Role: Admin. Time (UTC): 2026-10-19T15:12:42.175Z.
+
+Preconditions: Isolated Chrome context; Native Login; trusted HTTPS; seeded development identity
+
+Steps executed: Expand Access Information
+
+Expected: Access Information separates authentication and tenant role/membership/verification
+
+Actual / sanitized evidence:
+
+```json
+{
+  "text": "Access Information\nAuthentication\nSign-in uses the method configured for your account: HCL.CS, a native account or Microsoft Entra.\nTenant access\nManaged in SBOM. Access depends on tenant membership and assigned roles. Email verification and user account status are shown separately in the directory."
+}
+```
+
+API status: not applicable / not observed. Defect: none.
+
+### UAT-USER-009 — PASS
+
+Module: Users & Access. Role: admin. Time (UTC): 2026-10-19T15:15:16.350Z.
+
+Preconditions: Fresh isolated Chrome context; Native Login; TLS validation enabled; greenfield development stack
+
+Steps executed: Add Existing Member; search current Admin; compare candidate API
+
+Expected: Existing members excluded from candidate lookup
+
+Actual / sanitized evidence:
+
+```json
+{
+  "ui": "Add Existing Member\n\nAdd an existing SBOM Analyzer account to Olympus. This does not create a new user account.\n\nSearch existing user\nNo eligible users found for this tenant.\nCancel\nAdd Member",
+  "api": {
+    "status": 200,
+    "data": {
+      "items": []
+    },
+    "requestId": "27a0a4641b09"
+  }
+}
+```
+
+API status: 200. Defect: none.
+
+### UAT-USER-014 — FAIL
+
+Module: Users & Access. Role: admin. Time (UTC): 2026-10-19T15:15:18.502Z.
+
+Preconditions: Fresh isolated Chrome context; Native Login; TLS validation enabled; greenfield development stack
+
+Steps executed: Search Admin in Add Existing Member; click Cancel normally; result popup intercepts pointer
+
+Expected: Cancel remains clickable with candidate results open
+
+Actual / sanitized evidence:
+
+```json
+{
+  "error": "locator.click: Timeout 2000ms exceeded.\nCall log:\n\u001b[2m  - waiting for getByRole('button', { name: 'Cancel', exact: true })\u001b[22m\n\u001b[2m    - locator resolved to <button type=\"button\" class=\"group/btn inline-flex items-center justify-center font-medium border transition-[background-color,color,border-color,box-shadow,transform] duration-base ease-spring will-change-transform hover:-translate-y-px active:translate-y-0 active:scale-[0.97] focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-offset-2 focus-visible:ring-hcl-blue/50 focus-visible:ring-offset-background disabled:opacity-50 disabled:cursor-not-allowed disabled:hover
+### UAT-USER-010 — PASS
+
+Module: Users & Access. Role: admin. Time (UTC): 2026-10-19T15:15:18.595Z.
+
+Preconditions: Fresh isolated Chrome context; Native Login; TLS validation enabled; greenfield development stack
+
+Steps executed: GET candidate endpoint with short/blank/wildcard/SQL-like query
+
+Expected: Candidate validation/literal escaping: HTTP 422
+
+Actual / sanitized evidence:
+
+```json
+{
+  "status": 422,
+  "data": {
+    "detail": [
+      {
+        "type": "string_too_short",
+        "loc": [
+          "query",
+          "q"
+        ],
+        "msg": "String should have at least 2 characters",
+        "input": "a",
+        "ctx": {
+          "min_length": 2
+        }
+      }
+    ]
+  },
+  "requestId": "7bf2f65f7135"
+}
+```
+
+API status: 422. Defect: none.
+
+### UAT-USER-011 — PASS
+
+Module: Users & Access. Role: admin. Time (UTC): 2026-10-19T15:15:18.631Z.
+
+Preconditions: Fresh isolated Chrome context; Native Login; TLS validation enabled; greenfield development stack
+
+Steps executed: GET candidate endpoint with short/blank/wildcard/SQL-like query
+
+Expected: Candidate validation/literal escaping: HTTP 422
+
+Actual / sanitized evidence:
+
+```json
+{
+  "status": 422,
+  "data": {
+    "detail": "Search by name or email using at least 2 characters"
+  },
+  "requestId": "ee9dbccd5529"
+}
+```
+
+API status: 422. Defect: none.
+
+### UAT-USER-012 — PASS
+
+Module: Users & Access. Role: admin. Time (UTC): 2026-10-19T15:15:18.665Z.
+
+Preconditions: Fresh isolated Chrome context; Native Login; TLS validation enabled; greenfield development stack
+
+Steps executed: GET candidate endpoint with short/blank/wildcard/SQL-like query
+
+Expected: Candidate validation/literal escaping: HTTP 422
+
+Actual / sanitized evidence:
+
+```json
+{
+  "status": 422,
+  "data": {
+    "detail": [
+      {
+        "type": "string_too_short",
+        "loc": [
+          "query",
+          "q"
+        ],
+        "msg": "String should have at least 2 characters",
+        "input": "%",
+        "ctx": {
+          "min_length": 2
+        }
+      }
+    ]
+  },
+  "requestId": "c21fe4819793"
+}
+```
+
+API status: 422. Defect: none.
+
+### UAT-USER-013 — PASS
+
+Module: Users & Access. Role: admin. Time (UTC): 2026-10-19T15:15:18.706Z.
+
+Preconditions: Fresh isolated Chrome context; Native Login; TLS validation enabled; greenfield development stack
+
+Steps executed: GET candidate endpoint with short/blank/wildcard/SQL-like query
+
+Expected: Candidate validation/literal escaping: HTTP 200
+
+Actual / sanitized evidence:
+
+```json
+{
+  "status": 200,
+  "data": {
+    "items": []
+  },
+  "requestId": "a0fc6f6dba21"
+}
+```
+
+API status: 200. Defect: none.
+
+### UAT-READ-admin-candidates — PASS
+
+Module: Users & Access. Role: admin. Time (UTC): 2026-10-19T15:29:14.837Z.
+
+Preconditions: Fresh isolated Chrome context; Native Login; TLS validation enabled; greenfield development stack
+
+Steps executed: GET /api/tenants/3a900179-36bf-4b5f-b2e1-2a4a9d06e6af/user-candidates?q=Olympus directly through authenticated API; independent of UI visibility
+
+Expected: Implemented permission tenant:user:invite: HTTP 200
+
+Actual / sanitized evidence:
+
+```json
+{
+  "status": 200,
+  "count": 2,
+  "keys": [
+    "items"
+  ],
+  "requestId": "eb052503891a"
+}
+```
+
+API status: 200. Defect: none.
+
+### UAT-READ-admin-kev — PASS
+
+Module: CISA KEV. Role: admin. Time (UTC): 2026-10-19T15:29:16.072Z.
+
+Preconditions: Fresh isolated Chrome context; Native Login; TLS validation enabled; greenfield development stack
+
+Steps executed: GET /api/v1/kev?page=1&page_size=5 directly through authenticated API; independent of UI visibility
+
+Expected: Implemented permission analysis:read: HTTP 200
+
+Actual / sanitized evidence:
+
+```json
+{
+  "status": 200,
+  "count": 50,
+  "total": 1748,
+  "keys": [
+    "total",
+    "limit",
+    "offset",
+    "items"
+  ],
+  "requestId": "58199cdb13ba"
+}
+```
+
+API status: 200. Defect: none.
+
+### UAT-PAGE-admin--kev — PASS
+
+Module: CISA KEV. Role: admin. Time (UTC): 2026-10-19T15:41:55.730Z.
+
+Preconditions: Fresh isolated Chrome context; Native Login; TLS validation enabled; greenfield development stack
+
+Steps executed: Open /kev; inspect actual module and requests
+
+Expected: Authorized page renders actual content and reads without browser crash or API 5xx (page/read smoke)
+
+Actual / sanitized evidence:
+
+```json
+{
+  "path": "/kev",
+  "headings": [
+    "CISA KEV"
+  ],
+  "text": "SBOM Analyzer\nSearch\nSO\nSynthetic Olympus admin\nCISA KEV\nKnown Exploited Vulnerabilities catalog\nSync KEV Catalog\nSearch KEV catalog\nVendor\nAll vendors\n7-Zip\nAccellion\nAcclaim Systems\nAcronis\nAdminer\nAdobe\nAdvantive\nAhsay\nAjax.NET Professional\nAlcatel\nAmcrest\nAMI\nAndroid\nApache\nApple\nAquasecurity\nArcadyan\nArcserve\nArista\nArm\nArray Networks\nArtifex\nASUS\nAtlassian\nAudinate\nAviatrix\nBalbooa\nBarracuda Networks\nBerriAI\nBeyondTrust\nBQE\nBroadcom\nCacti\nChakraCore\nCheckbox\nCheck Point\nCisco\nCitrix\nCleo\nCode Aurora\nCommvault\nConnectWise\nCraft CMS\nCrestron\nCru
+### UAT-READ-developer-candidates — PASS
+
+Module: Users & Access. Role: developer. Time (UTC): 2026-10-19T15:29:43.730Z.
+
+Preconditions: Fresh isolated Chrome context; Native Login; TLS validation enabled; greenfield development stack
+
+Steps executed: GET /api/tenants/3a900179-36bf-4b5f-b2e1-2a4a9d06e6af/user-candidates?q=Olympus directly through authenticated API; independent of UI visibility
+
+Expected: Implemented permission tenant:user:invite: HTTP 403
+
+Actual / sanitized evidence:
+
+```json
+{
+  "status": 403,
+  "count": 0,
+  "keys": [
+    "detail"
+  ],
+  "error": {
+    "detail": "Insufficient permission"
+  },
+  "requestId": "5c0f476a817d"
+}
+```
+
+API status: 403. Defect: none.
+
+### UAT-READ-developer-kev — PASS
+
+Module: CISA KEV. Role: developer. Time (UTC): 2026-10-19T15:29:45.625Z.
+
+Preconditions: Fresh isolated Chrome context; Native Login; TLS validation enabled; greenfield development stack
+
+Steps executed: GET /api/v1/kev?page=1&page_size=5 directly through authenticated API; independent of UI visibility
+
+Expected: Implemented permission analysis:read: HTTP 200
+
+Actual / sanitized evidence:
+
+```json
+{
+  "status": 200,
+  "count": 50,
+  "total": 1748,
+  "keys": [
+    "total",
+    "limit",
+    "offset",
+    "items"
+  ],
+  "requestId": "0de0408d7920"
+}
+```
+
+API status: 200. Defect: none.
+
+### UAT-DENY-developer-invite — PASS
+
+Module: Authorization. Role: developer. Time (UTC): 2026-10-19T15:29:45.696Z.
+
+Preconditions: Fresh isolated Chrome context; Native Login; TLS validation enabled; greenfield development stack
+
+Steps executed: POST membership using nonexistent disposable user reference; no seeded users touched
+
+Expected: Administrative membership creation rejected HTTP 403
+
+Actual / sanitized evidence:
+
+```json
+{
+  "status": 403,
+  "data": {
+    "detail": "Insufficient permission"
+  },
+  "requestId": "8baabd9fb0a8"
+}
+```
+
+API status: 403. Defect: none.
+
+### UAT-DENY-developer-membership — PASS
+
+Module: Authorization. Role: developer. Time (UTC): 2026-10-19T15:29:45.738Z.
+
+Preconditions: Fresh isolated Chrome context; Native Login; TLS validation enabled; greenfield development stack
+
+Steps executed: PATCH nonexistent membership; no seeded users touched
+
+Expected: Administrative membership modification rejected HTTP 403
+
+Actual / sanitized evidence:
+
+```json
+{
+  "status": 403,
+  "data": {
+    "detail": "Insufficient permission"
+  },
+  "requestId": "026c569fc0d8"
+}
+```
+
+API status: 403. Defect: none.
+
+### UAT-PAGE-developer--kev — PASS
+
+Module: CISA KEV. Role: developer. Time (UTC): 2026-10-19T15:50:35.359Z.
+
+Preconditions: Fresh isolated Chrome context; Native Login; TLS validation enabled; greenfield development stack
+
+Steps executed: Open /kev; inspect actual module and requests
+
+Expected: Authorized page renders actual content and reads without browser crash or API 5xx (page/read smoke)
+
+Actual / sanitized evidence:
+
+```json
+{
+  "path": "/kev",
+  "headings": [
+    "CISA KEV"
+  ],
+  "text": "SBOM Analyzer\nSearch\nSO\nSynthetic Olympus developer\nCISA KEV\nKnown Exploited Vulnerabilities catalog\nSync KEV Catalog\nYou don't have permission to manage tenant settings. Contact your administrator to request access.\nSearch KEV catalog\nVendor\nAll vendors\n7-Zip\nAccellion\nAcclaim Systems\nAcronis\nAdminer\nAdobe\nAdvantive\nAhsay\nAjax.NET Professional\nAlcatel\nAmcrest\nAMI\nAndroid\nApache\nApple\nAquasecurity\nArcadyan\nArcserve\nArista\nArm\nArray Networks\nArtifex\nASUS\nAtlassian\nAudinate\nAviatrix\nBalbooa\nBarracuda Networks\nBerriAI\nBeyondTrust\nBQE\nBroadcom\nCacti\nChakr
+### UAT-READ-viewer-candidates — PASS
+
+Module: Users & Access. Role: viewer. Time (UTC): 2026-10-19T15:29:57.880Z.
+
+Preconditions: Fresh isolated Chrome context; Native Login; TLS validation enabled; greenfield development stack
+
+Steps executed: GET /api/tenants/3a900179-36bf-4b5f-b2e1-2a4a9d06e6af/user-candidates?q=Olympus directly through authenticated API; independent of UI visibility
+
+Expected: Implemented permission tenant:user:invite: HTTP 403
+
+Actual / sanitized evidence:
+
+```json
+{
+  "status": 403,
+  "count": 0,
+  "keys": [
+    "detail"
+  ],
+  "error": {
+    "detail": "Insufficient permission"
+  },
+  "requestId": "e40fc56a9ef8"
+}
+```
+
+API status: 403. Defect: none.
+
+### UAT-READ-viewer-kev — PASS
+
+Module: CISA KEV. Role: viewer. Time (UTC): 2026-10-19T15:30:00.566Z.
+
+Preconditions: Fresh isolated Chrome context; Native Login; TLS validation enabled; greenfield development stack
+
+Steps executed: GET /api/v1/kev?page=1&page_size=5 directly through authenticated API; independent of UI visibility
+
+Expected: Implemented permission analysis:read: HTTP 200
+
+Actual / sanitized evidence:
+
+```json
+{
+  "status": 200,
+  "count": 50,
+  "total": 1748,
+  "keys": [
+    "total",
+    "limit",
+    "offset",
+    "items"
+  ],
+  "requestId": "f7b873bd7699"
+}
+```
+
+API status: 200. Defect: none.
+
+### UAT-DENY-viewer-invite — PASS
+
+Module: Authorization. Role: viewer. Time (UTC): 2026-10-19T15:30:00.733Z.
+
+Preconditions: Fresh isolated Chrome context; Native Login; TLS validation enabled; greenfield development stack
+
+Steps executed: POST membership using nonexistent disposable user reference; no seeded users touched
+
+Expected: Administrative membership creation rejected HTTP 403
+
+Actual / sanitized evidence:
+
+```json
+{
+  "status": 403,
+  "data": {
+    "detail": "Insufficient permission"
+  },
+  "requestId": "66fd0529693d"
+}
+```
+
+API status: 403. Defect: none.
+
+### UAT-DENY-viewer-membership — PASS
+
+Module: Authorization. Role: viewer. Time (UTC): 2026-10-19T15:30:00.782Z.
+
+Preconditions: Fresh isolated Chrome context; Native Login; TLS validation enabled; greenfield development stack
+
+Steps executed: PATCH nonexistent membership; no seeded users touched
+
+Expected: Administrative membership modification rejected HTTP 403
+
+Actual / sanitized evidence:
+
+```json
+{
+  "status": 403,
+  "data": {
+    "detail": "Insufficient permission"
+  },
+  "requestId": "ff88b15902ea"
+}
+```
+
+API status: 403. Defect: none.
+
+### UAT-READ-analyst-candidates — PASS
+
+Module: Users & Access. Role: analyst. Time (UTC): 2026-10-19T15:29:31.064Z.
+
+Preconditions: Fresh isolated Chrome context; Native Login; TLS validation enabled; greenfield development stack
+
+Steps executed: GET /api/tenants/3a900179-36bf-4b5f-b2e1-2a4a9d06e6af/user-candidates?q=Olympus directly through authenticated API; independent of UI visibility
+
+Expected: Implemented permission tenant:user:invite: HTTP 403
+
+Actual / sanitized evidence:
+
+```json
+{
+  "status": 403,
+  "count": 0,
+  "keys": [
+    "detail"
+  ],
+  "error": {
+    "detail": "Insufficient permission"
+  },
+  "requestId": "4a99ffc59df2"
+}
+```
+
+API status: 403. Defect: none.
+
+### UAT-READ-analyst-kev — PASS
+
+Module: CISA KEV. Role: analyst. Time (UTC): 2026-10-19T15:29:33.050Z.
+
+Preconditions: Fresh isolated Chrome context; Native Login; TLS validation enabled; greenfield development stack
+
+Steps executed: GET /api/v1/kev?page=1&page_size=5 directly through authenticated API; independent of UI visibility
+
+Expected: Implemented permission analysis:read: HTTP 200
+
+Actual / sanitized evidence:
+
+```json
+{
+  "status": 200,
+  "count": 50,
+  "total": 1748,
+  "keys": [
+    "total",
+    "limit",
+    "offset",
+    "items"
+  ],
+  "requestId": "85b0ccf05b75"
+}
+```
+
+API status: 200. Defect: none.
+
+### UAT-DENY-analyst-invite — PASS
+
+Module: Authorization. Role: analyst. Time (UTC): 2026-10-19T15:29:33.159Z.
+
+Preconditions: Fresh isolated Chrome context; Native Login; TLS validation enabled; greenfield development stack
+
+Steps executed: POST membership using nonexistent disposable user reference; no seeded users touched
+
+Expected: Administrative membership creation rejected HTTP 403
+
+Actual / sanitized evidence:
+
+```json
+{
+  "status": 403,
+  "data": {
+    "detail": "Insufficient permission"
+  },
+  "requestId": "975a59dbc1e2"
+}
+```
+
+API status: 403. Defect: none.
+
+### UAT-DENY-analyst-membership — PASS
+
+Module: Authorization. Role: analyst. Time (UTC): 2026-10-19T15:29:33.200Z.
+
+Preconditions: Fresh isolated Chrome context; Native Login; TLS validation enabled; greenfield development stack
+
+Steps executed: PATCH nonexistent membership; no seeded users touched
+
+Expected: Administrative membership modification rejected HTTP 403
+
+Actual / sanitized evidence:
+
+```json
+{
+  "status": 403,
+  "data": {
+    "detail": "Insufficient permission"
+  },
+  "requestId": "4ca2af9a0c3d"
+}
+```
+
+API status: 403. Defect: none.
+
+### UAT-READ-foreign-candidates — PASS
+
+Module: Users & Access. Role: foreign. Time (UTC): 2026-10-19T15:30:13.165Z.
+
+Preconditions: Fresh isolated Chrome context; Native Login; TLS validation enabled; greenfield development stack
+
+Steps executed: GET /api/tenants/a803c17f-7e7d-439c-8664-c5406d391fd1/user-candidates?q=Olympus directly through authenticated API; independent of UI visibility
+
+Expected: Implemented permission tenant:user:invite: HTTP 200
+
+Actual / sanitized evidence:
+
+```json
+{
+  "status": 200,
+  "count": 5,
+  "keys": [
+    "items"
+  ],
+  "requestId": "81584fee4731"
+}
+```
+
+API status: 200. Defect: none.
+
+### UAT-READ-foreign-kev — PASS
+
+Module: CISA KEV. Role: foreign. Time (UTC): 2026-10-19T15:30:14.058Z.
+
+Preconditions: Fresh isolated Chrome context; Native Login; TLS validation enabled; greenfield development stack
+
+Steps executed: GET /api/v1/kev?page=1&page_size=5 directly through authenticated API; independent of UI visibility
+
+Expected: Implemented permission analysis:read: HTTP 200
+
+Actual / sanitized evidence:
+
+```json
+{
+  "status": 200,
+  "count": 50,
+  "total": 1748,
+  "keys": [
+    "total",
+    "limit",
+    "offset",
+    "items"
+  ],
+  "requestId": "a962a7eb49c7"
+}
+```
+
+API status: 200. Defect: none.
+
+### UAT-INVITE-002 — PASS
+
+Module: Users & Access. Role: admin. Time (UTC): 2026-10-19T15:32:21.262Z.
+
+Preconditions: Fresh isolated Chrome context; Native Login; TLS validation enabled; greenfield development stack
+
+Steps executed: Inspect invalidated member directory and compare API after invitation
+
+Expected: New invitation is visible without refresh with pending account/verification distinct from membership
+
+Actual / sanitized evidence:
+
+```json
+{
+  "before": 4,
+  "after": 5,
+  "member": {
+    "membership_id": 10,
+    "user_id": 7,
+    "external_iam_user_id": null,
+    "email": "uat-native-1792423938566@example.test",
+    "display_name": "UAT Native 1792423938566",
+    "user_status": "PENDING_EMAIL_VERIFICATION",
+    "email_verified": false,
+    "verification_required": true,
+    "role": "VIEWER",
+    "roles": [
+      "VIEWER"
+    ],
+    "role_assignment_version": 1,
+    "status": "ACTIVE"
+  },
+  "uiContains": 2
+}
+```
+
+API status: 200. Defect: none.
+
+### UAT-INVITE-003 — PASS
+
+Module: Users & Access. Role: admin. Time (UTC): 2026-10-19T15:33:29.829Z.
+
+Preconditions: Fresh isolated Chrome context; Native Login; TLS validation enabled; greenfield development stack
+
+Steps executed: Repeat invitation payload for newly created disposable account
+
+Expected: Duplicate invitation/membership is rejected HTTP 409
+
+Actual / sanitized evidence:
+
+```json
+{
+  "status": 409,
+  "data": {
+    "detail": {
+      "code": "MEMBERSHIP_ALREADY_EXISTS",
+      "message": "UAT Native 1792423938566 is already a member of Olympus.",
+      "roles": [
+        "VIEWER"
+      ],
+      "tenant_id": "3a900179-36bf-4b5f-b2e1-2a4a9d06e6af",
+      "user_id": 7
+    }
+  },
+  "requestId": "468513780cfb"
+}
+```
+
+API status: 409. Defect: none.
+
+### UAT-ROLE-001 — PASS
+
+Module: Authorization. Role: admin. Time (UTC): 2026-10-19T15:33:30.172Z.
+
+Preconditions: Fresh isolated Chrome context; Native Login; TLS validation enabled; greenfield development stack
+
+Steps executed: GET assignable roles; compare delegation policy
+
+Expected: Tenant Admin assignable list excludes Tenant Admin and Platform Admin
+
+Actual / sanitized evidence:
+
+```json
+{
+  "status": 200,
+  "data": {
+    "roles": [
+      {
+        "id": 4,
+        "code": "DEVELOPER",
+        "name": "Developer"
+      },
+      {
+        "id": 3,
+        "code": "SECURITY_ANALYST",
+        "name": "Security Analyst"
+      },
+      {
+        "id": 5,
+        "code": "VIEWER",
+        "name": "Viewer"
+      }
+    ]
+  },
+  "requestId": "3e28f7846446"
+}
+```
+
+API status: 200. Defect: none.
+
+### UAT-MEMBERSHIP-001 — PASS
+
+Module: Authorization. Role: disposable user. Time (UTC): 2026-10-19T15:33:53.980Z.
+
+Preconditions: Fresh isolated Chrome context; Native Login; TLS validation enabled; greenfield development stack
+
+Steps executed: Deactivate only disposable membership; call projects using already signed-in disposable browser
+
+Expected: Deactivated membership immediately loses protected tenant access
+
+Actual / sanitized evidence:
+
+```json
+{
+  "mutation": {
+    "status": 200,
+    "count": 0,
+    "keys": [
+      "membership_id",
+      "user_id",
+      "external_iam_user_id",
+      "email",
+      "display_name",
+      "user_status",
+      "email_verified",
+      "verification_required",
+      "role",
+      "roles",
+      "role_assignment_version",
+      "status"
+    ],
+    "requestId": "4686b86d728f"
+  },
+  "protectedRead": {
+    "status": 403,
+    "data": {
+      "detail": {
+        "code": "IAM_UNAUTHORIZED_TENANT",
+        "message": "The requested tenant is not available to this account."
+      }
+    },
+    "requestId": "6b491923435d"
+  }
+}
+```
+
+API status: 403. Defect: no
+### UAT-MEMBERSHIP-002 — PASS
+
+Module: Users & Access. Role: admin. Time (UTC): 2026-10-19T15:33:54.129Z.
+
+Preconditions: Fresh isolated Chrome context; Native Login; TLS validation enabled; greenfield development stack
+
+Steps executed: Reactivate only disposable membership
+
+Expected: Disposable membership reactivation succeeds
+
+Actual / sanitized evidence:
+
+```json
+{
+  "status": 200,
+  "count": 0,
+  "keys": [
+    "membership_id",
+    "user_id",
+    "external_iam_user_id",
+    "email",
+    "display_name",
+    "user_status",
+    "email_verified",
+    "verification_required",
+    "role",
+    "roles",
+    "role_assignment_version",
+    "status"
+  ],
+  "requestId": "6a05cf3bc33d"
+}
+```
+
+API status: 200. Defect: none.
+
+### UAT-ADD-MEMBER-002 — PASS
+
+Module: Users & Access. Role: foreign Admin. Time (UTC): 2026-10-19T15:34:43.205Z.
+
+Preconditions: Fresh isolated Chrome context; Native Login; TLS validation enabled; greenfield development stack
+
+Steps executed: Delete UAT-created membership; seeded foreign user untouched
+
+Expected: Remove only newly created disposable membership
+
+Actual / sanitized evidence:
+
+```json
+{
+  "status": 204,
+  "count": 0,
+  "requestId": "0857c8ad4ef7"
+}
+```
+
+API status: 204. Defect: none.
+
+### UAT-AUDIT-002 — PASS
+
+Module: Users & Access. Role: admin. Time (UTC): 2026-10-19T15:34:49.778Z.
+
+Preconditions: Fresh isolated Chrome context; Native Login; TLS validation enabled; greenfield development stack
+
+Steps executed: Read administration audit after disposable mutations
+
+Expected: Disposable invitation, role and membership actions create tenant audit records
+
+Actual / sanitized evidence:
+
+```json
+{
+  "total": 15,
+  "matchingRecords": [
+    {
+      "id": 1169,
+      "action": "TENANT_MEMBER_ACTIVATED",
+      "label": "Membership enabled",
+      "category": "membership",
+      "outcome": "SUCCESS",
+      "actor_user_id": 1,
+      "target_user_id": 7,
+      "actor_email": "admin@olympus.example.test",
+      "target_email": "uat-native-1792423938566@example.test",
+      "old_state": {
+        "role": "SECURITY_ANALYST",
+        "status": "DISABLED"
+      },
+      "new_state": {
+        "role": "SECURITY_ANALYST",
+        "status": "ACTIVE"
+      },
+      "correlation_id": "6a05cf3bc33d",
+      "timestamp": "2026-10-19T15:33:54.064870Z"
+    },
+    {
+      "id": 1167,
+      "acti
+### UAT-KEV-SEARCH-admin — PASS
+
+Module: CISA KEV. Role: admin. Time (UTC): 2026-10-19T15:41:56.586Z.
+
+Preconditions: Fresh isolated Chrome context; Native Login; TLS validation enabled; greenfield development stack
+
+Steps executed: Type known CVE into KEV search; inspect filtered results
+
+Expected: KEV CVE search displays requested Log4Shell CVE
+
+Actual / sanitized evidence:
+
+```json
+"SBOM Analyzer\nSearch\nSO\nSynthetic Olympus admin\nCISA KEV\nKnown Exploited Vulnerabilities catalog\nSync KEV Catalog\nSearch KEV catalog\nVendor\nAll vendors\n7-Zip\nAccellion\nAcclaim Systems\nAcronis\nAdminer\nAdobe\nAdvantive\nAhsay\nAjax.NET Professional\nAlcatel\nAmcrest\nAMI\nAndroid\nApache\nApple\nAquasecurity\nArcadyan\nArcserve\nArista\nArm\nArray Networks\nArtifex\nASUS\nAtlassian\nAudinate\nAviatrix\nBalbooa\nBarracuda Networks\nBerriAI\nBeyondTrust\nBQE\nBroadcom\nCacti\nChakraCore\nCheckbox\nCheck Point\nCisco\nCitrix\nCleo\nCode Aurora\nCommvault\nConnectWise\nCraft CMS\nCrestron\nCrushFTP\nCWP\nCyberPersons\nDaemon\nDahua\nDasan\nDassault Systèmes\nDD-WRT\nDell\nDelta Electronics\nDigiev
+### UAT-PAGE-viewer--kev — PASS
+
+Module: CISA KEV. Role: viewer. Time (UTC): 2026-10-19T15:51:01.918Z.
+
+Preconditions: Fresh isolated Chrome context; Native Login; TLS validation enabled; greenfield development stack
+
+Steps executed: Open /kev; inspect actual module and requests
+
+Expected: Authorized page renders actual content and reads without browser crash or API 5xx (page/read smoke)
+
+Actual / sanitized evidence:
+
+```json
+{
+  "path": "/kev",
+  "headings": [
+    "CISA KEV"
+  ],
+  "text": "SBOM Analyzer\nSearch\nSO\nSynthetic Olympus viewer\nCISA KEV\nKnown Exploited Vulnerabilities catalog\nSync KEV Catalog\nYou don't have permission to manage tenant settings. Contact your administrator to request access.\nSearch KEV catalog\nVendor\nAll vendors\n7-Zip\nAccellion\nAcclaim Systems\nAcronis\nAdminer\nAdobe\nAdvantive\nAhsay\nAjax.NET Professional\nAlcatel\nAmcrest\nAMI\nAndroid\nApache\nApple\nAquasecurity\nArcadyan\nArcserve\nArista\nArm\nArray Networks\nArtifex\nASUS\nAtlassian\nAudinate\nAviatrix\nBalbooa\nBarracuda Networks\nBerriAI\nBeyondTrust\nBQE\nBroadcom\nCacti\nChakraCore\nCh
+### UAT-KEV-SEARCH-viewer — PASS
+
+Module: CISA KEV. Role: viewer. Time (UTC): 2026-10-19T15:51:02.574Z.
+
+Preconditions: Fresh isolated Chrome context; Native Login; TLS validation enabled; greenfield development stack
+
+Steps executed: Type known CVE into KEV search; inspect filtered results
+
+Expected: KEV CVE search displays requested Log4Shell CVE
+
+Actual / sanitized evidence:
+
+```json
+"SBOM Analyzer\nSearch\nSO\nSynthetic Olympus viewer\nCISA KEV\nKnown Exploited Vulnerabilities catalog\nSync KEV Catalog\nYou don't have permission to manage tenant settings. Contact your administrator to request access.\nSearch KEV catalog\nVendor\nAll vendors\n7-Zip\nAccellion\nAcclaim Systems\nAcronis\nAdminer\nAdobe\nAdvantive\nAhsay\nAjax.NET Professional\nAlcatel\nAmcrest\nAMI\nAndroid\nApache\nApple\nAquasecurity\nArcadyan\nArcserve\nArista\nArm\nArray Networks\nArtifex\nASUS\nAtlassian\nAudinate\nAviatrix\nBalbooa\nBarracuda Networks\nBerriAI\nBeyondTrust\nBQE\nBroadcom\nCacti\nChakraCore\nCheckbox\nCheck Point\nCisco\nCitrix\nCleo\nCode Aurora\nCommvault\nConnectWise\nCraft CMS\nCrestron\nCrushF
+### UAT-KEV-SEARCH-developer — PASS
+
+Module: CISA KEV. Role: developer. Time (UTC): 2026-10-19T15:50:36.063Z.
+
+Preconditions: Fresh isolated Chrome context; Native Login; TLS validation enabled; greenfield development stack
+
+Steps executed: Type known CVE into KEV search; inspect filtered results
+
+Expected: KEV CVE search displays requested Log4Shell CVE
+
+Actual / sanitized evidence:
+
+```json
+"SBOM Analyzer\nSearch\nSO\nSynthetic Olympus developer\nCISA KEV\nKnown Exploited Vulnerabilities catalog\nSync KEV Catalog\nYou don't have permission to manage tenant settings. Contact your administrator to request access.\nSearch KEV catalog\nVendor\nAll vendors\n7-Zip\nAccellion\nAcclaim Systems\nAcronis\nAdminer\nAdobe\nAdvantive\nAhsay\nAjax.NET Professional\nAlcatel\nAmcrest\nAMI\nAndroid\nApache\nApple\nAquasecurity\nArcadyan\nArcserve\nArista\nArm\nArray Networks\nArtifex\nASUS\nAtlassian\nAudinate\nAviatrix\nBalbooa\nBarracuda Networks\nBerriAI\nBeyondTrust\nBQE\nBroadcom\nCacti\nChakraCore\nCheckbox\nCheck Point\nCisco\nCitrix\nCleo\nCode Aurora\nCommvault\nConnectWise\nCraft CMS\nCrestro
+### UAT-PAGE-analyst--kev — PASS
+
+Module: CISA KEV. Role: analyst. Time (UTC): 2026-10-19T15:49:55.710Z.
+
+Preconditions: Fresh isolated Chrome context; Native Login; TLS validation enabled; greenfield development stack
+
+Steps executed: Open /kev; inspect actual module and requests
+
+Expected: Authorized page renders actual content and reads without browser crash or API 5xx (page/read smoke)
+
+Actual / sanitized evidence:
+
+```json
+{
+  "path": "/kev",
+  "headings": [
+    "CISA KEV"
+  ],
+  "text": "SBOM Analyzer\nSearch\nSO\nSynthetic Olympus analyst\nCISA KEV\nKnown Exploited Vulnerabilities catalog\nSync KEV Catalog\nYou don't have permission to manage tenant settings. Contact your administrator to request access.\nSearch KEV catalog\nVendor\nAll vendors\n7-Zip\nAccellion\nAcclaim Systems\nAcronis\nAdminer\nAdobe\nAdvantive\nAhsay\nAjax.NET Professional\nAlcatel\nAmcrest\nAMI\nAndroid\nApache\nApple\nAquasecurity\nArcadyan\nArcserve\nArista\nArm\nArray Networks\nArtifex\nASUS\nAtlassian\nAudinate\nAviatrix\nBalbooa\nBarracuda Networks\nBerriAI\nBeyondTrust\nBQE\nBroadcom\nCacti\nChakraCore\
+### UAT-KEV-SEARCH-analyst — PASS
+
+Module: CISA KEV. Role: analyst. Time (UTC): 2026-10-19T15:49:56.401Z.
+
+Preconditions: Fresh isolated Chrome context; Native Login; TLS validation enabled; greenfield development stack
+
+Steps executed: Type known CVE into KEV search; inspect filtered results
+
+Expected: KEV CVE search displays requested Log4Shell CVE
+
+Actual / sanitized evidence:
+
+```json
+"SBOM Analyzer\nSearch\nSO\nSynthetic Olympus analyst\nCISA KEV\nKnown Exploited Vulnerabilities catalog\nSync KEV Catalog\nYou don't have permission to manage tenant settings. Contact your administrator to request access.\nSearch KEV catalog\nVendor\nAll vendors\n7-Zip\nAccellion\nAcclaim Systems\nAcronis\nAdminer\nAdobe\nAdvantive\nAhsay\nAjax.NET Professional\nAlcatel\nAmcrest\nAMI\nAndroid\nApache\nApple\nAquasecurity\nArcadyan\nArcserve\nArista\nArm\nArray Networks\nArtifex\nASUS\nAtlassian\nAudinate\nAviatrix\nBalbooa\nBarracuda Networks\nBerriAI\nBeyondTrust\nBQE\nBroadcom\nCacti\nChakraCore\nCheckbox\nCheck Point\nCisco\nCitrix\nCleo\nCode Aurora\nCommvault\nConnectWise\nCraft CMS\nCrestron\nCru
+### UAT-PAGE-foreign--kev — PASS
+
+Module: CISA KEV. Role: foreign. Time (UTC): 2026-10-19T15:51:25.550Z.
+
+Preconditions: Fresh isolated Chrome context; Native Login; TLS validation enabled; greenfield development stack
+
+Steps executed: Open /kev; inspect actual module and requests
+
+Expected: Authorized page renders actual content and reads without browser crash or API 5xx (page/read smoke)
+
+Actual / sanitized evidence:
+
+```json
+{
+  "path": "/kev",
+  "headings": [
+    "CISA KEV"
+  ],
+  "text": "SBOM Analyzer\nSearch\nSO\nSynthetic Olympus foreign\nCISA KEV\nKnown Exploited Vulnerabilities catalog\nSync KEV Catalog\nSearch KEV catalog\nVendor\nAll vendors\n7-Zip\nAccellion\nAcclaim Systems\nAcronis\nAdminer\nAdobe\nAdvantive\nAhsay\nAjax.NET Professional\nAlcatel\nAmcrest\nAMI\nAndroid\nApache\nApple\nAquasecurity\nArcadyan\nArcserve\nArista\nArm\nArray Networks\nArtifex\nASUS\nAtlassian\nAudinate\nAviatrix\nBalbooa\nBarracuda Networks\nBerriAI\nBeyondTrust\nBQE\nBroadcom\nCacti\nChakraCore\nCheckbox\nCheck Point\nCisco\nCitrix\nCleo\nCode Aurora\nCommvault\nConnectWise\nCraft CMS\nCrestro
+### UAT-KEV-SEARCH-foreign — PASS
+
+Module: CISA KEV. Role: foreign. Time (UTC): 2026-10-19T15:51:26.307Z.
+
+Preconditions: Fresh isolated Chrome context; Native Login; TLS validation enabled; greenfield development stack
+
+Steps executed: Type known CVE into KEV search; inspect filtered results
+
+Expected: KEV CVE search displays requested Log4Shell CVE
+
+Actual / sanitized evidence:
+
+```json
+"SBOM Analyzer\nSearch\nSO\nSynthetic Olympus foreign\nCISA KEV\nKnown Exploited Vulnerabilities catalog\nSync KEV Catalog\nSearch KEV catalog\nVendor\nAll vendors\n7-Zip\nAccellion\nAcclaim Systems\nAcronis\nAdminer\nAdobe\nAdvantive\nAhsay\nAjax.NET Professional\nAlcatel\nAmcrest\nAMI\nAndroid\nApache\nApple\nAquasecurity\nArcadyan\nArcserve\nArista\nArm\nArray Networks\nArtifex\nASUS\nAtlassian\nAudinate\nAviatrix\nBalbooa\nBarracuda Networks\nBerriAI\nBeyondTrust\nBQE\nBroadcom\nCacti\nChakraCore\nCheckbox\nCheck Point\nCisco\nCitrix\nCleo\nCode Aurora\nCommvault\nConnectWise\nCraft CMS\nCrestron\nCrushFTP\nCWP\nCyberPersons\nDaemon\nDahua\nDasan\nDassault Systèmes\nDD-WRT\nDell\nDelta Electronics\n
+### UAT-ROLE-UI-EMPTY — PASS
+
+Module: Users & Access. Role: admin. Time (UTC): 2026-10-19T15:48:36.999Z.
+
+Preconditions: Fresh isolated Chrome context; Native Login; TLS validation enabled; greenfield development stack
+
+Steps executed: Uncheck final role on disposable user; observe disabled Save; cancel
+
+Expected: Active membership cannot be saved with no role selected
+
+Actual / sanitized evidence:
+
+```json
+{
+  "saveEnabled": false,
+  "text": "Manage roles — UAT Native 1792423938566\n\nTenant: Olympus\n\nSecurity Analyst\n\nCan review security findings, vulnerabilities, VEX and remediation information.\n\nDeveloper\n\nCan perform the project and SBOM operations allowed by the backend role policy.\n\nViewer\n\nHas read-only tenant access according to backend authorization policy.\n\nActive tenant memberships require at least one assigned role.\n\nChange Summary:\nRemoving:\nViewer\nCancel\nSave changes"
+}
+```
+
+API status: not applicable / not observed. Defect: none.
+
+### UAT-MEMBERSHIP-PROVIDER-COPY — FAIL
+
+Module: Users & Access. Role: admin/native disposable account. Time (UTC): 2026-10-19T15:48:37.278Z.
+
+Preconditions: Fresh isolated Chrome context; Native Login; TLS validation enabled; greenfield development stack
+
+Steps executed: Open disable-membership confirmation for known Native account; inspect copy
+
+Expected: Native account confirmation uses accurate provider-neutral identity language
+
+Actual / sanitized evidence:
+
+```json
+"Disable tenant membership?\n\nUAT Native 1792423938566 will no longer be able to access Olympus. Their HCL.CS identity and SBOM user account will remain unchanged. Their tenant membership record and assigned roles will be retained.\n\nCancel\nDisable membership"
+```
+
+API status: not applicable / not observed. Defect: UAT-DEF-004.
+
+### UAT-MEMBERSHIP-UI-Disable — PASS
+
+Module: Users & Access. Role: admin. Time (UTC): 2026-10-19T15:48:37.632Z.
+
+Preconditions: Fresh isolated Chrome context; Native Login; TLS validation enabled; greenfield development stack
+
+Steps executed: Disable disposable membership through action menu and confirmation dialog; compare server state
+
+Expected: Disable only disposable membership while preserving active user account and assigned roles
+
+Actual / sanitized evidence:
+
+```json
+{
+  "status": 200,
+  "membership": "DISABLED",
+  "account": "ACTIVE",
+  "roles": [
+    "VIEWER"
+  ]
+}
+```
+
+API status: 200. Defect: none.
+
+### UAT-MEMBERSHIP-UI-Enable — PASS
+
+Module: Users & Access. Role: admin. Time (UTC): 2026-10-19T15:48:38.016Z.
+
+Preconditions: Fresh isolated Chrome context; Native Login; TLS validation enabled; greenfield development stack
+
+Steps executed: Enable disposable membership through action menu and confirmation dialog; compare server state
+
+Expected: Enable only disposable membership while preserving active user account and assigned roles
+
+Actual / sanitized evidence:
+
+```json
+{
+  "status": 200,
+  "membership": "ACTIVE",
+  "account": "ACTIVE",
+  "roles": [
+    "VIEWER"
+  ]
+}
+```
+
+API status: 200. Defect: none.
+
+### UAT-INVITE-UI-DUPLICATE — PASS
+
+Module: Users & Access. Role: admin. Time (UTC): 2026-10-19T15:48:38.229Z.
+
+Preconditions: Fresh isolated Chrome context; Native Login; TLS validation enabled; greenfield development stack
+
+Steps executed: Invite same disposable user through UI; inspect current roles and manage-existing-membership feedback
+
+Expected: Duplicate invitation shows actionable existing-membership feedback and HTTP 409
+
+Actual / sanitized evidence:
+
+```json
+{
+  "status": 409,
+  "message": "Invite new user\n\nCreate a local SBOM Analyzer account and assign its access.\n\nThe user sets their own password through an emailed activation link, valid for five hours.\n\nfirst name*\nlast name*\nemail*\nphone\nTenant\nTenant roles\nSECURITY ANALYST\nDEVELOPER\nVIEWER\nCancel\nCreate and send invitation\n\nThis account already belongs to the selected tenant. Current roles: VIEWER.\n\nManage existing membership"
+}
+```
+
+API status: 409. Defect: none.
+
+### UAT-KEV-SYNC-SERVER-POLICY — PASS
+
+Module: CISA KEV authorization. Role: admin. Time (UTC): 2026-10-19T17:57:22.816Z.
+
+Preconditions: Fresh isolated Chrome context; Native Login; TLS validation enabled; greenfield development stack
+
+Steps executed: POST safe no-prune future cutoff to verify current backend authority
+
+Expected: Global catalog sync requires platform authority and rejects Tenant Admin
+
+Actual / sanitized evidence:
+
+```json
+{
+  "status": 403,
+  "data": {
+    "detail": {
+      "code": "IAM_TENANT_SELECTION_REQUIRED",
+      "message": "Select an authorized tenant before accessing SBOM Analyzer."
+    }
+  },
+  "requestId": "e57b134a8bc8"
+}
+```
+
+API status: 403. Defect: none.
+
+### UAT-KEV-SYNC-UI — FAIL
+
+Module: CISA KEV authorization. Role: admin. Time (UTC): 2026-10-19T17:54:44.967Z.
+
+Preconditions: Fresh isolated Chrome context; Native Login; TLS validation enabled; greenfield development stack
+
+Steps executed: Click enabled Sync KEV Catalog as Tenant Admin after independently confirming server denial; server rejects before catalog mutation
+
+Expected: Tenant Admin UI does not enable a platform-only sync operation
+
+Actual / sanitized evidence:
+
+```json
+{
+  "enabled": true,
+  "status": 403,
+  "body": {
+    "detail": {
+      "code": "IAM_TENANT_SELECTION_REQUIRED",
+      "message": "Select an authorized tenant before accessing SBOM Analyzer."
+    }
+  },
+  "requestId": "7511a11888d2"
+}
+```
+
+API status: 403. Defect: UAT-DEF-005.
+
+### UAT-USER-CLEANUP-MEMBERSHIP — PASS
+
+Module: Users & Access. Role: admin. Time (UTC): 2026-10-19T17:58:23.928Z.
+
+Preconditions: Fresh isolated Chrome context; Native Login; TLS validation enabled; greenfield development stack
+
+Steps executed: Delete disposable invited-user membership only; leave account status unchanged because platform lacks manage_status
+
+Expected: Remove only UAT-created Olympus membership and restore seeded directory to four
+
+Actual / sanitized evidence:
+
+```json
+{
+  "status": 204,
+  "count": 0,
+  "requestId": "bc4cb0e4e33c"
+}
+```
+
+API status: 204. Defect: none.
+
+### UAT-SEEDED-STATE-PRESERVED — PASS
+
+Module: UAT cleanup. Role: admin. Time (UTC): 2026-10-19T17:58:24.030Z.
+
+Preconditions: Fresh isolated Chrome context; Native Login; TLS validation enabled; greenfield development stack
+
+Steps executed: Re-read original four-member directory after disposable membership cleanup
+
+Expected: All four seeded Olympus members retain original role, membership, account and verification state
+
+Actual / sanitized evidence:
+
+```json
+{
+  "status": 200,
+  "data": [
+    {
+      "membership_id": 1,
+      "user_id": 1,
+      "external_iam_user_id": null,
+      "email": "admin@olympus.example.test",
+      "display_name": "Synthetic Olympus admin",
+      "user_status": "ACTIVE",
+      "email_verified": true,
+      "verification_required": false,
+      "role": "TENANT_ADMIN",
+      "roles": [
+        "TENANT_ADMIN"
+      ],
+      "role_assignment_version": 1,
+      "status": "ACTIVE"
+    },
+    {
+      "membership_id": 2,
+      "user_id": 2,
+      "external_iam_user_id": null,
+      "email": "analyst@olympus.example.test",
+      "display_name": "Synthetic Olympus analy
+### UAT-DIRECT-platform-forged-tenant — PASS
+
+Module: Platform. Role: platform. Time (UTC): 2026-10-19T15:24:45.128Z.
+
+Preconditions: Independent Native bearer authentication per role; direct loopback API; greenfield development stack; no browser session reused
+
+Steps executed: Direct GET /api/projects with Olympus header and no explicit membership
+
+Expected: Platform authority uses supported administration workflow; HTTP 403
+
+Actual / sanitized evidence:
+
+```json
+{
+  "status": 403,
+  "count": 0,
+  "keys": [
+    "detail"
+  ],
+  "error": {
+    "detail": {
+      "code": "IAM_UNAUTHORIZED_TENANT",
+      "message": "The requested tenant is not available to this account."
+    }
+  },
+  "requestId": "d7eaec3d0bc5"
+}
+```
+
+API status: 403. Defect: none.
+
+### UAT-POLICY-MATRIX — PASS
+
+Module: Authorization. Role: platform. Time (UTC): 2026-10-19T15:24:45.469Z.
+
+Preconditions: Independent Native bearer authentication per role; direct loopback API; greenfield development stack; no browser session reused
+
+Steps executed: Read live authorization matrix for comparison with observed role permissions
+
+Expected: Database authority catalogue is readable by Platform Admin
+
+Actual / sanitized evidence:
+
+```json
+{
+  "status": 200,
+  "count": 0,
+  "keys": [
+    "roles"
+  ],
+  "requestId": "474a39abb73b"
+}
+```
+
+API status: 200. Defect: none.
+
+### UAT-ISOLATION-GLOBAL-CANDIDATES — FAIL
+
+Module: Tenant isolation. Role: foreign Admin. Time (UTC): 2026-10-19T15:30:49.429268+00:00.
+
+Preconditions: Isolation Control active membership with tenant:user:invite; no Olympus membership
+
+Steps executed: Direct authenticated GET own-tenant user-candidates?q=olympus; no membership mutations
+
+Expected: Requested strict no-enumeration criterion: Olympus account identities are not discoverable from another tenant
+
+Actual / sanitized evidence:
+
+```json
+{
+  "status": 200,
+  "candidates": [
+    {
+      "id": 6,
+      "email": "platform@olympus.example.test",
+      "display_name": "Synthetic Greenfield Platform Administrator",
+      "status": "ACTIVE"
+    },
+    {
+      "id": 1,
+      "email": "admin@olympus.example.test",
+      "display_name": "Synthetic Olympus admin",
+      "status": "ACTIVE"
+    },
+    {
+      "id": 2,
+      "email": "analyst@olympus.example.test",
+      "display_name": "Synthetic Olympus analyst",
+      "status": "ACTIVE"
+    },
+    {
+      "id": 3,
+      "email": "developer@olympus.example.test",
+      "display_name": "Synth
+### UAT-POLICY-COMPARE-admin — PASS
+
+Module: Authorization catalogue. Role: admin. Time (UTC): 2026-10-19T15:36:11.806027+00:00.
+
+Preconditions: Fresh auth/me and live platform authorization matrix captured in this run
+
+Steps executed: Compare effective permission set and assigned role from actual responses with active database catalogue entries
+
+Expected: Effective permissions equal active mappings for assigned seeded role; no extra role authority
+
+Actual / sanitized evidence:
+
+```json
+{
+  "role": [
+    "TENANT_ADMIN"
+  ],
+  "effectiveCount": 55,
+  "catalogueCount": 55,
+  "extra": [],
+  "missing": []
+}
+```
+
+API status: 200. Defect: none.
+
+### UAT-POLICY-COMPARE-analyst — PASS
+
+Module: Authorization catalogue. Role: analyst. Time (UTC): 2026-10-19T15:36:11.808528+00:00.
+
+Preconditions: Fresh auth/me and live platform authorization matrix captured in this run
+
+Steps executed: Compare effective permission set and assigned role from actual responses with active database catalogue entries
+
+Expected: Effective permissions equal active mappings for assigned seeded role; no extra role authority
+
+Actual / sanitized evidence:
+
+```json
+{
+  "role": [
+    "SECURITY_ANALYST"
+  ],
+  "effectiveCount": 37,
+  "catalogueCount": 37,
+  "extra": [],
+  "missing": []
+}
+```
+
+API status: 200. Defect: none.
+
+### UAT-POLICY-COMPARE-developer — PASS
+
+Module: Authorization catalogue. Role: developer. Time (UTC): 2026-10-19T15:36:11.808573+00:00.
+
+Preconditions: Fresh auth/me and live platform authorization matrix captured in this run
+
+Steps executed: Compare effective permission set and assigned role from actual responses with active database catalogue entries
+
+Expected: Effective permissions equal active mappings for assigned seeded role; no extra role authority
+
+Actual / sanitized evidence:
+
+```json
+{
+  "role": [
+    "DEVELOPER"
+  ],
+  "effectiveCount": 15,
+  "catalogueCount": 15,
+  "extra": [],
+  "missing": []
+}
+```
+
+API status: 200. Defect: none.
+
+### UAT-POLICY-COMPARE-viewer — PASS
+
+Module: Authorization catalogue. Role: viewer. Time (UTC): 2026-10-19T15:36:11.808592+00:00.
+
+Preconditions: Fresh auth/me and live platform authorization matrix captured in this run
+
+Steps executed: Compare effective permission set and assigned role from actual responses with active database catalogue entries
+
+Expected: Effective permissions equal active mappings for assigned seeded role; no extra role authority
+
+Actual / sanitized evidence:
+
+```json
+{
+  "role": [
+    "VIEWER"
+  ],
+  "effectiveCount": 13,
+  "catalogueCount": 13,
+  "extra": [],
+  "missing": []
+}
+```
+
+API status: 200. Defect: none.
+
+### UAT-POLICY-COMPARE-foreign — PASS
+
+Module: Authorization catalogue. Role: foreign. Time (UTC): 2026-10-19T15:36:11.808612+00:00.
+
+Preconditions: Fresh auth/me and live platform authorization matrix captured in this run
+
+Steps executed: Compare effective permission set and assigned role from actual responses with active database catalogue entries
+
+Expected: Effective permissions equal active mappings for assigned seeded role; no extra role authority
+
+Actual / sanitized evidence:
+
+```json
+{
+  "role": [
+    "TENANT_ADMIN"
+  ],
+  "effectiveCount": 55,
+  "catalogueCount": 55,
+  "extra": [],
+  "missing": []
+}
+```
+
+API status: 200. Defect: none.
+
+### UAT-POLICY-COMPARE-platform — PASS
+
+Module: Authorization catalogue. Role: platform. Time (UTC): 2026-10-19T15:36:11.808625+00:00.
+
+Preconditions: Fresh auth/me and live platform authorization matrix captured in this run
+
+Steps executed: Compare effective permission set and assigned role from actual responses with active database catalogue entries
+
+Expected: Effective permissions equal active mappings for assigned seeded role; no extra role authority
+
+Actual / sanitized evidence:
+
+```json
+{
+  "role": [
+    "PLATFORM_ADMIN"
+  ],
+  "effectiveCount": 21,
+  "catalogueCount": 21,
+  "extra": [],
+  "missing": []
+}
+```
+
+API status: 200. Defect: none.
+
+### UAT-TENANT-CREATE — PASS
+
+Module: Tenant Management. Role: platform. Time (UTC): 2026-10-19T15:45:03.506Z.
+
+Preconditions: Independent Native bearer authentication per role; direct loopback API; greenfield development stack; no browser session reused
+
+Steps executed: Create UAT tenant and synthetic initial administrator; mail transport verified local
+
+Expected: Platform creates disposable tenant with new initial administrator, without changing seeded memberships
+
+Actual / sanitized evidence:
+
+```json
+{
+  "status": 201,
+  "count": 0,
+  "keys": [
+    "tenant",
+    "initial_administrator"
+  ],
+  "requestId": "249c3433cd38",
+  "tenant": {
+    "id": "b8d8eddd-2984-45c1-8372-b4be665c1a25",
+    "name": "UAT Tenant 1792424703421",
+    "slug": "uat-tenant-1792424703421",
+    "external_iam_tenant_id": null,
+    "identity_mapping": null,
+    "status": "PENDING",
+    "created_at": "2026-10-19T15:45:03.462584Z",
+    "updated_at": "2026-10-19T15:45:03.462584Z"
+  },
+  "initial_administrator": {
+    "user_id": 8,
+    "email": "uat-tenant-admin-1792424703421@example.test",
+    "display_name": "UAT Te
+### UAT-KEV-SYNC-DENY-analyst — PASS
+
+Module: CISA KEV authorization. Role: analyst. Time (UTC): 2026-10-19T15:54:33.065412+00:00.
+
+Preconditions: Live greenfield stack; private credentials in memory; only UAT-created records mutated
+
+Steps executed: POST no-prune future cutoff with tenant role; no catalog change
+
+Expected: Only current platform authority can sync the global catalogue
+
+Actual / sanitized evidence:
+
+```json
+{
+  "status": 403,
+  "data": {
+    "detail": {
+      "code": "IAM_PLATFORM_PERMISSION_DENIED",
+      "message": "Platform permission is required for this action."
+    }
+  },
+  "request_id": "c09bef32fba8"
+}
+```
+
+API status: 403. Defect: none.
+
+### UAT-KEV-SYNC-DENY-developer — PASS
+
+Module: CISA KEV authorization. Role: developer. Time (UTC): 2026-10-19T15:54:33.081909+00:00.
+
+Preconditions: Live greenfield stack; private credentials in memory; only UAT-created records mutated
+
+Steps executed: POST no-prune future cutoff with tenant role; no catalog change
+
+Expected: Only current platform authority can sync the global catalogue
+
+Actual / sanitized evidence:
+
+```json
+{
+  "status": 403,
+  "data": {
+    "detail": {
+      "code": "IAM_PLATFORM_PERMISSION_DENIED",
+      "message": "Platform permission is required for this action."
+    }
+  },
+  "request_id": "7909c4061674"
+}
+```
+
+API status: 403. Defect: none.
+
+### UAT-KEV-SYNC-DENY-viewer — PASS
+
+Module: CISA KEV authorization. Role: viewer. Time (UTC): 2026-10-19T15:54:33.098557+00:00.
+
+Preconditions: Live greenfield stack; private credentials in memory; only UAT-created records mutated
+
+Steps executed: POST no-prune future cutoff with tenant role; no catalog change
+
+Expected: Only current platform authority can sync the global catalogue
+
+Actual / sanitized evidence:
+
+```json
+{
+  "status": 403,
+  "data": {
+    "detail": {
+      "code": "IAM_PLATFORM_PERMISSION_DENIED",
+      "message": "Platform permission is required for this action."
+    }
+  },
+  "request_id": "9b2a9f9c471a"
+}
+```
+
+API status: 403. Defect: none.
+
+### UAT-KEV-SYNC-DENY-foreign — PASS
+
+Module: CISA KEV authorization. Role: foreign. Time (UTC): 2026-10-19T15:54:33.115934+00:00.
+
+Preconditions: Live greenfield stack; private credentials in memory; only UAT-created records mutated
+
+Steps executed: POST no-prune future cutoff with tenant role; no catalog change
+
+Expected: Only current platform authority can sync the global catalogue
+
+Actual / sanitized evidence:
+
+```json
+{
+  "status": 403,
+  "data": {
+    "detail": {
+      "code": "IAM_PLATFORM_PERMISSION_DENIED",
+      "message": "Platform permission is required for this action."
+    }
+  },
+  "request_id": "364b249efaa2"
+}
+```
+
+API status: 403. Defect: none.
+
+### UAT-KEV-SYNC-DENY-admin — PASS
+
+Module: CISA KEV authorization. Role: admin. Time (UTC): 2026-10-19T15:54:33.124337+00:00.
+
+Preconditions: Live greenfield stack; private credentials in memory; only UAT-created records mutated
+
+Steps executed: POST no-prune future cutoff with tenant role; no catalog change
+
+Expected: Only current platform authority can sync the global catalogue
+
+Actual / sanitized evidence:
+
+```json
+{
+  "status": 403,
+  "data": {
+    "detail": {
+      "code": "IAM_TENANT_SELECTION_REQUIRED",
+      "message": "Select an authorized tenant before accessing SBOM Analyzer."
+    }
+  },
+  "request_id": "991e6626ae1c"
+}
+```
+
+API status: 403. Defect: none.
+
+### UAT-KEV-SYNC-PLATFORM — PASS
+
+Module: CISA KEV. Role: platform. Time (UTC): 2026-10-19T15:54:33.716861+00:00.
+
+Preconditions: Live greenfield stack; private credentials in memory; only UAT-created records mutated
+
+Steps executed: POST future cutoff and prune_stale=false to exercise configured provider/auth without changing existing catalogue rows
+
+Expected: Platform can fetch the actual CISA feed with no matching rows or destructive pruning
+
+Actual / sanitized evidence:
+
+```json
+{
+  "status": 200,
+  "data": {
+    "ok": true,
+    "catalog_version": "2026.10.16",
+    "catalog_date_released": "2026-10-16T17:15:48.875200+00:00",
+    "total_in_feed": 1748,
+    "filtered_since": "2099-01-01",
+    "matched_after_filter": 0,
+    "upserted": 0,
+    "duration_seconds": 0.363
+  },
+  "request_id": "450fbab8cb1f"
+}
+```
+
+API status: 200. Defect: none.
+
+### UAT-ADVISOR-ACCEPT-GATE — PASS
+
+Module: Component Advisor workflow. Role: admin. Time (UTC): 2026-10-19T18:04:10.457813+00:00.
+
+Preconditions: Verified UAT-created project/product/SBOM; Native direct API sessions; seeded accounts/configuration unchanged
+
+Steps executed: Attempt ACCEPT before any candidate is recommended; no dependency changes permitted
+
+Expected: Accept cannot bypass human recommendation/candidate gate
+
+Actual / sanitized evidence:
+
+```json
+{
+  "status": 409,
+  "data": {
+    "detail": {
+      "code": "INVALID_STATE",
+      "message": "ACCEPT is not allowed while the recommendation is REVIEW_REQUIRED"
+    }
+  },
+  "request_id": "7e4232222d12"
+}
+```
+
+API status: 409. Defect: none.
+
+### UAT-POLICY-WRITE-DENY-analyst — PASS
+
+Module: Vendor records and configuration. Role: analyst. Time (UTC): 2026-10-19T18:06:32.833206+00:00.
+
+Preconditions: Only globally scoped UAT vendor record is created/updated/disabled; no seeded component matches its name
+
+Steps executed: POST protected policy write expected to be rejected before shared policy mutation
+
+Expected: Non-administrators cannot publish tenant policy versions
+
+Actual / sanitized evidence:
+
+```json
+{
+  "status": 403,
+  "data": {
+    "detail": "Insufficient permission"
+  },
+  "request_id": "5b2e68d964b5"
+}
+```
+
+API status: 403. Defect: none.
+
+### UAT-POLICY-WRITE-DENY-developer — PASS
+
+Module: Vendor records and configuration. Role: developer. Time (UTC): 2026-10-19T18:06:32.881853+00:00.
+
+Preconditions: Only globally scoped UAT vendor record is created/updated/disabled; no seeded component matches its name
+
+Steps executed: POST protected policy write expected to be rejected before shared policy mutation
+
+Expected: Non-administrators cannot publish tenant policy versions
+
+Actual / sanitized evidence:
+
+```json
+{
+  "status": 403,
+  "data": {
+    "detail": "Insufficient permission"
+  },
+  "request_id": "757f4941ec5c"
+}
+```
+
+API status: 403. Defect: none.
+
+### UAT-POLICY-WRITE-DENY-viewer — PASS
+
+Module: Vendor records and configuration. Role: viewer. Time (UTC): 2026-10-19T18:06:32.969783+00:00.
+
+Preconditions: Only globally scoped UAT vendor record is created/updated/disabled; no seeded component matches its name
+
+Steps executed: POST protected policy write expected to be rejected before shared policy mutation
+
+Expected: Non-administrators cannot publish tenant policy versions
+
+Actual / sanitized evidence:
+
+```json
+{
+  "status": 403,
+  "data": {
+    "detail": "Insufficient permission"
+  },
+  "request_id": "a2954f9e7917"
+}
+```
+
+API status: 403. Defect: none.
+
+### UAT-POLICY-PUBLISH-trust — PASS
+
+Module: Advisor policy configuration. Role: disposable tenant administrator / platform. Time (UTC): 2026-10-19T18:09:25.114370+00:00.
+
+Preconditions: Only tenant and initial administrator created by this UAT are changed; local Mailpit; six seeded accounts untouched
+
+Steps executed: Publish only in this UAT-created tenant; platform/Olympus policies remain unchanged
+
+Expected: UAT administrator can publish a disabled isolated tenant policy version
+
+Actual / sanitized evidence:
+
+```json
+{
+  "status": 201,
+  "data": {
+    "version": {
+      "id": 1,
+      "policy_id": 1,
+      "kind": "TRUST",
+      "version": 1,
+      "status": "DISABLED",
+      "scope": "TENANT",
+      "rules": {},
+      "created_at": "2026-10-19T18:09:25.041282+00:00"
+    },
+    "kind": "TRUST",
+    "configured": false,
+    "effective": null,
+    "tenant_override": {
+      "id": 1,
+      "policy_id": 1,
+      "kind": "TRUST",
+      "version": 1,
+      "status": "DISABLED",
+      "scope": "TENANT",
+      "rules": {},
+      "created_at": "2026-10-19T18:09:25.041282+00:00"
+    },
+    "pla
+### UAT-POLICY-CONFLICT-trust — PASS
+
+Module: Advisor policy configuration. Role: disposable tenant administrator / platform. Time (UTC): 2026-10-19T18:09:25.139108+00:00.
+
+Preconditions: Only tenant and initial administrator created by this UAT are changed; local Mailpit; six seeded accounts untouched
+
+Steps executed: Retry original optimistic version after successful publication
+
+Expected: Stale policy version is rejected HTTP 409
+
+Actual / sanitized evidence:
+
+```json
+{
+  "status": 409,
+  "data": {
+    "detail": {
+      "code": "POLICY_CONFLICT",
+      "message": "Policy changed since it was read",
+      "row_version": 1
+    }
+  },
+  "request_id": "0e6ef0486d59"
+}
+```
+
+API status: 409. Defect: none.
+
+### UAT-POLICY-HISTORY-trust — FAIL
+
+Module: Advisor policy configuration. Role: disposable tenant administrator / platform. Time (UTC): 2026-10-19T18:09:25.161196+00:00.
+
+Preconditions: Only tenant and initial administrator created by this UAT are changed; local Mailpit; six seeded accounts untouched
+
+Steps executed: Read actual version history in UAT tenant
+
+Expected: Append-only policy history contains actual published version
+
+Actual / sanitized evidence:
+
+```json
+{
+  "status": 500,
+  "data": {
+    "detail": "Unresolvable public resource reference"
+  },
+  "request_id": "8f7ac6766b8e"
+}
+```
+
+API status: 500. Defect: UAT-DEF-007.
+
+### UAT-POLICY-INHERIT-trust — PASS
+
+Module: Advisor policy configuration. Role: disposable tenant administrator / platform. Time (UTC): 2026-10-19T18:09:25.230203+00:00.
+
+Preconditions: Only tenant and initial administrator created by this UAT are changed; local Mailpit; six seeded accounts untouched
+
+Steps executed: Append INHERIT version only to UAT tenant; preserve immutable audit history; latest override version is retained with INHERIT while effective policy follows platform
+
+Expected: UAT tenant can return to inherited policy configuration
+
+Actual / sanitized evidence:
+
+```json
+{
+  "status": 201,
+  "data": {
+    "version": {
+      "id": 2,
+      "policy_id": 1,
+      "kind": "TRUST",
+      "version": 2,
+      "status": "INHERIT",
+      "scope": "TENANT",
+      "rules": {},
+      "created_at": "2026-10-19T18:09:25.202705+00:00"
+    },
+    "kind": "TRUST",
+    "configured": false,
+    "effective": null,
+    "tenant_override": {
+      "id": 2,
+      "policy_id": 1,
+      "kind": "TRUST",
+      "version": 2,
+      "status": "INHERIT",
+      "scope": "TENANT",
+      "rules": {},
+      
+### UAT-POLICY-PUBLISH-accepted-risk — PASS
+
+Module: Advisor policy configuration. Role: disposable tenant administrator / platform. Time (UTC): 2026-10-19T18:09:25.288857+00:00.
+
+Preconditions: Only tenant and initial administrator created by this UAT are changed; local Mailpit; six seeded accounts untouched
+
+Steps executed: Publish only in this UAT-created tenant; platform/Olympus policies remain unchanged
+
+Expected: UAT administrator can publish a disabled isolated tenant policy version
+
+Actual / sanitized evidence:
+
+```json
+{
+  "status": 201,
+  "data": {
+    "version": {
+      "id": 3,
+      "policy_id": 2,
+      "kind": "ACCEPTED_RISK",
+      "version": 1,
+      "status": "DISABLED",
+      "scope": "TENANT",
+      "rules": {},
+      "created_at": "2026-10-19T18:09:25.264202+00:00"
+    },
+    "kind": "ACCEPTED_RISK",
+    "configured": false,
+    "effective": null,
+    "tenant_override": {
+      "id": 3,
+      "policy_id": 2,
+      "kind": "ACCEPTED_RISK",
+      "version": 1,
+      "status": "DISABLED",
+      "scope": "TENANT",
+      "rules": {},
+      "created_at": "2026-10-19T18:09:
+### UAT-POLICY-CONFLICT-accepted-risk — PASS
+
+Module: Advisor policy configuration. Role: disposable tenant administrator / platform. Time (UTC): 2026-10-19T18:09:25.310554+00:00.
+
+Preconditions: Only tenant and initial administrator created by this UAT are changed; local Mailpit; six seeded accounts untouched
+
+Steps executed: Retry original optimistic version after successful publication
+
+Expected: Stale policy version is rejected HTTP 409
+
+Actual / sanitized evidence:
+
+```json
+{
+  "status": 409,
+  "data": {
+    "detail": {
+      "code": "POLICY_CONFLICT",
+      "message": "Policy changed since it was read",
+      "row_version": 1
+    }
+  },
+  "request_id": "73cab2d62ed8"
+}
+```
+
+API status: 409. Defect: none.
+
+### UAT-POLICY-HISTORY-accepted-risk — FAIL
+
+Module: Advisor policy configuration. Role: disposable tenant administrator / platform. Time (UTC): 2026-10-19T18:09:25.330889+00:00.
+
+Preconditions: Only tenant and initial administrator created by this UAT are changed; local Mailpit; six seeded accounts untouched
+
+Steps executed: Read actual version history in UAT tenant
+
+Expected: Append-only policy history contains actual published version
+
+Actual / sanitized evidence:
+
+```json
+{
+  "status": 500,
+  "data": {
+    "detail": "Unresolvable public resource reference"
+  },
+  "request_id": "8c98bc6cca5b"
+}
+```
+
+API status: 500. Defect: UAT-DEF-007.
+
+### UAT-POLICY-INHERIT-accepted-risk — PASS
+
+Module: Advisor policy configuration. Role: disposable tenant administrator / platform. Time (UTC): 2026-10-19T18:09:25.401620+00:00.
+
+Preconditions: Only tenant and initial administrator created by this UAT are changed; local Mailpit; six seeded accounts untouched
+
+Steps executed: Append INHERIT version only to UAT tenant; preserve immutable audit history; latest override version is retained with INHERIT while effective policy follows platform
+
+Expected: UAT tenant can return to inherited policy configuration
+
+Actual / sanitized evidence:
+
+```json
+{
+  "status": 201,
+  "data": {
+    "version": {
+      "id": 4,
+      "policy_id": 2,
+      "kind": "ACCEPTED_RISK",
+      "version": 2,
+      "status": "INHERIT",
+      "scope": "TENANT",
+      "rules": {},
+      "created_at": "2026-10-19T18:09:25.369748+00:00"
+    },
+    "kind": "ACCEPTED_RISK",
+    "configured": false,
+    "effective": null,
+    "tenant_override": {
+      "id": 4,
+      "policy_id": 2,
+      "kind": "ACCEPTED_RISK",
+      "version": 2,
+      "status": "INHERIT",
+      "scope": "TE
+### UAT-POLICY-PUBLISH-scoring — PASS
+
+Module: Advisor policy configuration. Role: disposable tenant administrator / platform. Time (UTC): 2026-10-19T18:09:25.464830+00:00.
+
+Preconditions: Only tenant and initial administrator created by this UAT are changed; local Mailpit; six seeded accounts untouched
+
+Steps executed: Publish only in this UAT-created tenant; platform/Olympus policies remain unchanged
+
+Expected: UAT administrator can publish a disabled isolated tenant policy version
+
+Actual / sanitized evidence:
+
+```json
+{
+  "status": 201,
+  "data": {
+    "version": {
+      "id": 5,
+      "policy_id": 3,
+      "kind": "SCORING",
+      "version": 1,
+      "status": "DISABLED",
+      "scope": "TENANT",
+      "rules": {},
+      "created_at": "2026-10-19T18:09:25.440283+00:00"
+    },
+    "kind": "SCORING",
+    "configured": false,
+    "effective": null,
+    "tenant_override": {
+      "id": 5,
+      "policy_id": 3,
+      "kind": "SCORING",
+      "version": 1,
+      "status": "DISABLED",
+      "scope": "TENANT",
+      "rules": {},
+      "created_at": "2026-10-19T18:09:25.440283+00:00"
+    },
+
+### UAT-POLICY-CONFLICT-scoring — PASS
+
+Module: Advisor policy configuration. Role: disposable tenant administrator / platform. Time (UTC): 2026-10-19T18:09:25.489094+00:00.
+
+Preconditions: Only tenant and initial administrator created by this UAT are changed; local Mailpit; six seeded accounts untouched
+
+Steps executed: Retry original optimistic version after successful publication
+
+Expected: Stale policy version is rejected HTTP 409
+
+Actual / sanitized evidence:
+
+```json
+{
+  "status": 409,
+  "data": {
+    "detail": {
+      "code": "POLICY_CONFLICT",
+      "message": "Policy changed since it was read",
+      "row_version": 1
+    }
+  },
+  "request_id": "3f492bf1e175"
+}
+```
+
+API status: 409. Defect: none.
+
+### UAT-POLICY-HISTORY-scoring — FAIL
+
+Module: Advisor policy configuration. Role: disposable tenant administrator / platform. Time (UTC): 2026-10-19T18:09:25.513189+00:00.
+
+Preconditions: Only tenant and initial administrator created by this UAT are changed; local Mailpit; six seeded accounts untouched
+
+Steps executed: Read actual version history in UAT tenant
+
+Expected: Append-only policy history contains actual published version
+
+Actual / sanitized evidence:
+
+```json
+{
+  "status": 500,
+  "data": {
+    "detail": "Unresolvable public resource reference"
+  },
+  "request_id": "4ffa41c1be7c"
+}
+```
+
+API status: 500. Defect: UAT-DEF-007.
+
+### UAT-POLICY-INHERIT-scoring — PASS
+
+Module: Advisor policy configuration. Role: disposable tenant administrator / platform. Time (UTC): 2026-10-19T18:09:25.569360+00:00.
+
+Preconditions: Only tenant and initial administrator created by this UAT are changed; local Mailpit; six seeded accounts untouched
+
+Steps executed: Append INHERIT version only to UAT tenant; preserve immutable audit history; latest override version is retained with INHERIT while effective policy follows platform
+
+Expected: UAT tenant can return to inherited policy configuration
+
+Actual / sanitized evidence:
+
+```json
+{
+  "status": 201,
+  "data": {
+    "version": {
+      "id": 6,
+      "policy_id": 3,
+      "kind": "SCORING",
+      "version": 2,
+      "status": "INHERIT",
+      "scope": "TENANT",
+      "rules": {},
+      "created_at": "2026-10-19T18:09:25.553062+00:00"
+    },
+    "kind": "SCORING",
+    "configured": false,
+    "effective": null,
+    "tenant_override": {
+      "id": 6,
+      "policy_id": 3,
+      "kind": "SCORING",
+      "version": 2,
+      "status": "INHERIT",
+      "scope": "TENANT",
+      "rules": {}
+### UAT-FINAL-OLYMPUS-DIRECTORY — PASS
+
+Module: UAT cleanup. Role: admin. Time (UTC): 2026-10-19T18:12:21.976762+00:00.
+
+Preconditions: Final read-only safeguards after disposable-record tests; independent Native API authentication
+
+Steps executed: Read final directory after UAT membership cleanup
+
+Expected: Olympus has original four active verified seeded members with original roles
+
+Actual / sanitized evidence:
+
+```json
+{
+  "status": 200,
+  "members": [
+    {
+      "email": "admin@olympus.example.test",
+      "role": "TENANT_ADMIN",
+      "status": "ACTIVE",
+      "user_status": "ACTIVE",
+      "email_verified": true
+    },
+    {
+      "email": "analyst@olympus.example.test",
+      "role": "SECURITY_ANALYST",
+      "status": "ACTIVE",
+      "user_status": "ACTIVE",
+      "email_verified": true
+    },
+    {
+      "email": "developer@olympus.example.test",
+      "role": "DEVELOPER",
+      "status": "ACTIVE",
+      "user_status": "ACTIVE",
+      "email_verified": true
+    },
+    {
+      "email": "viewer@olympus.example.test",
+      "role": "VIEWER",
+      "status": "ACTIVE",
+      "user_s
+### UAT-PLATFORM-TENANT-WORKING-CONTEXT — BLOCKED
+
+Module: Platform. Role: platform. Time (UTC): 2026-10-19T18:11:45.360610+00:00.
+
+Preconditions: Required prerequisite or scenario coverage is explicitly stated below; no unsupported execution claim
+
+Steps executed: No positive execution of this scenario. See actual result for related executed evidence and prerequisite.
+
+Expected: Enter an authorized working tenant using the supported membership-based switcher
+
+Actual / sanitized evidence:
+
+```json
+{
+  "limitation": "Seeded Platform user has no tenant membership; supported switcher requires one. No seeded membership was added. Platform administration endpoints and forged-header denial were executed."
+}
+```
+
+API status: not applicable / not observed. Defect: none.
+
+### UAT-ACTIVE-POLICY-RULES — NOT RUN
+
+Module: Advisor policy configuration. Role: isolated tenant administrator. Time (UTC): 2026-10-19T18:11:45.360613+00:00.
+
+Preconditions: Required prerequisite or scenario coverage is explicitly stated below; no unsupported execution claim
+
+Steps executed: No positive execution of this scenario. See actual result for related executed evidence and prerequisite.
+
+Expected: Publish ACTIVE trust/risk/scoring rules and validate downstream classification and historical explanations
+
+Actual / sanitized evidence:
+
+```json
+{
+  "limitation": "Disabled-version publication, INHERIT, conflicts and settings boundaries were executed. ACTIVE rule combinations and their downstream classification were not executed."
+}
+```
+
+API status: not applicable / not observed. Defect: none.
+
+### UAT-REPAIR-AUTOMATIC-APPROVAL — NOT RUN
+
+Module: Validation repair. Role: admin / analyst. Time (UTC): 2026-10-19T18:11:45.360614+00:00.
+
+Preconditions: Required prerequisite or scenario coverage is explicitly stated below; no unsupported execution claim
+
+Steps executed: No positive execution of this scenario. See actual result for related executed evidence and prerequisite.
+
+Expected: Create a deterministically repairable semantic-error fixture; review candidate diff; approve/reject; verify retry hash and import lineage
+
+Actual / sanitized evidence:
+
+```json
+{
+  "limitation": "Malformed JSON manual-review analysis and manual draft/import were executed; positive deterministic candidate approval/rejection was not executed."
+}
+```
+
+API status: not applicable / not observed. Defect: none.
+
+### Disposable-record cleanup and retained evidence data
+
+- Original four Olympus members were re-read after the UAT membership was removed; original roles, active membership/account state and verification were preserved. Foreign and platform seeded memberships were not altered.
+- The UAT invited account remains active with its Olympus and Isolation Control test memberships removed. The seeded platform role cannot disable accounts; that prerequisite is recorded rather than bypassed.
+- The UAT tenant is DISABLED; its initial administrator remains a disposable account. AI/lifecycle overrides were removed, and the latest advisor-policy versions are INHERIT.
+- Temporary report subscriptions and product analysis schedules were removed. The synthetic vendor record is disabled. The Advisor recommendation is CLOSED.
+- UAT business projects, products, SBOM revisions, repaired import, analysis runs and audit records are retained to reproduce findings; their public IDs are in [business fixtures](evidence/2026-10-19/business-fixtures.json). No existing business record was deleted or deactivated. The

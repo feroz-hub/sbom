@@ -1,0 +1,87 @@
+<?xml version="1.0" encoding="utf-8"?><testsuites name="pytest tests"><testsuite name="pytest" errors="0" failures="1" skipped="0" tests="27" time="36.343" timestamp="2026-10-21T13:04:01.643945+05:30" hostname="Ferozes-MacBook-Air.local"><testcase classname="tests.test_iam_user_public_uuid" name="test_native_uuid_persists_and_retains_integer_keys" time="2.751" /><testcase classname="tests.test_iam_user_public_uuid" name="test_database_allocator_omitted_and_explicit_null[False]" time="1.145" /><testcase classname="tests.test_iam_user_public_uuid" name="test_database_allocator_omitted_and_explicit_null[True]" time="1.055" /><testcase classname="tests.test_iam_user_public_uuid" name="test_database_invalid_uuid_is_rejected_with_real_sqlstate[ca12f488-cd21-11f1-9fea-4da6ad746eaa]" time="1.071" /><testcase classname="tests.test_iam_user_public_uuid" name="test_database_invalid_uuid_is_rejected_with_real_sqlstate[053447ce-38ae-51a3-82c4-7989e8d68423]" time="1.389" /><testcase classname="tests.test_iam_user_public_uuid" name="test_database_invalid_uuid_is_rejected_with_real_sqlstate[00000000-0000-0000-0000-000000000000]" time="1.182" /><testcase classname="tests.test_iam_user_public_uuid" name="test_database_invalid_uuid_is_rejected_with_real_sqlstate[00000000-0000-4000-7000-000000000001]" time="1.163" /><testcase classname="tests.test_iam_user_public_uuid" name="test_database_invalid_uuid_is_rejected_with_real_sqlstate[invalid]" time="1.035" /><testcase classname="tests.test_iam_user_public_uuid" name="test_unique_constraint_and_immutability" time="1.008" /><testcase classname="tests.test_iam_user_public_uuid" name="test_concurrent_allocation_and_rollback" time="1.003" /><testcase classname="tests.test_iam_user_public_uuid" name="test_auth_context_has_public_user_but_provider_identity_unchanged" time="0.986" /><testcase classname="tests.test_iam_user_public_uuid" name="test_member_search_add_roles_membership_detail_and_remove" time="1.120" /><testcase classname="tests.test_iam_user_public_uuid" name="test_bad_user_paths_and_body_refuse_422[1]" time="1.005" /><testcase classname="tests.test_iam_user_public_uuid" name="test_bad_user_paths_and_body_refuse_422[not-a-uuid]" time="1.198" /><testcase classname="tests.test_iam_user_public_uuid" name="test_bad_user_paths_and_body_refuse_422[12345678123442348234123456781234_0]" time="1.014" /><testcase classname="tests.test_iam_user_public_uuid" name="test_bad_user_paths_and_body_refuse_422[12345678123442348234123456781234_1]" time="0.999" /><testcase classname="tests.test_iam_user_public_uuid" name="test_bad_user_paths_and_body_refuse_422[ca12f6f4-cd21-11f1-9fea-4da6ad746eaa]" time="1.019" /><testcase classname="tests.test_iam_user_public_uuid" name="test_bad_user_paths_and_body_refuse_422[053447ce-38ae-51a3-82c4-7989e8d68423]" time="1.012" /><testcase classname="tests.test_iam_user_public_uuid" name="test_nonexistent_and_nonmember_are_concealed" time="1.025" /><testcase classname="tests.test_iam_user_public_uuid" name="test_platform_policy_is_not_widened_to_discover_users" time="1.005" /><testcase classname="tests.test_iam_user_public_uuid" name="test_user_serialization_is_batched_and_other_ids_stay_integer" time="1.331" /><testcase classname="tests.test_iam_user_public_uuid" name="test_openapi_contract_is_user_uuid_but_analysis_and_membership_stay_integer" time="1.633" /><testcase classname="tests.test_iam_user_public_uuid" name="test_numeric_uuid_shaped_json_integer_refuses_before_lookup" time="1.008" /><testcase classname="tests.test_iam_user_public_uuid" name="test_platform_user_audit_event_id_is_not_a_user_reference" time="0.988"><failure message="AssertionError: fastapi_inner_astack not found in request scope">tests/test_iam_user_public_uuid.py:284: in test_platform_user_audit_event_id_is_not_a_user_reference
+    install_public_boundary(projection)
+                   ^^^^^^^^^^^^^^^^^^^^^
+.venv/lib/python3.12/site-packages/starlette/testclient.py:482: in get
+    return super().get(
+.venv/lib/python3.12/site-packages/httpx2/_client.py:1055: in get
+    return self.request(
+.venv/lib/python3.12/site-packages/starlette/testclient.py:454: in request
+    return super().request(
+.venv/lib/python3.12/site-packages/httpx2/_client.py:795: in request
+    return self.send(request, auth=auth, follow_redirects=follow_redirects)
+           ^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^
+.venv/lib/python3.12/site-packages/httpx2/_client.py:922: in send
+    response = self._send_handling_auth(
+.venv/lib/python3.12/site-packages/httpx2/_client.py:950: in _send_handling_auth
+    response = self._send_handling_redirects(
+.venv/lib/python3.12/site-packages/httpx2/_client.py:985: in _send_handling_redirects
+    response = self._send_single_request(request)
+               ^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^
+.venv/lib/python3.12/site-packages/httpx2/_client.py:1018: in _send_single_request
+    response = transport.handle_request(request)
+               ^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^
+.venv/lib/python3.12/site-packages/starlette/testclient.py:356: in handle_request
+    raise exc
+.venv/lib/python3.12/site-packages/starlette/testclient.py:353: in handle_request
+    portal.call(self.app, scope, receive, send)
+.venv/lib/python3.12/site-packages/anyio/from_thread.py:338: in call
+    return cast(T_Retval, self.start_task_soon(func, *args).result())
+                          ^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^
+/opt/anaconda3/lib/python3.12/concurrent/futures/_base.py:456: in result
+    return self.__get_result()
+           ^^^^^^^^^^^^^^^^^^^
+/opt/anaconda3/lib/python3.12/concurrent/futures/_base.py:401: in __get_result
+    raise self._exception
+.venv/lib/python3.12/site-packages/anyio/from_thread.py:263: in _call_func
+    retval = await retval_or_awaitable
+             ^^^^^^^^^^^^^^^^^^^^^^^^^
+.venv/lib/python3.12/site-packages/fastapi/applications.py:1163: in __call__
+    await super().__call__(scope, receive, send)
+.venv/lib/python3.12/site-packages/starlette/applications.py:90: in __call__
+    await self.middleware_stack(scope, receive, send)
+.venv/lib/python3.12/site-packages/starlette/middleware/errors.py:186: in __call__
+    raise exc
+.venv/lib/python3.12/site-packages/starlette/middleware/errors.py:164: in __call__
+    await self.app(scope, receive, _send)
+.venv/lib/python3.12/site-packages/starlette/middleware/base.py:193: in __call__
+    response = await self.dispatch_func(request, call_next)
+               ^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^
+tests/test_iam_user_public_uuid.py:275: in authorized_projection
+    )
+      
+.venv/lib/python3.12/site-packages/starlette/middleware/base.py:168: in call_next
+    raise app_exc from app_exc.__cause__ or app_exc.__context__
+.venv/lib/python3.12/site-packages/starlette/middleware/base.py:144: in coro
+    await self.app(scope, receive_or_disconnect, send_no_error)
+.venv/lib/python3.12/site-packages/starlette/middleware/exceptions.py:63: in __call__
+    await wrap_app_handling_exceptions(self.app, conn)(scope, receive, send)
+.venv/lib/python3.12/site-packages/starlette/_exception_handler.py:53: in wrapped_app
+    raise exc
+.venv/lib/python3.12/site-packages/starlette/_exception_handler.py:42: in wrapped_app
+    await app(scope, receive, sender)
+.venv/lib/python3.12/site-packages/fastapi/middleware/asyncexitstack.py:18: in __call__
+    await self.app(scope, receive, send)
+.venv/lib/python3.12/site-packages/starlette/routing.py:660: in __call__
+    await self.middleware_stack(scope, receive, send)
+.venv/lib/python3.12/site-packages/fastapi/routing.py:2683: in app
+    await route.handle(scope, receive, send)
+.venv/lib/python3.12/site-packages/fastapi/routing.py:1266: in handle
+    await super().handle(scope, receive, send)
+.venv/lib/python3.12/site-packages/starlette/routing.py:276: in handle
+    await self.app(scope, receive, send)
+.venv/lib/python3.12/site-packages/starlette/routing.py:64: in app
+    await wrap_app_handling_exceptions(app, request)(scope, receive, send)
+.venv/lib/python3.12/site-packages/starlette/_exception_handler.py:53: in wrapped_app
+    raise exc
+.venv/lib/python3.12/site-packages/starlette/_exception_handler.py:42: in wrapped_app
+    await app(scope, receive, sender)
+.venv/lib/python3.12/site-packages/starlette/routing.py:61: in app
+    response = await f(request)
+               ^^^^^^^^^^^^^^^^
+app/public_api.py:357: in serve
+    response = await handler(request)
+               ^^^^^^^^^^^^^^^^^^^^^^
+.venv/lib/python3.12/site-packages/fastapi/routing.py:470: in app
+    assert isinstance(async_exit_stack, AsyncExitStack), (
+           ^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^
+E   AssertionError: fastapi_inner_astack not found in request scope</failure></testcase><testcase classname="tests.test_iam_user_uuid_migration" name="test_populated_upgrade_preserves_accounts_credentials_links_keys_and_grants" time="2.160" /><testcase classname="tests.test_iam_user_uuid_migration" name="test_precommit_failure_rolls_back_column_guard_backfill_and_marker" time="1.794" /><testcase classname="tests.test_iam_user_uuid_migration" name="test_wrong_revision_refuses_before_schema_change" time="2.017" /></testsuite></testsuites>

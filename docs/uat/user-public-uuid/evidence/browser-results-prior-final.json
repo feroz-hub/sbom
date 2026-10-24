@@ -1,0 +1,50 @@
+[
+  {
+    "name": "admin: login, UUID context, refresh, logout/login stability",
+    "result": "PASS",
+    "observations": {},
+    "time": "2026-10-21T07:21:40.811Z"
+  },
+  {
+    "name": "analyst: login, UUID context, refresh, logout/login stability",
+    "result": "PASS",
+    "observations": {},
+    "time": "2026-10-21T07:22:02.022Z"
+  },
+  {
+    "name": "developer: login, UUID context, refresh, logout/login stability",
+    "result": "PASS",
+    "observations": {},
+    "time": "2026-10-21T07:22:24.373Z"
+  },
+  {
+    "name": "viewer: login, UUID context, refresh, logout/login stability",
+    "result": "PASS",
+    "observations": {},
+    "time": "2026-10-21T07:22:45.858Z"
+  },
+  {
+    "name": "foreign: login, UUID context, refresh, logout/login stability",
+    "result": "PASS",
+    "observations": {},
+    "time": "2026-10-21T07:23:09.684Z"
+  },
+  {
+    "name": "platform: login, UUID context, refresh, logout/login stability",
+    "result": "PASS",
+    "observations": {},
+    "time": "2026-10-21T07:23:20.917Z"
+  },
+  {
+    "name": "Tenant Admin: actual Users & Access find/add/change roles/remove UUID user",
+    "result": "PASS",
+    "observations": {},
+    "time": "2026-10-21T07:23:31.909Z"
+  },
+  {
+    "name": "Admin UUID path syntax, missing identities and membership separation",
+    "result": "PASS",
+    "observations": {},
+    "time": "2026-10-21T07:23:39.197Z"
+  }
+]

@@ -1,0 +1,432 @@
+UAT-USER-014 — FAIL
+
+Module: Users & Access. Role: admin. Time (UTC): 2026-10-19T15:15:18.502Z.
+
+Preconditions: Fresh isolated Chrome context; Native Login; TLS validation enabled; greenfield development stack
+
+Steps executed: Search Admin in Add Existing Member; click Cancel normally; result popup intercepts pointer
+
+Expected: Cancel remains clickable with candidate results open
+
+Actual / sanitized evidence:
+
+
+
+UAT-ACCOUNT-SUSPENDED — BLOCKED
+
+Module: Authorization. Role: platform/disposable user. Time (UTC): 2026-10-19T15:34:00.838Z.
+
+Preconditions: Fresh isolated Chrome context; Native Login; TLS validation enabled; greenfield development stack
+
+Steps executed: Platform changes disposable account status; direct Native Login probe; restore Active at end
+
+Expected: Exercise SUSPENDED account behavior only after an authorized disposable-account state transition
+
+Actual / sanitized evidence:
+
+
+
+UAT-ACCOUNT-DISABLED — BLOCKED
+
+Module: Authorization. Role: platform/disposable user. Time (UTC): 2026-10-19T15:34:01.232Z.
+
+Preconditions: Fresh isolated Chrome context; Native Login; TLS validation enabled; greenfield development stack
+
+Steps executed: Platform changes disposable account status; direct Native Login probe; restore Active at end
+
+Expected: Exercise DISABLED account behavior only after an authorized disposable-account state transition
+
+Actual / sanitized evidence:
+
+
+
+UAT-ACCOUNT-ACTIVE — BLOCKED
+
+Module: Authorization. Role: platform/disposable user. Time (UTC): 2026-10-19T15:34:01.581Z.
+
+Preconditions: Fresh isolated Chrome context; Native Login; TLS validation enabled; greenfield development stack
+
+Steps executed: Platform changes disposable account status; direct Native Login probe; restore Active at end
+
+Expected: Exercise ACTIVE account behavior only after an authorized disposable-account state transition
+
+Actual / sanitized evidence:
+
+
+
+UAT-MEMBERSHIP-PROVIDER-COPY — FAIL
+
+Module: Users & Access. Role: admin/native disposable account. Time (UTC): 2026-10-19T15:48:37.278Z.
+
+Preconditions: Fresh isolated Chrome context; Native Login; TLS validation enabled; greenfield development stack
+
+Steps executed: Open disable-membership confirmation for known Native account; inspect copy
+
+Expected: Native account confirmation uses accurate provider-neutral identity language
+
+Actual / sanitized evidence:
+
+
+
+UAT-KEV-SYNC-UI — FAIL
+
+Module: CISA KEV authorization. Role: admin. Time (UTC): 2026-10-19T17:54:44.967Z.
+
+Preconditions: Fresh isolated Chrome context; Native Login; TLS validation enabled; greenfield development stack
+
+Steps executed: Click enabled Sync KEV Catalog as Tenant Admin after independently confirming server denial; server rejects before catalog mutation
+
+Expected: Tenant Admin UI does not enable a platform-only sync operation
+
+Actual / sanitized evidence:
+
+
+
+UAT-DASHBOARD-FILTER-UI — FAIL
+
+Module: Dashboard. Role: admin. Time (UTC): 2026-10-19T17:57:59.274Z.
+
+Preconditions: Fresh isolated Chrome context; Native Login; TLS validation enabled; greenfield development stack
+
+Steps executed: Select UAT project in actual dashboard filters; observe scoped summary response and displayed state
+
+Expected: Browser Project filter selects disposable project and requests scoped metrics with UUID URL state
+
+Actual / sanitized evidence:
+
+
+
+UAT-DASHBOARD-FILTER-REFRESH — FAIL
+
+Module: Dashboard. Role: admin. Time (UTC): 2026-10-19T17:58:22.944Z.
+
+Preconditions: Fresh isolated Chrome context; Native Login; TLS validation enabled; greenfield development stack
+
+Steps executed: Repeated browser filter attempts did not complete; direct UUID-scoped dashboard API passed; no unsupported UI success claim
+
+Expected: Refresh preserves public project UUID filter and scoped dashboard summary
+
+Actual / sanitized evidence:
+
+
+
+UAT-ISOLATION-GLOBAL-CANDIDATES — FAIL
+
+Module: Tenant isolation. Role: foreign Admin. Time (UTC): 2026-10-19T15:30:49.429268+00:00.
+
+Preconditions: Isolation Control active membership with tenant:user:invite; no Olympus membership
+
+Steps executed: Direct authenticated GET own-tenant user-candidates?q=olympus; no membership mutations
+
+Expected: Requested strict no-enumeration criterion: Olympus account identities are not discoverable from another tenant
+
+Actual / sanitized evidence:
+
+
+
+UAT-VEX-DECISION — FAIL
+
+Module: VEX Investigation. Role: admin. Time (UTC): 2026-10-19T15:44:52.327Z.
+
+Preconditions: Independent Native bearer authentication per role; direct loopback API; greenfield development stack; no browser session reused
+
+Steps executed: Submit a complete versioned decision on UAT context and inspect list afterward; distinguish HTTP response failure from persisted mutation
+
+Expected: Authorized decision returns 200 with durable result
+
+Actual / sanitized evidence:
+
+
+
+UAT-VEX-STALE — FAIL
+
+Module: VEX Investigation. Role: admin. Time (UTC): 2026-10-19T15:44:52.700Z.
+
+Preconditions: Independent Native bearer authentication per role; direct loopback API; greenfield development stack; no browser session reused
+
+Steps executed: Repeat mutation with pre-change version
+
+Expected: Stale row_version returns 409 without replacement
+
+Actual / sanitized evidence:
+
+
+
+UAT-AI-LIVE-PROVIDER — BLOCKED
+
+Module: AI configuration and providers. Role: admin. Time (UTC): 2026-10-19T18:05:04.792906+00:00.
+
+Preconditions: Existing configuration inspected without modification; credentials/tokens stay in memory
+
+Steps executed: Observe actual disabled-feature gate and local provider readiness; leave shared configuration unchanged
+
+Expected: Successful live AI completion requires an enabled application feature and reachable configured provider
+
+Actual / sanitized evidence:
+
+
+
+UAT-VEX-DETAIL — FAIL
+
+Module: VEX Investigation. Role: admin. Time (UTC): 2026-10-19T15:44:44.958Z.
+
+Preconditions: Independent Native bearer authentication per role; direct loopback API; greenfield development stack; no browser session reused
+
+Steps executed: Direct GET UAT-created investigation detail; correlated ResponseValidationError and read-only payload validation
+
+Expected: HTTP 200 detail with valid evidence and row_version
+
+Actual / sanitized evidence:
+
+
+
+UAT-VEX-ASSIGNED-DEVELOPER — BLOCKED
+
+Module: VEX Investigation. Role: developer. Time (UTC): 2026-10-19T15:44:52.846Z.
+
+Preconditions: Independent Native bearer authentication per role; direct loopback API; greenfield development stack; no browser session reused
+
+Steps executed: Observe list/detail boundary before attempting supported assignment workflow
+
+Expected: Assigned Developer can open and update owned investigation
+
+Actual / sanitized evidence:
+
+
+
+UAT-SCHEDULE-VALIDATION — BLOCKED
+
+Module: Schedules. Role: admin. Time (UTC): 2026-10-19T15:44:53.279Z.
+
+Preconditions: Independent Native bearer authentication per role; direct loopback API; greenfield development stack; no browser session reused
+
+Steps executed: POST invalid disabled cron configuration on UAT product
+
+Expected: Invalid cron receives 400/422
+
+Actual / sanitized evidence:
+
+
+
+UAT-ENV-FRONTEND-RESTART — BLOCKED
+
+Module: Environment stability. Role: browser all roles. Time (UTC): 2026-10-19T15:47:46.596432+00:00.
+
+Preconditions: Next development server; one sequential Chrome account at a time; TLS validation enabled
+
+Steps executed: Navigate module pages; correlate ERR_EMPTY_RESPONSE/timeouts with frontend log; probe HTTPS afterward
+
+Expected: Frontend remains available across module navigation
+
+Actual / sanitized evidence:
+
+
+
+UAT-SCHEDULE-CUSTOM — BLOCKED
+
+Module: Schedules. Role: admin. Time (UTC): 2026-10-19T15:54:32.849516+00:00.
+
+Preconditions: Live greenfield stack; private credentials in memory; only UAT-created records mutated
+
+Steps executed: Submit valid disabled cron; inspect current optional parser prerequisite
+
+Expected: Valid custom cron can be stored without enabling execution
+
+Actual / sanitized evidence:
+
+
+
+UAT-POLICY-HISTORY-trust — FAIL
+
+Module: Advisor policy configuration. Role: disposable tenant administrator / platform. Time (UTC): 2026-10-19T18:09:25.161196+00:00.
+
+Preconditions: Only tenant and initial administrator created by this UAT are changed; local Mailpit; six seeded accounts untouched
+
+Steps executed: Read actual version history in UAT tenant
+
+Expected: Append-only policy history contains actual published version
+
+Actual / sanitized evidence:
+
+
+
+UAT-POLICY-HISTORY-accepted-risk — FAIL
+
+Module: Advisor policy configuration. Role: disposable tenant administrator / platform. Time (UTC): 2026-10-19T18:09:25.330889+00:00.
+
+Preconditions: Only tenant and initial administrator created by this UAT are changed; local Mailpit; six seeded accounts untouched
+
+Steps executed: Read actual version history in UAT tenant
+
+Expected: Append-only policy history contains actual published version
+
+Actual / sanitized evidence:
+
+
+
+UAT-POLICY-HISTORY-scoring — FAIL
+
+Module: Advisor policy configuration. Role: disposable tenant administrator / platform. Time (UTC): 2026-10-19T18:09:25.513189+00:00.
+
+Preconditions: Only tenant and initial administrator created by this UAT are changed; local Mailpit; six seeded accounts untouched
+
+Steps executed: Read actual version history in UAT tenant
+
+Expected: Append-only policy history contains actual published version
+
+Actual / sanitized evidence:
+
+
+
+UAT-DASHBOARD-DEPENDENT-FILTERS — BLOCKED
+
+Module: Dashboard. Role: admin / relevant tenant roles. Time (UTC): 2026-10-19T18:11:45.360212+00:00.
+
+Preconditions: Required prerequisite or scenario coverage is explicitly stated below; no unsupported execution claim
+
+Steps executed: No positive execution of this scenario. See actual result for related executed evidence and prerequisite.
+
+Expected: Complete project → product → SBOM browser selection and drill-down with refresh/deep links
+
+Actual / sanitized evidence:
+
+
+
+UAT-VEX-DECISION-UI — BLOCKED
+
+Module: VEX Investigation. Role: admin / analyst / assigned developer. Time (UTC): 2026-10-19T18:11:45.360607+00:00.
+
+Preconditions: Required prerequisite or scenario coverage is explicitly stated below; no unsupported execution claim
+
+Steps executed: No positive execution of this scenario. See actual result for related executed evidence and prerequisite.
+
+Expected: Open detail, assign, save a justified decision and verify refreshed state through UI
+
+Actual / sanitized evidence:
+
+
+
+UAT-PLATFORM-TENANT-WORKING-CONTEXT — BLOCKED
+
+Module: Platform. Role: platform. Time (UTC): 2026-10-19T18:11:45.360610+00:00.
+
+Preconditions: Required prerequisite or scenario coverage is explicitly stated below; no unsupported execution claim
+
+Steps executed: No positive execution of this scenario. See actual result for related executed evidence and prerequisite.
+
+Expected: Enter an authorized working tenant using the supported membership-based switcher
+
+Actual / sanitized evidence:
+
+
+
+UAT-ACTIVE-POLICY-RULES — NOT RUN
+
+Module: Advisor policy configuration. Role: isolated tenant administrator. Time (UTC): 2026-10-19T18:11:45.360613+00:00.
+
+Preconditions: Required prerequisite or scenario coverage is explicitly stated below; no unsupported execution claim
+
+Steps executed: No positive execution of this scenario. See actual result for related executed evidence and prerequisite.
+
+Expected: Publish ACTIVE trust/risk/scoring rules and validate downstream classification and historical explanations
+
+Actual / sanitized evidence:
+
+
+
+UAT-REPAIR-AUTOMATIC-APPROVAL — NOT RUN
+
+Module: Validation repair. Role: admin / analyst. Time (UTC): 2026-10-19T18:11:45.360614+00:00.
+
+Preconditions: Required prerequisite or scenario coverage is explicitly stated below; no unsupported execution claim
+
+Steps executed: No positive execution of this scenario. See actual result for related executed evidence and prerequisite.
+
+Expected: Create a deterministically repairable semantic-error fixture; review candidate diff; approve/reject; verify retry hash and import lineage
+
+Actual / sanitized evidence:
+
+
+
+UAT-REPORT-OTHER-FORMATS — NOT RUN
+
+Module: Reports. Role: permitted export roles. Time (UTC): 2026-10-19T18:11:45.360616+00:00.
+
+Preconditions: Required prerequisite or scenario coverage is explicitly stated below; no unsupported execution claim
+
+Steps executed: No positive execution of this scenario. See actual result for related executed evidence and prerequisite.
+
+Expected: Validate PDF, FDA 510(k), other configured output formats and corresponding role denials
+
+Actual / sanitized evidence:
+
+
+
+UAT-SBOM-SIGNATURE-CONVERSION — NOT RUN
+
+Module: SBOM upload and validation. Role: permitted upload roles. Time (UTC): 2026-10-19T18:11:45.360617+00:00.
+
+Preconditions: Required prerequisite or scenario coverage is explicitly stated below; no unsupported execution claim
+
+Steps executed: No positive execution of this scenario. See actual result for related executed evidence and prerequisite.
+
+Expected: Verify signed/tampered SBOMs, SPDX conversion, and large-file streaming repair
+
+Actual / sanitized evidence:
+
+
+
+UAT-REPORT-SCHEDULED-TRIGGER — NOT RUN
+
+Module: Reports and notifications. Role: admin. Time (UTC): 2026-10-19T18:11:45.360618+00:00.
+
+Preconditions: Required prerequisite or scenario coverage is explicitly stated below; no unsupported execution claim
+
+Steps executed: No positive execution of this scenario. See actual result for related executed evidence and prerequisite.
+
+Expected: Observe recurring enabled schedule firing and report notification retry/dedup behavior
+
+Actual / sanitized evidence:
+
+
+
+UAT-PROVIDER-SECRET-ROTATION — NOT RUN
+
+Module: Integration configuration. Role: platform / isolated tenant administrator. Time (UTC): 2026-10-19T18:11:45.360620+00:00.
+
+Preconditions: Required prerequisite or scenario coverage is explicitly stated below; no unsupported execution claim
+
+Steps executed: No positive execution of this scenario. See actual result for related executed evidence and prerequisite.
+
+Expected: Verify credential creation/rotation/revocation and successful authenticated upstream provider calls
+
+Actual / sanitized evidence:
+
+
+
+UAT-SESSION-EXPIRY-CONCURRENCY — NOT RUN
+
+Module: Session security. Role: all six roles. Time (UTC): 2026-10-19T18:11:45.360621+00:00.
+
+Preconditions: Required prerequisite or scenario coverage is explicitly stated below; no unsupported execution claim
+
+Steps executed: No positive execution of this scenario. See actual result for related executed evidence and prerequisite.
+
+Expected: Observe idle/absolute session expiry, concurrent session revocation and long-lived refresh under role/tenant changes
+
+Actual / sanitized evidence:
+
+
+
+UAT-PLATFORM-GRANT-REVOKE — NOT RUN
+
+Module: Platform Administrators. Role: platform. Time (UTC): 2026-10-19T18:11:45.360624+00:00.
+
+Preconditions: Required prerequisite or scenario coverage is explicitly stated below; no unsupported execution claim
+
+Steps executed: No positive execution of this scenario. See actual result for related executed evidence and prerequisite.
+
+Expected: Grant/revoke platform authority on an eligible disposable user and verify live privilege refresh
+
+Actual / sanitized evidence:
+

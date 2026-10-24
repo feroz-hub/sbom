@@ -1,0 +1,233 @@
+{
+  "$comment": "Python validator additionally checks exact source map, byte SHA from operator, unique action references, aware unexpired UTC and exact resource/hash shapes. Pending template is intentionally INVALID for execution. No operator approvals exist.",
+  "$schema": "https://json-schema.org/draft/2020-12/schema",
+  "additionalProperties": false,
+  "properties": {
+    "accepted": {
+      "const": false
+    },
+    "approvals": {
+      "additionalProperties": false,
+      "minProperties": 1,
+      "properties": {
+        "bootstrap_install_047": {
+          "minLength": 1,
+          "type": "string"
+        },
+        "bootstrap_readback": {
+          "minLength": 1,
+          "type": "string"
+        },
+        "bootstrap_validate": {
+          "minLength": 1,
+          "type": "string"
+        }
+      },
+      "type": "object"
+    },
+    "budgets": {
+      "const": {
+        "attempts": 1,
+        "catalog_queries": 64,
+        "connect_seconds": 5,
+        "cooperative_unit_seconds": 120,
+        "idle_transaction_ms": 30000,
+        "lock_ms": 1000,
+        "simultaneous_connections": 1,
+        "statement_ms": 30000,
+        "transaction_controls": 4
+      }
+    },
+    "connection_contract": {
+      "const": {
+        "application_name": "sbom_w21_f_bootstrap",
+        "autocommit": false,
+        "connect_timeout": 5,
+        "dbname": "uuid_w2_f_fresh",
+        "gssencmode": "disable",
+        "host": "127.0.0.1",
+        "hostaddr": "127.0.0.1",
+        "options": "-c default_transaction_read_only=on -c statement_timeout=30000 -c lock_timeout=1000 -c idle_in_transaction_session_timeout=30000 -c search_path=pg_catalog -c row_security=on",
+        "passfile": "/dev/null",
+        "port": 56043,
+        "sslmode": "disable",
+        "user": "uuid_w2_f_bootstrap"
+      }
+    },
+    "credential_reviewed": {
+      "const": true
+    },
+    "effective_authentication_independently_reviewed": {
+      "const": true
+    },
+    "effective_authentication_review_reference": {
+      "minLength": 1,
+      "type": "string"
+    },
+    "expected_047_catalog_sha256": {
+      "pattern": "^[0-9a-f]{64}$",
+      "type": "string"
+    },
+    "expires_at": {
+      "format": "date-time",
+      "type": "string"
+    },
+    "fresh_metadata": {
+      "minProperties": 1,
+      "type": "object"
+    },
+    "identity": {
+      "additionalProperties": false,
+      "properties": {
+        "database_oid": {
+          "minimum": 1,
+          "type": "integer"
+        },
+        "server_ip": {
+          "format": "ipv4",
+          "type": "string"
+        },
+        "system_identifier": {
+          "not": {
+            "const": "7697252084555804711"
+          },
+          "pattern": "^[1-9][0-9]{0,19}$",
+          "type": "string"
+        }
+      },
+      "required": [
+        "system_identifier",
+        "database_oid",
+        "server_ip"
+      ],
+      "type": "object"
+    },
+    "integrity_approvals": {
+      "const": {}
+    },
+    "integrity_attestations": {
+      "const": [
+        false,
+        false,
+        false,
+        false,
+        false,
+        false,
+        false
+      ]
+    },
+    "network_egress_reviewed": {
+      "const": true
+    },
+    "resources": {
+      "additionalProperties": false,
+      "properties": {
+        "container_id": {
+          "minLength": 1,
+          "type": "string"
+        },
+        "credential_metadata_reference": {
+          "minLength": 1,
+          "type": "string"
+        },
+        "daemon_id": {
+          "minLength": 1,
+          "type": "string"
+        },
+        "image_id": {
+          "minLength": 1,
+          "type": "string"
+        },
+        "network_id": {
+          "minLength": 1,
+          "type": "string"
+        },
+        "socket": {
+          "minLength": 1,
+          "type": "string"
+        },
+        "volume_identity": {
+          "minLength": 1,
+          "type": "string"
+        }
+      },
+      "required": [
+        "daemon_id",
+        "socket",
+        "container_id",
+        "image_id",
+        "volume_identity",
+        "network_id",
+        "credential_metadata_reference"
+      ],
+      "type": "object"
+    },
+    "roles_reviewed": {
+      "const": true
+    },
+    "schema": {
+      "const": "w21-f-bootstrap-v1"
+    },
+    "source_reviewed": {
+      "const": true
+    },
+    "source_sha256": {
+      "additionalProperties": {
+        "pattern": "^[0-9a-f]{64}$",
+        "type": "string"
+      },
+      "minProperties": 1,
+      "type": "object"
+    },
+    "target": {
+      "const": {
+        "database": "uuid_w2_f_fresh",
+        "host": "127.0.0.1",
+        "hostaddr": "127.0.0.1",
+        "network": "sbom-uuid-w2-f_f_access",
+        "port": 56043,
+        "postgresql": "16.15",
+        "project": "sbom-uuid-w2-f",
+        "service": "postgres_f",
+        "target": "F",
+        "user": "uuid_w2_f_bootstrap",
+        "volume": "sbom-uuid-w2-f_f_pgdata"
+      }
+    },
+    "target_reviewed": {
+      "const": true
+    },
+    "unit": {
+      "const": {
+        "next": "047_email_verification_tokens",
+        "previous": null
+      }
+    }
+  },
+  "required": [
+    "schema",
+    "target",
+    "accepted",
+    "unit",
+    "identity",
+    "source_sha256",
+    "budgets",
+    "connection_contract",
+    "source_reviewed",
+    "target_reviewed",
+    "credential_reviewed",
+    "roles_reviewed",
+    "network_egress_reviewed",
+    "integrity_approvals",
+    "integrity_attestations",
+    "approvals",
+    "expires_at",
+    "effective_authentication_independently_reviewed",
+    "effective_authentication_review_reference",
+    "resources",
+    "fresh_metadata",
+    "expected_047_catalog_sha256"
+  ],
+  "title": "W2.1 future F bootstrap authority contract; live build disabled",
+  "type": "object"
+}

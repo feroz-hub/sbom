@@ -1,0 +1,38 @@
+[
+  {
+    "name": "admin: login, UUID context, refresh, logout/login stability",
+    "result": "PASS",
+    "observations": {},
+    "time": "2026-10-21T06:51:30.307Z"
+  },
+  {
+    "name": "analyst: login, UUID context, refresh, logout/login stability",
+    "result": "PASS",
+    "observations": {},
+    "time": "2026-10-21T06:51:45.408Z"
+  },
+  {
+    "name": "developer: login, UUID context, refresh, logout/login stability",
+    "result": "PASS",
+    "observations": {},
+    "time": "2026-10-21T06:52:00.242Z"
+  },
+  {
+    "name": "viewer: login, UUID context, refresh, logout/login stability",
+    "result": "PASS",
+    "observations": {},
+    "time": "2026-10-21T06:52:15.907Z"
+  },
+  {
+    "name": "foreign: login, UUID context, refresh, logout/login stability",
+    "result": "PASS",
+    "observations": {},
+    "time": "2026-10-21T06:52:32.316Z"
+  },
+  {
+    "name": "platform: login, UUID context, refresh, logout/login stability",
+    "result": "PASS",
+    "observations": {},
+    "time": "2026-10-21T06:52:42.320Z"
+  }
+]

@@ -17,6 +17,7 @@ import type {
   VexInvestigationDetail,
   VexInvestigationListResponse,
   VexInvestigationSummary,
+  SbomPosture,
 } from '@/types';
 import VexInvestigationPage from './page';
 import userEvent from '@testing-library/user-event';
@@ -894,4 +895,44 @@ it('reads historical version scope directly from a URL', async () => {
   navigation.search="version_scope=all&sbom_id=00000000-0000-4000-8000-000000000005";renderPage();
   await waitFor(() => expect(api.listVexInvestigations.mock.calls.at(-1)?.[0]).toMatchObject({version_scope:'all',sbom_id:"00000000-0000-4000-8000-000000000005"}));
   expect(screen.getByText('All versions view')).toBeInTheDocument();
+});
+
+const versionEvidence: SbomPosture = {
+  target_sbom_id: '00000000-0000-4000-8000-000000000005', posture_sbom_id: '00000000-0000-4000-8000-000000000005', product_id: 8,
+  application_name: 'Selected application', current_sbom: { id: 5, name: 'rtos-1', version: '2.0' },
+  latest_uploaded: { id: 5, name: 'rtos-1', version: '2.0' }, posture_sbom: { id: 5, name: 'rtos-1', version: '2.0' },
+  analysis_run_id: '00000000-0000-4000-8000-000000000010', analysis_status: 'ANALYZED', analysis_finding_rows: 81,
+  last_known_posture: false, coverage_incomplete: false, designation_required: false, warning: null,
+};
+
+it('keeps the operational queue ahead of portfolio details__VEX_UI_001', async () => {
+  api.listVexInvestigations.mockResolvedValue({ ...listResponse, posture: Array.from({ length: 107 }, (_, i) => ({
+    ...versionEvidence, target_sbom_id: i + 100, application_name: `Portfolio application ${i}`,
+  })) });
+  renderPage();
+  await screen.findByText(/107 version lineages/);
+  expect(screen.getByRole('table', { name: 'VEX investigations' })).toBeInTheDocument();
+  expect(screen.queryByText('Portfolio application 0')).not.toBeInTheDocument();
+  expect(screen.queryByRole('table', { name: 'SBOM version evidence table' })).not.toBeInTheDocument();
+  const overview = screen.getByRole('region', { name: 'Current view' });
+  expect(overview.compareDocumentPosition(screen.getByRole('region', { name: 'SBOM version evidence' })) & Node.DOCUMENT_POSITION_FOLLOWING).toBeTruthy();
+  fireEvent.click(screen.getByRole('button', { name: 'Review version evidence' }));
+  expect(within(screen.getByRole('table', { name: 'SBOM version evidence table' })).getAllByRole('row')).toHaveLength(11);
+  expect(screen.getByText('CVE-2026-4001')).toBeInTheDocument();
+});
+
+it('limits provenance to the selected SBOM and retains optional comparison after the queue__VEX_DASH_004', async () => {
+  navigation.search = 'sbom_id=00000000-0000-4000-8000-000000000005';
+  api.listVexInvestigations.mockResolvedValue({ ...listResponse, posture: [versionEvidence,
+    { ...versionEvidence, target_sbom_id: 99, posture_sbom_id: 99, application_name: 'Unrelated lineage' }] });
+  renderPage();
+  await screen.findByText(/1 version lineage in this scope/);
+  fireEvent.click(screen.getByRole('button', { name: 'Review version evidence' }));
+  expect(screen.getByText('Selected application')).toBeInTheDocument();
+  expect(screen.queryByText('Unrelated lineage')).not.toBeInTheDocument();
+  const tools = screen.getByRole('region', { name: 'Version history and comparison' });
+  expect(screen.getByRole('table', { name: 'VEX investigations' }).compareDocumentPosition(tools) & Node.DOCUMENT_POSITION_FOLLOWING).toBeTruthy();
+  expect(screen.queryByRole('button', { name: 'Compare versions' })).not.toBeInTheDocument();
+  fireEvent.click(screen.getByRole('button', { name: 'Open version tools' }));
+  expect(screen.getByRole('button', { name: 'Compare versions' })).toBeInTheDocument();
 });
