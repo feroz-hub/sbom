@@ -30,6 +30,9 @@ from ..schemas_platform import (
     PlatformUserStatusResponse,
     PlatformUserStatusUpdate,
     PlatformUserSummary,
+    TenantAdministratorDeactivateRequest,
+    TenantAdministratorGovernanceResponse,
+    TenantAdministratorRevokeRequest,
     TenantMembershipBrief,
     TenantUserCandidate,
     TenantUserCandidateResponse,
@@ -42,6 +45,7 @@ from ..services import tenant_role_assignment_service as tras
 from ..services import user_management_service as ums
 from ..services.email_verification_service import ensure_initial_verification_delivery
 from ..services.identity_verification_policy import verification_complete, verification_complete_clause
+from ..services.tenant_admin_governance_service import mutate_administrator
 
 router = APIRouter(prefix="/api/platform", tags=["platform-identity"])
 
@@ -193,6 +197,10 @@ def _platform_tenant_dict(db: Session, tenant: Tenant) -> dict:
             current_administrators.append(
                 {
                     "user_id": user.id,
+                    "membership_id": membership.id,
+                    "role_assignment_version": membership.role_assignment_version,
+                    "primary_role": membership.role,
+                    "roles": sorted(tras.effective_role_codes(db, membership)),
                     "display_name": user.display_name,
                     "email": user.email,
                 }
@@ -252,6 +260,50 @@ def tenant_admin_candidates(
 
 class RecoverTenantAdmin(BaseModel):
     user_id: int = Field(ge=1)
+
+
+@router.post("/tenants/{tenant_id}/administrators/{membership_id}/revoke", response_model=TenantAdministratorGovernanceResponse)
+def revoke_tenant_administrator(
+    tenant_id: int, membership_id: int, payload: TenantAdministratorRevokeRequest, request: Request,
+    context: CurrentContext = Depends(require_platform_permission("platform:tenant_admin:manage")),
+    db: Session = Depends(get_db),
+):
+    """Revoke TENANT_ADMIN atomically; stale versions/last admin return 409.
+
+    Supply an ordinary replacement primary role when TENANT_ADMIN is primary
+    or the only role. All other active roles are retained.
+    """
+    result = mutate_administrator(db, context=context, tenant_id=tenant_id, membership_id=membership_id,
+        operation="revoke", request=request, **payload.model_dump())
+    invalidate_user_contexts(result["user_id"])
+    return result
+
+
+@router.post("/tenants/{tenant_id}/administrators/{membership_id}/deactivate", response_model=TenantAdministratorGovernanceResponse)
+def deactivate_tenant_administrator(
+    tenant_id: int, membership_id: int, request: Request,
+    payload: TenantAdministratorDeactivateRequest | None = None,
+    context: CurrentContext = Depends(require_platform_permission("platform:tenant_admin:manage")),
+    db: Session = Depends(get_db),
+):
+    """Disable only this membership, preserving its assignments and identity."""
+    result = mutate_administrator(db, context=context, tenant_id=tenant_id, membership_id=membership_id,
+        operation="deactivate", reason=payload.reason if payload else None, request=request)
+    invalidate_user_contexts(result["user_id"])
+    return result
+
+
+@router.delete("/tenants/{tenant_id}/administrators/{membership_id}", status_code=204)
+def remove_tenant_administrator(
+    tenant_id: int, membership_id: int, request: Request,
+    reason: str | None = Query(default=None, max_length=512),
+    context: CurrentContext = Depends(require_platform_permission("platform:tenant_admin:manage")),
+    db: Session = Depends(get_db),
+) -> None:
+    """Remove only this administrator membership; durable audit/history survive."""
+    result = mutate_administrator(db, context=context, tenant_id=tenant_id, membership_id=membership_id,
+        operation="remove", reason=reason, request=request)
+    invalidate_user_contexts(result["user_id"])
 
 
 @router.post("/tenants/{tenant_id}/recover-admin")

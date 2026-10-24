@@ -206,7 +206,7 @@ def test_membership_identifier_is_tenant_scoped(client):
     assert client.delete(f"/api/tenants/{tenant_id}/users/{membership_uuid(membership_id)}").status_code == 404
 
 
-def test_last_active_tenant_admin_is_protected(client):
+def test_tenant_admin_cannot_remove_own_administrator_membership(client):
     from app.db import SessionLocal
 
     with SessionLocal() as db, verified_fixture_tenant(db, 1):
@@ -214,13 +214,13 @@ def test_last_active_tenant_admin_is_protected(client):
         before = (membership.role, membership.status, membership.role_assignment_version)
         assignments = list(db.execute(select(TenantUserRoleAssignment.__table__)))
     response = client.post(f"/api/tenants/{tenant_uuid(1)}/users/{membership_uuid(1)}/deactivate")
-    assert response.status_code == 409
-    # Tenant Admin may manage membership status, but cannot delegate/remove
-    # TENANT_ADMIN roles. Exercise this invariant through authorized status work.
+    assert response.status_code == 403
+    # Tenant-context lifecycle mutations cannot remove administrator authority,
+    # regardless of whether another effective administrator remains.
     response = client.patch(f"/api/tenants/{tenant_uuid(1)}/users/{membership_uuid(1)}", json={"status": "DISABLED"})
-    assert response.status_code == 409
+    assert response.status_code == 403
     response = client.delete(f"/api/tenants/{tenant_uuid(1)}/users/{membership_uuid(1)}")
-    assert response.status_code == 409
+    assert response.status_code == 403
     with SessionLocal() as db, verified_fixture_tenant(db, 1):
         membership = db.get(TenantUser, 1)
         assert (membership.role, membership.status, membership.role_assignment_version) == before

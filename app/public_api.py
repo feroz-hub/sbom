@@ -235,7 +235,7 @@ async def decode_request(request: Request, db=Depends(get_db)):
             if entity == "iam_users":
                 table, statement = user_lookup(context, request)
             elif entity in resources.MODELS:
-                table, statement = resources.resource_statement(entity, context, request=True, path=path)
+                table, statement = resources.resource_statement(entity, context, request=True, path=path, tenant_id=request.path_params.get("tenant_id"))
             else:
                 table, statement = scoped_table(db, entity, context)
             row = db.execute(statement.where(table.c.public_id == public)).first()

@@ -483,7 +483,7 @@ def grant_tenant_user_role(
             make_primary=payload.make_primary,
             reason=payload.reason,
             actor_user_id=context.user_id,
-            is_platform_admin=context.is_platform_admin,
+            is_platform_admin=False,
             request=request,
         )
         result = _role_state(db, tenant_id, user_id)
@@ -521,7 +521,7 @@ def replace_tenant_user_roles(
             expected_version=payload.expected_version,
             reason=payload.reason,
             actor_user_id=context.user_id,
-            is_platform_admin=context.is_platform_admin,
+            is_platform_admin=False,
             request=request,
         )
         result = _role_state(db, tenant_id, user_id)
@@ -560,7 +560,7 @@ def revoke_tenant_user_role(
             replacement_primary_role_code=payload.replacement_primary_role_code,
             reason=payload.reason,
             actor_user_id=context.user_id,
-            is_platform_admin=context.is_platform_admin,
+            is_platform_admin=False,
             request=request,
         )
         result = _role_state(db, tenant_id, user_id)
@@ -889,7 +889,20 @@ def update_tenant_user(
     db: Session = Depends(get_db),
 ) -> dict:
     _require_current_tenant(tenant_id, context)
-    membership, user = ts.get_tenant_membership(db, tenant_id, membership_id)
+    membership, user = ts.lock_tenant_membership(db, tenant_id, membership_id)
+    # Reject before changing roles; the role service joins this route's
+    # transaction so a combined PATCH cannot partially commit.
+    if payload.role is not None or payload.status not in {None, "ACTIVE"}:
+        try:
+            ts.require_ordinary_membership_target(db, membership)
+        except HTTPException as exc:
+            audit_service.write_authorization_audit(
+                db, action="membership.update_denied", outcome="DENIED",
+                context=context, tenant_id=tenant_id, target_user_id=user.id,
+                target_membership_id=membership.id, request=request, detail=str(exc.detail),
+            )
+            db.commit()
+            raise
     compatibility_old = {"role": membership.role, "status": membership.status}
     compatibility_role_changed = False
     if payload.role is not None:
@@ -910,10 +923,12 @@ def update_tenant_user(
                 expected_version=membership.role_assignment_version,
                 reason="Legacy membership role update",
                 actor_user_id=context.user_id,
-                is_platform_admin=context.is_platform_admin,
+                is_platform_admin=False,
                 request=request,
+                caller_owns_transaction=True,
             )
         except tras.AssignmentProblem as exc:
+            db.rollback()
             audit_service.write_authorization_audit(
                 db,
                 action="membership.update_denied",
@@ -1011,10 +1026,7 @@ def _set_membership_status(
     _require_current_tenant(tenant_id, context)
     # Serialize lifecycle changes in the same tenant -> user -> membership order
     # as role and global administrative changes, refreshing any cached rows.
-    db.scalar(select(Tenant).where(Tenant.id == tenant_id).with_for_update())
-    membership, user = ts.get_tenant_membership(db, tenant_id, membership_id)
-    db.scalar(select(IAMUser).where(IAMUser.id == user.id).with_for_update().execution_options(populate_existing=True))
-    db.scalar(select(TenantUser).where(TenantUser.id == membership_id, TenantUser.tenant_id == tenant_id).with_for_update().execution_options(populate_existing=True))
+    membership, user = ts.lock_tenant_membership(db, tenant_id, membership_id)
     if (
         status_value == "ACTIVE"
         and tras.active_assignment_count(db, membership.id) == 0
@@ -1025,6 +1037,8 @@ def _set_membership_status(
             status_code=409,
         )
     try:
+        if status_value != "ACTIVE":
+            ts.require_ordinary_membership_target(db, membership)
         ts.ensure_not_last_active_tenant_admin(
             db,
             membership,
@@ -1113,8 +1127,9 @@ def delete_tenant_user(
     db: Session = Depends(get_db),
 ) -> None:
     _require_current_tenant(tenant_id, context)
-    membership, user = ts.get_tenant_membership(db, tenant_id, membership_id)
+    membership, user = ts.lock_tenant_membership(db, tenant_id, membership_id)
     try:
+        ts.require_ordinary_membership_target(db, membership)
         ts.ensure_not_last_active_tenant_admin(
             db,
             membership,

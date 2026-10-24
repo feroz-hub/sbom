@@ -247,6 +247,12 @@ def _reset_authorization_catalog(database_url: str) -> None:
             platform_policy_module = importlib.util.module_from_spec(platform_policy_spec)
             platform_policy_spec.loader.exec_module(platform_policy_module)
             platform_policy_module._seed(connection)
+            governance_spec = importlib.util.spec_from_file_location(
+                "_tenant_admin_governance", migration_path.with_name("103_tenant_admin_governance.py")
+            )
+            governance_module = importlib.util.module_from_spec(governance_spec)
+            governance_spec.loader.exec_module(governance_module)
+            governance_module._seed(connection)
     finally:
         engine.dispose()
 

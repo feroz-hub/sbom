@@ -17,7 +17,7 @@ from sqlalchemy import or_, select
 from sqlalchemy.exc import SQLAlchemyError
 from sqlalchemy.orm import Session, selectinload
 
-from ..authorization_catalog_seed_v5 import PLATFORM_ADMIN_PERMISSIONS_V5
+from ..authorization_catalog_seed_v6 import PLATFORM_ADMIN_PERMISSIONS_V6
 from ..core.context import CurrentContext
 from ..core.identity_states import IdentityErrorCode
 from ..core.permissions import (
@@ -101,7 +101,7 @@ def database_permissions_for_roles(
             AuthorizationPermission.status == "ACTIVE",
             AuthorizationRole.scope == AuthorizationPermission.scope,
             or_(AuthorizationRole.code != "PLATFORM_ADMIN",
-                AuthorizationPermission.code.in_(PLATFORM_ADMIN_PERMISSIONS_V5)),
+                AuthorizationPermission.code.in_(PLATFORM_ADMIN_PERMISSIONS_V6)),
         )
         .distinct()
     ).scalars()
@@ -126,7 +126,7 @@ def resolve_permissions_for_roles(
             # An incomplete platform catalogue cannot grant partial authority.
             # Until all protected control-plane grants are installed, fail closed.
             installed = database_permissions_for_roles(db, {"PLATFORM_ADMIN"})
-            if not PLATFORM_ADMIN_PERMISSIONS_V5.issubset(installed):
+            if not PLATFORM_ADMIN_PERMISSIONS_V6.issubset(installed):
                 return frozenset()
         database = database_permissions_for_roles(db, normalized)
         found_roles = set(
@@ -326,8 +326,10 @@ def replace_role_permissions(
             f"Permissions outside the role scope: {', '.join(cross_scope)}",
             409,
         )
-    if role.code == "PLATFORM_ADMIN" and set(normalized) - PLATFORM_ADMIN_PERMISSIONS_V5:
+    if role.code == "PLATFORM_ADMIN" and set(normalized) - PLATFORM_ADMIN_PERMISSIONS_V6:
         raise CatalogProblem("PLATFORM_CONTROL_PLANE_ONLY", "Platform Admin may only hold control-plane permissions.", 409)
+    if role.code != "PLATFORM_ADMIN" and "platform:tenant_admin:manage" in normalized:
+        raise CatalogProblem("PLATFORM_GOVERNANCE_ROLE_REQUIRED", "Tenant admin governance is reserved for Platform Admin.", 409)
     protected = PROTECTED_ROLE_PERMISSIONS.get(role.code, frozenset())
     removed_protected = sorted(set(protected) - set(normalized))
     if removed_protected:

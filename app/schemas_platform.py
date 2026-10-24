@@ -8,6 +8,30 @@ from typing import Literal
 from pydantic import BaseModel, ConfigDict, Field, model_validator
 
 
+class TenantAdministratorRevokeRequest(BaseModel):
+    model_config = ConfigDict(extra="forbid")
+
+    expected_version: int = Field(ge=1)
+    replacement_primary_role_code: str | None = Field(default=None, min_length=1, max_length=64)
+    reason: str | None = Field(default=None, max_length=512)
+
+
+class TenantAdministratorDeactivateRequest(BaseModel):
+    model_config = ConfigDict(extra="forbid")
+
+    reason: str | None = Field(default=None, max_length=512)
+
+
+class TenantAdministratorGovernanceResponse(BaseModel):
+    tenant_id: int
+    membership_id: int
+    user_id: int
+    status: Literal["ACTIVE", "DISABLED", "PENDING"]
+    roles: list[str]
+    primary_role: str
+    role_assignment_version: int
+
+
 class PlatformUserSummary(BaseModel):
     first_name: str | None = None
     last_name: str | None = None

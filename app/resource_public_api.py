@@ -58,6 +58,7 @@ SCHEMA_FIELDS = {
     "CompareRequest": RUN_FIELDS,
     "PdfReportByIdRequest": RUN_FIELDS,
     "PlatformTenantMembershipSummary": MEMBER_FIELDS,
+    "TenantAdministratorGovernanceResponse": MEMBER_FIELDS,
     "PlatformGrantSummary": frozenset({"grant_id"}),
     "PlatformAdministratorGrantResponse": frozenset({"grant_id"}),
 }
@@ -116,7 +117,7 @@ def response_entity(path):
     return None
 
 
-def resource_statement(entity, context, *, request=False, path=None):
+def resource_statement(entity, context, *, request=False, path=None, tenant_id=None):
     table = MODELS[entity].__table__
     statement = select(table.c.id, table.c.public_id)
     if context is None:
@@ -128,6 +129,18 @@ def resource_statement(entity, context, *, request=False, path=None):
             or (path and not path.startswith("/api/platform/"))
         ):
             raise HTTPException(403, "Platform permission required")
+    elif (
+        entity == "tenant_users" and context.is_platform_admin and context.tenant_id is None
+        and request and context.has_permission("platform:tenant_admin:manage")
+        and path in {
+            "/api/platform/tenants/{tenant_id}/administrators/{membership_id}/revoke",
+            "/api/platform/tenants/{tenant_id}/administrators/{membership_id}/deactivate",
+            "/api/platform/tenants/{tenant_id}/administrators/{membership_id}",
+        }
+    ):
+        # Only these governance selectors may resolve authorization metadata
+        # across tenants; the tenant selector was decoded first.
+        statement = statement.where(table.c.tenant_id == tenant_id)
     elif entity == "tenant_users" and context.is_platform_admin and context.tenant_id is None and not request:
         # Cross-tenant summaries have already been authorized by platform routes.
         pass

@@ -4,7 +4,7 @@ from tests.public_id_fixture import membership_uuid, user_uuid
 
 import pytest
 from app.authorization_catalog_seed_v2 import PLATFORM_ADMIN_PERMISSIONS_V2
-from app.authorization_catalog_seed_v5 import PLATFORM_ADMIN_PERMISSIONS_V5
+from app.authorization_catalog_seed_v6 import PLATFORM_ADMIN_PERMISSIONS_V6
 from app.core.permissions import ROLE_PERMISSIONS
 from app.core.security import get_current_user
 from app.db import SessionLocal
@@ -15,9 +15,9 @@ from tests.public_id_fixture import tenant_uuid
 
 
 def test_platform_catalog_contains_only_control_plane_permissions():
-    assert ROLE_PERMISSIONS["PLATFORM_ADMIN"] == PLATFORM_ADMIN_PERMISSIONS_V5
-    assert all(permission.startswith("platform:") for permission in PLATFORM_ADMIN_PERMISSIONS_V5)
-    assert not any(permission.startswith("platform:user:") for permission in PLATFORM_ADMIN_PERMISSIONS_V5)
+    assert ROLE_PERMISSIONS["PLATFORM_ADMIN"] == PLATFORM_ADMIN_PERMISSIONS_V6
+    assert all(permission.startswith("platform:") for permission in PLATFORM_ADMIN_PERMISSIONS_V6)
+    assert not any(permission.startswith("platform:user:") for permission in PLATFORM_ADMIN_PERMISSIONS_V6)
 
 
 def test_forward_migration_repairs_existing_12_permission_catalog(app):
@@ -43,7 +43,7 @@ def test_forward_migration_repairs_existing_12_permission_catalog(app):
         migration._seed(db.connection())
         migration._seed(db.connection())
         permissions = resolve_permissions_for_roles(db, {"PLATFORM_ADMIN"})
-        assert permissions == PLATFORM_ADMIN_PERMISSIONS_V5
+        assert permissions == PLATFORM_ADMIN_PERMISSIONS_V6
         assert "platform:tenant:read" in permissions
         assert "tenant:user:read" not in permissions
 
@@ -140,14 +140,14 @@ def test_platform_catalog_rejects_operational_and_identity_admin_grants(app, for
             tenant_id=None,
             external_tenant_id=None,
             roles=frozenset({"PLATFORM_ADMIN"}),
-            permissions=PLATFORM_ADMIN_PERMISSIONS_V5,
+            permissions=PLATFORM_ADMIN_PERMISSIONS_V6,
             is_platform_admin=True,
         )
         with pytest.raises(CatalogProblem):
             replace_role_permissions(
                 db,
                 role.id,
-                permission_codes=[*PLATFORM_ADMIN_PERMISSIONS_V5, forbidden],
+                permission_codes=[*PLATFORM_ADMIN_PERMISSIONS_V6, forbidden],
                 expected_version=role.version,
                 reason="negative scope test",
                 context=context,

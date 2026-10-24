@@ -786,6 +786,34 @@ def get_tenant_membership(db: Session, tenant_id: int, membership_id: int) -> tu
     return row
 
 
+def lock_tenant_membership(db: Session, tenant_id: int, membership_id: int) -> tuple[TenantUser, IAMUser]:
+    """Share the role service's tenant -> user -> membership locking order."""
+    tenant = db.scalar(select(Tenant).where(Tenant.id == tenant_id).with_for_update())
+    if tenant is None:
+        raise HTTPException(404, "Tenant not found")
+    membership, user = get_tenant_membership(db, tenant_id, membership_id)
+    db.refresh(user, with_for_update=True)
+    db.refresh(membership, with_for_update=True)
+    return membership, user
+
+
+def require_ordinary_membership_target(db: Session, membership: TenantUser) -> None:
+    """Tenant-context callers cannot remove any administrator's authority.
+
+    Check all assignments, not the compatibility primary-role column. Keep the
+    legacy resolver protection during configured transition modes as well.
+    This applies to every caller, including custom roles with user:update.
+    """
+    roles = tenant_role_assignment_service.assigned_role_codes(db, membership)
+    legacy_admin = get_settings().tenant_role_assignment_mode != "DATABASE" and normalize_role(membership.role) == "TENANT_ADMIN"
+    if "TENANT_ADMIN" in roles or legacy_admin:
+        raise identity_http_error(
+            IdentityErrorCode.TENANT_ROLE_NOT_ASSIGNABLE,
+            "Tenant Administrator authority can only be removed through platform governance.",
+            status_code=403,
+        )
+
+
 def _active_tenant_admin_count(db: Session, tenant_id: int, *, excluding: int | None = None) -> int:
     from ..core.context import get_bound_context, minimal_background_context, tenant_scope
     context = get_bound_context()
