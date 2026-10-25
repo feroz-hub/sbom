@@ -129,7 +129,18 @@ class MigrationUnit:
         return SimpleNamespace(**namespace)
 
     def snapshot(self, c):
-        return common.snapshot(c, omit_public_id_tables=())
+        result = common.snapshot(c, omit_public_id_tables=())
+        # Data migrations may need original catalogue rows to prove their exact
+        # allowed delta. Whole-table digests alone cannot describe an update.
+        capture = getattr(self.module(), "startup_snapshot", None)
+        if capture is not None:
+            if not callable(capture):
+                raise common.SchemaUpgradeError("Migration snapshot hook must be callable.")
+            supplement = capture(c)
+            if not isinstance(supplement, dict):
+                raise common.SchemaUpgradeError("Migration snapshot supplement must be a dictionary.")
+            result["migration"] = supplement
+        return result
 
     def inspect_current(self, e):
         with e.connect() as c:

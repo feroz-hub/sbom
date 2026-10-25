@@ -236,6 +236,9 @@ def test_future103_discovered_and_validated_without_launcher_edit(synthetic, mon
         shutil.copytree(
             common.stack.ROOT / directory, root / directory, ignore=shutil.ignore_patterns("__pycache__", "*.pyc")
         )
+    # This private fixture replaces the real post-102 tail with its synthetic
+    # migration. Keep one head after revision 103 was added to the repository.
+    (root / "alembic/versions/103_tenant_admin_governance.py").unlink()
     code = """
 from __future__ import annotations
 revision = "103_synthetic_startup_probe"

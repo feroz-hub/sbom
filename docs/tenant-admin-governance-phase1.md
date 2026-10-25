@@ -357,3 +357,69 @@ delivery report after commit creation. No push, merge, deployment, production
 migration, or production verification is authorized or claimed. Fresh database
 test reruns, independent human review, Phase 2 integration (SBO-83), and deployed
 end-to-end acceptance (SBO-84) remain follow-up work.
+
+## 17. Greenfield startup integration correction — 25 October 2026
+
+`python3 scripts/dev.py start --verbose` previously stopped before database
+access with `Migration needs a literal startup v1 contract and acceptance hooks:
+103_tenant_admin_governance`. Revision 103 lacked the contract required by the
+discovery-based Greenfield launcher. Its top-level datetime import also violated
+the launcher's inert-import rule.
+
+Revision 103 now declares its three affected catalogue tables, serialization key,
+read-only preflight and acceptance hooks. The datetime import is local to the
+unchanged seed function. An optional source-bound `startup_snapshot` hook keeps
+only the affected authorization catalogue metadata in memory so acceptance can
+prove the exact permitted row changes, including the Platform Admin version and
+timestamp. Full-table digests continue to protect all other identities,
+memberships, grants, assignments, history, audit and business data. Schema,
+owners, ACLs and sequence definitions remain unchanged; only the expected two
+catalogue sequence values may advance when rows are inserted. Existing revision
+102 IAM/resource UUID guards are validated both before upgrade and when accepting
+an already-current revision 103.
+
+This does not change Phase 1 mutation semantics, frozen revisions 100–102,
+backup/restore rehearsal, source locking, explicit operator confirmation,
+transaction ownership, failure claims or independent read-back. It does not
+stamp, recreate or repair the populated database automatically.
+
+Fresh validation for this correction:
+
+```sh
+TEST_DATABASE_URL=sqlite:///:memory: .venv/bin/python -m pytest -q --tb=short \
+  tests/test_greenfield_governance_startup.py \
+  tests/test_greenfield_auto_migrations.py \
+  tests/test_greenfield_startup_migrations.py \
+  tests/test_greenfield_resource_startup.py \
+  tests/test_dev_greenfield.py tests/test_greenfield_service_ports.py \
+  tests/test_hierarchical_scheduler_migration.py::test_hierarchical_scheduler_is_single_head
+```
+
+- **211 passed**, with one existing Alembic configuration deprecation warning.
+  The 52 catalogue tests inside that total execute real seed/metadata operations
+  on in-memory SQLite and explicitly mock PostgreSQL snapshot/schema boundaries.
+- **1 additional PostgreSQL 16 test passed** in a new task-owned container with an
+  empty `sbom_startup103_test` database and synthetic metadata/identity. This
+  exercises the real application schema, UUID guards, PostgreSQL snapshots,
+  rollback on failed acceptance, valid 102→103 upgrade, idempotency and an
+  independent server-enforced read-only connection. The container was removed.
+  Reproduction requires explicitly providing `STARTUP103_TEST_DATABASE_URL` for
+  an empty disposable loopback PostgreSQL 16 server, then running
+  `tests/test_greenfield_governance_postgresql.py` with the same SQLite global
+  test setting. That opt-in test refuses a populated database and the existing
+  Greenfield/default database ports.
+- Ruff lint, Python compilation, `git diff --check` and `alembic heads` passed;
+  there remains one head, `103_tenant_admin_governance`.
+
+The first default pytest attempt was blocked by the unavailable default test
+server on port 55439; no tests ran in that attempt. The fresh results above use
+explicit isolated targets instead. No populated Greenfield database was read or
+migrated, no existing service was restarted, and application startup was not
+executed. The previous unrelated untracked `sbom_launcher_bundle/` is untouched.
+
+An operator can rerun `python3 scripts/dev.py start --verbose`. If the verified
+local database is at revision 102, the launcher retains its review/confirmation
+step (`UPGRADE sbom_greenfield_uuid 102 TO 103`), encrypted backup and restore
+verification before any write. Already-current 103 is validated read-only. Live
+Greenfield startup and its full encrypted backup/restore path remain unverified
+by this correction task; no commit, push or deployment was performed.

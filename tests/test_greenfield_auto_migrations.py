@@ -54,8 +54,52 @@ def test_actual_graph_head_is_discovered_without_historical_imports(monkeypatch)
         importlib.util, "spec_from_file_location", Mock(side_effect=AssertionError("no module imports"))
     )
     observed = graph.discover(Path(__file__).resolve().parents[1])
-    assert len(observed.revisions) == 82
-    assert observed.head == "102_public_membership_grant_analysis_uuid"
+    assert len(observed.revisions) == 83
+    assert observed.head == "103_tenant_admin_governance"
+
+
+def test_actual_governance_revision_binds_inert_startup_hooks(repository, monkeypatch):
+    import sqlalchemy as sa
+    from alembic import op
+
+    root = Path(__file__).resolve().parents[1]
+    name = "103_tenant_admin_governance.py"
+    (repository / "alembic/versions" / name).write_bytes((root / "alembic/versions" / name).read_bytes())
+    monkeypatch.setattr(op, "get_bind", Mock(side_effect=AssertionError("no database binding during import")))
+    monkeypatch.setattr(sa, "create_engine", Mock(side_effect=AssertionError("no engine during import")))
+    observed = graph.discover(repository)
+    unit = auto.select_unit(observed.revisions[-1], graph.SourceLock.capture(repository))
+    assert isinstance(unit, auto.MigrationUnit)
+    assert unit.PREVIOUS == "102_public_membership_grant_analysis_uuid"
+    assert unit.CURRENT == "103_tenant_admin_governance"
+    assert unit.CONFIRMATION == "UPGRADE sbom_greenfield_uuid 102 TO 103"
+    assert set(unit.TABLES) == {
+        "authorization_roles",
+        "authorization_permissions",
+        "authorization_role_permissions",
+    }
+    module = unit.module()
+    assert callable(module.startup_preflight)
+    assert callable(module.startup_validate)
+    assert callable(module.startup_snapshot)
+    op.get_bind.assert_not_called()
+    sa.create_engine.assert_not_called()
+
+
+def test_actual_governance_contract_is_selected_before_resource_access(repository, monkeypatch):
+    root = Path(__file__).resolve().parents[1]
+    name = "103_tenant_admin_governance.py"
+    (repository / "alembic/versions" / name).write_bytes((root / "alembic/versions" / name).read_bytes())
+    monkeypatch.setattr(common.stack, "ROOT", repository)
+    monkeypatch.setattr(common.stack, "STATE", repository / "state")
+    resource_gate = Mock(side_effect=common.SchemaUpgradeError("synthetic resource boundary"))
+    monkeypatch.setattr(common.stack, "verify_resources", resource_gate)
+    observe = Mock(side_effect=AssertionError("no database observation"))
+    monkeypatch.setattr(auto, "observe_revision", observe)
+    with pytest.raises(common.SchemaUpgradeError, match="synthetic resource boundary"):
+        auto.ensure_current()
+    resource_gate.assert_called_once_with()
+    observe.assert_not_called()
 
 
 def test_future_head_and_multi_step_path_require_no_launcher_edit(repository):
@@ -167,6 +211,53 @@ def test_future_unit_exact_target_confirmation_and_source_binding(repository):
     add_future(repository, extra=FUTURE + "\n# substitution\n")
     with pytest.raises(graph.DiscoveryError):
         unit.module()
+
+
+def test_future_snapshot_without_supplement_preserves_original_shape(repository, monkeypatch):
+    add_future(repository)
+    unit = auto.MigrationUnit(graph.discover(repository).revisions[-1], graph.SourceLock.capture(repository))
+    connection = Mock()
+    original = {"catalog": {"relations": []}, "data": {"tenant_users": [0, "synthetic-digest"]}}
+    snapshot = Mock(return_value=original)
+    monkeypatch.setattr(common, "snapshot", snapshot)
+    assert unit.snapshot(connection) == original
+    assert "migration" not in original
+    snapshot.assert_called_once_with(connection, omit_public_id_tables=())
+    connection.commit.assert_not_called()
+    connection.rollback.assert_not_called()
+
+
+def test_future_snapshot_includes_source_bound_read_only_supplement(repository, monkeypatch):
+    supplement = """
+def startup_snapshot(connection):
+    return {"catalogue": connection.info["synthetic_catalogue"]}
+"""
+    add_future(repository, extra=FUTURE + supplement)
+    unit = auto.MigrationUnit(graph.discover(repository).revisions[-1], graph.SourceLock.capture(repository))
+    connection = Mock(info={"synthetic_catalogue": {"role_version": 4}})
+    original = {"catalog": {"relations": []}, "data": {"tenant_users": [0, "synthetic-digest"]}}
+    monkeypatch.setattr(common, "snapshot", Mock(return_value=original.copy()))
+    assert unit.snapshot(connection) == {
+        **original,
+        "migration": {"catalogue": {"role_version": 4}},
+    }
+    assert "migration" not in original
+    connection.commit.assert_not_called()
+    connection.rollback.assert_not_called()
+    connection.exec_driver_sql.assert_not_called()
+
+    add_future(repository, extra=FUTURE + supplement + "\n# changed after snapshot capture\n")
+    with pytest.raises(graph.DiscoveryError, match="changed after review"):
+        unit.snapshot(connection)
+
+
+@pytest.mark.parametrize("value", ["None", "[]", "True", "'not a dictionary'"])
+def test_future_snapshot_rejects_invalid_supplement(repository, monkeypatch, value):
+    add_future(repository, extra=FUTURE + f"\ndef startup_snapshot(connection):\n    return {value}\n")
+    unit = auto.MigrationUnit(graph.discover(repository).revisions[-1], graph.SourceLock.capture(repository))
+    monkeypatch.setattr(common, "snapshot", Mock(return_value={"catalog": {}, "data": {}}))
+    with pytest.raises(common.SchemaUpgradeError):
+        unit.snapshot(Mock())
 
 
 @pytest.fixture
