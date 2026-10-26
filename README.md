@@ -2,7 +2,7 @@
 
 SBOM Analyser is a FastAPI and Next.js platform for importing, validating, normalizing, analysing, and managing software bills of materials. It combines SBOM inventory, multi-source vulnerability analysis, CISA Known Exploited Vulnerabilities (KEV), lifecycle intelligence, VEX, remediation, reporting, tenant isolation, and role-based access control in one application.
 
-The current application version is `2.0.0`. The current Alembic schema head is `079_lifecycle_provider_verification`.
+The current application version is `2.0.0`. The current Alembic schema head is `103_tenant_admin_governance`.
 
 ## Highlights
 
@@ -401,6 +401,12 @@ Recent schema work:
 | `042`-`043` | Wider vulnerability evidence and match-reason fields. |
 | `044` | Canonical CISA KEV vulnerabilities table and metadata. |
 | `054` | Hierarchical Project/Product/SBOM scheduling, explicit current SBOMs, and target policies. |
+| `100` | Greenfield UUID finalization. |
+| `101` | IAM user public UUID. |
+| `102` | Public membership and grant analysis UUID. |
+| `103` | Restricted tenant administrator governance permission. |
+
+This table highlights selected revisions, not every migration. Run `python -m alembic heads` to verify the head in the checked-out codebase.
 
 ## Background workers
 
