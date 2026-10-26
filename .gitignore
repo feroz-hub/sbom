@@ -66,6 +66,9 @@ logs/
 celerybeat-schedule*
 celerybeat.pid
 
+# ── SBOM upload workspaces (runtime data, regenerated) ──
+data/sbom-workspaces/
+
 # ── IDE / editor ─────────────────────────────────────────
 .vscode/
 .idea/
