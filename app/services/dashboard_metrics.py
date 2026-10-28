@@ -373,14 +373,10 @@ _lifetime_cache: dict[tuple, tuple[float, LifetimeMetrics]] = {}
 _lifetime_cache_lock = threading.Lock()
 
 
-def _lifetime_cache_key(db: Session) -> tuple[int, int, int]:
-    """Cheap invalidation key: any new run, new SBOM, or status change moves
-    one of the three. All three are O(1) with the existing indices.
-    """
-    max_run_id = db.execute(select(func.max(AnalysisRun.id))).scalar() or 0
-    run_count = db.execute(select(func.count(AnalysisRun.id))).scalar() or 0
-    sbom_count = db.execute(select(func.count(SBOMSource.id))).scalar() or 0
-    return (int(max_run_id), int(run_count), int(sbom_count))
+def _lifetime_cache_key(db: Session) -> tuple[int, ...]:
+    """Share current-data and lifecycle revision invalidation across cache pools."""
+    from ..metrics.cache import invalidation_key
+    return invalidation_key(db)
 
 
 def compute_lifetime_metrics(db: Session) -> LifetimeMetrics:

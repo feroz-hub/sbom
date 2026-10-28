@@ -1,0 +1,50 @@
+[
+  {
+    "id": "R3-UI-UPLOAD-READBACK",
+    "role": "admin",
+    "stepsExecuted": "Resolve owned product latest upload through API after actual202 form response; open UUID detail",
+    "expected": "Correct public UUID, project/application lineage and rendered owned name",
+    "actual": {
+      "productStatus": 200,
+      "sbom_id": "8ee6a759-eb0e-407f-94bc-ddf9e89a8878",
+      "project_id": "1649eec9-c695-4a95-af6d-01db245b06cd",
+      "path": "/sboms/8ee6a759-eb0e-407f-94bc-ddf9e89a8878"
+    },
+    "result": "PASS"
+  },
+  {
+    "id": "R3-UI-COMPONENT-READ",
+    "role": "admin",
+    "stepsExecuted": "Open Components List in newly uploaded detail",
+    "expected": "Uploaded lodash component visible",
+    "actual": {
+      "component": "lodash\nNormalized lodash 4.17.20\n\t4.17.20\t\nlibrary\nNPM\n\tNone\tUnknown\nnpm registry · Low\nUpgrade 4.18.1\n\tUnknown / Not Available\t\nEvidence\nRefresh\nManage VEX\nEdit"
+    },
+    "result": "PASS"
+  },
+  {
+    "id": "R3-UI-NATIVE-DOWNLOAD",
+    "role": "admin",
+    "stepsExecuted": "Click actual Export CycloneDX link; save and parse download",
+    "expected": "CycloneDX1.6 with owned lodash content",
+    "actual": {
+      "filename": "UAT R3 Browser 1792490385837 SBOM.cdx.json",
+      "format": "CycloneDX",
+      "specVersion": "1.6",
+      "components": 1
+    },
+    "result": "PASS"
+  },
+  {
+    "id": "R3-UI-REPORT-DOWNLOAD",
+    "role": "admin",
+    "stepsExecuted": "On previously analyzed task-owned scope, click Export Vulnerability Excel and save actual browser download",
+    "expected": "XLSX file header and nonempty artifact",
+    "actual": {
+      "filename": "sbom-29-vulnerability-report.xlsx",
+      "bytes": 6108,
+      "header": "PK"
+    },
+    "result": "PASS"
+  }
+]

@@ -270,4 +270,19 @@ class NvdEnrichmentService:
         if summary["failures"] or breaker.open:
             summary["status"] = "degraded"
         self.db.commit()
-        return {"records": output, "provider_status": summary}
+        # Cache intelligence once, then associate it with each authorized input.
+        expanded = []
+        for record in output:
+            identifier = record["identifier"]
+            if identifier.upper().startswith("CVE-"):
+                origins = [v for v in vulnerabilities or [] if identifier.upper() in
+                           {str(value).upper() for value in _iter_cve_values(v)}]
+                matches = [c for c in components if any(
+                    (v.get("component_id") is not None and v.get("component_id") == c.get("component_id"))
+                    or (v.get("purl") and v.get("purl") == c.get("purl") and v.get("component_version") == c.get("version"))
+                    for v in origins)]
+            else:
+                matches = [c for c in components if c.get("cpe") == identifier
+                           and is_trusted_cpe(identifier, c.get("cpe_source"))]
+            expanded.extend({**record, "component": c} for c in matches or [record.get("component") or {}])
+        return {"records": expanded, "provider_status": summary}

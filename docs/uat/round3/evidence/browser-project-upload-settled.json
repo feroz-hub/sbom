@@ -1,0 +1,17 @@
+[
+  {
+    "id": "R3-UI-PROJECT-UPLOAD-EXECUTION",
+    "role": "admin",
+    "stepsExecuted": "Execute actual UI creation/upload workflow",
+    "expected": "Complete workflow",
+    "actual": {
+      "error": "locator.click: Timeout 20000ms exceeded.\nCall log:\n\u001b[2m  - waiting for getByRole('button', { name: 'New Project', exact: true })\u001b[22m\n\u001b[2m    - waiting for \"https://localhost:13000/native-sign-in\" navigation to finish...\u001b[22m\n\u001b[2m    - navigated to \"https://localhost:13000/native-sign-in\"\u001b[22m\n",
+      "path": "/native-sign-in",
+      "headings": [
+        "Secure yoursoftware supply chain.",
+        "Welcome back"
+      ]
+    },
+    "result": "FAIL"
+  }
+]

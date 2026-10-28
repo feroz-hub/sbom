@@ -1,0 +1,37 @@
+[
+  {
+    "name": "first_name",
+    "type": "text"
+  },
+  {
+    "name": "last_name",
+    "type": "text"
+  },
+  {
+    "name": "email",
+    "type": "email"
+  },
+  {
+    "name": "phone",
+    "type": "tel"
+  },
+  {
+    "name": "",
+    "type": "text"
+  },
+  {
+    "name": "role_codes",
+    "type": "checkbox",
+    "value": "SECURITY_ANALYST"
+  },
+  {
+    "name": "role_codes",
+    "type": "checkbox",
+    "value": "DEVELOPER"
+  },
+  {
+    "name": "role_codes",
+    "type": "checkbox",
+    "value": "VIEWER"
+  }
+]

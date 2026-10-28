@@ -24,7 +24,7 @@ export async function POST(request: NextRequest) {
     const config = serverAuthConfig();
     const discovery = await getDiscovery(config);
     const session = await exchangeCode(body.code, transaction.verifier, transaction.nonce, config, discovery);
-    const sessionId = createSession(session);
+    const sessionId = await createSession(session);
     const response = NextResponse.json({ returnTo: transaction.returnTo });
     response.cookies.set(SESSION_COOKIE, sessionId, {
       httpOnly: true, secure: true, sameSite: 'lax', path: '/', maxAge: 24 * 60 * 60,

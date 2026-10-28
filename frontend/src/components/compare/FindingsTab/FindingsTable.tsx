@@ -8,7 +8,7 @@ import { FindingRowAdvanced } from '../FindingRow/FindingRowAdvanced';
 
 interface Props {
   rows: FindingDiffRow[];
-  scanId?: number | null;
+  scanId?: string | null;
   scanName?: string | null;
 }
 

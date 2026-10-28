@@ -1,0 +1,450 @@
+'use client';
+
+import { useAnalysisScope } from '@/hooks/useAnalysisScope';
+import { addPendingAnalysis } from '@/lib/pendingAnalysis';
+import { invalidateScheduleLists, invalidateAnalysisSubmission } from '@/lib/queryInvalidation';
+import { PermissionButton } from '@/components/ui/PermissionButton';
+
+import { useState } from 'react';
+import { useMutation, useQuery, useQueryClient } from '@tanstack/react-query';
+import { Ban, CalendarClock, Pause, Pencil, Play, RotateCcw, Trash2, Zap } from 'lucide-react';
+import { Card, CardHeader, CardTitle, CardContent } from '@/components/ui/Card';
+import { PermissionButton as Button } from '@/components/ui/PermissionButton';
+import { Badge } from '@/components/ui/Badge';
+import { DeleteConfirmDialog } from '@/components/ui/DeleteConfirmDialog';
+import {
+  deleteProjectSchedule,
+  deleteProductSchedule,
+  deleteSbomSchedule,
+  excludeFromParentSchedule,
+  getEffectiveProductSchedule,
+  getProjectSchedule,
+  getSbomSchedule,
+  pauseSchedule,
+  previewScheduleTargets,
+  restoreScheduleInheritance,
+  resumeSchedule,
+  runScheduleNow,
+} from '@/lib/api';
+import { useToast } from '@/hooks/useToast';
+import { getApiErrorMessage } from '@/lib/notifications';
+import { formatRelative } from '@/lib/utils';
+import { HttpError } from '@/lib/api';
+import { ScheduleEditor } from './ScheduleEditor';
+import type { AnalysisSchedule, SbomScheduleResolved, ScheduleCadence } from '@/types';
+
+/**
+ * Schedule summary card shared by Project, Product, and SBOM surfaces.
+ *
+ * - Project scope: GET /api/projects/{id}/schedule. 404 = no schedule.
+ * - Product/SBOM scopes return an effective result so the card can explain
+ *   inheritance, custom overrides, pauses, and exclusions consistently.
+ */
+
+interface ScheduleCardProps {
+  scope: 'PROJECT' | 'PRODUCT' | 'SBOM';
+  targetId: (string | number);
+  processingReason?: string | null;
+}
+
+const cadenceLabel = (s: AnalysisSchedule): string => {
+  const hour = `${String(s.hour_utc).padStart(2, '0')}:00 UTC`;
+  switch (s.cadence) {
+    case 'DAILY':
+      return `Daily at ${hour}`;
+    case 'WEEKLY': {
+      const day = WEEKDAYS[s.day_of_week ?? 0] ?? '?';
+      return `Weekly on ${day} at ${hour}`;
+    }
+    case 'BIWEEKLY': {
+      const day = WEEKDAYS[s.day_of_week ?? 0] ?? '?';
+      return `Bi-weekly on ${day} at ${hour}`;
+    }
+    case 'MONTHLY':
+      return `Monthly on day ${s.day_of_month ?? '?'} at ${hour}`;
+    case 'QUARTERLY':
+      return `Quarterly on day ${s.day_of_month ?? '?'} at ${hour}`;
+    case 'CUSTOM':
+      return `Custom: ${s.cron_expression ?? '—'}`;
+  }
+};
+
+const WEEKDAYS = ['Monday', 'Tuesday', 'Wednesday', 'Thursday', 'Friday', 'Saturday', 'Sunday'];
+
+const CADENCE_BADGE: Record<ScheduleCadence, string> = {
+  DAILY: 'bg-blue-50 text-blue-700 border-blue-200',
+  WEEKLY: 'bg-emerald-50 text-emerald-700 border-emerald-200',
+  BIWEEKLY: 'bg-emerald-50 text-emerald-700 border-emerald-200',
+  MONTHLY: 'bg-amber-50 text-amber-700 border-amber-200',
+  QUARTERLY: 'bg-amber-50 text-amber-700 border-amber-200',
+  CUSTOM: 'bg-purple-50 text-purple-700 border-purple-200',
+};
+
+export function ScheduleCard({ scope, targetId, processingReason }: ScheduleCardProps) {
+  const queryClient = useQueryClient();
+  const analysisScope = useAnalysisScope();
+  const { showToast } = useToast();
+  const [showEditor, setShowEditor] = useState(false);
+  const [confirmDelete, setConfirmDelete] = useState(false);
+
+  const queryKey = ['schedule', scope, targetId];
+
+  const query = useQuery<SbomScheduleResolved>({
+    queryKey,
+    queryFn: ({ signal }) =>
+      scope === 'PROJECT'
+        ? getProjectSchedule(targetId, signal).then((s) => ({
+            inherited: false,
+            schedule: s,
+            state: s.enabled ? 'CUSTOM' : 'PAUSED',
+            source_scope: 'PROJECT',
+            resolution_reason: s.enabled ? 'custom' : 'paused',
+            included: s.enabled,
+          }))
+        : scope === 'PRODUCT'
+          ? getEffectiveProductSchedule(targetId, signal)
+          : getSbomSchedule(targetId, signal),
+    // 404 from GET /api/projects/{id}/schedule means "no schedule" — render
+    // the empty state instead of an error toast. Other errors still surface.
+    retry: (failureCount, err) =>
+      err instanceof HttpError && err.status === 404 ? false : failureCount < 2,
+  });
+
+  const invalidate = () => invalidateScheduleLists(queryClient);
+
+  const pauseMutation = useMutation({
+    mutationFn: (id: number) => pauseSchedule(id),
+    onSuccess: () => {
+      showToast('Schedule paused', 'success');
+      return invalidate();
+    },
+    onError: (error: unknown) => showToast(getApiErrorMessage(error, 'Schedule pause failed.'), 'error'),
+  });
+
+  const resumeMutation = useMutation({
+    mutationFn: (id: number) => resumeSchedule(id),
+    onSuccess: () => {
+      showToast('Schedule resumed', 'success');
+      return invalidate();
+    },
+    onError: (error: unknown) => showToast(getApiErrorMessage(error, 'Schedule resume failed.'), 'error'),
+  });
+
+  const runNowMutation = useMutation({
+    onMutate: () => ({ isCurrent: analysisScope.capture(), scopeKey: analysisScope.key }),
+    mutationFn: (id: number) => {
+      if (processingReason) throw new Error(processingReason);
+      return runScheduleNow(id);
+    },
+    onSuccess: (res, _variables, context) => {
+      if (!context?.isCurrent()) return;
+      for (const id of res.sbom_ids) addPendingAnalysis(id, `SBOM #${id}`, context.scopeKey);
+      showToast(
+        `Enqueued ${res.sbom_ids.length} SBOM analysis${res.sbom_ids.length === 1 ? '' : 'es'}`,
+        'success',
+      );
+      return invalidateAnalysisSubmission(queryClient);
+    },
+    onError: (error: unknown) => showToast(getApiErrorMessage(error, 'The scheduled analysis could not be queued.'), 'error'),
+  });
+
+  const deleteMutation = useMutation({
+    mutationFn: ({ permanent }: { permanent: boolean }) =>
+      scope === 'PROJECT'
+        ? deleteProjectSchedule(targetId, { permanent })
+        : scope === 'PRODUCT'
+          ? deleteProductSchedule(targetId, { permanent })
+          : deleteSbomSchedule(targetId, { permanent }),
+    onSuccess: (_data, { permanent }) => {
+      const noun = scope === 'PROJECT' ? 'Schedule' : 'Override';
+      showToast(
+        permanent ? `${noun} permanently removed` : `${noun} removed`,
+        'success',
+      );
+      setConfirmDelete(false);
+      return invalidate();
+    },
+    onError: (error: unknown) => showToast(getApiErrorMessage(error, 'Schedule deletion failed.'), 'error'),
+  });
+
+  const excludeMutation = useMutation({
+    mutationFn: () => excludeFromParentSchedule(scope as 'PRODUCT' | 'SBOM', targetId),
+    onSuccess: () => {
+      showToast(`${scope === 'PRODUCT' ? 'Product' : 'SBOM'} excluded from parent schedules`, 'success');
+      return invalidate();
+    },
+    onError: (error: unknown) => showToast(getApiErrorMessage(error, 'Schedule exclusion failed.'), 'error'),
+  });
+
+  const inheritMutation = useMutation({
+    mutationFn: () => restoreScheduleInheritance(scope as 'PRODUCT' | 'SBOM', targetId),
+    onSuccess: () => {
+      showToast('Parent schedule inheritance restored', 'success');
+      return invalidate();
+    },
+    onError: (error: unknown) => showToast(getApiErrorMessage(error, 'Could not restore inheritance.'), 'error'),
+  });
+
+  // Empty state — no project schedule, or no SBOM override AND no parent cascade.
+  const noScheduleAtAll =
+    !query.isLoading &&
+    !query.error &&
+    (!query.data?.schedule || (scope === 'PROJECT' && query.data.schedule === null));
+
+  const scheduleId = query.data?.schedule?.id;
+  const previewQuery = useQuery({
+    queryKey: ['schedule-targets', scheduleId],
+    queryFn: ({ signal }) => previewScheduleTargets(scheduleId!, signal),
+    enabled: scheduleId != null,
+  });
+
+  if (query.isLoading) {
+    return (
+      <Card>
+        <CardHeader>
+          <CardTitle className="flex items-center gap-2">
+            <CalendarClock className="h-4 w-4" /> Periodic analysis
+          </CardTitle>
+        </CardHeader>
+        <CardContent>
+          <p className="text-sm text-hcl-muted">Loading…</p>
+        </CardContent>
+      </Card>
+    );
+  }
+
+  if (query.error && !(query.error instanceof HttpError && query.error.status === 404)) {
+    return (
+      <Card>
+        <CardHeader>
+          <CardTitle className="flex items-center gap-2">
+            <CalendarClock className="h-4 w-4" /> Periodic analysis
+          </CardTitle>
+        </CardHeader>
+        <CardContent>
+          <p className="text-sm text-red-600">Could not load schedule: {query.error.message}</p>
+        </CardContent>
+      </Card>
+    );
+  }
+
+  // Project: 404 / no row → empty state. SBOM: schedule===null → empty state.
+  const is404 = query.error instanceof HttpError && query.error.status === 404;
+  if (is404 || noScheduleAtAll) {
+    return (
+      <>
+        <Card>
+          <CardHeader className="flex flex-row items-center justify-between">
+            <CardTitle className="flex items-center gap-2">
+              <CalendarClock className="h-4 w-4" /> Periodic analysis
+            </CardTitle>
+            <Button permission={["schedule:write","product:manage_schedule"]} size="sm" onClick={() => setShowEditor(true)}>
+              <Pencil className="h-4 w-4" /> Set up schedule
+            </Button>
+          </CardHeader>
+          <CardContent>
+            <p className="text-sm text-hcl-muted">
+              {scope === 'PROJECT'
+                ? 'No schedule. Products in this project are only analyzed on manual runs.'
+                : scope === 'PRODUCT'
+                  ? 'No schedule (own or inherited). This product is only analyzed on manual runs.'
+                  : 'No schedule (own or inherited). This SBOM is only analyzed on manual runs.'}
+            </p>
+          </CardContent>
+        </Card>
+        <ScheduleEditor
+          open={showEditor}
+          onClose={() => setShowEditor(false)}
+          scope={scope}
+          targetId={targetId}
+        />
+      </>
+    );
+  }
+
+  const sched = query.data!.schedule!;
+  const inherited = scope !== 'PROJECT' && (query.data!.inherited === true);
+  const state = query.data!.state ?? sched.state;
+  const excluded = state === 'EXCLUDED' || sched.mode === 'EXCLUDED';
+
+  const previewTargets = (previewQuery.data?.targets ?? []).filter((target) =>
+    scope === 'PRODUCT' ? target.product_id === targetId : scope === 'SBOM' ? target.sbom_id === targetId : true,
+  );
+
+  return (
+    <>
+      <Card>
+        <CardHeader className="flex flex-row items-center justify-between">
+          <CardTitle className="flex flex-wrap items-center gap-2">
+            <CalendarClock className="h-4 w-4" />
+            <span>Periodic analysis</span>
+            <span
+              className={`inline-flex items-center px-2 py-0.5 rounded-md text-xs font-medium border ${CADENCE_BADGE[sched.cadence]}`}
+            >
+              {sched.cadence.toLowerCase()}
+            </span>
+            {inherited && (
+              <span title={`Following the ${sched.scope.toLowerCase()} cascade. Create an override to use a target-specific schedule.`}>
+                <Badge variant="gray">inherited from {sched.scope.toLowerCase()}</Badge>
+              </span>
+            )}
+            {excluded && <Badge variant="gray">excluded</Badge>}
+            {!excluded && !sched.enabled && <Badge variant="gray">paused</Badge>}
+          </CardTitle>
+          <div className="flex items-center gap-2">
+            <Button permission={["schedule:write","product:manage_schedule"]} size="sm" variant="secondary" onClick={() => setShowEditor(true)}>
+              <Pencil className="h-4 w-4" />
+              {inherited || excluded ? 'Create override' : 'Edit'}
+            </Button>
+            {(scope === 'PRODUCT' || scope === 'SBOM') && inherited && (
+              <Button permission={["schedule:write","product:manage_schedule"]}
+                size="sm"
+                variant="secondary"
+                loading={excludeMutation.isPending}
+                onClick={() => excludeMutation.mutate()}
+              >
+                <Ban className="h-4 w-4" /> Exclude
+              </Button>
+            )}
+            {(scope === 'PRODUCT' || scope === 'SBOM') && excluded && (
+              <Button permission={["schedule:write","product:manage_schedule"]}
+                size="sm"
+                variant="secondary"
+                loading={inheritMutation.isPending}
+                onClick={() => inheritMutation.mutate()}
+              >
+                <RotateCcw className="h-4 w-4" /> Restore inheritance
+              </Button>
+            )}
+            {!inherited && !excluded && (
+              <>
+                {sched.enabled ? (
+                  <Button permission={["schedule:write","product:manage_schedule"]}
+                    size="sm"
+                    variant="secondary"
+                    loading={pauseMutation.isPending}
+                    onClick={() => pauseMutation.mutate(sched.id)}
+                  >
+                    <Pause className="h-4 w-4" /> Pause
+                  </Button>
+                ) : (
+                  <Button permission={["schedule:write","product:manage_schedule"]}
+                    size="sm"
+                    variant="secondary"
+                    loading={resumeMutation.isPending}
+                    onClick={() => resumeMutation.mutate(sched.id)}
+                  >
+                    <Play className="h-4 w-4" /> Resume
+                  </Button>
+                )}
+                <Button permission={["schedule:write","product:manage_schedule"]}
+                  size="sm"
+                  variant="secondary"
+                  loading={runNowMutation.isPending}
+                  disabled={Boolean(processingReason)}
+                  onClick={() => runNowMutation.mutate(sched.id)}
+                  title={processingReason || "Trigger an analysis immediately. The cadence cursor is unchanged."}
+                >
+                  <Zap className="h-4 w-4" /> Run now
+                </Button>
+                <PermissionButton size="sm" variant="ghost" permission={["schedule:write","product:manage_schedule"]}
+                  onClick={() => setConfirmDelete(true)}
+                  className="rounded-lg p-1.5 text-hcl-muted transition-colors hover:bg-red-50 hover:text-red-600 dark:hover:bg-red-950/40"
+                  aria-label={scope === 'PROJECT' ? 'Remove schedule' : 'Remove override'}
+                >
+                  <Trash2 className="h-4 w-4" />
+                </PermissionButton>
+              </>
+            )}
+          </div>
+        </CardHeader>
+        <CardContent>
+          <dl className="grid grid-cols-2 md:grid-cols-4 gap-4">
+            <Field label="Cadence" value={cadenceLabel(sched)} />
+            <Field
+              label="Next run"
+              value={
+                sched.enabled && sched.next_run_at
+                  ? `${formatRelative(sched.next_run_at)} · ${sched.next_run_at}`
+                  : 'paused'
+              }
+            />
+            <Field
+              label="Last run"
+              value={
+                sched.last_run_at
+                  ? `${formatRelative(sched.last_run_at)} · ${sched.last_run_status ?? '—'}`
+                  : 'never'
+              }
+            />
+            <Field
+              label="Skip recent runs"
+              value={`if a run completed in the last ${sched.min_gap_minutes} min`}
+            />
+            {scope !== 'SBOM' && (
+              <Field
+                label="Target policy"
+                value={sched.target_version_policy === 'ALL_ACTIVE_VERSIONS' ? 'All active versions' : 'Current SBOM only'}
+              />
+            )}
+            <Field label="Schedule source" value={inherited ? `Inherited from ${sched.scope.toLowerCase()}` : state.toLowerCase()} />
+          </dl>
+          <div className="mt-4 border-t border-hcl-border pt-3">
+            <p className="text-xs font-medium uppercase tracking-wide text-hcl-muted">Target preview</p>
+            {previewQuery.isLoading ? (
+              <p className="mt-1 text-sm text-hcl-muted">Loading targets…</p>
+            ) : previewQuery.error ? (
+              <p className="mt-1 text-sm text-red-600">Target preview could not be loaded.</p>
+            ) : (
+              <div className="mt-2 space-y-1 text-sm">
+                <p className="text-hcl-navy">
+                  {previewTargets.filter((target) => target.included).length} included ·{' '}
+                  {previewTargets.filter((target) => !target.included).length} skipped
+                </p>
+                {previewTargets.slice(0, 8).map((target, index) => (
+                  <p key={`${target.sbom_id ?? 'product'}-${index}`} className={target.included ? 'text-hcl-navy' : 'text-hcl-muted'}>
+                    {target.product_name ?? 'Product'} / {target.sbom_name ?? 'No current SBOM'}
+                    {target.sbom_version ? ` ${target.sbom_version}` : ''} — {target.resolution.replaceAll('_', ' ').toLowerCase()}
+                  </p>
+                ))}
+              </div>
+            )}
+          </div>
+        </CardContent>
+      </Card>
+
+      <ScheduleEditor
+        open={showEditor}
+        onClose={() => setShowEditor(false)}
+        scope={scope}
+        targetId={targetId}
+        // For "inherited" SBOM cards, opening the editor creates a NEW
+        // SBOM-level override — we do NOT pass the project's row as the
+        // "existing" record, since editing it would mutate the project
+        // schedule from inside the SBOM page (surprising).
+        existing={inherited || excluded ? null : sched}
+      />
+
+      <DeleteConfirmDialog
+        open={confirmDelete}
+        onClose={() => setConfirmDelete(false)}
+        onConfirm={({ permanent }) => deleteMutation.mutate({ permanent })}
+        loading={deleteMutation.isPending}
+        recordName={cadenceLabel(sched as AnalysisSchedule)}
+        recordKind={`${scope.toLowerCase()} schedule override`}
+        title={scope === 'PROJECT' ? 'Remove schedule?' : `Restore ${scope.toLowerCase()} inheritance?`}
+        // Schedules have no children — pre-flight impact is empty.
+        cascadeImpact={[]}
+      />
+    </>
+  );
+}
+
+function Field({ label, value }: { label: string; value: string }) {
+  return (
+    <div>
+      <dt className="text-xs font-medium text-hcl-muted uppercase tracking-wide">{label}</dt>
+      <dd className="mt-1 text-sm font-medium text-hcl-navy break-words">{value}</dd>
+    </div>
+  );
+}

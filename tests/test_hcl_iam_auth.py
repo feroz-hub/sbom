@@ -607,7 +607,7 @@ class TestPrincipalTenantResolution:
             assert db.execute(select(TenantUser).where(TenantUser.user_id == user.id)).scalars().all() == []
             assert db.execute(select(PlatformUserRole).where(PlatformUserRole.user_id == user.id)).scalars().all() == []
 
-    def test_active_database_platform_grant_allows_explicit_tenant_selection(self, monkeypatch):
+    def test_platform_grant_requires_membership_for_tenant_selection(self, monkeypatch):
         from datetime import UTC, datetime
         from uuid import uuid4
 
@@ -637,15 +637,11 @@ class TestPrincipalTenantResolution:
             db.flush()
             db.add(PlatformUserRole(user_id=user.id, role="PLATFORM_ADMIN", status="ACTIVE", created_at=now, updated_at=now))
             db.commit()
-            context = _resolve_context(
-                db,
-                _identity_claims(
-                    user.external_iam_user_id,
-                    tenant=tenant.external_iam_tenant_id,
-                    roles=["VIEWER"],
-                ),
-                str(tenant.id),
-            )
+            with pytest.raises(HTTPException) as denied:
+                _resolve_context(db, _identity_claims(user.external_iam_user_id, roles=["VIEWER"]), str(tenant.id))
+            assert denied.value.status_code == 403
+            assert denied.value.detail["code"] == "IAM_UNAUTHORIZED_TENANT"
+            context = _resolve_context(db, _identity_claims(user.external_iam_user_id, roles=["VIEWER"]), None, allow_platform_context=True)
             assert context.is_platform_admin
-            assert context.tenant_id == tenant.id
+            assert context.tenant_id is None
             assert context.has_permission("platform:admin")

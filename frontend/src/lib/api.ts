@@ -3,6 +3,7 @@ import type {
   VexInvestigationDecision,
   VexInvestigationListParams,
   VexInvestigationListResponse,
+  VexInvestigationSummary,
   Project,
   Product,
   ProductListResponse,
@@ -207,8 +208,8 @@ export type TenantRole = 'TENANT_ADMIN' | 'SECURITY_ANALYST' | 'DEVELOPER' | 'VI
 export type MembershipStatus = 'ACTIVE' | 'PENDING' | 'DISABLED';
 
 export interface TenantMember {
-  membership_id: number;
-  user_id: number;
+  membership_id: string;
+  user_id: string;
   external_iam_user_id: string;
   email: string | null;
   display_name: string | null;
@@ -222,8 +223,8 @@ export interface TenantMember {
 }
 
 export interface PlatformAdministrator {
-  grant_id: number;
-  user_id: number;
+  grant_id: string;
+  user_id: string;
   email: string | null;
   display_name: string | null;
   local_status: string;
@@ -236,7 +237,8 @@ export interface PlatformAdministrator {
 }
 
 export interface UserSearchResult {
-  id: number;
+  providers?: string[];
+  id: string;
   email: string | null;
   display_name: string | null;
   username?: string | null;
@@ -247,14 +249,14 @@ export interface UserSearchResult {
   external_subject?: string | null;
   is_platform_admin?: boolean;
   tenant_membership?: {
-    tenant_id: number;
+    tenant_id: (string | number);
     tenant_name?: string | null;
     status: string;
     role: string;
     roles?: string[];
   } | null;
   tenant_memberships?: Array<{
-    tenant_id: number;
+    tenant_id: (string | number);
     tenant_name?: string | null;
     status: string;
     role: string;
@@ -275,12 +277,16 @@ export interface TenantSummary {
   updated_at?: string;
   member_count?: number;
   initial_administrator?: {
-    user_id: number;
+    user_id: string;
     display_name: string | null;
     email: string | null;
   } | null;
   current_administrators?: Array<{
-    user_id: number;
+    user_id: string;
+    membership_id?: string;
+    role_assignment_version?: number;
+    primary_role?: string;
+    roles?: string[];
     display_name: string | null;
     email: string | null;
   }>;
@@ -289,7 +295,8 @@ export interface TenantSummary {
 export interface CreateTenantRequest {
   name: string;
   slug: string;
-  initial_admin_user_id: number;
+  initial_admin_user_id?: string;
+  initial_admin_invitation?: { first_name: string; last_name: string; email: string; phone?: string };
 }
 
 // ─── Fetch with timeout + caller-signal support ───────────────────────────────
@@ -341,6 +348,7 @@ async function performRequest(
   const headers = new Headers(isFormData ? undefined : { 'Content-Type': 'application/json' });
   for (const [name, value] of Object.entries(authHeaders)) headers.set(name, value);
   new Headers(fetchOptions.headers).forEach((value, name) => headers.set(name, value));
+  if (path.startsWith('/api/platform/')) headers.delete('X-Tenant-ID');
   const res = await fetchWithTimeout(
     url,
     {
@@ -441,12 +449,12 @@ export async function requestVoid(
 }
 
 const adminRequestOptions = { authErrorMode: 'throw' as const };
-const tenantRequestOptions = (tenantId: number) => ({
+const tenantRequestOptions = (tenantId: (string | number)) => ({
   ...adminRequestOptions,
   headers: { 'X-Tenant-ID': String(tenantId) },
 });
 
-export async function getTenantMembers(tenantId: number): Promise<TenantMember[]> {
+export async function getTenantMembers(tenantId: (string | number)): Promise<TenantMember[]> {
   const res = await request<TenantMember[] | { items: TenantMember[] }>(
     `/api/tenants/${tenantId}/users`,
     tenantRequestOptions(tenantId),
@@ -454,7 +462,7 @@ export async function getTenantMembers(tenantId: number): Promise<TenantMember[]
   return Array.isArray(res) ? res : res?.items ?? [];
 }
 
-export async function getAssignableTenantRoles(tenantId?: number): Promise<{ roles: RoleValue[] }> {
+export async function getAssignableTenantRoles(tenantId?: (string | number)): Promise<{ roles: RoleValue[] }> {
   const res = await request<{ roles: RoleValue[] } | RoleValue[]>(
     '/api/tenant-roles',
     tenantId ? tenantRequestOptions(tenantId) : adminRequestOptions,
@@ -464,8 +472,8 @@ export async function getAssignableTenantRoles(tenantId?: number): Promise<{ rol
 }
 
 export function addTenantMember(
-  tenantId: number,
-  payload: { user_id: number; roles: TenantRole[]; status?: MembershipStatus },
+  tenantId: (string | number),
+  payload: { user_id: string; roles: TenantRole[]; status?: MembershipStatus },
 ): Promise<TenantMember> {
   const roleCodes = payload.roles.map(getRoleCode);
   return request<TenantMember>(`/api/tenants/${tenantId}/users`, {
@@ -476,8 +484,8 @@ export function addTenantMember(
 }
 
 export interface TenantRoleState {
-  membership_id: number;
-  user_id: number;
+  membership_id: string;
+  user_id: string;
   membership_status: MembershipStatus;
   role_assignment_version: number;
   primary_role: string;
@@ -492,12 +500,14 @@ export interface TenantRoleState {
 }
 
 export interface TenantAuditEvent {
+  label?: string;
+  category?: string;
   id: number;
   action: string;
   outcome: string;
-  actor_user_id: number | null;
+  actor_user_id: string | null;
   actor_email: string | null;
-  target_user_id: number | null;
+  target_user_id: string | null;
   target_email: string | null;
   old_state: Record<string, unknown> | null;
   new_state: Record<string, unknown> | null;
@@ -506,18 +516,45 @@ export interface TenantAuditEvent {
 }
 
 export async function getTenantAuditHistory(
-  tenantId: number,
+  tenantId: (string | number),
 ): Promise<TenantAuditEvent[]> {
   const response = await request<{ items: TenantAuditEvent[] }>(
-    `/api/tenants/${tenantId}/audit-history`,
+    `/api/tenants/${tenantId}/audit-history?page=1&page_size=5&administrative_only=true`,
     tenantRequestOptions(tenantId),
   );
   return response.items ?? [];
 }
 
+export interface TenantAuditPage {
+  items: TenantAuditEvent[]; page: number; page_size: number; total: number; total_pages: number;
+}
+
+export function getTenantAuditPage(tenantId: (string | number), filters: {
+  page: number; page_size: number; q?: string; category?: string; outcome?: string;
+  from_time?: string; to_time?: string;
+}): Promise<TenantAuditPage> {
+  const params = new URLSearchParams();
+  Object.entries(filters).forEach(([key, value]) => { if (value !== '' && value !== undefined) params.set(key, String(value)); });
+  return request(`/api/tenants/${tenantId}/audit-history?${params}`, tenantRequestOptions(tenantId));
+}
+
+export function getPlatformSummary(): Promise<Record<string, number>> {
+  return request('/api/platform/summary', adminRequestOptions);
+}
+
+export async function searchPlatformTenantAdminCandidates(query: string): Promise<UserSearchResult[]> {
+  if (query.trim().length < 2) return [];
+  const result = await request<{ items: UserSearchResult[] }>(`/api/platform/tenant-admin-candidates?q=${encodeURIComponent(query.trim())}`, adminRequestOptions);
+  return result.items;
+}
+
+export function recoverPlatformTenantAdmin(tenantId: (string | number), userId: string) {
+  return request(`/api/platform/tenants/${tenantId}/recover-admin`, { ...adminRequestOptions, method: 'POST', body: JSON.stringify({ user_id: userId }) });
+}
+
 export function replaceTenantMemberRoles(
-  tenantId: number,
-  userId: number,
+  tenantId: (string | number),
+  userId: string,
   roles: TenantRole[],
   expectedVersion: number,
 ): Promise<TenantRoleState> {
@@ -535,8 +572,8 @@ export function replaceTenantMemberRoles(
 }
 
 export function updateTenantMemberRole(
-  tenantId: number,
-  membershipId: number,
+  tenantId: (string | number),
+  membershipId: string,
   role: TenantRole,
 ): Promise<TenantMember> {
   const roleCode = getRoleCode(role);
@@ -547,28 +584,28 @@ export function updateTenantMemberRole(
   });
 }
 
-export function activateTenantMember(tenantId: number, membershipId: number): Promise<TenantMember> {
+export function activateTenantMember(tenantId: (string | number), membershipId: string): Promise<TenantMember> {
   return request<TenantMember>(`/api/tenants/${tenantId}/users/${membershipId}/activate`, {
     ...tenantRequestOptions(tenantId),
     method: 'POST',
   });
 }
 
-export function deactivateTenantMember(tenantId: number, membershipId: number): Promise<TenantMember> {
+export function deactivateTenantMember(tenantId: (string | number), membershipId: string): Promise<TenantMember> {
   return request<TenantMember>(`/api/tenants/${tenantId}/users/${membershipId}/deactivate`, {
     ...tenantRequestOptions(tenantId),
     method: 'POST',
   });
 }
 
-export function removeTenantMember(tenantId: number, membershipId: number): Promise<void> {
+export function removeTenantMember(tenantId: (string | number), membershipId: string): Promise<void> {
   return requestVoid(`/api/tenants/${tenantId}/users/${membershipId}`, {
     ...tenantRequestOptions(tenantId),
     method: 'DELETE',
   });
 }
 
-export async function searchPlatformUsers(query: string, tenantId?: number): Promise<UserSearchResult[]> {
+export async function searchPlatformUsers(query: string, tenantId?: (string | number)): Promise<UserSearchResult[]> {
   if (!query.trim()) return [];
   const params = new URLSearchParams({ q: query.trim() });
   if (tenantId) params.set('tenant_id', String(tenantId));
@@ -579,8 +616,8 @@ export async function searchPlatformUsers(query: string, tenantId?: number): Pro
   return Array.isArray(res) ? res : res?.items ?? [];
 }
 
-export async function searchTenantUserCandidates(tenantId: number, query: string): Promise<UserSearchResult[]> {
-  if (!query.trim() || !tenantId) return [];
+export async function searchTenantUserCandidates(tenantId: (string | number), query: string): Promise<UserSearchResult[]> {
+  if (query.trim().length < 2 || !tenantId) return [];
   const res = await request<UserSearchResult[] | { items: UserSearchResult[] }>(
     `/api/tenants/${tenantId}/user-candidates?q=${encodeURIComponent(query.trim())}`,
     tenantRequestOptions(tenantId),
@@ -593,7 +630,7 @@ export async function getPlatformAdministrators(): Promise<PlatformAdministrator
   return Array.isArray(res) ? res : res?.items ?? [];
 }
 
-export function grantPlatformAdministrator(userId: number): Promise<PlatformAdministrator> {
+export function grantPlatformAdministrator(userId: string): Promise<PlatformAdministrator> {
   return request<PlatformAdministrator>('/api/platform/administrators', {
     ...adminRequestOptions,
     method: 'POST',
@@ -601,16 +638,84 @@ export function grantPlatformAdministrator(userId: number): Promise<PlatformAdmi
   });
 }
 
-export function revokePlatformAdministrator(grantId: number): Promise<void> {
+export function revokePlatformAdministrator(grantId: string): Promise<void> {
   return requestVoid(`/api/platform/administrators/${grantId}`, {
     ...adminRequestOptions,
     method: 'DELETE',
   });
 }
 
-export async function listPlatformTenants(): Promise<TenantSummary[]> {
-  const res = await request<TenantSummary[] | { items: TenantSummary[] }>('/api/platform/tenants', adminRequestOptions);
+export async function listPlatformTenants(query = '', page = 1, pageSize = 50): Promise<TenantSummary[]> {
+  const params = new URLSearchParams({ q: query, page: String(page), page_size: String(pageSize) });
+  const res = await request<TenantSummary[] | { items: TenantSummary[] }>(`/api/platform/tenants?${params}`, adminRequestOptions);
   return Array.isArray(res) ? res : res?.items ?? [];
+}
+
+export function getPlatformTenant(tenantId: (string | number)): Promise<TenantSummary> {
+  return request<TenantSummary>(`/api/platform/tenants/${tenantId}`, adminRequestOptions);
+}
+
+export interface TenantAdministratorState {
+  tenant_id: string;
+  membership_id: string;
+  user_id: string;
+  status: 'ACTIVE' | 'DISABLED' | 'PENDING';
+  roles: string[];
+  primary_role: string;
+  role_assignment_version: number;
+}
+
+export interface TenantAdministratorMembership extends TenantAdministratorState {
+  display_name: string | null;
+  email: string | null;
+  account_status: string;
+  is_effective: boolean;
+}
+
+export interface TenantAdministratorDirectory {
+  tenant_id: string;
+  administrators: TenantAdministratorMembership[];
+  replacement_roles: Array<{ code: string; name: string; scope: 'TENANT' }>;
+}
+
+export interface RevokeTenantAdministratorRequest {
+  expected_version: number;
+  replacement_primary_role_code?: string;
+  reason?: string;
+}
+
+const administratorPath = (tenantId: string, membershipId?: string) =>
+  `/api/platform/tenants/${encodeURIComponent(tenantId)}/administrators${membershipId ? `/${encodeURIComponent(membershipId)}` : ''}`;
+
+export function getPlatformTenantAdministrators(tenantId: string, signal?: AbortSignal): Promise<TenantAdministratorDirectory> {
+  return request(administratorPath(tenantId), { ...adminRequestOptions, signal });
+}
+
+export function revokePlatformTenantAdministrator(tenantId: string, membershipId: string, payload: RevokeTenantAdministratorRequest): Promise<TenantAdministratorState> {
+  return request(`${administratorPath(tenantId, membershipId)}/revoke`, {
+    ...adminRequestOptions, method: 'POST', body: JSON.stringify(payload),
+  });
+}
+
+export function deactivatePlatformTenantAdministrator(tenantId: string, membershipId: string, reason?: string): Promise<TenantAdministratorState> {
+  return request(`${administratorPath(tenantId, membershipId)}/deactivate`, {
+    ...adminRequestOptions, method: 'POST', body: JSON.stringify(reason ? { reason } : {}),
+  });
+}
+
+export function removePlatformTenantAdministrator(tenantId: string, membershipId: string, reason?: string): Promise<void> {
+  const query = reason ? `?${new URLSearchParams({ reason })}` : '';
+  return requestVoid(`${administratorPath(tenantId, membershipId)}${query}`, {
+    ...adminRequestOptions, method: 'DELETE',
+  });
+}
+
+/** Reuse the existing platform activation endpoint; token issuance stays on the server. */
+export function resendPlatformTenantActivation(tenantId: (string | number), userId: string): Promise<{ delivery: { status: string } }> {
+  return request(`/api/platform/tenants/${tenantId}/native-users/${userId}/resend-activation`, {
+    ...adminRequestOptions,
+    method: 'POST',
+  });
 }
 
 export async function createPlatformTenant(payload: CreateTenantRequest): Promise<TenantSummary> {
@@ -623,10 +728,10 @@ export async function createPlatformTenant(payload: CreateTenantRequest): Promis
 }
 
 export function updatePlatformTenantStatus(
-  tenantId: number | string,
+  tenantId: (string | number) | string,
   status: 'ACTIVE' | 'DISABLED',
-): Promise<{ tenant_id: number; status: string }> {
-  return request<{ tenant_id: number; status: string }>(`/api/platform/tenants/${tenantId}`, {
+): Promise<{ tenant_id: (string | number); status: string }> {
+  return request<{ tenant_id: (string | number); status: string }>(`/api/platform/tenants/${tenantId}`, {
     ...adminRequestOptions,
     method: 'PATCH',
     body: JSON.stringify({ status }),
@@ -634,7 +739,24 @@ export function updatePlatformTenantStatus(
 }
 
 // ─── Analysis config ──────────────────────────────────────────────────────────
+export interface EffectiveAiStatus {
+  configured: boolean;
+  source: 'PLATFORM' | 'TENANT' | null;
+  provider: string | null;
+  model: string | null;
+  verification_status: string;
+  feature_enabled: boolean;
+  available_for_tenant: boolean;
+  state: 'AVAILABLE' | 'DISABLED' | 'CONFIGURATION_REQUIRED' | 'VERIFICATION_PENDING' | 'TEMPORARILY_UNAVAILABLE' | 'CONFIGURATION_UNAVAILABLE' | 'STATUS_UNAVAILABLE';
+  can_view_settings: boolean;
+  can_configure: boolean;
+  settings_scope: 'tenant' | 'platform';
+  can_invoke_ai?: boolean;
+  configuration_issue?: 'TENANT_OVERRIDE_WITHOUT_EFFECTIVE_PROVIDER' | null;
+}
+
 export interface AnalysisConfig {
+  ai_status?: EffectiveAiStatus;
   github_configured: boolean;
   nvd_key_configured: boolean;
   max_concurrency: number;
@@ -679,9 +801,9 @@ export function getHealth(signal?: AbortSignal) {
 
 // ─── Dashboard ───────────────────────────────────────────────────────────────
 export interface DashboardFilterScope {
-  projectId: number | null;
-  applicationId: number | null;
-  sbomId: number | null;
+  projectId: (string | number) | null;
+  applicationId: (string | number) | null;
+  sbomId: (string | number) | null;
 }
 
 export function dashboardScopeParams(scope?: DashboardFilterScope): URLSearchParams {
@@ -704,10 +826,10 @@ export function getDashboardProjectOptions(signal?: AbortSignal) {
 }
 
 export function getDashboardScannedProjectIds(scope?: DashboardFilterScope, signal?: AbortSignal) {
-  return request<{ ids: number[] }>(withDashboardScope('/dashboard/scanned-project-ids', scope), { signal });
+  return request<{ ids: (string | number)[] }>(withDashboardScope('/dashboard/scanned-project-ids', scope), { signal });
 }
 
-export function getDashboardApplicationOptions(projectId: number, signal?: AbortSignal) {
+export function getDashboardApplicationOptions(projectId: (string | number), signal?: AbortSignal) {
   return request<{ items: DashboardOption[] }>(`/dashboard/filter-options/applications?project_id=${projectId}`, { signal });
 }
 
@@ -758,7 +880,7 @@ export function getProjects(signal?: AbortSignal) {
   return request<Project[]>('/api/projects', { signal });
 }
 
-export function getProject(id: number, signal?: AbortSignal) {
+export function getProject(id: (string | number), signal?: AbortSignal) {
   return request<Project>(`/api/projects/${id}`, { signal });
 }
 
@@ -770,15 +892,15 @@ export function createProject(payload: CreateProjectPayload, signal?: AbortSigna
   });
 }
 
-export function getProducts(projectId: number, signal?: AbortSignal) {
+export function getProducts(projectId: (string | number), signal?: AbortSignal) {
   return request<ProductListResponse>(`/api/projects/${projectId}/products`, { signal });
 }
 
-export function getProduct(id: number, signal?: AbortSignal) {
+export function getProduct(id: (string | number), signal?: AbortSignal) {
   return request<Product>(`/api/products/${id}`, { signal });
 }
 
-export function createProduct(projectId: number, payload: Partial<Product> & { name: string }, signal?: AbortSignal) {
+export function createProduct(projectId: (string | number), payload: Partial<Product> & { name: string }, signal?: AbortSignal) {
   return request<Product>(`/api/projects/${projectId}/products`, {
     method: 'POST',
     body: JSON.stringify(payload),
@@ -786,7 +908,7 @@ export function createProduct(projectId: number, payload: Partial<Product> & { n
   });
 }
 
-export function updateProduct(id: number, payload: Partial<Product>, signal?: AbortSignal) {
+export function updateProduct(id: (string | number), payload: Partial<Product>, signal?: AbortSignal) {
   return request<Product>(`/api/products/${id}`, {
     method: 'PATCH',
     body: JSON.stringify(payload),
@@ -794,19 +916,19 @@ export function updateProduct(id: number, payload: Partial<Product>, signal?: Ab
   });
 }
 
-export function deleteProduct(id: number, signal?: AbortSignal) {
-  return request<{ status: string; product_id: number }>(`/api/products/${id}`, {
+export function deleteProduct(id: (string | number), signal?: AbortSignal) {
+  return request<{ status: string; product_id: (string | number) }>(`/api/products/${id}`, {
     method: 'DELETE',
     signal,
   });
 }
 
-export function getProductSboms(id: number, signal?: AbortSignal) {
+export function getProductSboms(id: (string | number), signal?: AbortSignal) {
   return request<SBOMSource[]>(`/api/products/${id}/sboms`, { signal });
 }
 
 export function updateProject(
-  id: number,
+  id: (string | number),
   payload: UpdateProjectPayload,
   signal?: AbortSignal
 ) {
@@ -818,7 +940,7 @@ export function updateProject(
 }
 
 export interface ProjectDeleteImpact {
-  project_id: number;
+  project_id: (string | number);
   project_name: string;
   sboms: number;
   components: number;
@@ -827,12 +949,12 @@ export interface ProjectDeleteImpact {
   schedules: number;
 }
 
-export function getProjectDeleteImpact(id: number, signal?: AbortSignal) {
+export function getProjectDeleteImpact(id: (string | number), signal?: AbortSignal) {
   return request<ProjectDeleteImpact>(`/api/projects/${id}/delete-impact`, { signal });
 }
 
 export function deleteProject(
-  id: number,
+  id: (string | number),
   options: { permanent?: boolean; userId?: string } = {},
   signal?: AbortSignal,
 ) {
@@ -851,17 +973,25 @@ export function getSboms(page = 1, pageSize = 50, signal?: AbortSignal, scope?: 
   return request<SBOMSource[]>(withDashboardScope(path, scope), { signal });
 }
 
-export function getSbom(id: number, signal?: AbortSignal, includeRaw = false) {
+export function changeSbomLifecycle(id: (string | number), status: 'ACTIVE' | 'INACTIVE', reason: string) {
+  return request<SBOMSource>(`/api/sboms/${id}/lifecycle`, { method: 'POST', body: JSON.stringify({ status, reason }) });
+}
+
+export function getSbomLifecycleHistory(id: (string | number), signal?: AbortSignal) {
+  return request<import('@/types').SbomLifecycleEvent[]>(`/api/sboms/${id}/lifecycle-history`, { signal });
+}
+
+export function getSbom(id: (string | number), signal?: AbortSignal, includeRaw = false) {
   const qs = includeRaw ? '?include_raw=true' : '';
   return request<SBOMSource>(`/api/sboms/${id}${qs}`, { signal });
 }
 
-export function getSbomStats(sbomId: number, signal?: AbortSignal) {
+export function getSbomStats(sbomId: (string | number), signal?: AbortSignal) {
   return request<SbomDocumentStats>(`/api/sboms/${sbomId}/stats`, { signal });
 }
 
 export function getSbomRawChunk(
-  sbomId: number,
+  sbomId: (string | number),
   offset = 0,
   limit = 500,
   signal?: AbortSignal,
@@ -872,7 +1002,7 @@ export function getSbomRawChunk(
   );
 }
 
-export async function downloadSbomOriginal(sbomId: number, signal?: AbortSignal): Promise<Blob> {
+export async function downloadSbomOriginal(sbomId: (string | number), signal?: AbortSignal): Promise<Blob> {
   const res = await performRequest(`/api/sboms/${sbomId}/download`, { signal }, 120_000);
   return res.blob();
 }
@@ -902,6 +1032,8 @@ export async function uploadSbom(payload: CreateSBOMPayload, signal?: AbortSigna
   const productVersion = payload.product_version ?? payload.productver;
   if (productVersion) form.set('product_version', productVersion);
   if (payload.created_by) form.set('created_by', payload.created_by);
+  if (payload.logical_sbom_id != null) form.set('logical_sbom_id', String(payload.logical_sbom_id));
+  if (payload.create_new_logical_sbom != null) form.set('create_new_logical_sbom', String(payload.create_new_logical_sbom));
   if (payload.parent_sbom_id != null) form.set('parent_sbom_id', String(payload.parent_sbom_id));
   if (payload.set_as_current != null) form.set('set_as_current', String(payload.set_as_current));
 
@@ -938,7 +1070,7 @@ export async function uploadSbom(payload: CreateSBOMPayload, signal?: AbortSigna
 }
 
 export function updateSbom(
-  id: number,
+  id: (string | number),
   payload: UpdateSBOMPayload,
   signal?: AbortSignal
 ) {
@@ -949,7 +1081,7 @@ export function updateSbom(
   });
 }
 
-export function editSbom(id: number, payload: any, userId?: string, signal?: AbortSignal) {
+export function editSbom(id: (string | number), payload: any, userId?: string, signal?: AbortSignal) {
   const qs = userId ? `?user_id=${encodeURIComponent(userId)}` : '';
   return request<SBOMSource>(`/api/sboms/${id}/edit${qs}`, {
     method: 'POST',
@@ -958,18 +1090,18 @@ export function editSbom(id: number, payload: any, userId?: string, signal?: Abo
   });
 }
 
-export function createWorkspaceForSbom(sbomId: number, signal?: AbortSignal) {
+export function createWorkspaceForSbom(sbomId: (string | number), signal?: AbortSignal) {
   return request<ValidationRepairSession>(`/api/sboms/${sbomId}/workspace`, {
     method: 'POST',
     signal,
   });
 }
 
-export function getSbomVersions(id: number, signal?: AbortSignal) {
+export function getSbomVersions(id: (string | number), signal?: AbortSignal) {
   return request<SBOMSource[]>(`/api/sboms/${id}/versions`, { signal });
 }
 
-export function compareSbomVersions(versionA: number, versionB: number, signal?: AbortSignal) {
+export function compareSbomVersions(versionA: string | number, versionB: string | number, signal?: AbortSignal) {
   return request<{
     added: any[];
     removed: any[];
@@ -977,7 +1109,7 @@ export function compareSbomVersions(versionA: number, versionB: number, signal?:
   }>(`/api/sboms/compare-versions?version_a=${versionA}&version_b=${versionB}`, { signal });
 }
 
-export function restoreSbomVersion(id: number, versionId: number, userId?: string, signal?: AbortSignal) {
+export function restoreSbomVersion(id: (string | number), versionId: string | number, userId?: string, signal?: AbortSignal) {
   const qs = userId ? `?user_id=${encodeURIComponent(userId)}` : '';
   return request<SBOMSource>(`/api/sboms/${id}/restore/${versionId}${qs}`, {
     method: 'POST',
@@ -986,7 +1118,7 @@ export function restoreSbomVersion(id: number, versionId: number, userId?: strin
 }
 
 export interface SbomDeleteImpact {
-  sbom_id: number;
+  sbom_id: (string | number);
   sbom_name: string;
   components: number;
   runs: number;
@@ -1014,24 +1146,24 @@ export interface SbomDeleteImpact {
   };
   table_counts: Record<string, number>;
   blocking_dependencies: Record<string, number>;
-  child_sbom_ids: number[];
+  child_sbom_ids: (string | number)[];
   child_sboms: Array<{
-    sbom_id: number;
+    sbom_id: (string | number);
     sbom_name: string;
     parent_id: number | null;
-    source_sbom_id: number | null;
-    converted_sbom_id: number | null;
+    source_sbom_id: (string | number) | null;
+    converted_sbom_id: (string | number) | null;
   }>;
   warnings: string[];
   delete_order: string[];
 }
 
-export function getSbomDeleteImpact(id: number, signal?: AbortSignal) {
+export function getSbomDeleteImpact(id: (string | number), signal?: AbortSignal) {
   return request<SbomDeleteImpact>(`/api/sboms/${id}/delete-impact`, { signal });
 }
 
 export function deleteSbom(
-  id: number,
+  id: (string | number),
   userId: number | string,
   options: { permanent?: boolean } = {},
   signal?: AbortSignal,
@@ -1048,7 +1180,7 @@ export function deleteSbom(
 }
 
 export function getSbomComponents(
-  sbomId: number,
+  sbomId: (string | number),
   options: GetSbomComponentsOptions = {},
 ): Promise<SbomComponentListResponse> {
   const {
@@ -1075,22 +1207,22 @@ export function getSbomComponents(
   });
 }
 
-export function getSbomDedupeReport(sbomId: number, signal?: AbortSignal) {
+export function getSbomDedupeReport(sbomId: (string | number), signal?: AbortSignal) {
   return request<any>(`/api/sboms/${sbomId}/dedupe-report`, { signal });
 }
 
-export function getSbomNormalizationReport(sbomId: number, signal?: AbortSignal) {
+export function getSbomNormalizationReport(sbomId: (string | number), signal?: AbortSignal) {
   return request<any>(`/api/sboms/${sbomId}/normalization-report`, { signal });
 }
 
-export function normalizeDeduplicateSbom(sbomId: number, force = true, signal?: AbortSignal) {
+export function normalizeDeduplicateSbom(sbomId: (string | number), force = true, signal?: AbortSignal) {
   return request<any>(`/api/sboms/${sbomId}/normalize-deduplicate?force=${force ? 'true' : 'false'}`, {
     method: 'POST',
     signal,
   });
 }
 
-export function refreshSbomLifecycle(sbomId: number, force = true, signal?: AbortSignal) {
+export function refreshSbomLifecycle(sbomId: (string | number), force = true, signal?: AbortSignal) {
   return request<import('@/types').LifecycleRefreshSummary>(
     `/api/sboms/${sbomId}/lifecycle/refresh?force=${force ? 'true' : 'false'}`,
     {
@@ -1109,11 +1241,11 @@ export function getLifecycleSources(signal?: AbortSignal) {
   return request<{ sources: import('@/types').LifecycleProviderSource[] }>('/api/lifecycle/sources', { signal });
 }
 
-export function getSbomLifecycleReport(sbomId: number, signal?: AbortSignal) {
+export function getSbomLifecycleReport(sbomId: (string | number), signal?: AbortSignal) {
   return request<LifecycleReport>(`/api/sboms/${sbomId}/lifecycle/report`, { signal });
 }
 
-export function exportSbomLifecycleReportCsv(sbomId: number, reportType = 'all', signal?: AbortSignal) {
+export function exportSbomLifecycleReportCsv(sbomId: (string | number), reportType = 'all', signal?: AbortSignal) {
   const params = new URLSearchParams({ format: 'csv' });
   if (reportType && reportType !== 'all') params.set('report_type', reportType);
   return downloadBinary(
@@ -1123,11 +1255,11 @@ export function exportSbomLifecycleReportCsv(sbomId: number, reportType = 'all',
   );
 }
 
-export function exportSbomLifecycleReportPack(sbomId: number, signal?: AbortSignal) {
+export function exportSbomLifecycleReportPack(sbomId: (string | number), signal?: AbortSignal) {
   return downloadBinary(`/api/sboms/${sbomId}/reports/lifecycle-pack`, `sbom_${sbomId}_lifecycle_reports.zip`, signal);
 }
 
-export function refreshComponentLifecycle(componentId: number, force = true, signal?: AbortSignal) {
+export function refreshComponentLifecycle(componentId: (string | number), force = true, signal?: AbortSignal) {
   return request<SBOMComponent>(
     `/api/components/${componentId}/lifecycle/refresh?force=${force ? 'true' : 'false'}`,
     {
@@ -1139,7 +1271,7 @@ export function refreshComponentLifecycle(componentId: number, force = true, sig
 }
 
 export function overrideComponentLifecycle(
-  componentId: number,
+  componentId: (string | number),
   payload: LifecycleOverridePayload,
   signal?: AbortSignal,
 ) {
@@ -1154,7 +1286,7 @@ export function overrideComponentLifecycle(
   );
 }
 
-export function analyzeSbom(sbomId: number, signal?: AbortSignal) {
+export function analyzeSbom(sbomId: (string | number), signal?: AbortSignal) {
   return request<AnalysisRun>(`/api/sboms/${sbomId}/analyze`, {
     method: 'POST',
     signal,
@@ -1172,27 +1304,27 @@ export function analyzeConsolidated(payload: AnalyzeSBOMPayload, signal?: AbortS
 
 // ─── Analysis Runs ────────────────────────────────────────────────────────────
 export interface RunsFilter {
-  sbom_id?: number;
-  project_id?: number;
-  product_id?: number;
+  sbom_id?: (string | number);
+  project_id?: (string | number);
+  product_id?: (string | number);
   run_status?: string;
   page?: number;
   page_size?: number;
+  q?: string;
+  source?: string;
+  sort_by?: 'id' | 'sbom_name' | 'run_status' | 'total_findings' | 'completed_on';
+  sort_direction?: 'asc' | 'desc';
+  summary_only?: boolean;
 }
 
 /**
- * Build query params for /api/runs. Positive-integer filters that are NaN,
- * zero, negative, or non-finite are silently dropped — sending them would
- * cause a 422 from the FastAPI validator. This used to happen when a stale
- * select value was passed through `Number()`.
+ * Preserve public UUID selectors as strings. Paging and optional history
+ * search/order fields use the same query builder for the table and export.
  */
 function buildRunsQuery(filter: RunsFilter): URLSearchParams {
   const params = new URLSearchParams();
-  const addPositiveInt = (key: string, value: number | undefined) => {
-    if (value === undefined) return;
-    if (!Number.isFinite(value)) return; // drops NaN and ±Infinity
-    if (value <= 0) return;               // backend requires ge=1 on these
-    params.set(key, String(Math.trunc(value)));
+  const addPositiveInt = (key: string, value: string | number | undefined) => {
+    if (value != null && String(value)) params.set(key, String(value));
   };
   addPositiveInt('sbom_id', filter.sbom_id);
   addPositiveInt('project_id', filter.project_id);
@@ -1202,12 +1334,28 @@ function buildRunsQuery(filter: RunsFilter): URLSearchParams {
   }
   addPositiveInt('page', filter.page ?? 1);
   addPositiveInt('page_size', filter.page_size ?? 50);
+  for (const key of ['q', 'source', 'sort_by', 'sort_direction'] as const) {
+    if (filter[key]) params.set(key, filter[key]);
+  }
+  if (filter.summary_only) params.set('summary_only', 'true');
   return params;
 }
 
 export function getRuns(filter: RunsFilter = {}, signal?: AbortSignal) {
   const params = buildRunsQuery(filter);
   return request<AnalysisRun[]>(`/api/runs?${params.toString()}`, { signal });
+}
+
+/** Paged history: keep the array API for existing callers and read its count header here. */
+export async function getRunsPage(filter: RunsFilter = {}, signal?: AbortSignal) {
+  const response = await performRequest(`/api/runs?${buildRunsQuery(filter)}`, { signal });
+  const items = await response.json() as AnalysisRun[];
+  const header = response.headers.get('X-Total-Count');
+  const total = header === null ? null : Number(header);
+  if (total === null || !Number.isSafeInteger(total) || total < 0) {
+    throw new ApiError('Analysis pagination count is unavailable. Please try again.', 502);
+  }
+  return { items, total };
 }
 
 // ─── Analysis Runs aggregate (server-side tile values) ───────────────────────
@@ -1227,13 +1375,12 @@ export interface RunsAggregate {
 }
 
 export function getRunsAggregate(
-  filter: { sbom_id?: number; project_id?: number; product_id?: number } = {},
+  filter: { sbom_id?: (string | number); project_id?: (string | number); product_id?: (string | number) } = {},
   signal?: AbortSignal,
 ) {
   const params = new URLSearchParams();
-  const addPositiveInt = (key: string, value: number | undefined) => {
-    if (value === undefined || !Number.isFinite(value) || value <= 0) return;
-    params.set(key, String(Math.trunc(value)));
+  const addPositiveInt = (key: string, value: string | number | undefined) => {
+    if (value != null && String(value)) params.set(key, String(value));
   };
   addPositiveInt('sbom_id', filter.sbom_id);
   addPositiveInt('project_id', filter.project_id);
@@ -1252,6 +1399,9 @@ export function getRunsAggregate(
 // app/routers/vulnerabilities.py.
 
 export interface VulnerabilityRow {
+  project_display_id?: number | null;
+  product_display_id?: number | null;
+  sbom_display_id?: number | null;
   finding_id: number;
   vuln_id: string;
   severity: string;
@@ -1261,12 +1411,12 @@ export interface VulnerabilityRow {
   /** JSON array stored as text, e.g. '["4.17.21"]'. */
   fixed_versions: string | null;
   source: string | null;
-  run_id: number;
-  sbom_id: number | null;
+  run_id: string;
+  sbom_id: (string | number) | null;
   sbom_name: string | null;
-  project_id: number | null;
+  project_id: (string | number) | null;
   project_name: string | null;
-  product_id: number | null;
+  product_id: (string | number) | null;
   product_name: string | null;
 }
 
@@ -1292,12 +1442,12 @@ export function getVulnerabilities(
   return request<VulnerabilitiesResponse>(`/api/vulnerabilities?${params.toString()}`, { signal });
 }
 
-export function getRun(id: number, signal?: AbortSignal) {
+export function getRun(id: string, signal?: AbortSignal) {
   return request<AnalysisRun>(`/api/runs/${id}`, { signal });
 }
 
 export function getRunFindings(
-  id: number,
+  id: string,
   opts: { severity?: string; page?: number; page_size?: number } = {},
   signal?: AbortSignal
 ) {
@@ -1321,7 +1471,7 @@ const RUN_FINDINGS_MAX_PAGES = 500;
  * the same CVEs are served in-memory.
  */
 export function getEnrichedRunFindings(
-  id: number,
+  id: string,
   opts: { severity?: string; page?: number; page_size?: number } = {},
   signal?: AbortSignal,
 ) {
@@ -1337,7 +1487,7 @@ export function getEnrichedRunFindings(
 
 /** Paginate every enriched finding for a run, mirroring `getAllRunFindings`. */
 export async function getAllEnrichedRunFindings(
-  id: number,
+  id: string,
   opts: { severity?: string } = {},
   signal?: AbortSignal,
 ): Promise<{ findings: EnrichedFinding[]; totalCount: number }> {
@@ -1496,19 +1646,19 @@ export function getSbomTypes(signal?: AbortSignal) {
 }
 
 // ─── SBOM info / risk-summary ────────────────────────────────────────────────
-export function getSbomInfo(sbomId: number, signal?: AbortSignal) {
+export function getSbomInfo(sbomId: (string | number), signal?: AbortSignal) {
   return request<SBOMInfo>(`/api/sboms/${sbomId}/info`, { signal });
 }
 
-export function getSbomRiskSummary(sbomId: number, signal?: AbortSignal) {
+export function getSbomRiskSummary(sbomId: (string | number), signal?: AbortSignal) {
   return request<SBOMRiskSummary>(`/api/sboms/${sbomId}/risk-summary`, { signal });
 }
 
-export function getSbomValidationReport(sbomId: number, signal?: AbortSignal) {
+export function getSbomValidationReport(sbomId: (string | number), signal?: AbortSignal) {
   return request<ValidationReport>(`/api/sboms/${sbomId}/validation-report`, { signal });
 }
 
-export function convertSbomToCycloneDX(sbomId: number, userId?: string, signal?: AbortSignal) {
+export function convertSbomToCycloneDX(sbomId: (string | number), userId?: string, signal?: AbortSignal) {
   const params = userId ? `?user_id=${encodeURIComponent(userId)}` : '';
   return request<SbomConversionResponse>(`/api/sboms/${sbomId}/convert/cyclonedx${params}`, {
     method: 'POST',
@@ -1516,12 +1666,12 @@ export function convertSbomToCycloneDX(sbomId: number, userId?: string, signal?:
   });
 }
 
-export function getSbomConversionReport(sbomId: number, signal?: AbortSignal) {
+export function getSbomConversionReport(sbomId: (string | number), signal?: AbortSignal) {
   return request<SbomConversionReport>(`/api/sboms/${sbomId}/conversion-report`, { signal });
 }
 
 export function exportSbomDocument(
-  sbomId: number,
+  sbomId: (string | number),
   opts?: { format?: string; exportMode?: string },
   signal?: AbortSignal,
 ) {
@@ -1533,7 +1683,7 @@ export function exportSbomDocument(
   return downloadBinary(`/api/sboms/${sbomId}/export${suffix}`, `sbom_${sbomId}.json`, signal);
 }
 
-export function exportSbomVulnerabilityExcel(sbomId: number, signal?: AbortSignal) {
+export function exportSbomVulnerabilityExcel(sbomId: (string | number), signal?: AbortSignal) {
   return downloadBinary(
     `/api/sboms/${sbomId}/reports/vulnerabilities.xlsx`,
     `sbom-${sbomId}-vulnerability-report.xlsx`,
@@ -1542,7 +1692,7 @@ export function exportSbomVulnerabilityExcel(sbomId: number, signal?: AbortSigna
 }
 
 export function exportFda510kSbomReport(
-  projectId: number,
+  projectId: (string | number),
   payload: Fda510kReportExportRequest,
   signal?: AbortSignal,
 ) {
@@ -1565,7 +1715,7 @@ export function exportFda510kSbomReport(
  * ``HttpError.detail`` carrying the structured failure when the report
  * has any error-severity entry.
  */
-export function revalidateSbom(sbomId: number, signal?: AbortSignal) {
+export function revalidateSbom(sbomId: (string | number), signal?: AbortSignal) {
   return request<SBOMSource>(`/api/sboms/${sbomId}/revalidate`, {
     method: 'POST',
     signal,
@@ -1649,7 +1799,7 @@ export function saveValidationSessionRepairDraft(
 
 export function updateValidationSession(
   sessionId: string,
-  content: string | null | { current_content?: string | null; project_id?: number | null },
+  content: string | null | { current_content?: string | null; project_id?: (string | number) | null },
   signal?: AbortSignal,
 ) {
   const body = typeof content === 'string' || content === null
@@ -1744,8 +1894,8 @@ export function applyValidationRepairPatch(
 export const getValidationRepairHistory = getValidationSessionHistory;
 
 // ─── Dashboard trend ─────────────────────────────────────────────────────────
-export function getDashboardTrend(days = 30, signal?: AbortSignal) {
-  return request<DashboardTrend>(`/dashboard/trend?days=${days}`, { signal });
+export function getDashboardTrend(days = 30, signal?: AbortSignal, scope?: DashboardFilterScope) {
+  return request<DashboardTrend>(withDashboardScope(`/dashboard/trend?days=${days}`, scope), { signal, authErrorMode: 'throw' });
 }
 
 /**
@@ -1754,7 +1904,7 @@ export function getDashboardTrend(days = 30, signal?: AbortSignal) {
  * legacy daily `getDashboardTrend` so the existing chart is untouched.
  */
 export function getDashboardTrendFiltered(
-  opts: { granularity: TrendGranularity; applicationIds?: number[] },
+  opts: { granularity: TrendGranularity; applicationIds?: (string | number)[] },
   signal?: AbortSignal,
   scope?: DashboardFilterScope,
 ) {
@@ -1847,16 +1997,16 @@ export function getDashboardRemediationStats(signal?: AbortSignal) {
   }>('/dashboard/remediation-stats', { signal });
 }
 
-export function getComponentVulnerabilities(sbomId: number, componentId: number, signal?: AbortSignal) {
+export function getComponentVulnerabilities(sbomId: (string | number), componentId: (string | number), signal?: AbortSignal) {
   return request<import('@/types').ComponentVulnerabilitiesResponse>(
     `/api/sboms/${sbomId}/components/${componentId}/vulnerabilities`, { signal });
 }
 
-export function getSbomVexStatements(sbomId: number, signal?: AbortSignal) {
+export function getSbomVexStatements(sbomId: (string | number), signal?: AbortSignal) {
   return request<VexListResponse>(`/api/sboms/${sbomId}/vex`, { signal });
 }
 
-export function discoverSbomVexDocuments(sbomId: number, force = false, signal?: AbortSignal) {
+export function discoverSbomVexDocuments(sbomId: (string | number), force = false, signal?: AbortSignal) {
   return request<VexDiscoveryResponse>(
     `/api/sboms/${sbomId}/vex/discover?force=${force ? 'true' : 'false'}`,
     {
@@ -1868,7 +2018,7 @@ export function discoverSbomVexDocuments(sbomId: number, force = false, signal?:
 }
 
 export function uploadSbomVexDocument(
-  sbomId: number,
+  sbomId: (string | number),
   payload: {
     document: Record<string, unknown>;
     source_type?: string;
@@ -1885,11 +2035,11 @@ export function uploadSbomVexDocument(
 }
 
 export function overrideVexStatement(
-  componentId: number,
+  componentId: (string | number),
   vulnerabilityId: string,
   payload: VexOverridePayload,
   signal?: AbortSignal,
-  sbomId?: number,
+  sbomId?: (string | number),
 ) {
   return request<VexListResponse['statements'][number]>(
     `/api${sbomId ? `/sboms/${sbomId}` : ''}/components/${componentId}/vulnerabilities/${encodeURIComponent(vulnerabilityId)}/vex-override`,
@@ -1901,20 +2051,20 @@ export function overrideVexStatement(
   );
 }
 
-export function getVexOverrideHistory(componentId: number, vulnerabilityId: string, signal?: AbortSignal, sbomId?: number) {
+export function getVexOverrideHistory(componentId: (string | number), vulnerabilityId: string, signal?: AbortSignal, sbomId?: (string | number)) {
   return request<VexOverrideHistoryResponse>(
     `/api${sbomId ? `/sboms/${sbomId}` : ''}/components/${componentId}/vulnerabilities/${encodeURIComponent(vulnerabilityId)}/vex-override/history`,
     { signal },
   );
 }
 
-export function exportSbomVexReportJson(sbomId: number, reportType = 'all', signal?: AbortSignal) {
+export function exportSbomVexReportJson(sbomId: (string | number), reportType = 'all', signal?: AbortSignal) {
   const params = new URLSearchParams({ format: 'json' });
   if (reportType && reportType !== 'all') params.set('report_type', reportType);
   return downloadBinary(`/api/sboms/${sbomId}/vex/report?${params.toString()}`, `sbom_${sbomId}_vex.json`, signal);
 }
 
-export function exportSbomVexReportCsv(sbomId: number, reportType = 'all', signal?: AbortSignal) {
+export function exportSbomVexReportCsv(sbomId: (string | number), reportType = 'all', signal?: AbortSignal) {
   const params = new URLSearchParams({ format: 'csv' });
   if (reportType && reportType !== 'all') params.set('report_type', reportType);
   return downloadBinary(
@@ -1924,7 +2074,7 @@ export function exportSbomVexReportCsv(sbomId: number, reportType = 'all', signa
   );
 }
 
-export function exportSbomVexReportPack(sbomId: number, signal?: AbortSignal) {
+export function exportSbomVexReportPack(sbomId: (string | number), signal?: AbortSignal) {
   return downloadBinary(`/api/sboms/${sbomId}/reports/vex-pack`, `sbom_${sbomId}_vex_reports.zip`, signal);
 }
 
@@ -1965,7 +2115,7 @@ export function askCopilot(question: string, signal?: AbortSignal) {
 }
 
 // ─── Analysis-runs export & compare ──────────────────────────────────────────
-export function compareRuns(runA: number, runB: number, signal?: AbortSignal) {
+export function compareRuns(runA: string, runB: string, signal?: AbortSignal) {
   return request<CompareRunsResult>(
     `/api/analysis-runs/compare?run_a=${runA}&run_b=${runB}`,
     { signal },
@@ -2047,11 +2197,11 @@ export function downloadReportArtifact(deliveryId: number, artifactId: number) {
   return downloadBinary(`/api/report-deliveries/${deliveryId}/artifacts/${artifactId}`, 'security-report');
 }
 
-export function exportRunCsv(runId: number) {
+export function exportRunCsv(runId: string) {
   return downloadBinary(`/api/analysis-runs/${runId}/export/csv`, `sbom_findings_${runId}.csv`);
 }
 
-export function exportRunSarif(runId: number) {
+export function exportRunSarif(runId: string) {
   return downloadBinary(`/api/analysis-runs/${runId}/export/sarif`, `sbom_findings_${runId}.sarif`);
 }
 
@@ -2091,20 +2241,20 @@ export function analyzeSbomOsv(payload: AnalyzeSBOMPayload, signal?: AbortSignal
 // ─── Periodic analysis schedules ─────────────────────────────────────────────
 // See app/routers/schedules.py for the server contract.
 
-export function getProjectSchedule(projectId: number, signal?: AbortSignal) {
+export function getProjectSchedule(projectId: (string | number), signal?: AbortSignal) {
   return request<AnalysisSchedule>(`/api/projects/${projectId}/schedule`, { signal });
 }
 
-export function getProductSchedule(productId: number, signal?: AbortSignal) {
+export function getProductSchedule(productId: (string | number), signal?: AbortSignal) {
   return request<AnalysisSchedule>(`/api/products/${productId}/schedule`, { signal });
 }
 
-export function getEffectiveProductSchedule(productId: number, signal?: AbortSignal) {
+export function getEffectiveProductSchedule(productId: (string | number), signal?: AbortSignal) {
   return request<SbomScheduleResolved>(`/api/products/${productId}/schedule/effective`, { signal });
 }
 
 export function upsertProductSchedule(
-  productId: number,
+  productId: (string | number),
   payload: ScheduleUpsertPayload,
   signal?: AbortSignal,
 ) {
@@ -2114,7 +2264,7 @@ export function upsertProductSchedule(
 }
 
 export function patchProductSchedule(
-  productId: number,
+  productId: (string | number),
   payload: Partial<ScheduleUpsertPayload>,
   signal?: AbortSignal,
 ) {
@@ -2124,7 +2274,7 @@ export function patchProductSchedule(
 }
 
 export function deleteProductSchedule(
-  productId: number,
+  productId: (string | number),
   options: { permanent?: boolean } = {},
   signal?: AbortSignal,
 ) {
@@ -2133,7 +2283,7 @@ export function deleteProductSchedule(
 }
 
 export function upsertProjectSchedule(
-  projectId: number,
+  projectId: (string | number),
   payload: ScheduleUpsertPayload,
   signal?: AbortSignal,
 ) {
@@ -2145,7 +2295,7 @@ export function upsertProjectSchedule(
 }
 
 export function patchProjectSchedule(
-  projectId: number,
+  projectId: (string | number),
   payload: Partial<ScheduleUpsertPayload>,
   signal?: AbortSignal,
 ) {
@@ -2157,7 +2307,7 @@ export function patchProjectSchedule(
 }
 
 export function deleteProjectSchedule(
-  projectId: number,
+  projectId: (string | number),
   options: { permanent?: boolean } = {},
   signal?: AbortSignal,
 ) {
@@ -2168,12 +2318,12 @@ export function deleteProjectSchedule(
   });
 }
 
-export function getSbomSchedule(sbomId: number, signal?: AbortSignal) {
+export function getSbomSchedule(sbomId: (string | number), signal?: AbortSignal) {
   return request<SbomScheduleResolved>(`/api/sboms/${sbomId}/schedule`, { signal });
 }
 
 export function upsertSbomSchedule(
-  sbomId: number,
+  sbomId: (string | number),
   payload: ScheduleUpsertPayload,
   signal?: AbortSignal,
 ) {
@@ -2185,7 +2335,7 @@ export function upsertSbomSchedule(
 }
 
 export function patchSbomSchedule(
-  sbomId: number,
+  sbomId: (string | number),
   payload: Partial<ScheduleUpsertPayload>,
   signal?: AbortSignal,
 ) {
@@ -2197,7 +2347,7 @@ export function patchSbomSchedule(
 }
 
 export function deleteSbomSchedule(
-  sbomId: number,
+  sbomId: (string | number),
   options: { permanent?: boolean } = {},
   signal?: AbortSignal,
 ) {
@@ -2211,28 +2361,28 @@ export function deleteSbomSchedule(
 export interface ListSchedulesFilter {
   scope?: 'TENANT' | 'PROJECT' | 'PRODUCT' | 'SBOM';
   enabled?: boolean;
-  project_id?: number;
+  project_id?: (string | number);
 }
 
-export function getTenantSchedule(tenantId: number, signal?: AbortSignal) {
+export function getTenantSchedule(tenantId: (string | number), signal?: AbortSignal) {
   return request<AnalysisSchedule | null>(`/api/tenants/${tenantId}/schedule`, { signal });
 }
 
-export function upsertScopedSchedule(scope: 'TENANT' | 'PRODUCT', targetId: number, payload: ScheduleUpsertPayload) {
+export function upsertScopedSchedule(scope: 'TENANT' | 'PRODUCT', targetId: (string | number), payload: ScheduleUpsertPayload) {
   return request<AnalysisSchedule>(`/api/${scope === 'TENANT' ? 'tenants' : 'products'}/${targetId}/schedule`, { method: 'POST', body: JSON.stringify(payload) });
 }
 
-export function deleteScopedSchedule(scope: 'TENANT' | 'PRODUCT', targetId: number) {
+export function deleteScopedSchedule(scope: 'TENANT' | 'PRODUCT', targetId: (string | number)) {
   return requestVoid(`/api/${scope === 'TENANT' ? 'tenants' : 'products'}/${targetId}/schedule`, { method: 'DELETE' });
 }
 
-export function excludeFromParentSchedule(scope: 'PRODUCT' | 'SBOM', targetId: number) {
+export function excludeFromParentSchedule(scope: 'PRODUCT' | 'SBOM', targetId: string | number) {
   return request<AnalysisSchedule>(`/api/${scope === 'PRODUCT' ? 'products' : 'sboms'}/${targetId}/schedule/exclude`, {
     method: 'POST',
   });
 }
 
-export function restoreScheduleInheritance(scope: 'PRODUCT' | 'SBOM', targetId: number) {
+export function restoreScheduleInheritance(scope: 'PRODUCT' | 'SBOM', targetId: string | number) {
   return request<{ status: string; id?: number }>(
     `/api/${scope === 'PRODUCT' ? 'products' : 'sboms'}/${targetId}/schedule/inherit`,
     { method: 'POST' },
@@ -2269,8 +2419,8 @@ export function resumeSchedule(scheduleId: number, signal?: AbortSignal) {
 export interface RunNowResult {
   status: string;
   schedule_id: number;
-  sbom_ids: number[];
-  failed_sbom_ids?: number[];
+  sbom_ids: (string | number)[];
+  failed_sbom_ids?: (string | number)[];
   scope?: string;
   target_count?: number;
   skipped_count?: number;
@@ -2368,7 +2518,7 @@ export function regenerateFindingAiFix(
 
 /** Trigger batch AI fix generation for an entire run. */
 export function triggerRunAiFixes(
-  runId: number,
+  runId: string,
   payload: AiTriggerBatchRequest = {},
   signal?: AbortSignal,
 ): Promise<AiTriggerBatchResponse> {
@@ -2382,9 +2532,9 @@ export function triggerRunAiFixes(
 
 /** Cooperative cancel — sets a flag the worker checks before each LLM call. */
 export function cancelRunAiFixes(
-  runId: number,
+  runId: string,
   signal?: AbortSignal,
-): Promise<{ run_id: number; cancel_requested: boolean }> {
+): Promise<{ run_id: string; cancel_requested: boolean }> {
   return request(`/api/v1/runs/${runId}/ai-fixes/cancel`, {
     method: 'POST',
     signal,
@@ -2398,7 +2548,7 @@ export function cancelRunAiFixes(
  * Callers must treat ``null`` as "nothing to track" (don't subscribe/poll).
  */
 export function getRunAiFixProgress(
-  runId: number,
+  runId: string,
   signal?: AbortSignal,
 ): Promise<AiBatchProgress | null> {
   return requestOrNull<AiBatchProgress>(`/api/v1/runs/${runId}/ai-fixes/progress`, {
@@ -2408,7 +2558,7 @@ export function getRunAiFixProgress(
 
 /** List cached fix bundles for a run (table view). */
 export function listRunAiFixes(
-  runId: number,
+  runId: string,
   signal?: AbortSignal,
 ): Promise<AiFindingFixListResponse> {
   return request<AiFindingFixListResponse>(`/api/v1/runs/${runId}/ai-fixes`, { signal });
@@ -2419,19 +2569,19 @@ export function listRunAiFixes(
  *
  *  Legacy run-scoped stream — yields the most-recent batch's progress.
  *  Use ``aiFixBatchStreamUrl`` for per-batch SSE in the multi-batch flow. */
-export function aiFixStreamUrl(runId: number): string {
+export function aiFixStreamUrl(runId: string): string {
   return `${BASE_URL}/api/v1/runs/${runId}/ai-fixes/stream`;
 }
 
 /** Per-batch SSE URL. Pin a stream to one batch_id so concurrent batches
  *  on the same run don't share an event source. */
-export function aiFixBatchStreamUrl(runId: number, batchId: string): string {
+export function aiFixBatchStreamUrl(runId: string, batchId: string): string {
   return `${BASE_URL}/api/v1/runs/${runId}/ai-fixes/batches/${batchId}/stream`;
 }
 
 /** List every batch (active + historical) for a run, newest-first. */
 export function listRunAiBatches(
-  runId: number,
+  runId: string,
   signal?: AbortSignal,
 ): Promise<import('@/types/ai').AiBatchListResponse> {
   return request(`/api/v1/runs/${runId}/ai-fixes/batches`, { signal });
@@ -2439,7 +2589,7 @@ export function listRunAiBatches(
 
 /** One batch's durable record + live progress envelope. */
 export function getRunAiBatch(
-  runId: number,
+  runId: string,
   batchId: string,
   signal?: AbortSignal,
 ): Promise<import('@/types/ai').AiBatchDetailResponse> {
@@ -2448,10 +2598,10 @@ export function getRunAiBatch(
 
 /** Cooperative per-batch cancel. */
 export function cancelRunAiBatch(
-  runId: number,
+  runId: string,
   batchId: string,
   signal?: AbortSignal,
-): Promise<{ run_id: number; batch_id: string; cancel_requested: boolean }> {
+): Promise<{ run_id: string; batch_id: string; cancel_requested: boolean }> {
   return request(`/api/v1/runs/${runId}/ai-fixes/batches/${batchId}/cancel`, {
     method: 'POST',
     signal,
@@ -2464,7 +2614,7 @@ export function cancelRunAiBatch(
  *  via a single SQL join, and returns the duration / cost projection
  *  along with the multi-batch contention signal. */
 export function estimateRunAiFixesScoped(
-  runId: number,
+  runId: string,
   scope: import('@/types/ai').AiFixGenerationScope | null = null,
   signal?: AbortSignal,
 ): Promise<import('@/types/ai').AiScopedEstimateResponse> {
@@ -2510,19 +2660,37 @@ export function getAiTopCachedFixes(
 // ─── Phase 3 — credential CRUD + settings ────────────────────────────────
 
 /** List every saved AI provider credential. */
-export function listAiCredentials(signal?: AbortSignal): Promise<AiCredential[]> {
-  return request<AiCredential[]>(`/api/v1/ai/credentials`, { signal });
+export type ConfigurationScope = 'platform' | 'tenant';
+export const aiConfigurationBase = (scope: ConfigurationScope) => scope === 'platform' ? '/api/platform/configuration/ai' : '/api/v1/ai';
+export const lifecycleConfigurationBase = (scope: ConfigurationScope) => scope === 'platform' ? '/api/platform/configuration/lifecycle' : '/api/admin/lifecycle-providers';
+export interface EffectiveAiConfiguration {
+  source: 'PLATFORM_DEFAULT' | 'TENANT_OVERRIDE'; override_enabled: boolean;
+  feature_enabled: boolean;
+  default_selection_key?: string | null;
+  configured_providers: { provider_name: string; model: string; enabled: boolean; credential_present: boolean; selection_key?: string; is_default?: boolean; is_fallback?: boolean }[];
+}
+export function getEffectiveAiConfiguration(scope: ConfigurationScope, signal?: AbortSignal) {
+  return request<EffectiveAiConfiguration>(`${aiConfigurationBase(scope)}/effective-config`, { signal });
+}
+export function createTenantAiOverride() { return request(`${aiConfigurationBase('tenant')}/override`, { method: 'POST' }); }
+export function resetTenantAiOverride() { return requestVoid(`${aiConfigurationBase('tenant')}/override`, { method: 'DELETE' }); }
+export function resetLifecycleProviderOverride(key: string) {
+  return requestVoid(`${lifecycleConfigurationBase('tenant')}/${encodeURIComponent(key)}/override`, { method: 'DELETE' });
 }
 
-export function getAiCredential(id: number, signal?: AbortSignal): Promise<AiCredential> {
-  return request<AiCredential>(`/api/v1/ai/credentials/${id}`, { signal });
+export function listAiCredentials(signal?: AbortSignal, scope: ConfigurationScope = 'tenant'): Promise<AiCredential[]> {
+  return request<AiCredential[]>(`${aiConfigurationBase(scope)}/credentials`, { signal });
+}
+
+export function getAiCredential(id: number, signal?: AbortSignal, scope: ConfigurationScope = 'tenant'): Promise<AiCredential> {
+  return request<AiCredential>(`${aiConfigurationBase(scope)}/credentials/${id}`, { signal });
 }
 
 export function createAiCredential(
   body: AiCredentialCreateRequest,
-  signal?: AbortSignal,
+  signal?: AbortSignal, scope: ConfigurationScope = 'tenant',
 ): Promise<AiCredential> {
-  return request<AiCredential>(`/api/v1/ai/credentials`, {
+  return request<AiCredential>(`${aiConfigurationBase(scope)}/credentials`, {
     method: 'POST',
     headers: { 'content-type': 'application/json' },
     body: JSON.stringify(body),
@@ -2533,9 +2701,9 @@ export function createAiCredential(
 export function updateAiCredential(
   id: number,
   body: AiCredentialUpdateRequest,
-  signal?: AbortSignal,
+  signal?: AbortSignal, scope: ConfigurationScope = 'tenant',
 ): Promise<AiCredential> {
-  return request<AiCredential>(`/api/v1/ai/credentials/${id}`, {
+  return request<AiCredential>(`${aiConfigurationBase(scope)}/credentials/${id}`, {
     method: 'PUT',
     headers: { 'content-type': 'application/json' },
     body: JSON.stringify(body),
@@ -2543,15 +2711,15 @@ export function updateAiCredential(
   });
 }
 
-export function deleteAiCredential(id: number, signal?: AbortSignal): Promise<void> {
-  return requestVoid(`/api/v1/ai/credentials/${id}`, { method: 'DELETE', signal });
+export function deleteAiCredential(id: number, signal?: AbortSignal, scope: ConfigurationScope = 'tenant'): Promise<void> {
+  return requestVoid(`${aiConfigurationBase(scope)}/credentials/${id}`, { method: 'DELETE', signal });
 }
 
 export function setAiCredentialDefault(
   id: number,
-  signal?: AbortSignal,
+  signal?: AbortSignal, scope: ConfigurationScope = 'tenant',
 ): Promise<AiCredential> {
-  return request<AiCredential>(`/api/v1/ai/credentials/${id}/set-default`, {
+  return request<AiCredential>(`${aiConfigurationBase(scope)}/credentials/${id}/set-default`, {
     method: 'PUT',
     signal,
   });
@@ -2559,9 +2727,9 @@ export function setAiCredentialDefault(
 
 export function setAiCredentialFallback(
   id: number,
-  signal?: AbortSignal,
+  signal?: AbortSignal, scope: ConfigurationScope = 'tenant',
 ): Promise<AiCredential> {
-  return request<AiCredential>(`/api/v1/ai/credentials/${id}/set-fallback`, {
+  return request<AiCredential>(`${aiConfigurationBase(scope)}/credentials/${id}/set-fallback`, {
     method: 'PUT',
     signal,
   });
@@ -2570,9 +2738,9 @@ export function setAiCredentialFallback(
 /** Test an unsaved credential — used by the AddProviderDialog before Save. */
 export function testAiCredentialUnsaved(
   body: AiTestConnectionRequest,
-  signal?: AbortSignal,
+  signal?: AbortSignal, scope: ConfigurationScope = 'tenant',
 ): Promise<AiConnectionTestResult> {
-  return request<AiConnectionTestResult>(`/api/v1/ai/credentials/test`, {
+  return request<AiConnectionTestResult>(`${aiConfigurationBase(scope)}/credentials/test`, {
     method: 'POST',
     headers: { 'content-type': 'application/json' },
     body: JSON.stringify(body),
@@ -2583,48 +2751,48 @@ export function testAiCredentialUnsaved(
 /** Re-test a saved credential — used by the ProviderCard "Test" button. */
 export function testAiCredentialSaved(
   id: number,
-  signal?: AbortSignal,
+  signal?: AbortSignal, scope: ConfigurationScope = 'tenant',
 ): Promise<AiConnectionTestResult> {
-  return request<AiConnectionTestResult>(`/api/v1/ai/credentials/${id}/test`, {
+  return request<AiConnectionTestResult>(`${aiConfigurationBase(scope)}/credentials/${id}/test`, {
     method: 'POST',
     signal,
   });
 }
 
-export function listAiProviderModels(id: number, signal?: AbortSignal): Promise<AiProviderModel[]> {
-  return request<AiProviderModel[]>(`/api/v1/ai/credentials/${id}/models`, { signal });
+export function listAiProviderModels(id: number, signal?: AbortSignal, scope: ConfigurationScope = 'tenant'): Promise<AiProviderModel[]> {
+  return request<AiProviderModel[]>(`${aiConfigurationBase(scope)}/credentials/${id}/models`, { signal });
 }
 
-export function refreshAiProviderModels(id: number, signal?: AbortSignal): Promise<AiModelRefreshResult> {
-  return request<AiModelRefreshResult>(`/api/v1/ai/credentials/${id}/models/refresh`, {
+export function refreshAiProviderModels(id: number, signal?: AbortSignal, scope: ConfigurationScope = 'tenant'): Promise<AiModelRefreshResult> {
+  return request<AiModelRefreshResult>(`${aiConfigurationBase(scope)}/credentials/${id}/models/refresh`, {
     method: 'POST',
     signal,
   });
 }
 
-export function selectAiProviderModel(credentialId: number, modelId: number, signal?: AbortSignal): Promise<AiProviderModel> {
-  return request<AiProviderModel>(`/api/v1/ai/credentials/${credentialId}/models/${modelId}/select`, {
+export function selectAiProviderModel(credentialId: number, modelId: number, signal?: AbortSignal, scope: ConfigurationScope = 'tenant'): Promise<AiProviderModel> {
+  return request<AiProviderModel>(`${aiConfigurationBase(scope)}/credentials/${credentialId}/models/${modelId}/select`, {
     method: 'POST',
     signal,
   });
 }
 
-export function testAiProviderModel(credentialId: number, modelId: number, signal?: AbortSignal): Promise<AiModelTestResult> {
-  return request<AiModelTestResult>(`/api/v1/ai/credentials/${credentialId}/models/${modelId}/test`, {
+export function testAiProviderModel(credentialId: number, modelId: number, signal?: AbortSignal, scope: ConfigurationScope = 'tenant'): Promise<AiModelTestResult> {
+  return request<AiModelTestResult>(`${aiConfigurationBase(scope)}/credentials/${credentialId}/models/${modelId}/test`, {
     method: 'POST',
     signal,
   });
 }
 
-export function getAiCredentialSettings(signal?: AbortSignal): Promise<AiCredentialSettings> {
-  return request<AiCredentialSettings>(`/api/v1/ai/settings`, { signal });
+export function getAiCredentialSettings(signal?: AbortSignal, scope: ConfigurationScope = 'tenant'): Promise<AiCredentialSettings> {
+  return request<AiCredentialSettings>(`${aiConfigurationBase(scope)}/settings`, { signal });
 }
 
 export function updateAiCredentialSettings(
   body: AiCredentialSettingsUpdateRequest,
-  signal?: AbortSignal,
+  signal?: AbortSignal, scope: ConfigurationScope = 'tenant',
 ): Promise<AiCredentialSettings> {
-  return request<AiCredentialSettings>(`/api/v1/ai/settings`, {
+  return request<AiCredentialSettings>(`${aiConfigurationBase(scope)}/settings`, {
     method: 'PUT',
     headers: { 'content-type': 'application/json' },
     body: JSON.stringify(body),
@@ -2633,23 +2801,23 @@ export function updateAiCredentialSettings(
 }
 
 /** Provider/bootstrap catalog driving the unsaved AddProviderDialog only. */
-export function listAiProviderCatalog(signal?: AbortSignal): Promise<AiProviderCatalogEntry[]> {
-  return request<AiProviderCatalogEntry[]>(`/api/v1/ai/providers/available`, { signal });
+export function listAiProviderCatalog(signal?: AbortSignal, scope: ConfigurationScope = 'tenant'): Promise<AiProviderCatalogEntry[]> {
+  return request<AiProviderCatalogEntry[]>(`${aiConfigurationBase(scope)}/providers/available`, { signal });
 }
 
 export function getAiProviderCatalogEntry(
   name: string,
-  signal?: AbortSignal,
+  signal?: AbortSignal, scope: ConfigurationScope = 'tenant',
 ): Promise<AiProviderCatalogEntry> {
   return request<AiProviderCatalogEntry>(
-    `/api/v1/ai/providers/available/${encodeURIComponent(name)}`,
+    `${aiConfigurationBase(scope)}/providers/available/${encodeURIComponent(name)}`,
     { signal },
   );
 }
 
 /** Free-tier batch duration estimate (Phase 1 endpoint, used by FreeTierWarningDialog). */
 export function getRunBatchEstimate(
-  runId: number,
+  runId: string,
   signal?: AbortSignal,
 ): Promise<AiBatchDurationEstimate> {
   return request<AiBatchDurationEstimate>(
@@ -2669,12 +2837,12 @@ import type { CveDetail, CveDetailWithContext } from '@/types';
  * call the global endpoint.
  */
 export function getCveDetail(
-  args: { cveId: string; scanId?: number | null },
+  args: { cveId: string; scanId?: string | null; componentId?: (string | number) | null },
   signal?: AbortSignal,
 ): Promise<CveDetail | CveDetailWithContext> {
   const id = encodeURIComponent(args.cveId.trim().toUpperCase());
   if (args.scanId != null) {
-    return request<CveDetailWithContext>(`/api/v1/scans/${args.scanId}/cves/${id}`, { signal });
+    return request<CveDetailWithContext>(`/api/v1/scans/${args.scanId}/cves/${id}${args.componentId != null ? `?component_id=${args.componentId}` : ''}`, { signal });
   }
   return request<CveDetail>(`/api/v1/cves/${id}`, { signal });
 }
@@ -2740,7 +2908,7 @@ export function syncKevCatalog(signal?: AbortSignal): Promise<KevSyncResult> {
   );
 }
 
-export function upsertRemediation(projectId: number, payload: any, signal?: AbortSignal) {
+export function upsertRemediation(projectId: (string | number), payload: any, signal?: AbortSignal) {
   return request<any>(`/api/remediation?project_id=${projectId}`, {
     method: 'POST',
     body: JSON.stringify(payload),
@@ -2750,16 +2918,16 @@ export function upsertRemediation(projectId: number, payload: any, signal?: Abor
 
 // ─── Lifecycle provider admin ────────────────────────────────────────────────
 
-export function listLifecycleProviders(signal?: AbortSignal): Promise<LifecycleProviderConfig[]> {
-  return request<LifecycleProviderConfig[]>('/api/admin/lifecycle-providers', { signal });
+export function listLifecycleProviders(signal?: AbortSignal, scope: ConfigurationScope = 'tenant'): Promise<LifecycleProviderConfig[]> {
+  return request<LifecycleProviderConfig[]>(`${lifecycleConfigurationBase(scope)}`, { signal });
 }
 
 export function updateLifecycleProvider(
   providerKey: string,
   body: LifecycleProviderUpdatePayload,
-  signal?: AbortSignal,
+  signal?: AbortSignal, scope: ConfigurationScope = 'tenant',
 ): Promise<LifecycleProviderConfig> {
-  return request<LifecycleProviderConfig>(`/api/admin/lifecycle-providers/${encodeURIComponent(providerKey)}`, {
+  return request<LifecycleProviderConfig>(`${lifecycleConfigurationBase(scope)}/${encodeURIComponent(providerKey)}`, {
     method: 'PUT',
     body: JSON.stringify(body),
     signal,
@@ -2769,10 +2937,10 @@ export function updateLifecycleProvider(
 export function setLifecycleProviderSecret(
   providerKey: string,
   body: { secret_name: string; secret_value: string },
-  signal?: AbortSignal,
+  signal?: AbortSignal, scope: ConfigurationScope = 'tenant',
 ): Promise<LifecycleProviderSecretResult> {
   return request<LifecycleProviderSecretResult>(
-    `/api/admin/lifecycle-providers/${encodeURIComponent(providerKey)}/secret`,
+    `${lifecycleConfigurationBase(scope)}/${encodeURIComponent(providerKey)}/secret`,
     {
       method: 'PUT',
       body: JSON.stringify(body),
@@ -2784,20 +2952,20 @@ export function setLifecycleProviderSecret(
 export function deleteLifecycleProviderSecret(
   providerKey: string,
   secretName: string,
-  signal?: AbortSignal,
+  signal?: AbortSignal, scope: ConfigurationScope = 'tenant',
 ): Promise<void> {
   return requestVoid(
-    `/api/admin/lifecycle-providers/${encodeURIComponent(providerKey)}/secret/${encodeURIComponent(secretName)}`,
+    `${lifecycleConfigurationBase(scope)}/${encodeURIComponent(providerKey)}/secret/${encodeURIComponent(secretName)}`,
     { method: 'DELETE', signal },
   );
 }
 
 export function testLifecycleProvider(
   providerKey: string,
-  signal?: AbortSignal,
+  signal?: AbortSignal, scope: ConfigurationScope = 'tenant',
 ): Promise<LifecycleProviderTestResult> {
   return request<LifecycleProviderTestResult>(
-    `/api/admin/lifecycle-providers/${encodeURIComponent(providerKey)}/test`,
+    `${lifecycleConfigurationBase(scope)}/${encodeURIComponent(providerKey)}/test`,
     { method: 'POST', signal },
     65_000,
   );
@@ -2805,10 +2973,10 @@ export function testLifecycleProvider(
 
 export function syncLifecycleProvider(
   providerKey: string,
-  signal?: AbortSignal,
+  signal?: AbortSignal, scope: ConfigurationScope = 'tenant',
 ): Promise<LifecycleProviderSyncResult> {
   return request<LifecycleProviderSyncResult>(
-    `/api/admin/lifecycle-providers/${encodeURIComponent(providerKey)}/sync`,
+    `${lifecycleConfigurationBase(scope)}/${encodeURIComponent(providerKey)}/sync`,
     { method: 'POST', signal },
     65_000,
   );
@@ -2875,12 +3043,11 @@ export function exportLifecycleVendorRecords(signal?: AbortSignal): Promise<{ re
 
 // --- VEX investigation (portfolio) -----------------------------------------
 
-export function listVexInvestigations(
-  args: VexInvestigationListParams = {},
-  signal?: AbortSignal,
-): Promise<VexInvestigationListResponse> {
+/** Filter params shared by the queue and its metrics, so both read one predicate. */
+function vexInvestigationFilterParams(args: VexInvestigationListParams): URLSearchParams {
   const params = new URLSearchParams();
   const textParams: Array<keyof VexInvestigationListParams> = [
+    'version_scope',
     'effective_status',
     'reconciliation_status',
     'severity',
@@ -2888,8 +3055,8 @@ export function listVexInvestigations(
     'q',
     'vex_source',
     'analyzer_source',
-    'sort_by',
-    'sort_order',
+    'my_work',
+    'assignee',
   ];
   textParams.forEach((key) => {
     const value = args[key];
@@ -2900,9 +3067,30 @@ export function listVexInvestigations(
     if (typeof value === 'number') params.set(key, String(value));
   });
   if (typeof args.needs_review === 'boolean') params.set('needs_review', String(args.needs_review));
+  if (args.unresolved_component) params.set('unresolved_component', 'true');
+  return params;
+}
+
+export function listVexInvestigations(
+  args: VexInvestigationListParams = {},
+  signal?: AbortSignal,
+): Promise<VexInvestigationListResponse> {
+  const params = vexInvestigationFilterParams(args);
+  if (args.sort_by) params.set('sort_by', args.sort_by);
+  if (args.sort_order) params.set('sort_order', args.sort_order);
   params.set('limit', String(args.limit ?? 50));
   params.set('offset', String(args.offset ?? 0));
   return request<VexInvestigationListResponse>(`/api/vex/investigations?${params.toString()}`, { signal });
+}
+
+/** Metric cards for exactly the rows the queue matches (VEX-DASH-004). */
+export function getVexInvestigationSummary(
+  args: VexInvestigationListParams = {},
+  signal?: AbortSignal,
+): Promise<VexInvestigationSummary> {
+  const params = vexInvestigationFilterParams(args);
+  const query = params.toString();
+  return request<VexInvestigationSummary>(`/api/vex/investigations/summary${query ? `?${query}` : ''}`, { signal });
 }
 
 export function getVexInvestigation(
@@ -2910,6 +3098,14 @@ export function getVexInvestigation(
   signal?: AbortSignal,
 ): Promise<VexInvestigationDetail> {
   return request<VexInvestigationDetail>(`/api/vex/investigations/${investigationId}`, { signal });
+}
+
+export function searchVexAssignees(q = '', offset = 0, signal?: AbortSignal): Promise<{
+  items: NonNullable<VexInvestigationDetail['capabilities']>['candidates'];
+  total: number; limit: number; offset: number;
+}> {
+  const params = new URLSearchParams({ q, limit: '50', offset: String(offset) });
+  return request(`/api/vex/investigations/assignees?${params}`, { signal });
 }
 
 /**
@@ -2948,7 +3144,7 @@ export function setVexInvestigationAssignment(
  */
 export function resolveVexInvestigationComponent(
   investigationId: number,
-  body: { component_id: number; row_version: number; reason: string },
+  body: { component_id: (string | number); row_version: number; reason: string },
 ): Promise<VexInvestigationDetail> {
   return request<VexInvestigationDetail>(`/api/vex/investigations/${investigationId}/component`, {
     method: 'PUT',
@@ -2965,7 +3161,7 @@ export function resolveVexInvestigationComponent(
  * saves through the component-scoped override instead.
  */
 export async function getVexInvestigationByTriple(
-  args: { sbom_id: number; component_id: number; vulnerability_id: string },
+  args: { sbom_id: (string | number); component_id: (string | number); vulnerability_id: string },
   signal?: AbortSignal,
 ): Promise<VexInvestigationDetail | null> {
   const params = new URLSearchParams({
@@ -2982,4 +3178,193 @@ export async function getVexInvestigationByTriple(
     if ((error as { status?: number })?.status === 404) return null;
     throw error;
   }
+}
+
+// ---------------------------------------------------------------------------
+// Secure Component Advisor (app/routers/component_advisor.py)
+// ---------------------------------------------------------------------------
+
+import type {
+  AdvisorCandidateEvidence,
+  AdvisorCompatibilityChecks,
+  AdvisorComponentDetail,
+  AdvisorComponentList,
+  AdvisorFilterParams,
+  AdvisorRecommendation,
+  AdvisorSearchResult,
+  AdvisorSummary,
+  RecommendationDecision,
+  RecommendationTrigger,
+} from '@/types/componentAdvisor';
+
+const ADVISOR = '/api/component-advisor';
+
+/** Query string for advisor reads. Arrays repeat the key, like the backend expects. */
+export function advisorParams(args: AdvisorFilterParams = {}): string {
+  const params = new URLSearchParams();
+  args.risk?.forEach((value) => params.append('risk', value));
+  args.lifecycle?.forEach((value) => params.append('lifecycle', value));
+  for (const key of ['needs_review', 'frequently_adopted', 'trusted'] as const) {
+    if (typeof args[key] === 'boolean') params.set(key, String(args[key]));
+  }
+  if (args.q?.trim()) params.set('q', args.q.trim());
+  if (args.facet && args.facet !== 'all') params.set('facet', args.facet);
+  for (const key of ['project_id', 'product_id', 'sbom_id'] as const) {
+    const value = args[key];
+    if (typeof value === 'number') params.set(key, String(value));
+  }
+  if (args.sort_by) params.set('sort_by', args.sort_by);
+  if (args.sort_order) params.set('sort_order', args.sort_order);
+  if (typeof args.limit === 'number') params.set('limit', String(args.limit));
+  if (typeof args.offset === 'number') params.set('offset', String(args.offset));
+  const query = params.toString();
+  return query ? `?${query}` : '';
+}
+
+export function getAdvisorSummary(args: AdvisorFilterParams = {}, signal?: AbortSignal): Promise<AdvisorSummary> {
+  return request<AdvisorSummary>(`${ADVISOR}/summary${advisorParams(args)}`, { signal });
+}
+
+export function listAdvisorComponents(args: AdvisorFilterParams = {}, signal?: AbortSignal): Promise<AdvisorComponentList> {
+  return request<AdvisorComponentList>(`${ADVISOR}/components${advisorParams(args)}`, { signal });
+}
+
+export function getAdvisorComponent(
+  canonicalKey: string,
+  scope: Pick<AdvisorFilterParams, 'project_id' | 'product_id' | 'sbom_id'> = {},
+  signal?: AbortSignal,
+): Promise<AdvisorComponentDetail> {
+  return request<AdvisorComponentDetail>(
+    `${ADVISOR}/components/${encodeURIComponent(canonicalKey)}${advisorParams(scope)}`, { signal },
+  );
+}
+
+export function searchAdvisor(args: AdvisorFilterParams & { q: string }, signal?: AbortSignal): Promise<AdvisorSearchResult> {
+  return request<AdvisorSearchResult>(`${ADVISOR}/search${advisorParams(args)}`, { signal });
+}
+
+export function createAdvisorRecommendation(
+  body: { canonical_key: string; trigger_type: RecommendationTrigger; evaluate?: boolean },
+  scope: Pick<AdvisorFilterParams, 'project_id' | 'product_id' | 'sbom_id'> = {},
+): Promise<AdvisorRecommendation> {
+  return request<AdvisorRecommendation>(`${ADVISOR}/recommendations${advisorParams(scope)}`, {
+    method: 'POST',
+    body: JSON.stringify(body),
+  });
+}
+
+export function getAdvisorRecommendation(id: number, signal?: AbortSignal): Promise<AdvisorRecommendation> {
+  return request<AdvisorRecommendation>(`${ADVISOR}/recommendations/${id}`, { signal });
+}
+
+export function evaluateAdvisorRecommendation(id: number): Promise<AdvisorRecommendation> {
+  return request<AdvisorRecommendation>(`${ADVISOR}/recommendations/${id}/evaluate`, { method: 'POST' });
+}
+
+export function decideAdvisorRecommendation(
+  id: number,
+  body: { decision: RecommendationDecision; reason: string; row_version: number; candidate_id?: number },
+): Promise<AdvisorRecommendation> {
+  return request<AdvisorRecommendation>(`${ADVISOR}/recommendations/${id}/decisions`, {
+    method: 'POST',
+    body: JSON.stringify(body),
+  });
+}
+
+export function getAdvisorCandidateEvidence(id: number, candidateId: number, signal?: AbortSignal): Promise<AdvisorCandidateEvidence> {
+  return request<AdvisorCandidateEvidence>(`${ADVISOR}/recommendations/${id}/candidates/${candidateId}/evidence`, { signal });
+}
+
+export function getAdvisorCandidateCompatibility(id: number, candidateId: number, signal?: AbortSignal): Promise<AdvisorCompatibilityChecks> {
+  return request<AdvisorCompatibilityChecks>(`${ADVISOR}/recommendations/${id}/candidates/${candidateId}/compatibility`, { signal });
+}
+
+// Deterministic repairs reuse the existing quarantine workspace and authenticated BFF.
+export function analyzeSbomRepair(sessionId: string, signal?: AbortSignal) {
+  return request<import('@/types/sbomAutoRepair').RepairAnalysis>(`/api/sbom-validation-sessions/${sessionId}/repair/analyze`, { method: 'POST', signal });
+}
+export function getLatestSbomRepair(sessionId: string, signal?: AbortSignal) {
+  return request<import('@/types/sbomAutoRepair').DeterministicRepairJob | null>(`/api/sbom-validation-sessions/${sessionId}/repair`, { signal });
+}
+export function runSbomRepair(sessionId: string) {
+  return request<import('@/types/sbomAutoRepair').DeterministicRepairJob>(`/api/sbom-validation-sessions/${sessionId}/repair`, { method: 'POST' });
+}
+export function decideSbomRepair(sessionId: string, jobId: string, decision: 'approve' | 'reject', candidateHash?: string) {
+  return request<import('@/types/sbomAutoRepair').DeterministicRepairJob>(`/api/sbom-validation-sessions/${sessionId}/repair/${jobId}/${decision}`, { method: 'POST', ...(decision === 'approve' ? { body: JSON.stringify({ candidate_sha256: candidateHash }) } : {}) });
+}
+export function downloadSbomRepair(sessionId: string, jobId: string, kind: 'download' | 'report') {
+  return downloadBinary(`/api/sbom-validation-sessions/${sessionId}/repair/${jobId}/${kind}`, `repair-${jobId}.json`);
+}
+
+export function getSessionQuality(sessionId: string, signal?: AbortSignal) {
+  return request<import('@/types/sbomQuality').QualityResponse>(`/api/sbom-validation-sessions/${sessionId}/quality`, { signal });
+}
+export function getSbomQuality(sbomId: (string | number), signal?: AbortSignal) {
+  return request<import('@/types/sbomQuality').QualityResponse>(`/api/sboms/${sbomId}/quality`, { signal });
+}
+
+export function getLogicalSboms(productId: (string | number), signal?: AbortSignal, page = 1, pageSize = 50) {
+  return request<import('@/types').LogicalSBOMListResponse>(`/api/products/${productId}/logical-sboms?page=${page}&page_size=${pageSize}`, { signal });
+}
+export async function getLogicalSbomChoices(productId: (string | number), signal?: AbortSignal) {
+  const first = await getLogicalSboms(productId, signal, 1, 500);
+  const items = [...first.items];
+  for (let page = 2; items.length < first.total; page++) {
+    const next = await getLogicalSboms(productId, signal, page, 500);
+    if (!next.items.length) break;
+    items.push(...next.items);
+  }
+  return items;
+}
+export function getLogicalSbom(id: (string | number), signal?: AbortSignal) {
+  return request<import('@/types').LogicalSBOM>(`/api/logical-sboms/${id}`, { signal });
+}
+export function getLogicalSbomVersions(id: (string | number), signal?: AbortSignal) {
+  return request<SBOMSource[]>(`/api/logical-sboms/${id}/versions`, { signal });
+}
+export function createLogicalSbom(productId: (string | number), payload: { name: string; description?: string }) {
+  return request<import('@/types').LogicalSBOM>(`/api/products/${productId}/logical-sboms`, { method: 'POST', body: JSON.stringify(payload) });
+}
+
+
+export function getDashboardPostureVersions(scope?: DashboardFilterScope, signal?: AbortSignal) {
+  return request<import('@/types').SbomPostureResponse>(withDashboardScope('/dashboard/posture-versions', scope), {signal, authErrorMode: 'throw'});
+}
+export function getVexInvestigationVersions(scope?: DashboardFilterScope, signal?: AbortSignal) {
+  return request<{items: Array<{id: number; name: string; version: string | null; historical: boolean; active: boolean}>}>(withDashboardScope('/api/vex/investigations/versions', scope), {signal});
+}
+export function getVexVersionComparison(sbomId: (string | number), signal?: AbortSignal) {
+  return request<import('@/types').VexVersionComparison>(`/api/vex/investigations/comparison?sbom_id=${sbomId}`, {signal});
+}
+
+
+export interface DashboardPriorityFinding {
+  component_id: (string | number) | null;
+  id: number;
+  analysis_run_id: string;
+  vuln_id: string;
+  component_name: string | null;
+  component_version: string | null;
+  severity: string | null;
+  score: number | null;
+  source: string | null;
+}
+
+export function getDashboardPriorityFindings(scope: DashboardFilterScope, signal?: AbortSignal) {
+  return request<{ items: DashboardPriorityFinding[] }>(
+    withDashboardScope('/dashboard/priority-findings?limit=5', scope), { signal, authErrorMode: 'throw' },
+  );
+}
+
+export function getVexAnalysisRuns(sbomId: (string | number), signal?: AbortSignal) {
+  return request<{items: Array<{display_id?: number | null; id: string; run_status: string; completed_on: string | null; is_current: boolean}>}>(
+    `/api/vex/investigations/analysis-runs?sbom_id=${sbomId}`, {signal});
+}
+
+export function getVexRunSnapshot(sbomId: (string | number), runId: string, offset: number, signal?: AbortSignal) {
+  return request<{total: number; snapshot_available: boolean; obsolete: boolean; items: Array<{
+    investigation_id: number; canonical_vulnerability_id: string; component_name: string | null;
+    component_version: string | null; effective_status: string; reconciliation_status: string;
+    assigned_to: string | null; reviewed_by: string | null;
+  }>}>(`/api/vex/investigations/run-snapshot?sbom_id=${sbomId}&analysis_run_id=${runId}&offset=${offset}`, {signal});
 }

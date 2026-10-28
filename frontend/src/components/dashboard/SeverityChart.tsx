@@ -12,6 +12,7 @@ import type { SeverityKey } from '@/lib/severityParam';
 import type { SeverityData } from '@/types';
 
 interface SeverityChartProps {
+  compact?: boolean;
   data: SeverityData | undefined;
   isLoading: boolean;
   /** Card heading. Defaults to "Vulnerability severity". */
@@ -75,6 +76,7 @@ export function SeverityChart({
   data,
   isLoading,
   title = 'Vulnerability severity',
+  compact = false,
   onSliceClick,
   interactiveSeverities,
 }: SeverityChartProps) {
@@ -108,7 +110,7 @@ export function SeverityChart({
   };
 
   return (
-    <Surface variant="elevated">
+    <Surface variant="elevated" className="h-full min-w-0" elevation={1}>
       <SurfaceHeader>
         <div>
           <h3 className="text-base font-semibold text-hcl-navy">{title}</h3>
@@ -132,16 +134,16 @@ export function SeverityChart({
             compact
           />
         ) : (
-          <div className="grid grid-cols-1 gap-4 lg:grid-cols-[1fr_auto] lg:items-center">
+          <div className={compact ? "grid grid-cols-1 gap-1" : "grid grid-cols-1 gap-4 lg:grid-cols-[1fr_auto] lg:items-center"}>
             <div className="relative">
-              <ResponsiveContainer width="100%" height={220}>
+              <ResponsiveContainer width="100%" height={compact ? 150 : 220}>
                 <PieChart>
                   <Pie
                     data={chartData}
                     cx="50%"
                     cy="50%"
-                    innerRadius={62}
-                    outerRadius={92}
+                    innerRadius={compact ? 48 : 62}
+                    outerRadius={compact ? 66 : 92}
                     paddingAngle={3}
                     dataKey="value"
                     nameKey="name"
@@ -151,7 +153,7 @@ export function SeverityChart({
                     }}
                     onMouseEnter={(_, index) => setHovered(chartData[index]?.name ?? null)}
                     onMouseLeave={() => setHovered(null)}
-                    isAnimationActive
+                    isAnimationActive={false}
                     animationDuration={600}
                     animationEasing="ease-out"
                   >
@@ -182,7 +184,7 @@ export function SeverityChart({
                 </span>
               </div>
             </div>
-            <ul className="grid gap-1.5 self-center lg:min-w-[180px]">
+            <ul className={compact ? "grid grid-cols-2 gap-x-3 self-center" : "grid gap-1.5 self-center lg:min-w-[180px]"}>
               {chartData.map((d) => {
                 const pct = total > 0 ? (d.value / total) * 100 : 0;
                 const drillable = isDrillable(d);

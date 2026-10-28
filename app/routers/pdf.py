@@ -125,6 +125,21 @@ async def create_pdf_report_by_run_id(
     log.info("PDF report requested: run_id=%d filename=%s", payload.runId, payload.filename)
     run_id = payload.runId
 
+    from ..models import RunCache
+    from ..services.sbom_lifecycle import require_processing
+
+    record = db.get(AnalysisRun, run_id) or db.get(RunCache, run_id)
+    if record is not None:
+        require_processing(db.get(SBOMSource, record.sbom_id), operation="Report generation")
+        if isinstance(record, AnalysisRun) and not record.is_current:
+            raise HTTPException(
+                409,
+                detail={
+                    "code": "SBOM_ANALYSIS_OBSOLETE",
+                    "message": "This analysis is historical and cannot generate a new current report.",
+                },
+            )
+
     # 1. Try RunCache (populated by ad-hoc consolidated endpoint)
     run = load_run_cache(db, run_id)
 
@@ -137,6 +152,7 @@ async def create_pdf_report_by_run_id(
         log.warning("PDF report: run_id=%d not found anywhere", run_id)
         raise HTTPException(status_code=404, detail=f"Run {run_id} not found.")
 
+    run = {**run, "runId": str(record.public_id)}
     filename = payload.filename or "sbom_report.pdf"
     if not filename.lower().endswith(".pdf"):
         filename = f"{filename}.pdf"

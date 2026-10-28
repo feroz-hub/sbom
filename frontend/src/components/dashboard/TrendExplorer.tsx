@@ -75,7 +75,7 @@ export function TrendExplorer({ scope, tenantId }: { scope?: DashboardFilterScop
   const { resolvedTheme } = useTheme();
   const isDark = resolvedTheme === 'dark';
   const [granularity, setGranularity] = useState<TrendGranularity>('week');
-  const [selectedApps, setSelectedApps] = useState<number[]>([]);
+  const [selectedApps, setSelectedApps] = useState<(string | number)[]>([]);
   useEffect(() => { setSelectedApps([]); }, [scope?.projectId, scope?.applicationId, scope?.sbomId, tenantId]);
 
   const projectsQuery = useQuery({
@@ -85,7 +85,7 @@ export function TrendExplorer({ scope, tenantId }: { scope?: DashboardFilterScop
   const projects = projectsQuery.data ?? [];
 
   const { data, isLoading } = useQuery({
-    queryKey: ['trend-explorer', tenantId, scope?.projectId, scope?.applicationId, scope?.sbomId, granularity, [...selectedApps].sort((a, b) => a - b)],
+    queryKey: ['trend-explorer', tenantId, scope?.projectId, scope?.applicationId, scope?.sbomId, granularity, [...selectedApps].sort((a, b) => String(a).localeCompare(String(b)))],
     queryFn: ({ signal }) => {
       const opts = { granularity, applicationIds: selectedApps.length ? selectedApps : undefined };
       return scope
@@ -98,7 +98,7 @@ export function TrendExplorer({ scope, tenantId }: { scope?: DashboardFilterScop
   const gridStroke = isDark ? '#243047' : '#dce8f2';
   const axisStroke = isDark ? '#8fa4bd' : '#5c6d7e';
 
-  const toggleApp = (id: number) =>
+  const toggleApp = (id: string | number) =>
     setSelectedApps((prev) =>
       prev.includes(id) ? prev.filter((x) => x !== id) : [...prev, id],
     );

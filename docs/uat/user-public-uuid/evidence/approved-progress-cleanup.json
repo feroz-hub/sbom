@@ -1,0 +1,11 @@
+{
+  "timestamp": "2026-10-21T07:17:15.354481+00:00",
+  "authority": "Explicit user approval: Approve exact test-key cleanup",
+  "deleted_test_progress_keys": 3,
+  "removed_test_index_members": 3,
+  "unrelated_index_members_preserved": true,
+  "post_cleanup_missing_keys_verified": true,
+  "database_mutations": 0,
+  "action_count": 1,
+  "retry_count": 0
+}

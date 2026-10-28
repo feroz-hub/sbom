@@ -1,0 +1,13 @@
+{
+  "schema": "w24a-activation-review-v1",
+  "accepted": false,
+  "w23_manifest": {"path": null, "sha256": null},
+  "activation_sources": {},
+  "dependency_sources": {},
+  "connection": null,
+  "sql_allowlist": {"catalog_queries": [], "migration_statements": [], "session_statements": [], "marker_statements": []},
+  "approvals": {},
+  "expires_at": null,
+  "integrity_attestations": [false, false, false, false, false, false, false],
+  "integrity_approvals": {}
+}

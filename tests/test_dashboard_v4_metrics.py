@@ -13,6 +13,8 @@ from datetime import UTC, datetime, timedelta
 
 import pytest
 
+from tests.tenant_fixture_scope import verified_fixture_tenant
+
 pytestmark = pytest.mark.metric_consistency
 
 
@@ -35,7 +37,8 @@ def db(client):
 
     s = SessionLocal()
     try:
-        yield s
+        with verified_fixture_tenant(s, 1):
+            yield s
     finally:
         s.rollback()
         s.close()
@@ -364,7 +367,7 @@ def test_risk_map_and_matrix_reflect_latest_run(client, db):
     _seed_epss(db, {"CVE-2026-3333": 0.9})
 
     map_body = client.get("/dashboard/risk-map").json()
-    cell = next((i for i in map_body["items"] if i["sbom_id"] == s.id), None)
+    cell = next((i for i in map_body["items"] if i["sbom_id"] == str(s.public_id)), None)
     assert cell is not None, "seeded SBOM missing from risk map"
     assert cell["findings_total"] == 2
     assert cell["dominant"] == "critical"

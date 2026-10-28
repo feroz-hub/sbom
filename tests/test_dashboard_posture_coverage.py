@@ -28,7 +28,21 @@ def db() -> Session:
 
     engine = create_engine("sqlite:///:memory:")
     Base.metadata.create_all(engine)
-    return sessionmaker(bind=engine)()
+    from datetime import UTC, datetime
+
+    from app.core.context import minimal_background_context, tenant_scope
+    from app.models import Tenant
+
+    session = sessionmaker(bind=engine)()
+    now = datetime.now(UTC)
+    session.add(Tenant(id=1, name="Coverage", slug="coverage", status="ACTIVE", created_at=now, updated_at=now))
+    session.commit()
+    try:
+        with tenant_scope(minimal_background_context(1)):
+            yield session
+    finally:
+        session.close()
+        engine.dispose()
 
 
 def _complete(source: str, *, queried: int = 69, matched: int = 0) -> dict:

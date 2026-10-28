@@ -7,6 +7,7 @@ module, preventing the catalog and test/runtime implementations from drifting.
 from __future__ import annotations
 
 from typing import Any
+from urllib.parse import urlsplit
 
 from .catalog import get_catalog_entry
 from .config_types import ProviderConfig
@@ -38,6 +39,14 @@ def validate_provider_config(config: ProviderConfig) -> None:
         raise ProviderUnavailableError(f"{config.name}: rate_per_minute must be greater than zero")
     if config.cost_per_1k_input_usd < 0 or config.cost_per_1k_output_usd < 0:
         raise ProviderUnavailableError(f"{config.name}: cost fields cannot be negative")
+    if config.base_url:
+        try:
+            url = urlsplit(config.base_url)
+            if url.scheme not in {"http", "https"} or not url.hostname or url.username or url.password or url.query or url.fragment:
+                raise ValueError()
+            _ = url.port
+        except ValueError:
+            raise ProviderUnavailableError("base_url must be a valid HTTP(S) endpoint without credentials, query parameters, or fragments") from None
     if config.name == "custom_openai":
         _validate_base_url(config.base_url)
 

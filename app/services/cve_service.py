@@ -191,18 +191,27 @@ class CveDetailService:
                     out[c] = r
         return out
 
-    async def get_with_scan_context(self, cve_id: str, scan_id: int) -> CveDetailWithContext:
+    async def get_with_scan_context(self, cve_id: str, scan_id: int, *, component_id: int | None = None) -> CveDetailWithContext:
         """Scan-aware variant — joins component context + recommended upgrade."""
         detail = await self.get(cve_id)
         run = self._db.get(AnalysisRun, scan_id)
         if run is None:
             return CveDetailWithContext(**detail.model_dump())
 
+        # A CVE may affect several components in one run. VEX callers supply
+        # their exact component; never fall back to a different component.
+        if component_id is not None:
+            component_row = self._db.get(SBOMComponent, component_id)
+            if component_row is None or component_row.sbom_id != run.sbom_id or component_row.tenant_id != run.tenant_id:
+                return CveDetailWithContext(**detail.model_dump())
+        conditions = [AnalysisFinding.analysis_run_id == scan_id, AnalysisFinding.tenant_id == run.tenant_id]
+        if component_id is not None:
+            conditions.append(AnalysisFinding.component_id == component_id)
         cve = detail.cve_id
         finding = (
             self._db.execute(
                 select(AnalysisFinding)
-                .where(AnalysisFinding.analysis_run_id == scan_id)
+                .where(*conditions)
                 .where(AnalysisFinding.vuln_id == cve)
             )
             .scalars()
@@ -217,7 +226,7 @@ class CveDetailService:
             candidates = (
                 self._db.execute(
                     select(AnalysisFinding)
-                    .where(AnalysisFinding.analysis_run_id == scan_id)
+                    .where(*conditions)
                     .where(AnalysisFinding.vuln_id.ilike(f"%{cve}%"))
                 )
                 .scalars()

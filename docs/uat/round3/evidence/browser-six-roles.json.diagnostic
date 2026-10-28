@@ -1,0 +1,286 @@
+[
+  {
+    "id": "R3-NATIVE-CONTEXT-admin",
+    "role": "admin",
+    "stepsExecuted": "Actual Native Login form; supported tenant selection; inspect authenticated context",
+    "expected": "Correct platform or tenant context and effective role",
+    "actual": {
+      "status": 200,
+      "tenant_id": "3a900179-36bf-4b5f-b2e1-2a4a9d06e6af",
+      "roles": [
+        "TENANT_ADMIN"
+      ],
+      "is_platform_admin": false
+    },
+    "result": "PASS"
+  },
+  {
+    "id": "R3-NATIVE-REFRESH-admin",
+    "role": "admin",
+    "stepsExecuted": "Refresh authenticated page; read authoritative context",
+    "expected": "Session retains only authorized context",
+    "actual": {
+      "status": 200,
+      "tenant": "3a900179-36bf-4b5f-b2e1-2a4a9d06e6af"
+    },
+    "result": "PASS"
+  },
+  {
+    "id": "R3-USERS-ACCESS-admin",
+    "role": "admin",
+    "stepsExecuted": "Open Users & Access; compare Add Existing visibility with authoritative permission; direct directory read",
+    "expected": "UI agrees with effective invite authority; directory response observed",
+    "actual": {
+      "directoryStatus": 200,
+      "addVisible": true,
+      "canInvite": true
+    },
+    "result": "PASS"
+  },
+  {
+    "id": "R3-SIX-ROLE-EXECUTION-admin",
+    "role": "admin",
+    "stepsExecuted": "Execute authorized browser/session cases",
+    "expected": "Complete declared cases",
+    "actual": {
+      "error": "locator.waitFor: Error: strict mode violation: getByText('viewer@olympus.example.test', { exact: true }) resolved to 2 elements:\n    1) <div title=\"viewer@olympus.example.test\" class=\"mt-0.5 truncate text-xs text-hcl-muted\">viewer@olympus.example.test</div> aka getByTitle('viewer@olympus.example.test')\n    2) <div class=\"break-all text-xs text-hcl-muted\">viewer@olympus.example.test</div> aka getByText('viewer@olympus.example.test').nth(1)\n\nCall log:\n\u001b[2m  - waiting for getByText('viewer@olympus.example.test', { exact: true }) to be visible\u001b[22m\n"
+    },
+    "result": "FAIL"
+  },
+  {
+    "id": "R3-NATIVE-CONTEXT-analyst",
+    "role": "analyst",
+    "stepsExecuted": "Actual Native Login form; supported tenant selection; inspect authenticated context",
+    "expected": "Correct platform or tenant context and effective role",
+    "actual": {
+      "status": 200,
+      "tenant_id": "3a900179-36bf-4b5f-b2e1-2a4a9d06e6af",
+      "roles": [
+        "SECURITY_ANALYST"
+      ],
+      "is_platform_admin": false
+    },
+    "result": "PASS"
+  },
+  {
+    "id": "R3-NATIVE-REFRESH-analyst",
+    "role": "analyst",
+    "stepsExecuted": "Refresh authenticated page; read authoritative context",
+    "expected": "Session retains only authorized context",
+    "actual": {
+      "status": 200,
+      "tenant": "3a900179-36bf-4b5f-b2e1-2a4a9d06e6af"
+    },
+    "result": "PASS"
+  },
+  {
+    "id": "R3-SIX-ROLE-EXECUTION-analyst",
+    "role": "analyst",
+    "stepsExecuted": "Execute authorized browser/session cases",
+    "expected": "Complete declared cases",
+    "actual": {
+      "error": "locator.waitFor: Timeout 20000ms exceeded.\nCall log:\n\u001b[2m  - waiting for getByRole('heading', { name: 'Users & Access', exact: true }) to be visible\u001b[22m\n"
+    },
+    "result": "FAIL"
+  },
+  {
+    "id": "R3-NATIVE-CONTEXT-developer",
+    "role": "developer",
+    "stepsExecuted": "Actual Native Login form; supported tenant selection; inspect authenticated context",
+    "expected": "Correct platform or tenant context and effective role",
+    "actual": {
+      "status": 200,
+      "tenant_id": "3a900179-36bf-4b5f-b2e1-2a4a9d06e6af",
+      "roles": [
+        "DEVELOPER"
+      ],
+      "is_platform_admin": false
+    },
+    "result": "PASS"
+  },
+  {
+    "id": "R3-NATIVE-REFRESH-developer",
+    "role": "developer",
+    "stepsExecuted": "Refresh authenticated page; read authoritative context",
+    "expected": "Session retains only authorized context",
+    "actual": {
+      "status": 200,
+      "tenant": "3a900179-36bf-4b5f-b2e1-2a4a9d06e6af"
+    },
+    "result": "PASS"
+  },
+  {
+    "id": "R3-SIX-ROLE-EXECUTION-developer",
+    "role": "developer",
+    "stepsExecuted": "Execute authorized browser/session cases",
+    "expected": "Complete declared cases",
+    "actual": {
+      "error": "locator.waitFor: Timeout 20000ms exceeded.\nCall log:\n\u001b[2m  - waiting for getByRole('heading', { name: 'Users & Access', exact: true }) to be visible\u001b[22m\n"
+    },
+    "result": "FAIL"
+  },
+  {
+    "id": "R3-NATIVE-CONTEXT-viewer",
+    "role": "viewer",
+    "stepsExecuted": "Actual Native Login form; supported tenant selection; inspect authenticated context",
+    "expected": "Correct platform or tenant context and effective role",
+    "actual": {
+      "status": 200,
+      "tenant_id": "3a900179-36bf-4b5f-b2e1-2a4a9d06e6af",
+      "roles": [
+        "VIEWER"
+      ],
+      "is_platform_admin": false
+    },
+    "result": "PASS"
+  },
+  {
+    "id": "R3-NATIVE-REFRESH-viewer",
+    "role": "viewer",
+    "stepsExecuted": "Refresh authenticated page; read authoritative context",
+    "expected": "Session retains only authorized context",
+    "actual": {
+      "status": 200,
+      "tenant": "3a900179-36bf-4b5f-b2e1-2a4a9d06e6af"
+    },
+    "result": "PASS"
+  },
+  {
+    "id": "R3-SIX-ROLE-EXECUTION-viewer",
+    "role": "viewer",
+    "stepsExecuted": "Execute authorized browser/session cases",
+    "expected": "Complete declared cases",
+    "actual": {
+      "error": "locator.waitFor: Timeout 20000ms exceeded.\nCall log:\n\u001b[2m  - waiting for getByRole('heading', { name: 'Users & Access', exact: true }) to be visible\u001b[22m\n"
+    },
+    "result": "FAIL"
+  },
+  {
+    "id": "R3-NATIVE-CONTEXT-foreign",
+    "role": "foreign",
+    "stepsExecuted": "Actual Native Login form; supported tenant selection; inspect authenticated context",
+    "expected": "Correct platform or tenant context and effective role",
+    "actual": {
+      "status": 200,
+      "tenant_id": "a803c17f-7e7d-439c-8664-c5406d391fd1",
+      "roles": [
+        "TENANT_ADMIN"
+      ],
+      "is_platform_admin": false
+    },
+    "result": "PASS"
+  },
+  {
+    "id": "R3-NATIVE-REFRESH-foreign",
+    "role": "foreign",
+    "stepsExecuted": "Refresh authenticated page; read authoritative context",
+    "expected": "Session retains only authorized context",
+    "actual": {
+      "status": 200,
+      "tenant": "a803c17f-7e7d-439c-8664-c5406d391fd1"
+    },
+    "result": "PASS"
+  },
+  {
+    "id": "R3-USERS-ACCESS-foreign",
+    "role": "foreign",
+    "stepsExecuted": "Open Users & Access; compare Add Existing visibility with authoritative permission; direct directory read",
+    "expected": "UI agrees with effective invite authority; directory response observed",
+    "actual": {
+      "directoryStatus": 200,
+      "addVisible": true,
+      "canInvite": true
+    },
+    "result": "PASS"
+  },
+  {
+    "id": "R3-PUBLIC-BOUNDARY-foreign",
+    "role": "foreign",
+    "stepsExecuted": "Attempt decision on unknown investigation using valid request schema",
+    "expected": "Role denied or unknown context concealed",
+    "actual": {
+      "status": 422
+    },
+    "result": "PASS"
+  },
+  {
+    "id": "R3-CONCURRENT-LOGIN-foreign",
+    "role": "foreign",
+    "stepsExecuted": "Independent second browser context uses real Native BFF API login fixture",
+    "expected": "200 independent concurrent session",
+    "actual": {
+      "status": 200
+    },
+    "result": "PASS"
+  },
+  {
+    "id": "R3-LOGOUT-ISOLATION-foreign",
+    "role": "foreign",
+    "stepsExecuted": "UI Sign Out first context; replay previous cookie in fresh context; inspect second session",
+    "expected": "First session invalidated; second remains authenticated",
+    "actual": {
+      "replayStatus": 200,
+      "oldAuthenticated": false,
+      "secondAuthenticated": true
+    },
+    "result": "PASS"
+  },
+  {
+    "id": "R3-NATIVE-CONTEXT-platform",
+    "role": "platform",
+    "stepsExecuted": "Actual Native Login form; supported tenant selection; inspect authenticated context",
+    "expected": "Correct platform or tenant context and effective role",
+    "actual": {
+      "status": 200,
+      "tenant_id": null,
+      "roles": [
+        "PLATFORM_ADMIN"
+      ],
+      "is_platform_admin": true
+    },
+    "result": "PASS"
+  },
+  {
+    "id": "R3-NATIVE-REFRESH-platform",
+    "role": "platform",
+    "stepsExecuted": "Refresh authenticated page; read authoritative context",
+    "expected": "Session retains only authorized context",
+    "actual": {
+      "status": 200,
+      "tenant": null
+    },
+    "result": "PASS"
+  },
+  {
+    "id": "R3-PLATFORM-LANDING",
+    "role": "platform",
+    "stepsExecuted": "Inspect global action in current platform context",
+    "expected": "Platform control enabled without inherited tenant",
+    "actual": {
+      "enabled": true
+    },
+    "result": "PASS"
+  },
+  {
+    "id": "R3-CONCURRENT-LOGIN-platform",
+    "role": "platform",
+    "stepsExecuted": "Independent second browser context uses real Native BFF API login fixture",
+    "expected": "200 independent concurrent session",
+    "actual": {
+      "status": 200
+    },
+    "result": "PASS"
+  },
+  {
+    "id": "R3-LOGOUT-ISOLATION-platform",
+    "role": "platform",
+    "stepsExecuted": "UI Sign Out first context; replay previous cookie in fresh context; inspect second session",
+    "expected": "First session invalidated; second remains authenticated",
+    "actual": {
+      "replayStatus": 200,
+      "oldAuthenticated": false,
+      "secondAuthenticated": true
+    },
+    "result": "PASS"
+  }
+]

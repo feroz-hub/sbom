@@ -1,0 +1,79 @@
+# OFFLINE PREPARATION ONLY. Provisioning requires a separate approval.
+# Use only the clean-environment invocation in the accompanying runbook.
+# Do not merge with root/server Compose files or pass repository env files.
+name: sbom-uuid-w1
+
+services:
+  postgres_d:
+    image: postgres:16
+    restart: "no"
+    stop_grace_period: 30s
+    environment:
+      POSTGRES_USER: "${UUID_W1_D_POSTGRES_USER:?Supply a new disposable-only bootstrap user}"
+      POSTGRES_DB: "${UUID_W1_D_POSTGRES_DB:?Supply a new disposable-only database name}"
+      POSTGRES_PASSWORD_FILE: /run/secrets/uuid_w1_d_password
+      POSTGRES_INITDB_ARGS: --auth-host=scram-sha-256 --auth-local=scram-sha-256
+      PGDATA: /var/lib/postgresql/data/pgdata
+    command: ["postgres", "-c", "password_encryption=scram-sha-256"]
+    ports:
+      - target: 5432
+        # Require a three-digit suffix: host port 56000..56999.
+        # The fixed 56 prefix structurally excludes A/B host port 55439.
+        published: "56${UUID_W1_D_PORT_SUFFIX:?Supply exactly three decimal digits for a free 56xxx host port}"
+        host_ip: 127.0.0.1
+        protocol: tcp
+    volumes:
+      - type: volume
+        source: d_pgdata
+        target: /var/lib/postgresql/data
+        volume:
+          nocopy: true
+    secrets:
+      - uuid_w1_d_password
+    networks:
+      - d_access
+    security_opt:
+      - no-new-privileges:true
+    healthcheck:
+      # Readiness only; not an authentication, schema or target-identity proof.
+      test: ["CMD-SHELL", "pg_isready -h 127.0.0.1 -p 5432 -U \"$$POSTGRES_USER\" -d \"$$POSTGRES_DB\""]
+      interval: 5s
+      timeout: 3s
+      retries: 20
+      start_period: 10s
+    labels:
+      io.sbom.uuid-migration.target: D
+      io.sbom.uuid-migration.disposable: "true"
+
+volumes:
+  d_pgdata:
+    driver: local
+    labels:
+      io.sbom.uuid-migration.target: D
+      io.sbom.uuid-migration.disposable: "true"
+
+networks:
+  d_access:
+    driver: bridge
+    internal: false
+    attachable: false
+    enable_ipv4: true
+    enable_ipv6: false
+    driver_opts:
+      com.docker.network.bridge.gateway_mode_ipv4: "nat"
+      com.docker.network.bridge.host_binding_ipv4: "127.0.0.1"
+      com.docker.network.bridge.enable_icc: "false"
+    labels:
+      io.sbom.uuid-migration.target: D
+      io.sbom.uuid-migration.disposable: "true"
+  d_private:
+    driver: bridge
+    internal: true
+    attachable: false
+    labels:
+      io.sbom.uuid-migration.target: D
+      io.sbom.uuid-migration.disposable: "true"
+
+secrets:
+  uuid_w1_d_password:
+    file: "${UUID_W1_D_PASSWORD_FILE:?Supply an absolute path to a new disposable-only password file outside the checkout}"

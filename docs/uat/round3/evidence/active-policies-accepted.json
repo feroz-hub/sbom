@@ -1,0 +1,778 @@
+[
+  {
+    "id": "R3-POLICY-ANALYSIS",
+    "role": "disposable tenant admin",
+    "preconditions": "Verified isolated Greenfield UUID; task-owned fixtures; credentials kept in memory",
+    "stepsExecuted": "Analyze task-owned lodash fixture against real configured OSV",
+    "expected": "200 completed analysis with real evidence",
+    "actual": {
+      "status": 200,
+      "complete": [
+        {
+          "runId": 34,
+          "status": "FINDINGS",
+          "total": 5,
+          "critical": 0,
+          "high": 2,
+          "medium": 3,
+          "low": 0,
+          "unknown": 0,
+          "errors": 0,
+          "duration_ms": 1280,
+          "provider_status": []
+        }
+      ]
+    },
+    "result": "PASS",
+    "time": "2026-10-20T09:24:28.776803+00:00"
+  },
+  {
+    "id": "R3-ACTIVE-trust",
+    "role": "disposable tenant admin",
+    "preconditions": "Verified isolated Greenfield UUID; task-owned fixtures; credentials kept in memory",
+    "stepsExecuted": "Publish supported active trust rules in isolated tenant",
+    "expected": "201 integer policy version",
+    "actual": {
+      "status": 201,
+      "data": {
+        "version": {
+          "id": 16,
+          "policy_id": 10,
+          "kind": "TRUST",
+          "version": 1,
+          "status": "ACTIVE",
+          "scope": "TENANT",
+          "rules": {
+            "allowed_classifications": [
+              "LOW"
+            ],
+            "allowed_lifecycle": [
+              "SUPPORTED"
+            ],
+            "allowed_licenses": null,
+            "denied_licenses": null,
+            "max_evidence_age_days": null,
+            "min_tenant_products": null,
+            "require_no_review_reasons": true
+          },
+          "created_at": "2026-10-20T09:24:28.849386+00:00"
+        },
+        "kind": "TRUST",
+        "configured": true,
+        "effective": {
+          "id": 16,
+          "policy_id": 10,
+          "kind": "TRUST",
+          "version": 1,
+          "status": "ACTIVE",
+          "scope": "TENANT",
+          "rules": {
+            "allowed_classifications": [
+              "LOW"
+            ],
+            "allowed_lifecycle": [
+              "SUPPORTED"
+            ],
+            "allowed_licenses": null,
+            "denied_licenses": null,
+            "max_evidence_age_days": null,
+            "min_tenant_products": null,
+            "require_no_review_reasons": true
+          },
+          "created_at": "2026-10-20T09:24:28.849386+00:00"
+        },
+        "tenant_override": {
+          "id": 16,
+          "policy_id": 10,
+          "kind": "TRUST",
+          "version": 1,
+          "status": "ACTIVE",
+          "scope": "TENANT",
+          "rules": {
+            "allowed_classifications": [
+              "LOW"
+            ],
+            "allowed_lifecycle": [
+              "SUPPORTED"
+            ],
+            "allowed_licenses": null,
+            "denied_licenses": null,
+            "max_evidence_age_days": null,
+            "min_tenant_products": null,
+            "require_no_review_reasons": true
+          },
+          "created_at": "2026-10-20T09:24:28.849386+00:00"
+        },
+        "platform_default": null,
+        "row_version": 1
+      },
+      "request_id": "d5aacfa88dc4"
+    },
+    "result": "PASS",
+    "time": "2026-10-20T09:24:28.976612+00:00"
+  },
+  {
+    "id": "R3-ACTIVE-STALE-trust",
+    "role": "disposable tenant admin",
+    "preconditions": "Verified isolated Greenfield UUID; task-owned fixtures; credentials kept in memory",
+    "stepsExecuted": "Repeat with obsolete row_version",
+    "expected": "409 no duplicate version",
+    "actual": {
+      "status": 409,
+      "data": {
+        "detail": {
+          "code": "POLICY_CONFLICT",
+          "message": "Policy changed since it was read",
+          "row_version": 1
+        }
+      },
+      "request_id": "61055368139a"
+    },
+    "result": "PASS",
+    "time": "2026-10-20T09:24:29.093612+00:00"
+  },
+  {
+    "id": "R3-ACTIVE-HISTORY-trust",
+    "role": "disposable tenant admin",
+    "preconditions": "Verified isolated Greenfield UUID; task-owned fixtures; credentials kept in memory",
+    "stepsExecuted": "Read actual nonempty policy history",
+    "expected": "200 exactly one active immutable rule version",
+    "actual": {
+      "status": 200,
+      "data": {
+        "total": 1,
+        "items": [
+          {
+            "id": 16,
+            "policy_id": 10,
+            "kind": "TRUST",
+            "version": 1,
+            "status": "ACTIVE",
+            "scope": "TENANT",
+            "rules": {
+              "allowed_classifications": [
+                "LOW"
+              ],
+              "allowed_lifecycle": [
+                "SUPPORTED"
+              ],
+              "allowed_licenses": null,
+              "denied_licenses": null,
+              "max_evidence_age_days": null,
+              "min_tenant_products": null,
+              "require_no_review_reasons": true
+            },
+            "created_at": "2026-10-20T09:24:28.849386+00:00",
+            "reason": "Round 3 active rule acceptance",
+            "created_by": "uat-r3-1792488257314175000@example.test"
+          }
+        ]
+      },
+      "request_id": "1053d5fc92f6"
+    },
+    "result": "PASS",
+    "time": "2026-10-20T09:24:29.195579+00:00"
+  },
+  {
+    "id": "R3-ACTIVE-accepted-risk",
+    "role": "disposable tenant admin",
+    "preconditions": "Verified isolated Greenfield UUID; task-owned fixtures; credentials kept in memory",
+    "stepsExecuted": "Publish supported active accepted-risk rules in isolated tenant",
+    "expected": "201 integer policy version",
+    "actual": {
+      "status": 201,
+      "data": {
+        "version": {
+          "id": 17,
+          "policy_id": 11,
+          "kind": "ACCEPTED_RISK",
+          "version": 1,
+          "status": "ACTIVE",
+          "scope": "TENANT",
+          "rules": {
+            "max_actionable_severity": "MEDIUM",
+            "max_cvss_score": 5.0,
+            "allowed_actionable_vex_statuses": [
+              "AFFECTED",
+              "UNDER_INVESTIGATION"
+            ],
+            "max_actionable_vulnerabilities": null,
+            "allowed_lifecycle": null,
+            "max_analysis_age_days": null
+          },
+          "created_at": "2026-10-20T09:24:29.249749+00:00"
+        },
+        "kind": "ACCEPTED_RISK",
+        "configured": true,
+        "effective": {
+          "id": 17,
+          "policy_id": 11,
+          "kind": "ACCEPTED_RISK",
+          "version": 1,
+          "status": "ACTIVE",
+          "scope": "TENANT",
+          "rules": {
+            "max_actionable_severity": "MEDIUM",
+            "max_cvss_score": 5.0,
+            "allowed_actionable_vex_statuses": [
+              "AFFECTED",
+              "UNDER_INVESTIGATION"
+            ],
+            "max_actionable_vulnerabilities": null,
+            "allowed_lifecycle": null,
+            "max_analysis_age_days": null
+          },
+          "created_at": "2026-10-20T09:24:29.249749+00:00"
+        },
+        "tenant_override": {
+          "id": 17,
+          "policy_id": 11,
+          "kind": "ACCEPTED_RISK",
+          "version": 1,
+          "status": "ACTIVE",
+          "scope": "TENANT",
+          "rules": {
+            "max_actionable_severity": "MEDIUM",
+            "max_cvss_score": 5.0,
+            "allowed_actionable_vex_statuses": [
+              "AFFECTED",
+              "UNDER_INVESTIGATION"
+            ],
+            "max_actionable_vulnerabilities": null,
+            "allowed_lifecycle": null,
+            "max_analysis_age_days": null
+          },
+          "created_at": "2026-10-20T09:24:29.249749+00:00"
+        },
+        "platform_default": null,
+        "row_version": 1
+      },
+      "request_id": "b228f0b18b65"
+    },
+    "result": "PASS",
+    "time": "2026-10-20T09:24:29.280400+00:00"
+  },
+  {
+    "id": "R3-ACTIVE-STALE-accepted-risk",
+    "role": "disposable tenant admin",
+    "preconditions": "Verified isolated Greenfield UUID; task-owned fixtures; credentials kept in memory",
+    "stepsExecuted": "Repeat with obsolete row_version",
+    "expected": "409 no duplicate version",
+    "actual": {
+      "status": 409,
+      "data": {
+        "detail": {
+          "code": "POLICY_CONFLICT",
+          "message": "Policy changed since it was read",
+          "row_version": 1
+        }
+      },
+      "request_id": "146811362271"
+    },
+    "result": "PASS",
+    "time": "2026-10-20T09:24:29.344261+00:00"
+  },
+  {
+    "id": "R3-ACTIVE-HISTORY-accepted-risk",
+    "role": "disposable tenant admin",
+    "preconditions": "Verified isolated Greenfield UUID; task-owned fixtures; credentials kept in memory",
+    "stepsExecuted": "Read actual nonempty policy history",
+    "expected": "200 exactly one active immutable rule version",
+    "actual": {
+      "status": 200,
+      "data": {
+        "total": 1,
+        "items": [
+          {
+            "id": 17,
+            "policy_id": 11,
+            "kind": "ACCEPTED_RISK",
+            "version": 1,
+            "status": "ACTIVE",
+            "scope": "TENANT",
+            "rules": {
+              "max_actionable_severity": "MEDIUM",
+              "max_cvss_score": 5.0,
+              "allowed_actionable_vex_statuses": [
+                "AFFECTED",
+                "UNDER_INVESTIGATION"
+              ],
+              "max_actionable_vulnerabilities": null,
+              "allowed_lifecycle": null,
+              "max_analysis_age_days": null
+            },
+            "created_at": "2026-10-20T09:24:29.249749+00:00",
+            "reason": "Round 3 active rule acceptance",
+            "created_by": "uat-r3-1792488257314175000@example.test"
+          }
+        ]
+      },
+      "request_id": "b1d718be1653"
+    },
+    "result": "PASS",
+    "time": "2026-10-20T09:24:29.402543+00:00"
+  },
+  {
+    "id": "R3-ACTIVE-scoring",
+    "role": "disposable tenant admin",
+    "preconditions": "Verified isolated Greenfield UUID; task-owned fixtures; credentials kept in memory",
+    "stepsExecuted": "Publish supported active scoring rules in isolated tenant",
+    "expected": "201 integer policy version",
+    "actual": {
+      "status": 201,
+      "data": {
+        "version": {
+          "id": 18,
+          "policy_id": 12,
+          "kind": "SCORING",
+          "version": 1,
+          "status": "ACTIVE",
+          "scope": "TENANT",
+          "rules": {
+            "weights": {
+              "current_risk": 0.3,
+              "lifecycle": 0.2,
+              "vulnerability_trend": 0.15,
+              "compatibility": 0.15,
+              "maintenance": 0.08,
+              "license": 0.05,
+              "tenant_adoption": 0.05,
+              "evidence_freshness": 0.02
+            },
+            "missing_data": "PENALIZE",
+            "history_window_months": 24,
+            "stale_after_days": 90
+          },
+          "created_at": "2026-10-20T09:24:29.447925+00:00"
+        },
+        "kind": "SCORING",
+        "configured": true,
+        "effective": {
+          "id": 18,
+          "policy_id": 12,
+          "kind": "SCORING",
+          "version": 1,
+          "status": "ACTIVE",
+          "scope": "TENANT",
+          "rules": {
+            "weights": {
+              "current_risk": 0.3,
+              "lifecycle": 0.2,
+              "vulnerability_trend": 0.15,
+              "compatibility": 0.15,
+              "maintenance": 0.08,
+              "license": 0.05,
+              "tenant_adoption": 0.05,
+              "evidence_freshness": 0.02
+            },
+            "missing_data": "PENALIZE",
+            "history_window_months": 24,
+            "stale_after_days": 90
+          },
+          "created_at": "2026-10-20T09:24:29.447925+00:00"
+        },
+        "tenant_override": {
+          "id": 18,
+          "policy_id": 12,
+          "kind": "SCORING",
+          "version": 1,
+          "status": "ACTIVE",
+          "scope": "TENANT",
+          "rules": {
+            "weights": {
+              "current_risk": 0.3,
+              "lifecycle": 0.2,
+              "vulnerability_trend": 0.15,
+              "compatibility": 0.15,
+              "maintenance": 0.08,
+              "license": 0.05,
+              "tenant_adoption": 0.05,
+              "evidence_freshness": 0.02
+            },
+            "missing_data": "PENALIZE",
+            "history_window_months": 24,
+            "stale_after_days": 90
+          },
+          "created_at": "2026-10-20T09:24:29.447925+00:00"
+        },
+        "platform_default": null,
+        "row_version": 1
+      },
+      "request_id": "519587d26218"
+    },
+    "result": "PASS",
+    "time": "2026-10-20T09:24:29.476607+00:00"
+  },
+  {
+    "id": "R3-ACTIVE-STALE-scoring",
+    "role": "disposable tenant admin",
+    "preconditions": "Verified isolated Greenfield UUID; task-owned fixtures; credentials kept in memory",
+    "stepsExecuted": "Repeat with obsolete row_version",
+    "expected": "409 no duplicate version",
+    "actual": {
+      "status": 409,
+      "data": {
+        "detail": {
+          "code": "POLICY_CONFLICT",
+          "message": "Policy changed since it was read",
+          "row_version": 1
+        }
+      },
+      "request_id": "d8d9703ad90b"
+    },
+    "result": "PASS",
+    "time": "2026-10-20T09:24:29.506449+00:00"
+  },
+  {
+    "id": "R3-ACTIVE-HISTORY-scoring",
+    "role": "disposable tenant admin",
+    "preconditions": "Verified isolated Greenfield UUID; task-owned fixtures; credentials kept in memory",
+    "stepsExecuted": "Read actual nonempty policy history",
+    "expected": "200 exactly one active immutable rule version",
+    "actual": {
+      "status": 200,
+      "data": {
+        "total": 1,
+        "items": [
+          {
+            "id": 18,
+            "policy_id": 12,
+            "kind": "SCORING",
+            "version": 1,
+            "status": "ACTIVE",
+            "scope": "TENANT",
+            "rules": {
+              "weights": {
+                "current_risk": 0.3,
+                "lifecycle": 0.2,
+                "vulnerability_trend": 0.15,
+                "compatibility": 0.15,
+                "maintenance": 0.08,
+                "license": 0.05,
+                "tenant_adoption": 0.05,
+                "evidence_freshness": 0.02
+              },
+              "missing_data": "PENALIZE",
+              "history_window_months": 24,
+              "stale_after_days": 90
+            },
+            "created_at": "2026-10-20T09:24:29.447925+00:00",
+            "reason": "Round 3 active rule acceptance",
+            "created_by": "uat-r3-1792488257314175000@example.test"
+          }
+        ]
+      },
+      "request_id": "4f1a1979b50a"
+    },
+    "result": "PASS",
+    "time": "2026-10-20T09:24:29.552176+00:00"
+  },
+  {
+    "id": "R3-ACTIVE-DOWNSTREAM",
+    "role": "disposable tenant admin",
+    "preconditions": "Verified isolated Greenfield UUID; task-owned fixtures; credentials kept in memory",
+    "stepsExecuted": "Read actual component classification under configured trust/risk rules",
+    "expected": "200 evaluation records exact active policy version identities",
+    "actual": {
+      "status": 200,
+      "data": {
+        "canonical_key": "6a93b26b0cb10087f2398a0b111ffb00182be5a47336302f26e22b00bf8899d9",
+        "classification": "HIGH",
+        "decided_by": "HIGHEST_ACTIONABLE_SEVERITY_OUTRANKS_REVIEW",
+        "highest_actionable_severity": "HIGH",
+        "review_reasons": [],
+        "accepted_risk": {
+          "policy_version_id": 17,
+          "satisfied": false,
+          "criteria": [
+            {
+              "criterion": "MAX_ACTIONABLE_SEVERITY",
+              "passed": false,
+              "detail": "Highest actionable severity HIGH; limit MEDIUM"
+            },
+            {
+              "criterion": "NO_REVIEW_REASONS",
+              "passed": true,
+              "detail": "No review reasons"
+            },
+            {
+              "criterion": "MAX_CVSS_SCORE",
+              "passed": false,
+              "detail": "Highest actionable CVSS 8.1; limit 5.0"
+            },
+            {
+              "criterion": "ALLOWED_VEX_STATUSES",
+              "passed": true,
+              "detail": "Actionable VEX statuses ['UNDER_INVESTIGATION']; allowed ['AFFECTED', 'UNDER_INVESTIGATION']"
+            }
+          ]
+        },
+        "trust": {
+          "status": "NOT_TRUSTED",
+          "policy_version_id": 16,
+          "criteria": [
+            {
+              "criterion": "ACCEPTABLE_CURRENT_RISK",
+              "passed": false,
+              "detail": "Classification HIGH; allowed ['LOW']"
+            },
+            {
+              "criterion": "SUPPORTED_LIFECYCLE",
+              "passed": false,
+              "detail": "Lifecycle UNKNOWN; allowed ['SUPPORTED']"
+            },
+            {
+              "criterion": "NO_REVIEW_REASONS",
+              "passed": true,
+              "detail": "No review reasons"
+            }
+          ]
+        },
+        "meta": {
+          "applied_filters": {
+            "risk": [],
+            "lifecycle": [],
+            "needs_review": null,
+            "frequently_adopted": null,
+            "trusted": null,
+            "q": null,
+            "facet": "all"
+          },
+          "unsupported_filters": [],
+          "scope": {
+            "posture": [
+              {
+                "target_sbom_id": "13b76cfe-dbf4-4297-80f1-3f24f2dd85ce",
+                "posture_sbom_id": "13b76cfe-dbf4-4297-80f1-3f24f2dd85ce",
+                "tenant_id": "5879ab3a-858b-4058-b220-832f070b3564",
+                "projectid": "fcade97c-7aff-426a-8d4c-46a1394155d3",
+                "product_id": "68d46c83-cc2d-466b-9eb8-b1eede24e612",
+                "designated_sbom_id": 36,
+                "stored_designated_sbom_id": 36,
+                "selection_mode": "AUTO",
+                "application_name": "Policy fixture",
+                "current_sbom": {
+                  "id": "13b76cfe-dbf4-4297-80f1-3f24f2dd85ce",
+                  "name": "UAT R3 policy fixture",
+                  "version": null
+                },
+                "effective_current_sbom": {
+                  "id": "13b76cfe-dbf4-4297-80f1-3f24f2dd85ce",
+                  "name": "UAT R3 policy fixture",
+                  "version": null
+                },
+                "invalid_selection": false,
+                "designated_current_sbom_id": "13b76cfe-dbf4-4297-80f1-3f24f2dd85ce",
+                "analysis_completed_on": "2026-10-20T09:24:28+00:00",
+                "fallback_reason": null,
+                "latest_uploaded": {
+                  "id": "13b76cfe-dbf4-4297-80f1-3f24f2dd85ce",
+                  "name": "UAT R3 policy fixture",
+                  "version": null
+                },
+                "latest_analyzed": {
+                  "id": "13b76cfe-dbf4-4297-80f1-3f24f2dd85ce",
+                  "name": "UAT R3 policy fixture",
+                  "version": null
+                },
+                "posture_sbom": {
+                  "id": "13b76cfe-dbf4-4297-80f1-3f24f2dd85ce",
+                  "name": "UAT R3 policy fixture",
+                  "version": null
+                },
+                "analysis_run_id": 34,
+                "analysis_finding_rows": 5,
+                "analysis_status": "ANALYZED",
+                "last_known_posture": false,
+                "coverage_incomplete": false,
+                "warning": null,
+                "designation_required": false
+              }
+            ],
+            "level": "TENANT",
+            "tenant": {
+              "id": "5879ab3a-858b-4058-b220-832f070b3564",
+              "name": "UAT R3 1792488257314175000"
+            },
+            "project": null,
+            "application": null,
+            "sbom": null
+          },
+          "as_of": "2026-10-20T09:24:29.581857+00:00",
+          "generated_at": "2026-10-20T09:24:32.270075+00:00",
+          "historical_view": false,
+          "freshness": {
+            "latest_analysis_at": "2026-10-20T09:24:28+00:00",
+            "lifecycle_checked_at": "2026-10-20T09:24:27+00:00",
+            "vulnerability_source_refreshed_at": null,
+            "package_metadata_refreshed_at": null,
+            "coverage": {
+              "eligible_sboms": 1,
+              "analysed_sboms": 1,
+              "unattributed_actionable_findings": 0
+            },
+            "stale_flags": []
+          },
+          "policy_versions": {
+            "accepted_risk": {
+              "policy_version_id": 17,
+              "version": 1,
+              "scope": "TENANT"
+            },
+            "trust": {
+              "policy_version_id": 16,
+              "version": 1,
+              "scope": "TENANT"
+            }
+          },
+          "thresholds": {
+            "frequently_adopted_min_products": 3
+          },
+          "capabilities": {
+            "informational_severity_supported": false
+          }
+        }
+      },
+      "request_id": "52cf0816ab27"
+    },
+    "result": "PASS",
+    "time": "2026-10-20T09:24:32.474432+00:00"
+  },
+  {
+    "id": "R3-POLICY-INHERIT-trust",
+    "role": "disposable tenant admin",
+    "preconditions": "Verified isolated Greenfield UUID; task-owned fixtures; credentials kept in memory",
+    "stepsExecuted": "Append INHERIT version without modifying global defaults",
+    "expected": "201 own override relinquished",
+    "actual": {
+      "status": 201,
+      "data": {
+        "version": {
+          "id": 19,
+          "policy_id": 10,
+          "kind": "TRUST",
+          "version": 2,
+          "status": "INHERIT",
+          "scope": "TENANT",
+          "rules": {},
+          "created_at": "2026-10-20T09:24:33.785034+00:00"
+        },
+        "kind": "TRUST",
+        "configured": false,
+        "effective": null,
+        "tenant_override": {
+          "id": 19,
+          "policy_id": 10,
+          "kind": "TRUST",
+          "version": 2,
+          "status": "INHERIT",
+          "scope": "TENANT",
+          "rules": {},
+          "created_at": "2026-10-20T09:24:33.785034+00:00"
+        },
+        "platform_default": null,
+        "row_version": 2
+      },
+      "request_id": "8f751529c3a5"
+    },
+    "result": "PASS",
+    "time": "2026-10-20T09:24:34.587323+00:00"
+  },
+  {
+    "id": "R3-POLICY-INHERIT-accepted-risk",
+    "role": "disposable tenant admin",
+    "preconditions": "Verified isolated Greenfield UUID; task-owned fixtures; credentials kept in memory",
+    "stepsExecuted": "Append INHERIT version without modifying global defaults",
+    "expected": "201 own override relinquished",
+    "actual": {
+      "status": 201,
+      "data": {
+        "version": {
+          "id": 20,
+          "policy_id": 11,
+          "kind": "ACCEPTED_RISK",
+          "version": 2,
+          "status": "INHERIT",
+          "scope": "TENANT",
+          "rules": {},
+          "created_at": "2026-10-20T09:24:35.011266+00:00"
+        },
+        "kind": "ACCEPTED_RISK",
+        "configured": false,
+        "effective": null,
+        "tenant_override": {
+          "id": 20,
+          "policy_id": 11,
+          "kind": "ACCEPTED_RISK",
+          "version": 2,
+          "status": "INHERIT",
+          "scope": "TENANT",
+          "rules": {},
+          "created_at": "2026-10-20T09:24:35.011266+00:00"
+        },
+        "platform_default": null,
+        "row_version": 2
+      },
+      "request_id": "48d90a8908ff"
+    },
+    "result": "PASS",
+    "time": "2026-10-20T09:24:35.329112+00:00"
+  },
+  {
+    "id": "R3-POLICY-INHERIT-scoring",
+    "role": "disposable tenant admin",
+    "preconditions": "Verified isolated Greenfield UUID; task-owned fixtures; credentials kept in memory",
+    "stepsExecuted": "Append INHERIT version without modifying global defaults",
+    "expected": "201 own override relinquished",
+    "actual": {
+      "status": 201,
+      "data": {
+        "version": {
+          "id": 21,
+          "policy_id": 12,
+          "kind": "SCORING",
+          "version": 2,
+          "status": "INHERIT",
+          "scope": "TENANT",
+          "rules": {},
+          "created_at": "2026-10-20T09:24:35.922722+00:00"
+        },
+        "kind": "SCORING",
+        "configured": false,
+        "effective": null,
+        "tenant_override": {
+          "id": 21,
+          "policy_id": 12,
+          "kind": "SCORING",
+          "version": 2,
+          "status": "INHERIT",
+          "scope": "TENANT",
+          "rules": {},
+          "created_at": "2026-10-20T09:24:35.922722+00:00"
+        },
+        "platform_default": null,
+        "row_version": 2
+      },
+      "request_id": "5b295685be94"
+    },
+    "result": "PASS",
+    "time": "2026-10-20T09:24:36.845286+00:00"
+  },
+  {
+    "id": "R3-ACTIVE-POLICY-CLEANUP",
+    "role": "disposable tenant admin",
+    "preconditions": "Verified isolated Greenfield UUID; task-owned fixtures; credentials kept in memory",
+    "stepsExecuted": "Disable only newly owned policy tenant",
+    "expected": "200",
+    "actual": {
+      "status": 200,
+      "data": {
+        "tenant_id": "5879ab3a-858b-4058-b220-832f070b3564",
+        "status": "DISABLED"
+      },
+      "request_id": "bc2af6c591cb"
+    },
+    "result": "PASS",
+    "time": "2026-10-20T09:24:43.336916+00:00"
+  }
+]

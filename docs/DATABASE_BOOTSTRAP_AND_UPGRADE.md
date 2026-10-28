@@ -16,8 +16,8 @@ python scripts/bootstrap_fresh_database.py \
 
 The command refuses a non-empty or partially initialized target, never drops
 objects, creates `alembic_version.version_num` as `VARCHAR(128)`, stamps
-revision 047, upgrades through revisions 048 and 049, and verifies the
-resulting `055_ai_model_registry` head after the AI model registry migration.
+revision 047, applies all subsequent revisions through the current head, and
+verifies the resulting `079_lifecycle_provider_verification` head.
 
 Revision 049 validates every legacy membership role against an active,
 assignable TENANT catalogue role, then creates one primary assignment and one

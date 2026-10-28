@@ -1,0 +1,51 @@
+[
+  {
+    "id": "R3-UI-PROJECT-CREATE",
+    "role": "admin",
+    "stepsExecuted": "Native Admin; Projects > New Project; complete form; Create Project",
+    "expected": "201 UUID and visible project",
+    "actual": {
+      "status": 201,
+      "id": "1649eec9-c695-4a95-af6d-01db245b06cd"
+    },
+    "result": "PASS"
+  },
+  {
+    "id": "R3-UI-APPLICATION-CREATE",
+    "role": "admin",
+    "stepsExecuted": "Select owned project; Create Application form; save",
+    "expected": "201 with matching project UUID",
+    "actual": {
+      "status": 201,
+      "id": "18f3ce1a-1e63-4c69-95a0-01ff4828c13f",
+      "project_id": "1649eec9-c695-4a95-af6d-01db245b06cd"
+    },
+    "result": "PASS"
+  },
+  {
+    "id": "R3-UI-SBOM-UPLOAD",
+    "role": "admin",
+    "stepsExecuted": "Application action > Upload SBOM; choose synthetic file; submit actual form",
+    "expected": "Accepted UUID attached to owned project/application",
+    "actual": {
+      "status": 202,
+      "project_id": "1649eec9-c695-4a95-af6d-01db245b06cd",
+      "product_id": "18f3ce1a-1e63-4c69-95a0-01ff4828c13f"
+    },
+    "result": "PASS"
+  },
+  {
+    "id": "R3-UI-SBOM-DETAIL",
+    "role": "admin",
+    "stepsExecuted": "Open uploaded UUID SBOM detail",
+    "expected": "Owned SBOM name and component workflow rendered",
+    "actual": {
+      "path": "/sboms/undefined",
+      "headings": [],
+      "buttons": [
+        ""
+      ]
+    },
+    "result": "FAIL"
+  }
+]

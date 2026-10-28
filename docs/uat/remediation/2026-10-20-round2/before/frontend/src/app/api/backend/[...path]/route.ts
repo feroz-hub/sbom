@@ -1,0 +1,105 @@
+import { trustedMutationOrigin } from '@/lib/auth/origin';
+import { NextRequest, NextResponse } from 'next/server';
+import { ACTIVE_TENANT_COOKIE } from '@/lib/auth';
+import { applyServerDerivedTenantHeader } from '@/lib/auth/tenantHeader';
+import { getDiscovery, refreshTokens } from '@/lib/auth/oidc';
+import { serverAuthConfig } from '@/lib/auth/server-config';
+import {
+  destroySession, getSession, SESSION_COOKIE, setSession, singleFlightRefresh, type TokenSession,
+} from '@/lib/auth/session-store';
+
+export const runtime = 'nodejs';
+export const dynamic = 'force-dynamic';
+
+async function usableSession(id: string, force = false): Promise<TokenSession | null> {
+  const current = await getSession(id);
+  if (!current) return null;
+  if (current.provider === 'NATIVE' || current.provider === 'MICROSOFT_ENTRA') {
+    if (!force && current.expiresAt > Date.now()) return current;
+    await destroySession(id);
+    return null;
+  }
+  if (!force && current.expiresAt > Date.now() + 60_000) return current;
+  return singleFlightRefresh(id, async () => {
+    const latest = await getSession(id);
+    if (!latest) return null;
+    if (!force && latest.expiresAt > Date.now() + 60_000) return latest;
+    const config = serverAuthConfig();
+    const next = await refreshTokens(latest, config, await getDiscovery(config));
+    if (next) await setSession(id, next);
+    else await destroySession(id);
+    return next;
+  });
+}
+
+async function proxy(request: NextRequest, context: { params: Promise<{ path: string[] }> }) {
+  if (!['GET', 'HEAD'].includes(request.method) && !trustedMutationOrigin(request)) {
+    return NextResponse.json({ detail: 'Untrusted origin' }, { status: 403 });
+  }
+  const config = serverAuthConfig();
+  const id = request.cookies.get(SESSION_COOKIE)?.value;
+  if (config.enabled && !id) return NextResponse.json({ detail: 'Authentication required' }, { status: 401 });
+  let session = id ? await usableSession(id) : null;
+  if (config.enabled && !session) return NextResponse.json({ detail: 'Authentication required' }, { status: 401 });
+
+  const { path } = await context.params;
+  const target = new URL(`/${path.join('/')}`, `${config.apiUrl}/`);
+  let decodedTarget: URL;
+  try { decodedTarget = new URL(decodeURIComponent(target.pathname), config.apiUrl); }
+  catch { return NextResponse.json({ detail: 'Invalid path' }, { status: 400 }); }
+  const backendOrigin = new URL(config.apiUrl).origin;
+  if (target.origin !== backendOrigin || decodedTarget.origin !== backendOrigin || decodedTarget.pathname.startsWith('/api/auth/native')) {
+    return NextResponse.json({ detail: 'Not found' }, { status: 404 });
+  }
+  target.search = request.nextUrl.search;
+  const headers = new Headers(request.headers);
+  for (const name of ['host', 'cookie', 'content-length', 'connection']) headers.delete(name);
+  if (session) headers.set('Authorization', `Bearer ${session.accessToken}`);
+  else headers.delete('Authorization');
+  // Native EventSource cannot set X-Tenant-ID. The browser-side tenant
+  // selector mirrors the non-secret numeric id into a strict same-site
+  // cookie; authenticated same-origin streams reach this BFF, which derives
+  // the normal header server-side. Backend membership checks remain the
+  // authorization boundary. Bearer tokens are never placed in URLs.
+  applyServerDerivedTenantHeader(headers, request.cookies.get(ACTIVE_TENANT_COOKIE)?.value, decodedTarget.pathname);
+  const body = ['GET', 'HEAD'].includes(request.method) ? undefined : await request.arrayBuffer();
+  const send = () => fetch(target, { method: request.method, headers, body, redirect: 'manual', cache: 'no-store' });
+  let upstream = await send();
+  if (upstream.status === 401 && id && session) {
+    session = await usableSession(id, true);
+    if (session) {
+      headers.set('Authorization', `Bearer ${session.accessToken}`);
+      upstream = await send();
+    }
+  }
+  if (!upstream.ok) {
+    // Do not log query strings, headers, cookies, or token-bearing bodies.
+    console.warn(`[api/backend] ${request.method} /${path.join('/')} -> ${upstream.status}`);
+  }
+  const responseHeaders = new Headers(upstream.headers);
+  responseHeaders.delete('set-cookie');
+  responseHeaders.delete('www-authenticate');
+  // Node fetch transparently decodes compressed upstream bodies. Forwarding
+  // the original encoding/length makes the browser try to decode them again,
+  // which surfaces as a successful status with an unreadable response body.
+  responseHeaders.delete('content-encoding');
+  responseHeaders.delete('content-length');
+  responseHeaders.delete('transfer-encoding');
+  // These statuses prohibit a response body, including an empty ArrayBuffer.
+  // A JSON content type on a successful DELETE must not turn its 204 into a 500.
+  if ([204, 205, 304].includes(upstream.status)) {
+    return new NextResponse(null, { status: upstream.status, headers: responseHeaders });
+  }
+  // Next.js development route handlers can close a proxied JSON stream before
+  // the browser finishes reading it. Buffer structured API responses here;
+  // binary downloads remain streamed to avoid loading large files into memory.
+  const contentType = responseHeaders.get('content-type') || '';
+  const responseBody = contentType.includes('json') ? await upstream.arrayBuffer() : upstream.body;
+  return new NextResponse(responseBody, { status: upstream.status, headers: responseHeaders });
+}
+
+export const GET = proxy;
+export const POST = proxy;
+export const PUT = proxy;
+export const PATCH = proxy;
+export const DELETE = proxy;

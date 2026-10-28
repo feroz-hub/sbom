@@ -3,7 +3,7 @@
 The dashboard's metric functions share a Session.  A scope installed on that
 Session is applied by the existing ORM read filter in ``app.db``; metric SQL
 therefore keeps its canonical definitions while every query sees the same
-tenant, hierarchy and active HEAD SBOM set.
+tenant, hierarchy and resolved current security-posture SBOM set.
 """
 
 from __future__ import annotations
@@ -19,7 +19,7 @@ from sqlalchemy.orm import Session
 from ..core.context import CurrentContext
 from ..core.security import get_current_tenant_context
 from ..db import get_db
-from ..models import Product, Projects, SBOMSource
+from ..models import Product, Projects, SBOMSource, Tenant
 
 
 @dataclass(frozen=True)
@@ -45,39 +45,9 @@ class DashboardScope:
 
     def eligible_sbom_ids(self):
         """SQL subquery, not a Python list; usable by every metric query."""
-        s = SBOMSource.__table__.c
-        statement = select(s.id).where(s.tenant_id == self.tenant_id, s.is_active.is_(True))
-        # Core subqueries need the same parent visibility rules that ORM
-        # queries receive from SoftDeleteMixin and Product's deleted_at field.
-        # Nullable links remain eligible for older uploads without a Product.
-        project = Projects.__table__.c
-        visible_projects = select(project.id).where(
-            project.tenant_id == self.tenant_id, project.is_active.is_(True),
-        )
-        product = Product.__table__.c
-        visible_products = select(product.id).where(
-            product.tenant_id == self.tenant_id,
-            product.is_active.is_(True), product.deleted_at.is_(None),
-        )
-        statement = statement.where(
-            s.projectid.is_(None) | s.projectid.in_(visible_projects),
-            s.product_id.is_(None) | s.product_id.in_(visible_products),
-        )
-        # A later version supersedes its parent in operational dashboards.
-        child = SBOMSource.__table__.alias("dashboard_child")
-        statement = statement.where(
-            ~s.id.in_(select(child.c.parent_id).where(
-                child.c.tenant_id == self.tenant_id,
-                child.c.parent_id.is_not(None),
-            ))
-        )
-        if self.project_id is not None:
-            statement = statement.where(s.projectid == self.project_id)
-        if self.product_id is not None:
-            statement = statement.where(s.product_id == self.product_id)
-        if self.sbom_id is not None:
-            statement = statement.where(s.id == self.sbom_id)
-        return statement
+        from ..metrics.posture import posture_sbom_ids
+        return posture_sbom_ids(self.tenant_id, self.project_id, self.product_id, self.sbom_id)
+
 
 
 def resolve_dashboard_scope(
@@ -120,6 +90,23 @@ def resolve_dashboard_scope(
     if sbom_id is not None and db.execute(scope.eligible_sbom_ids()).scalar_one_or_none() is None:
         raise HTTPException(status_code=404, detail="Dashboard scope not found")
     return scope
+
+
+def scope_metadata(db: Session, scope: DashboardScope) -> dict:
+    """Names for the applied scope, echoed by dashboard responses."""
+    tenant_name = db.execute(select(Tenant.name).where(Tenant.id == scope.tenant_id)).scalar_one_or_none()
+    project_name = db.execute(select(Projects.project_name).where(Projects.id == scope.project_id)).scalar_one_or_none() if scope.project_id else None
+    product_name = db.execute(select(Product.name).where(Product.id == scope.product_id)).scalar_one_or_none() if scope.product_id else None
+    sbom = db.execute(select(SBOMSource.sbom_name, SBOMSource.sbom_version, SBOMSource.productver).where(SBOMSource.id == scope.sbom_id)).first() if scope.sbom_id else None
+    from .sbom_posture import posture_metadata
+    return {
+        "posture": posture_metadata(db, *scope.key),
+        "level": scope.level,
+        "tenant": {"id": scope.tenant_id, "name": tenant_name},
+        "project": {"id": scope.project_id, "name": project_name} if scope.project_id else None,
+        "application": {"id": scope.product_id, "name": product_name} if scope.product_id else None,
+        "sbom": {"id": scope.sbom_id, "name": sbom.sbom_name, "version": sbom.sbom_version or sbom.productver} if sbom else None,
+    }
 
 
 @contextmanager

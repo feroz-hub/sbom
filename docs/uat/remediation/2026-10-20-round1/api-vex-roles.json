@@ -1,0 +1,429 @@
+[
+  {
+    "id": "R1-VEX-DETAIL-ROLE-admin",
+    "phase": "vex-roles",
+    "role": "admin",
+    "expected": "Actual detail response respects role/tenant HTTP 200",
+    "actual": {
+      "status": 200,
+      "confidence": "0.812",
+      "capabilities": {
+        "historical": false,
+        "can_assign": true,
+        "can_unassign": true,
+        "can_update": true,
+        "can_map": true,
+        "eligible_roles": [
+          "DEVELOPER",
+          "SECURITY_ANALYST"
+        ],
+        "candidates": [
+          {
+            "id": "membership:2",
+            "label": "Synthetic Olympus analyst",
+            "email": "analyst@olympus.example.test",
+            "roles": [
+              "SECURITY_ANALYST"
+            ]
+          },
+          {
+            "id": "membership:3",
+            "label": "Synthetic Olympus developer",
+            "email": "developer@olympus.example.test",
+            "roles": [
+              "DEVELOPER"
+            ]
+          }
+        ],
+        "owner": {
+          "id": null,
+          "label": "Unassigned",
+          "active": false,
+          "email": null,
+          "is_self": false,
+          "roles": []
+        },
+        "read_only_reason": null
+      },
+      "request_id": "895f4e74adc7"
+    },
+    "result": "PASS",
+    "time": "2026-10-20T03:39:11.767914+00:00"
+  },
+  {
+    "id": "R1-VEX-DETAIL-ROLE-analyst",
+    "phase": "vex-roles",
+    "role": "analyst",
+    "expected": "Actual detail response respects role/tenant HTTP 200",
+    "actual": {
+      "status": 200,
+      "confidence": "0.812",
+      "capabilities": {
+        "historical": false,
+        "can_assign": true,
+        "can_unassign": true,
+        "can_update": true,
+        "can_map": true,
+        "eligible_roles": [
+          "DEVELOPER"
+        ],
+        "candidates": [
+          {
+            "id": "membership:3",
+            "label": "Synthetic Olympus developer",
+            "email": "developer@olympus.example.test",
+            "roles": [
+              "DEVELOPER"
+            ]
+          }
+        ],
+        "owner": {
+          "id": null,
+          "label": "Unassigned",
+          "active": false,
+          "email": null,
+          "is_self": false,
+          "roles": []
+        },
+        "read_only_reason": null
+      },
+      "request_id": "b3b6377647bd"
+    },
+    "result": "PASS",
+    "time": "2026-10-20T03:39:12.971204+00:00"
+  },
+  {
+    "id": "R1-VEX-DETAIL-ROLE-developer",
+    "phase": "vex-roles",
+    "role": "developer",
+    "expected": "Actual detail response respects role/tenant HTTP 200",
+    "actual": {
+      "status": 200,
+      "confidence": "0.812",
+      "capabilities": {
+        "historical": false,
+        "can_assign": false,
+        "can_unassign": false,
+        "can_update": false,
+        "can_map": false,
+        "eligible_roles": [],
+        "candidates": [],
+        "owner": {
+          "id": null,
+          "label": "Unassigned",
+          "active": false,
+          "email": null,
+          "is_self": false,
+          "roles": []
+        },
+        "read_only_reason": "This investigation must be assigned to you before you can update it. This investigation must be assigned by a Tenant Administrator or Security Analyst before you can update it."
+      },
+      "request_id": "3eaabb30e5f6"
+    },
+    "result": "PASS",
+    "time": "2026-10-20T03:39:15.189748+00:00"
+  },
+  {
+    "id": "R1-VEX-DETAIL-ROLE-viewer",
+    "phase": "vex-roles",
+    "role": "viewer",
+    "expected": "Actual detail response respects role/tenant HTTP 200",
+    "actual": {
+      "status": 200,
+      "confidence": "0.812",
+      "capabilities": {
+        "historical": false,
+        "can_assign": false,
+        "can_unassign": false,
+        "can_update": false,
+        "can_map": false,
+        "eligible_roles": [],
+        "candidates": [],
+        "owner": {
+          "id": null,
+          "label": "Unassigned",
+          "active": false,
+          "email": null,
+          "is_self": false,
+          "roles": []
+        },
+        "read_only_reason": "You can view this investigation, but only the assigned Developer, a Security Analyst, or Tenant Administrator can update it."
+      },
+      "request_id": "63216c3ad146"
+    },
+    "result": "PASS",
+    "time": "2026-10-20T03:39:15.736941+00:00"
+  },
+  {
+    "id": "R1-VEX-DETAIL-ROLE-foreign",
+    "phase": "vex-roles",
+    "role": "foreign",
+    "expected": "Actual detail response respects role/tenant HTTP 404",
+    "actual": {
+      "status": 404,
+      "confidence": null,
+      "capabilities": null,
+      "request_id": "809d925d46b2"
+    },
+    "result": "PASS",
+    "time": "2026-10-20T03:39:16.001112+00:00"
+  },
+  {
+    "id": "R1-VEX-DETAIL-ROLE-platform",
+    "phase": "vex-roles",
+    "role": "platform",
+    "expected": "Actual detail response respects role/tenant HTTP 403",
+    "actual": {
+      "status": 403,
+      "confidence": null,
+      "capabilities": null,
+      "request_id": "a9b46127f5d0"
+    },
+    "result": "PASS",
+    "time": "2026-10-20T03:39:16.288648+00:00"
+  },
+  {
+    "id": "R1-VEX-ANALYST-DECISION",
+    "phase": "vex-roles",
+    "role": "analyst",
+    "expected": "Security Analyst decision on second UAT context serializes and persists",
+    "actual": {
+      "status": 200,
+      "data": {
+        "id": 48,
+        "sbom_id": "a18b1310-f4d9-401f-b8b1-f6beee5933ac",
+        "project_name": "UAT R1 1792465600082474000",
+        "product_name": "UAT R1 1792465600082474000 Application",
+        "sbom_name": "UAT R1 1792465600082474000 SBOM",
+        "sbom_version": null,
+        "historical": false,
+        "analysis_run_id": 22,
+        "vulnerability": {
+          "canonical_vulnerability_id": "CVE-2021-23337",
+          "aliases": [
+            "GHSA-35JH-R3H4-6JHM"
+          ],
+          "severity": "HIGH",
+          "cvss_score": 7.2,
+          "description": "Command Injection in lodash",
+          "references": [
+            "https://cert-portal.siemens.com/productcert/pdf/ssa-637483.pdf"
+          ]
+        },
+        "component": {
+          "component_id": "06036bc5-2ed5-40cf-82c8-52b9cb39c84d",
+          "name": "lodash",
+          "version": "4.17.20",
+          "purl": "pkg:npm/lodash@4.17.20",
+          "cpe": null,
+          "bom_ref": "uat-lodash",
+          "supplier": "UAT"
+        },
+        "analyzer_evidence": {
+          "detection_state": "DETECTED",
+          "sources": [
+            "OSV"
+          ],
+          "analysis_run_id": 22,
+          "match_strategy": "purl_direct",
+          "match_confidence": "0.812",
+          "matched_range": null,
+          "first_seen_at": "2026-10-20T03:06:44+00:00",
+          "last_seen_at": "2026-10-20T03:39:17+00:00"
+        },
+        "imported_vex": [],
+        "internal_decision": {
+          "effective_status": "UNDER_INVESTIGATION",
+          "reviewer": "analyst@olympus.example.test",
+          "assigned_to": null,
+          "reason": "Round 1 Security Analyst disposable role acceptance",
+          "justification": null,
+          "impact_statement": null,
+          "action_statement": null,
+          "mitigation": null,
+          "fixed_version": null,
+          "evidence_url": null,
+          "updated_at": "2026-10-20T03:39:17+00:00"
+        },
+        "reconciliation_status": "MATCHED",
+        "effective_status": "UNDER_INVESTIGATION",
+        "history": [
+          {
+            "at": "2026-10-20T03:39:17+00:00",
+            "kind": "decision",
+            "actor": "analyst@olympus.example.test",
+            "summary": "Round 1 Security Analyst disposable role acceptance",
+            "previous_status": null,
+            "new_status": "UNDER_INVESTIGATION",
+            "reason": "Round 1 Security Analyst disposable role acceptance"
+          },
+          {
+            "at": "2026-10-20T03:39:17+00:00",
+            "kind": "decision",
+            "actor": "analyst@olympus.example.test",
+            "summary": "Round 1 Security Analyst disposable role acceptance",
+            "previous_status": "UNDER_INVESTIGATION",
+            "new_status": "UNDER_INVESTIGATION",
+            "reason": "Round 1 Security Analyst disposable role acceptance"
+          }
+        ],
+        "capabilities": {
+          "historical": false,
+          "can_assign": true,
+          "can_unassign": true,
+          "can_update": true,
+          "can_map": true,
+          "eligible_roles": [
+            "DEVELOPER"
+          ],
+          "candidates": [
+            {
+              "id": "membership:3",
+              "label": "Synthetic Olympus developer",
+              "email": "developer@olympus.example.test",
+              "roles": [
+                "DEVELOPER"
+              ]
+            }
+          ],
+          "owner": {
+            "id": null,
+            "label": "Unassigned",
+            "active": false,
+            "email": null,
+            "is_self": false,
+            "roles": []
+          },
+          "read_only_reason": null
+        },
+        "previous_decisions": [],
+        "row_version": 3
+      },
+      "request_id": "2ef3dfafedb0"
+    },
+    "result": "PASS",
+    "time": "2026-10-20T03:39:18.197596+00:00"
+  },
+  {
+    "id": "R1-VEX-ANALYST-CONFLICT",
+    "phase": "vex-roles",
+    "role": "analyst",
+    "expected": "Security Analyst stale decision remains 409",
+    "actual": {
+      "status": 409,
+      "data": {
+        "id": 48,
+        "sbom_id": "a18b1310-f4d9-401f-b8b1-f6beee5933ac",
+        "project_name": "UAT R1 1792465600082474000",
+        "product_name": "UAT R1 1792465600082474000 Application",
+        "sbom_name": "UAT R1 1792465600082474000 SBOM",
+        "sbom_version": null,
+        "historical": false,
+        "analysis_run_id": 22,
+        "vulnerability": {
+          "canonical_vulnerability_id": "CVE-2021-23337",
+          "aliases": [
+            "GHSA-35JH-R3H4-6JHM"
+          ],
+          "severity": "HIGH",
+          "cvss_score": 7.2,
+          "description": "Command Injection in lodash",
+          "references": [
+            "https://cert-portal.siemens.com/productcert/pdf/ssa-637483.pdf"
+          ]
+        },
+        "component": {
+          "component_id": "06036bc5-2ed5-40cf-82c8-52b9cb39c84d",
+          "name": "lodash",
+          "version": "4.17.20",
+          "purl": "pkg:npm/lodash@4.17.20",
+          "cpe": null,
+          "bom_ref": "uat-lodash",
+          "supplier": "UAT"
+        },
+        "analyzer_evidence": {
+          "detection_state": "DETECTED",
+          "sources": [
+            "OSV"
+          ],
+          "analysis_run_id": 22,
+          "match_strategy": "purl_direct",
+          "match_confidence": "0.812",
+          "matched_range": null,
+          "first_seen_at": "2026-10-20T03:06:44+00:00",
+          "last_seen_at": "2026-10-20T03:39:17+00:00"
+        },
+        "imported_vex": [],
+        "internal_decision": {
+          "effective_status": "UNDER_INVESTIGATION",
+          "reviewer": "analyst@olympus.example.test",
+          "assigned_to": null,
+          "reason": "Round 1 Security Analyst disposable role acceptance",
+          "justification": null,
+          "impact_statement": null,
+          "action_statement": null,
+          "mitigation": null,
+          "fixed_version": null,
+          "evidence_url": null,
+          "updated_at": "2026-10-20T03:39:17+00:00"
+        },
+        "reconciliation_status": "MATCHED",
+        "effective_status": "UNDER_INVESTIGATION",
+        "history": [
+          {
+            "at": "2026-10-20T03:39:17+00:00",
+            "kind": "decision",
+            "actor": "analyst@olympus.example.test",
+            "summary": "Round 1 Security Analyst disposable role acceptance",
+            "previous_status": null,
+            "new_status": "UNDER_INVESTIGATION",
+            "reason": "Round 1 Security Analyst disposable role acceptance"
+          },
+          {
+            "at": "2026-10-20T03:39:17+00:00",
+            "kind": "decision",
+            "actor": "analyst@olympus.example.test",
+            "summary": "Round 1 Security Analyst disposable role acceptance",
+            "previous_status": "UNDER_INVESTIGATION",
+            "new_status": "UNDER_INVESTIGATION",
+            "reason": "Round 1 Security Analyst disposable role acceptance"
+          }
+        ],
+        "capabilities": {
+          "historical": false,
+          "can_assign": true,
+          "can_unassign": true,
+          "can_update": true,
+          "can_map": true,
+          "eligible_roles": [
+            "DEVELOPER"
+          ],
+          "candidates": [
+            {
+              "id": "membership:3",
+              "label": "Synthetic Olympus developer",
+              "email": "developer@olympus.example.test",
+              "roles": [
+                "DEVELOPER"
+              ]
+            }
+          ],
+          "owner": {
+            "id": null,
+            "label": "Unassigned",
+            "active": false,
+            "email": null,
+            "is_self": false,
+            "roles": []
+          },
+          "read_only_reason": null
+        },
+        "previous_decisions": [],
+        "row_version": 3
+      },
+      "request_id": "a577fc20e81c"
+    },
+    "result": "PASS",
+    "time": "2026-10-20T03:39:18.704533+00:00"
+  }
+]

@@ -1,0 +1,89 @@
+[
+  {
+    "id": "R3-STABILITY-NAV-0-/",
+    "role": "admin/viewer",
+    "expected": "Protected module navigation reaches expected heading without empty response",
+    "actual": {
+      "path": "/",
+      "status": 200,
+      "elapsedMs": 10405
+    },
+    "result": "PASS"
+  },
+  {
+    "id": "R3-STABILITY-NAV-0-/projects",
+    "role": "admin/viewer",
+    "expected": "Protected module navigation reaches expected heading without empty response",
+    "actual": {
+      "path": "/projects",
+      "status": 200,
+      "elapsedMs": 29216
+    },
+    "result": "PASS"
+  },
+  {
+    "id": "R3-STABILITY-NAV-0-/sboms",
+    "role": "admin/viewer",
+    "expected": "Protected module navigation reaches expected heading without empty response",
+    "actual": {
+      "path": "/sboms",
+      "status": 200,
+      "elapsedMs": 45080
+    },
+    "result": "PASS"
+  },
+  {
+    "id": "R3-STABILITY-NAV-0-/kev",
+    "role": "admin/viewer",
+    "expected": "Protected module navigation reaches expected heading without empty response",
+    "actual": {
+      "path": "/kev",
+      "status": 200,
+      "elapsedMs": 35054
+    },
+    "result": "PASS"
+  },
+  {
+    "id": "R3-STABILITY-NAV-0-/schedules",
+    "role": "admin/viewer",
+    "expected": "Protected module navigation reaches expected heading without empty response",
+    "actual": {
+      "path": "/schedules",
+      "status": 200,
+      "elapsedMs": 24155
+    },
+    "result": "PASS"
+  },
+  {
+    "id": "R3-STABILITY-NAV-0-/vex-investigation",
+    "role": "admin/viewer",
+    "expected": "Protected module navigation reaches expected heading without empty response",
+    "actual": {
+      "path": "/vex-investigation",
+      "status": 200,
+      "elapsedMs": 35619
+    },
+    "result": "PASS"
+  },
+  {
+    "id": "R3-STABILITY-NAV-0-/component-advisor",
+    "role": "admin/viewer",
+    "expected": "Protected module navigation reaches expected heading without empty response",
+    "actual": {
+      "path": "/component-advisor",
+      "status": 200,
+      "elapsedMs": 56561
+    },
+    "result": "PASS"
+  },
+  {
+    "id": "R3-STABILITY-EXECUTION",
+    "role": "admin/viewer",
+    "expected": "Complete bounded normal-access measurement",
+    "actual": {
+      "error": "locator.waitFor: Timeout 60000ms exceeded.\nCall log:\n\u001b[2m  - waiting for getByRole('heading', { name: 'Users & Access', exact: true }) to be visible\u001b[22m\n",
+      "path": "/settings/users"
+    },
+    "result": "FAIL"
+  }
+]

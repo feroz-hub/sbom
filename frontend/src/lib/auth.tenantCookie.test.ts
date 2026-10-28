@@ -15,13 +15,13 @@ describe('active tenant propagation for authenticated streams', () => {
   });
 
   it('mirrors the non-secret tenant id into same-origin cookie context', () => {
-    setActiveTenantId('17');
-    expect(getActiveTenantId()).toBe('17');
-    expect(document.cookie).toContain(`${ACTIVE_TENANT_COOKIE}=17`);
+    setActiveTenantId('00000000-0000-4000-8000-000000000011');
+    expect(getActiveTenantId()).toBe('00000000-0000-4000-8000-000000000011');
+    expect(document.cookie).toContain(`${ACTIVE_TENANT_COOKIE}=00000000-0000-4000-8000-000000000011`);
   });
 
   it('removes both tenant preference stores on clear', () => {
-    setActiveTenantId('17');
+    setActiveTenantId('00000000-0000-4000-8000-000000000011');
     clearActiveTenantId();
     expect(getActiveTenantId()).toBeNull();
     expect(document.cookie).not.toContain(`${ACTIVE_TENANT_COOKIE}=`);
@@ -32,4 +32,14 @@ describe('active tenant propagation for authenticated streams', () => {
     expect(getActiveTenantId()).toBeNull();
     expect(document.cookie).not.toContain(ACTIVE_TENANT_COOKIE);
   });
+
+  it.each(['1', '17', 'NaN', 'undefined', '', 'not-a-uuid', '00000000-0000-1000-8000-000000000011'])(
+    'clears an existing invalid tenant preference before making requests: %s', value => {
+      sessionStorage.setItem('sbom_active_tenant_id', value);
+      document.cookie = `${ACTIVE_TENANT_COOKIE}=${encodeURIComponent(value)}; Path=/`;
+      expect(getActiveTenantId()).toBeNull();
+      expect(sessionStorage.getItem('sbom_active_tenant_id')).toBeNull();
+      expect(document.cookie).not.toContain(`${ACTIVE_TENANT_COOKIE}=`);
+    },
+  );
 });

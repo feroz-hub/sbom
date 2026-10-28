@@ -39,8 +39,27 @@ def api_client(app, fernet_key: str) -> Iterator[TestClient]:
     """
     app.dependency_overrides[get_secrets] = lambda: FernetSecretsAdapter(fernet_key)
     with TestClient(app) as c:
+        from app.db import SessionLocal
+
+        from tests.phase6_helpers import seed_dev_platform_admin
+        with SessionLocal() as db:
+            seed_dev_platform_admin(db)
         yield c
     app.dependency_overrides.pop(get_secrets, None)
+
+
+def test_tenant_admin_cannot_mutate_global_mirror(client, fernet_key):
+    from app.db import SessionLocal
+    from app.nvd_mirror.db.models import NvdSettingsRow, NvdSyncRunRow
+    from sqlalchemy import func, select
+
+    with SessionLocal() as db:
+        before = (db.scalar(select(func.count(NvdSettingsRow.id))), db.scalar(select(func.count(NvdSyncRunRow.id))))
+    assert client.get("/admin/nvd-mirror/settings").status_code == 403
+    assert client.put("/admin/nvd-mirror/settings", json={"enabled": True}).status_code == 403
+    assert client.post("/admin/nvd-mirror/sync").status_code == 403
+    with SessionLocal() as db:
+        assert (db.scalar(select(func.count(NvdSettingsRow.id))), db.scalar(select(func.count(NvdSyncRunRow.id)))) == before
 
 
 # --- GET /settings --------------------------------------------------------

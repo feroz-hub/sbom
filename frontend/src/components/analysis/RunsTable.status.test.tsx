@@ -24,7 +24,7 @@ function wrap(children: ReactNode) {
 
 function run(overrides: Partial<AnalysisRun>): AnalysisRun {
   return {
-    id: 1,
+    id: "00000000-0000-4000-8000-000000000001", display_id: 1,
     sbom_id: 10,
     sbom_name: 'clean-backfill',
     project_id: null,
@@ -53,8 +53,8 @@ describe('RunsTable status classification', () => {
       wrap(
         <RunsTable
           runs={[
-            run({ id: 2, run_status: 'PASS', total_findings: 0, source: 'BACKFILL' }),
-            run({ id: 1, sbom_name: 'vulnerable', run_status: 'FINDINGS', total_findings: 35 }),
+            run({ id: "00000000-0000-4000-8000-000000000002", display_id: 2, run_status: 'PASS', total_findings: 0, source: 'BACKFILL' }),
+            run({ id: "00000000-0000-4000-8000-000000000001", display_id: 1, sbom_name: 'vulnerable', run_status: 'FINDINGS', total_findings: 35 }),
           ]}
           isLoading={false}
           error={null}
@@ -73,4 +73,14 @@ describe('RunsTable status classification', () => {
     expect(screen.getByText('#2')).toBeInTheDocument();
     expect(screen.queryByText('#1')).not.toBeInTheDocument();
   });
+});
+
+it('preserves historical rows while disabling comparison and new PDFs', () => {
+  const reason = 'Analysis unavailable because this SBOM is inactive.';
+  render(wrap(<RunsTable runs={[run({ run_status: 'FINDINGS', processing_eligibility: { eligible: false, reason_code: 'SBOM_INACTIVE', reason } })]} isLoading={false} error={null} selectedIds={new Set()} onToggleSelect={vi.fn()} />));
+  expect(screen.getByText('#1')).toBeVisible();
+  expect(screen.getByRole('checkbox', { name: 'Select Run #1 for comparison' })).toBeDisabled();
+  expect(screen.getByRole('button', { name: 'Download PDF' })).toBeDisabled();
+  expect(screen.getByRole('button', { name: 'Download PDF' })).toHaveAttribute('title', reason);
+  expect(screen.getByRole('link', { name: 'View run' })).toHaveAttribute('href', '/analysis/00000000-0000-4000-8000-000000000001');
 });

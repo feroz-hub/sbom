@@ -23,7 +23,7 @@ from ..core.identity_states import (
     IdentityErrorCode,
     identity_http_error,
 )
-from ..models import EmailVerificationToken, IAMUser
+from ..models import EmailVerificationToken, IAMUser, UserIdentity
 from ..settings import get_settings
 from . import audit_service
 
@@ -577,6 +577,27 @@ def provision_local_identity(
             now=now,
             request=request,
         )
+    # Additive compatibility mirror only. The trusted issuer/subject lookup
+    # above still determines the person; profile email never links accounts.
+    db.scalar(select(IAMUser.id).where(IAMUser.id == user.id).with_for_update())
+    provider_identity = db.scalar(select(UserIdentity).where(
+        UserIdentity.provider_type == "HCL_CS",
+        UserIdentity.issuer == identity.issuer,
+        UserIdentity.subject == identity.subject,
+    ))
+    if provider_identity is not None and provider_identity.user_id != user.id:
+        _identity_conflict(db, identity, request)
+    if provider_identity is None:
+        provider_identity = UserIdentity(
+            user_id=user.id, provider_type="HCL_CS", issuer=identity.issuer,
+            subject=identity.subject, provider_identifier=user.external_iam_user_id,
+            created_at=now, updated_at=now,
+        )
+        db.add(provider_identity)
+    provider_identity.provider_email = identity.email
+    provider_identity.updated_at = now
+    provider_identity.last_authenticated_at = now
+    db.flush()
     return ProvisioningResult(
         user=user,
         created=created,

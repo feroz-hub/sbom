@@ -1,0 +1,6574 @@
+[
+  {
+    "id": "R3-OWNED-ANALYSIS",
+    "role": "admin",
+    "preconditions": "Verified isolated Greenfield UUID; task-owned fixtures; credentials kept in memory",
+    "stepsExecuted": "Analyze fresh own scope",
+    "expected": "200 complete",
+    "actual": {
+      "status": 200,
+      "complete": true
+    },
+    "result": "PASS",
+    "time": "2026-10-20T09:15:48.422634+00:00"
+  },
+  {
+    "id": "R3-DASHBOARD-OWNED-BEFORE",
+    "role": "admin",
+    "preconditions": "Verified isolated Greenfield UUID; task-owned fixtures; credentials kept in memory",
+    "stepsExecuted": "Read fresh two-SBOM scoped posture",
+    "expected": "200 two stored active SBOMs",
+    "actual": {
+      "status": 200,
+      "data": {
+        "scope": {
+          "posture": [
+            {
+              "target_sbom_id": "98cfb1f3-6ebc-4727-8222-56921377ce0f",
+              "posture_sbom_id": "98cfb1f3-6ebc-4727-8222-56921377ce0f",
+              "tenant_id": "3a900179-36bf-4b5f-b2e1-2a4a9d06e6af",
+              "projectid": "d016fed5-336c-4234-a3ef-83964c6cbf57",
+              "product_id": "67289be2-ba05-4469-b158-c64859613caa",
+              "designated_sbom_id": null,
+              "stored_designated_sbom_id": null,
+              "selection_mode": "AUTO",
+              "application_name": "UAT R3 1792486718006046000 Application",
+              "current_sbom": {
+                "id": "98cfb1f3-6ebc-4727-8222-56921377ce0f",
+                "name": "UAT R3 1792486718006046000 SBOM 2",
+                "version": null
+              },
+              "effective_current_sbom": {
+                "id": "98cfb1f3-6ebc-4727-8222-56921377ce0f",
+                "name": "UAT R3 1792486718006046000 SBOM 2",
+                "version": null
+              },
+              "invalid_selection": false,
+              "designated_current_sbom_id": null,
+              "analysis_completed_on": "2026-10-20T09:02:59+00:00",
+              "fallback_reason": null,
+              "latest_uploaded": {
+                "id": "98cfb1f3-6ebc-4727-8222-56921377ce0f",
+                "name": "UAT R3 1792486718006046000 SBOM 2",
+                "version": null
+              },
+              "latest_analyzed": {
+                "id": "98cfb1f3-6ebc-4727-8222-56921377ce0f",
+                "name": "UAT R3 1792486718006046000 SBOM 2",
+                "version": null
+              },
+              "posture_sbom": {
+                "id": "98cfb1f3-6ebc-4727-8222-56921377ce0f",
+                "name": "UAT R3 1792486718006046000 SBOM 2",
+                "version": null
+              },
+              "analysis_run_id": 27,
+              "analysis_finding_rows": 0,
+              "analysis_status": "ANALYZED",
+              "last_known_posture": false,
+              "coverage_incomplete": false,
+              "warning": null,
+              "designation_required": false
+            },
+            {
+              "target_sbom_id": "f5e7f4c4-8a16-4c70-93d8-092173885437",
+              "posture_sbom_id": "f5e7f4c4-8a16-4c70-93d8-092173885437",
+              "tenant_id": "3a900179-36bf-4b5f-b2e1-2a4a9d06e6af",
+              "projectid": "d016fed5-336c-4234-a3ef-83964c6cbf57",
+              "product_id": "67289be2-ba05-4469-b158-c64859613caa",
+              "designated_sbom_id": null,
+              "stored_designated_sbom_id": null,
+              "selection_mode": "AUTO",
+              "application_name": "UAT R3 1792486718006046000 Application",
+              "current_sbom": {
+                "id": "f5e7f4c4-8a16-4c70-93d8-092173885437",
+                "name": "UAT R3 1792486718006046000 SBOM 1",
+                "version": null
+              },
+              "effective_current_sbom": {
+                "id": "f5e7f4c4-8a16-4c70-93d8-092173885437",
+                "name": "UAT R3 1792486718006046000 SBOM 1",
+                "version": null
+              },
+              "invalid_selection": false,
+              "designated_current_sbom_id": null,
+              "analysis_completed_on": "2026-10-20T09:15:48+00:00",
+              "fallback_reason": null,
+              "latest_uploaded": {
+                "id": "f5e7f4c4-8a16-4c70-93d8-092173885437",
+                "name": "UAT R3 1792486718006046000 SBOM 1",
+                "version": null
+              },
+              "latest_analyzed": {
+                "id": "f5e7f4c4-8a16-4c70-93d8-092173885437",
+                "name": "UAT R3 1792486718006046000 SBOM 1",
+                "version": null
+              },
+              "posture_sbom": {
+                "id": "f5e7f4c4-8a16-4c70-93d8-092173885437",
+                "name": "UAT R3 1792486718006046000 SBOM 1",
+                "version": null
+              },
+              "analysis_run_id": 31,
+              "analysis_finding_rows": 5,
+              "analysis_status": "ANALYZED",
+              "last_known_posture": false,
+              "coverage_incomplete": false,
+              "warning": null,
+              "designation_required": false
+            }
+          ],
+          "level": "APPLICATION",
+          "tenant": {
+            "id": "3a900179-36bf-4b5f-b2e1-2a4a9d06e6af",
+            "name": "Olympus"
+          },
+          "project": {
+            "id": "d016fed5-336c-4234-a3ef-83964c6cbf57",
+            "name": "UAT R3 1792486718006046000"
+          },
+          "application": {
+            "id": "67289be2-ba05-4469-b158-c64859613caa",
+            "name": "UAT R3 1792486718006046000 Application"
+          },
+          "sbom": null
+        },
+        "posture": {
+          "severity": {
+            "critical": 0,
+            "high": 2,
+            "medium": 3,
+            "low": 0,
+            "unknown": 0
+          },
+          "kev_count": 0,
+          "high_epss_count": 1,
+          "needs_review_count": 5,
+          "fix_available_count": 5,
+          "last_successful_run_at": "2026-10-20T09:15:48+00:00",
+          "total_sboms": 2,
+          "total_sboms_analysed": 2,
+          "total_applications_scanned": 1,
+          "total_active_projects": 1,
+          "total_findings": 5,
+          "distinct_vulnerabilities": 5,
+          "net_7day": {
+            "added": 5,
+            "resolved": 0,
+            "is_first_period": true,
+            "window_days": 7
+          },
+          "net_7day_added": 5,
+          "net_7day_resolved": 0,
+          "headline_state": "high_only",
+          "primary_action": "view_top_sboms",
+          "coverage_status": "complete",
+          "coverage_gap_sources": [],
+          "schema_version": 1
+        },
+        "lifecycle": {
+          "total_components": 4,
+          "supported_count": 0,
+          "eol_count": 0,
+          "eos_count": 0,
+          "eof_count": 0,
+          "deprecated_count": 0,
+          "unsupported_count": 0,
+          "unknown_count": 4,
+          "eol_soon_count": 0,
+          "possibly_unmaintained_count": 0,
+          "stale_lifecycle_count": 0,
+          "top_risky_components": [],
+          "recommended_upgrades": [
+            {
+              "id": 51,
+              "name": "lodash",
+              "version": "4.17.20",
+              "ecosystem": "npm",
+              "purl": "pkg:npm/lodash@4.17.20",
+              "cpe": null,
+              "supplier": "UAT",
+              "license": null,
+              "lifecycle_status": "Unknown",
+              "eos_date": null,
+              "eol_date": null,
+              "eof_date": null,
+              "deprecated": false,
+              "unsupported": false,
+              "maintenance_status": null,
+              "latest_version": "4.18.1",
+              "latest_supported_version": null,
+              "recommended_version": "4.18.1",
+              "recommendation": "Review upgrade to latest registry version 4.18.1.",
+              "source_name": "npm registry",
+              "source_url": "https://www.npmjs.com/package/lodash",
+              "confidence": "Low",
+              "checked_at": "2026-10-19T13:00:01+00:00",
+              "evidence": {
+                "dist_tags": {
+                  "latest": "4.18.1"
+                },
+                "repository_url": "https://github.com/lodash/lodash",
+                "provider_key": "package_registry",
+                "cache_policy": {
+                  "known_days": 14,
+                  "unknown_hours": 24,
+                  "failure_minutes": 30,
+                  "deprecated_days": 7
+                },
+                "deps.dev": {
+                  "package": {},
+                  "version": {
+                    "versionKey": {
+                      "system": "NPM",
+                      "name": "lodash",
+                      "version": "4.17.20"
+                    },
+                    "isDefault": false,
+                    "licenses": [
+                      "MIT"
+                    ],
+                    "links": [
+                      {
+                        "label": "HOMEPAGE",
+                        "url": "https://lodash.com/"
+                      },
+                      {
+                        "label": "ISSUE_TRACKER",
+                        "url": "https://github.com/lodash/lodash/issues"
+                      },
+                      {
+                        "label": "ORIGIN",
+                        "url": "https://registry.npmjs.org/lodash/4.17.20"
+                      },
+                      {
+                        "label": "SOURCE_REPO",
+                        "url": "git+https://github.com/lodash/lodash.git"
+                      }
+                    ],
+                    "publishedAt": "2020-08-13T16:53:54Z"
+                  },
+                  "advisory_count": 5,
+                  "advisories": [
+                    {
+                      "id": "GHSA-29mw-wpgm-hmr9"
+                    },
+                    {
+                      "id": "GHSA-35jh-r3h4-6jhm"
+                    },
+                    {
+                      "id": "GHSA-f23m-r3pf-42rh"
+                    },
+                    {
+                      "id": "GHSA-r5fr-rjxr-66jc"
+                    },
+                    {
+                      "id": "GHSA-xxjr-mmjv-4gpg"
+                    }
+                  ],
+                  "provider_key": "deps_dev",
+                  "cache_policy": {
+                    "known_days": null,
+                    "unknown_hours": null,
+                    "failure_minutes": null,
+                    "deprecated_days": null
+                  }
+                },
+                "OSV": {
+                  "vulnerability_count": 5,
+                  "fixed_versions": [
+                    "4.17.21",
+                    "4.18.0",
+                    "4.17.23"
+                  ],
+                  "vuln_ids": [
+                    "GHSA-29mw-wpgm-hmr9",
+                    "GHSA-35jh-r3h4-6jhm",
+                    "GHSA-f23m-r3pf-42rh",
+                    "GHSA-r5fr-rjxr-66jc",
+                    "GHSA-xxjr-mmjv-4gpg"
+                  ],
+                  "provider_key": "osv",
+                  "cache_policy": {
+                    "known_days": null,
+                    "unknown_hours": null,
+                    "failure_minutes": null,
+                    "deprecated_days": null
+                  }
+                },
+                "provider_outcomes": [
+                  {
+                    "provider": "npm registry",
+                    "provider_key": "package_registry",
+                    "status": "Unknown",
+                    "error": null,
+                    "checked_at": "2026-10-19T13:00:01+00:00"
+                  },
+                  {
+                    "provider": "deps.dev",
+                    "provider_key": "deps_dev",
+                    "status": "Unknown",
+                    "error": null,
+                    "checked_at": "2026-10-19T13:00:02+00:00"
+                  },
+                  {
+                    "provider": "OSV",
+                    "provider_key": "osv",
+                    "status": "Unknown",
+                    "error": null,
+                    "checked_at": "2026-10-19T13:00:03+00:00"
+                  }
+                ],
+                "cache_hit": true,
+                "stale_cache": false,
+                "cache_expires_at": "2026-10-20T13:00:03+00:00",
+                "risk_level": "UNKNOWN"
+              },
+              "risk_level": "UNKNOWN",
+              "is_stale": false,
+              "manual_override": false
+            },
+            {
+              "id": 53,
+              "name": "lodash",
+              "version": "4.17.20",
+              "ecosystem": "npm",
+              "purl": "pkg:npm/lodash@4.17.20",
+              "cpe": null,
+              "supplier": "UAT",
+              "license": null,
+              "lifecycle_status": "Unknown",
+              "eos_date": null,
+              "eol_date": null,
+              "eof_date": null,
+              "deprecated": false,
+              "unsupported": false,
+              "maintenance_status": null,
+              "latest_version": "4.18.1",
+              "latest_supported_version": null,
+              "recommended_version": "4.18.1",
+              "recommendation": "Review upgrade to latest registry version 4.18.1.",
+              "source_name": "npm registry",
+              "source_url": "https://www.npmjs.com/package/lodash",
+              "confidence": "Low",
+              "checked_at": "2026-10-19T13:00:01+00:00",
+              "evidence": {
+                "dist_tags": {
+                  "latest": "4.18.1"
+                },
+                "repository_url": "https://github.com/lodash/lodash",
+                "provider_key": "package_registry",
+                "cache_policy": {
+                  "known_days": 14,
+                  "unknown_hours": 24,
+                  "failure_minutes": 30,
+                  "deprecated_days": 7
+                },
+                "deps.dev": {
+                  "package": {},
+                  "version": {
+                    "versionKey": {
+                      "system": "NPM",
+                      "name": "lodash",
+                      "version": "4.17.20"
+                    },
+                    "isDefault": false,
+                    "licenses": [
+                      "MIT"
+                    ],
+                    "links": [
+                      {
+                        "label": "HOMEPAGE",
+                        "url": "https://lodash.com/"
+                      },
+                      {
+                        "label": "ISSUE_TRACKER",
+                        "url": "https://github.com/lodash/lodash/issues"
+                      },
+                      {
+                        "label": "ORIGIN",
+                        "url": "https://registry.npmjs.org/lodash/4.17.20"
+                      },
+                      {
+                        "label": "SOURCE_REPO",
+                        "url": "git+https://github.com/lodash/lodash.git"
+                      }
+                    ],
+                    "publishedAt": "2020-08-13T16:53:54Z"
+                  },
+                  "advisory_count": 5,
+                  "advisories": [
+                    {
+                      "id": "GHSA-29mw-wpgm-hmr9"
+                    },
+                    {
+                      "id": "GHSA-35jh-r3h4-6jhm"
+                    },
+                    {
+                      "id": "GHSA-f23m-r3pf-42rh"
+                    },
+                    {
+                      "id": "GHSA-r5fr-rjxr-66jc"
+                    },
+                    {
+                      "id": "GHSA-xxjr-mmjv-4gpg"
+                    }
+                  ],
+                  "provider_key": "deps_dev",
+                  "cache_policy": {
+                    "known_days": null,
+                    "unknown_hours": null,
+                    "failure_minutes": null,
+                    "deprecated_days": null
+                  }
+                },
+                "OSV": {
+                  "vulnerability_count": 5,
+                  "fixed_versions": [
+                    "4.17.21",
+                    "4.18.0",
+                    "4.17.23"
+                  ],
+                  "vuln_ids": [
+                    "GHSA-29mw-wpgm-hmr9",
+                    "GHSA-35jh-r3h4-6jhm",
+                    "GHSA-f23m-r3pf-42rh",
+                    "GHSA-r5fr-rjxr-66jc",
+                    "GHSA-xxjr-mmjv-4gpg"
+                  ],
+                  "provider_key": "osv",
+                  "cache_policy": {
+                    "known_days": null,
+                    "unknown_hours": null,
+                    "failure_minutes": null,
+                    "deprecated_days": null
+                  }
+                },
+                "provider_outcomes": [
+                  {
+                    "provider": "npm registry",
+                    "provider_key": "package_registry",
+                    "status": "Unknown",
+                    "error": null,
+                    "checked_at": "2026-10-19T13:00:01+00:00"
+                  },
+                  {
+                    "provider": "deps.dev",
+                    "provider_key": "deps_dev",
+                    "status": "Unknown",
+                    "error": null,
+                    "checked_at": "2026-10-19T13:00:02+00:00"
+                  },
+                  {
+                    "provider": "OSV",
+                    "provider_key": "osv",
+                    "status": "Unknown",
+                    "error": null,
+                    "checked_at": "2026-10-19T13:00:03+00:00"
+                  }
+                ],
+                "cache_hit": true,
+                "stale_cache": false,
+                "cache_expires_at": "2026-10-20T13:00:03+00:00",
+                "risk_level": "UNKNOWN"
+              },
+              "risk_level": "UNKNOWN",
+              "is_stale": false,
+              "manual_override": false
+            }
+          ],
+          "eol_components": 0,
+          "eos_upcoming": 0,
+          "unsupported": 0,
+          "stale_count": 0
+        },
+        "health": {
+          "completeness_score": 64.0,
+          "missing_metadata": 8,
+          "outdated_components": 0
+        },
+        "vex": {
+          "affected_count": 0,
+          "not_affected_count": 0,
+          "fixed_count": 0,
+          "under_investigation_count": 5,
+          "unknown_count": 0,
+          "vulnerabilities_reduced_by_vex": 0,
+          "vulnerabilities_requiring_action": 5,
+          "top_affected_components": [],
+          "total_contexts": 5,
+          "matched_count": 0,
+          "analyzer_only_count": 5,
+          "vex_only_count": 0,
+          "conflict_review_count": 0,
+          "revalidation_required_count": 0,
+          "unresolved_mapping_count": 0,
+          "needs_review_count": 0
+        },
+        "vulnerability_age": {
+          "buckets": {
+            "le_30d": 0,
+            "d31_90": 0,
+            "d91_365": 3,
+            "gt_365": 2,
+            "unknown": 0
+          },
+          "total": 5,
+          "period": "all",
+          "date_from": null,
+          "date_to": null,
+          "schema_version": 1
+        },
+        "trend": {
+          "days": 30,
+          "points": [
+            {
+              "date": "2026-09-21",
+              "critical": 0,
+              "high": 0,
+              "medium": 0,
+              "low": 0,
+              "unknown": 0,
+              "total": 0
+            },
+            {
+              "date": "2026-09-22",
+              "critical": 0,
+              "high": 0,
+              "medium": 0,
+              "low": 0,
+              "unknown": 0,
+              "total": 0
+            },
+            {
+              "date": "2026-09-23",
+              "critical": 0,
+              "high": 0,
+              "medium": 0,
+              "low": 0,
+              "unknown": 0,
+              "total": 0
+            },
+            {
+              "date": "2026-09-24",
+              "critical": 0,
+              "high": 0,
+              "medium": 0,
+              "low": 0,
+              "unknown": 0,
+              "total": 0
+            },
+            {
+              "date": "2026-09-25",
+              "critical": 0,
+              "high": 0,
+              "medium": 0,
+              "low": 0,
+              "unknown": 0,
+              "total": 0
+            },
+            {
+              "date": "2026-09-26",
+              "critical": 0,
+              "high": 0,
+              "medium": 0,
+              "low": 0,
+              "unknown": 0,
+              "total": 0
+            },
+            {
+              "date": "2026-09-27",
+              "critical": 0,
+              "high": 0,
+              "medium": 0,
+              "low": 0,
+              "unknown": 0,
+              "total": 0
+            },
+            {
+              "date": "2026-09-28",
+              "critical": 0,
+              "high": 0,
+              "medium": 0,
+              "low": 0,
+              "unknown": 0,
+              "total": 0
+            },
+            {
+              "date": "2026-09-29",
+              "critical": 0,
+              "high": 0,
+              "medium": 0,
+              "low": 0,
+              "unknown": 0,
+              "total": 0
+            },
+            {
+              "date": "2026-09-30",
+              "critical": 0,
+              "high": 0,
+              "medium": 0,
+              "low": 0,
+              "unknown": 0,
+              "total": 0
+            },
+            {
+              "date": "2026-10-01",
+              "critical": 0,
+              "high": 0,
+              "medium": 0,
+              "low": 0,
+              "unknown": 0,
+              "total": 0
+            },
+            {
+              "date": "2026-10-02",
+              "critical": 0,
+              "high": 0,
+              "medium": 0,
+              "low": 0,
+              "unknown": 0,
+              "total": 0
+            },
+            {
+              "date": "2026-10-03",
+              "critical": 0,
+              "high": 0,
+              "medium": 0,
+              "low": 0,
+              "unknown": 0,
+              "total": 0
+            },
+            {
+              "date": "2026-10-04",
+              "critical": 0,
+              "high": 0,
+              "medium": 0,
+              "low": 0,
+              "unknown": 0,
+              "total": 0
+            },
+            {
+              "date": "2026-10-05",
+              "critical": 0,
+              "high": 0,
+              "medium": 0,
+              "low": 0,
+              "unknown": 0,
+              "total": 0
+            },
+            {
+              "date": "2026-10-06",
+              "critical": 0,
+              "high": 0,
+              "medium": 0,
+              "low": 0,
+              "unknown": 0,
+              "total": 0
+            },
+            {
+              "date": "2026-10-07",
+              "critical": 0,
+              "high": 0,
+              "medium": 0,
+              "low": 0,
+              "unknown": 0,
+              "total": 0
+            },
+            {
+              "date": "2026-10-08",
+              "critical": 0,
+              "high": 0,
+              "medium": 0,
+              "low": 0,
+              "unknown": 0,
+              "total": 0
+            },
+            {
+              "date": "2026-10-09",
+              "critical": 0,
+              "high": 0,
+              "medium": 0,
+              "low": 0,
+              "unknown": 0,
+              "total": 0
+            },
+            {
+              "date": "2026-10-10",
+              "critical": 0,
+              "high": 0,
+              "medium": 0,
+              "low": 0,
+              "unknown": 0,
+              "total": 0
+            },
+            {
+              "date": "2026-10-11",
+              "critical": 0,
+              "high": 0,
+              "medium": 0,
+              "low": 0,
+              "unknown": 0,
+              "total": 0
+            },
+            {
+              "date": "2026-10-12",
+              "critical": 0,
+              "high": 0,
+              "medium": 0,
+              "low": 0,
+              "unknown": 0,
+              "total": 0
+            },
+            {
+              "date": "2026-10-13",
+              "critical": 0,
+              "high": 0,
+              "medium": 0,
+              "low": 0,
+              "unknown": 0,
+              "total": 0
+            },
+            {
+              "date": "2026-10-14",
+              "critical": 0,
+              "high": 0,
+              "medium": 0,
+              "low": 0,
+              "unknown": 0,
+              "total": 0
+            },
+            {
+              "date": "2026-10-15",
+              "critical": 0,
+              "high": 0,
+              "medium": 0,
+              "low": 0,
+              "unknown": 0,
+              "total": 0
+            },
+            {
+              "date": "2026-10-16",
+              "critical": 0,
+              "high": 0,
+              "medium": 0,
+              "low": 0,
+              "unknown": 0,
+              "total": 0
+            },
+            {
+              "date": "2026-10-17",
+              "critical": 0,
+              "high": 0,
+              "medium": 0,
+              "low": 0,
+              "unknown": 0,
+              "total": 0
+            },
+            {
+              "date": "2026-10-18",
+              "critical": 0,
+              "high": 0,
+              "medium": 0,
+              "low": 0,
+              "unknown": 0,
+              "total": 0
+            },
+            {
+              "date": "2026-10-19",
+              "critical": 0,
+              "high": 0,
+              "medium": 0,
+              "low": 0,
+              "unknown": 0,
+              "total": 0
+            },
+            {
+              "date": "2026-10-20",
+              "critical": 0,
+              "high": 2,
+              "medium": 3,
+              "low": 0,
+              "unknown": 0,
+              "total": 5
+            }
+          ],
+          "series": [
+            {
+              "date": "2026-09-21",
+              "critical": 0,
+              "high": 0,
+              "medium": 0,
+              "low": 0,
+              "unknown": 0,
+              "total": 0
+            },
+            {
+              "date": "2026-09-22",
+              "critical": 0,
+              "high": 0,
+              "medium": 0,
+              "low": 0,
+              "unknown": 0,
+              "total": 0
+            },
+            {
+              "date": "2026-09-23",
+              "critical": 0,
+              "high": 0,
+              "medium": 0,
+              "low": 0,
+              "unknown": 0,
+              "total": 0
+            },
+            {
+              "date": "2026-09-24",
+              "critical": 0,
+              "high": 0,
+              "medium": 0,
+              "low": 0,
+              "unknown": 0,
+              "total": 0
+            },
+            {
+              "date": "2026-09-25",
+              "critical": 0,
+              "high": 0,
+              "medium": 0,
+              "low": 0,
+              "unknown": 0,
+              "total": 0
+            },
+            {
+              "date": "2026-09-26",
+              "critical": 0,
+              "high": 0,
+              "medium": 0,
+              "low": 0,
+              "unknown": 0,
+              "total": 0
+            },
+            {
+              "date": "2026-09-27",
+              "critical": 0,
+              "high": 0,
+              "medium": 0,
+              "low": 0,
+              "unknown": 0,
+              "total": 0
+            },
+            {
+              "date": "2026-09-28",
+              "critical": 0,
+              "high": 0,
+              "medium": 0,
+              "low": 0,
+              "unknown": 0,
+              "total": 0
+            },
+            {
+              "date": "2026-09-29",
+              "critical": 0,
+              "high": 0,
+              "medium": 0,
+              "low": 0,
+              "unknown": 0,
+              "total": 0
+            },
+            {
+              "date": "2026-09-30",
+              "critical": 0,
+              "high": 0,
+              "medium": 0,
+              "low": 0,
+              "unknown": 0,
+              "total": 0
+            },
+            {
+              "date": "2026-10-01",
+              "critical": 0,
+              "high": 0,
+              "medium": 0,
+              "low": 0,
+              "unknown": 0,
+              "total": 0
+            },
+            {
+              "date": "2026-10-02",
+              "critical": 0,
+              "high": 0,
+              "medium": 0,
+              "low": 0,
+              "unknown": 0,
+              "total": 0
+            },
+            {
+              "date": "2026-10-03",
+              "critical": 0,
+              "high": 0,
+              "medium": 0,
+              "low": 0,
+              "unknown": 0,
+              "total": 0
+            },
+            {
+              "date": "2026-10-04",
+              "critical": 0,
+              "high": 0,
+              "medium": 0,
+              "low": 0,
+              "unknown": 0,
+              "total": 0
+            },
+            {
+              "date": "2026-10-05",
+              "critical": 0,
+              "high": 0,
+              "medium": 0,
+              "low": 0,
+              "unknown": 0,
+              "total": 0
+            },
+            {
+              "date": "2026-10-06",
+              "critical": 0,
+              "high": 0,
+              "medium": 0,
+              "low": 0,
+              "unknown": 0,
+              "total": 0
+            },
+            {
+              "date": "2026-10-07",
+              "critical": 0,
+              "high": 0,
+              "medium": 0,
+              "low": 0,
+              "unknown": 0,
+              "total": 0
+            },
+            {
+              "date": "2026-10-08",
+              "critical": 0,
+              "high": 0,
+              "medium": 0,
+              "low": 0,
+              "unknown": 0,
+              "total": 0
+            },
+            {
+              "date": "2026-10-09",
+              "critical": 0,
+              "high": 0,
+              "medium": 0,
+              "low": 0,
+              "unknown": 0,
+              "total": 0
+            },
+            {
+              "date": "2026-10-10",
+              "critical": 0,
+              "high": 0,
+              "medium": 0,
+              "low": 0,
+              "unknown": 0,
+              "total": 0
+            },
+            {
+              "date": "2026-10-11",
+              "critical": 0,
+              "high": 0,
+              "medium": 0,
+              "low": 0,
+              "unknown": 0,
+              "total": 0
+            },
+            {
+              "date": "2026-10-12",
+              "critical": 0,
+              "high": 0,
+              "medium": 0,
+              "low": 0,
+              "unknown": 0,
+              "total": 0
+            },
+            {
+              "date": "2026-10-13",
+              "critical": 0,
+              "high": 0,
+              "medium": 0,
+              "low": 0,
+              "unknown": 0,
+              "total": 0
+            },
+            {
+              "date": "2026-10-14",
+              "critical": 0,
+              "high": 0,
+              "medium": 0,
+              "low": 0,
+              "unknown": 0,
+              "total": 0
+            },
+            {
+              "date": "2026-10-15",
+              "critical": 0,
+              "high": 0,
+              "medium": 0,
+              "low": 0,
+              "unknown": 0,
+              "total": 0
+            },
+            {
+              "date": "2026-10-16",
+              "critical": 0,
+              "high": 0,
+              "medium": 0,
+              "low": 0,
+              "unknown": 0,
+              "total": 0
+            },
+            {
+              "date": "2026-10-17",
+              "critical": 0,
+              "high": 0,
+              "medium": 0,
+              "low": 0,
+              "unknown": 0,
+              "total": 0
+            },
+            {
+              "date": "2026-10-18",
+              "critical": 0,
+              "high": 0,
+              "medium": 0,
+              "low": 0,
+              "unknown": 0,
+              "total": 0
+            },
+            {
+              "date": "2026-10-19",
+              "critical": 0,
+              "high": 0,
+              "medium": 0,
+              "low": 0,
+              "unknown": 0,
+              "total": 0
+            },
+            {
+              "date": "2026-10-20",
+              "critical": 0,
+              "high": 2,
+              "medium": 3,
+              "low": 0,
+              "unknown": 0,
+              "total": 5
+            }
+          ],
+          "annotations": [
+            {
+              "date": "2026-10-20",
+              "kind": "sbom_uploaded",
+              "label": "+2 SBOMs uploaded",
+              "count": 2
+            }
+          ],
+          "avg_total": 0.17,
+          "earliest_run_date": "2026-10-20",
+          "runs_total": 3,
+          "runs_distinct_dates": 1,
+          "granularity": null,
+          "schema_version": 1
+        },
+        "forecast": {
+          "history": [
+            {
+              "date": "2026-09-21",
+              "total": 0
+            },
+            {
+              "date": "2026-09-22",
+              "total": 0
+            },
+            {
+              "date": "2026-09-23",
+              "total": 0
+            },
+            {
+              "date": "2026-09-24",
+              "total": 0
+            },
+            {
+              "date": "2026-09-25",
+              "total": 0
+            },
+            {
+              "date": "2026-09-26",
+              "total": 0
+            },
+            {
+              "date": "2026-09-27",
+              "total": 0
+            },
+            {
+              "date": "2026-09-28",
+              "total": 0
+            },
+            {
+              "date": "2026-09-29",
+              "total": 0
+            },
+            {
+              "date": "2026-09-30",
+              "total": 0
+            },
+            {
+              "date": "2026-10-01",
+              "total": 0
+            },
+            {
+              "date": "2026-10-02",
+              "total": 0
+            },
+            {
+              "date": "2026-10-03",
+              "total": 0
+            },
+            {
+              "date": "2026-10-04",
+              "total": 0
+            },
+            {
+              "date": "2026-10-05",
+              "total": 0
+            },
+            {
+              "date": "2026-10-06",
+              "total": 0
+            },
+            {
+              "date": "2026-10-07",
+              "total": 0
+            },
+            {
+              "date": "2026-10-08",
+              "total": 0
+            },
+            {
+              "date": "2026-10-09",
+              "total": 0
+            },
+            {
+              "date": "2026-10-10",
+              "total": 0
+            },
+            {
+              "date": "2026-10-11",
+              "total": 0
+            },
+            {
+              "date": "2026-10-12",
+              "total": 0
+            },
+            {
+              "date": "2026-10-13",
+              "total": 0
+            },
+            {
+              "date": "2026-10-14",
+              "total": 0
+            },
+            {
+              "date": "2026-10-15",
+              "total": 0
+            },
+            {
+              "date": "2026-10-16",
+              "total": 0
+            },
+            {
+              "date": "2026-10-17",
+              "total": 0
+            },
+            {
+              "date": "2026-10-18",
+              "total": 0
+            },
+            {
+              "date": "2026-10-19",
+              "total": 0
+            },
+            {
+              "date": "2026-10-20",
+              "total": 5
+            }
+          ],
+          "history_days": 30,
+          "horizon_days": 14,
+          "insufficient_history": true,
+          "projection": [],
+          "slope_per_day": 0.0,
+          "r_squared": 0.0,
+          "current_total": 5,
+          "projected_total": null,
+          "days_to_zero": null,
+          "anomaly": {
+            "detected": true,
+            "zscore": null,
+            "delta": 5,
+            "baseline_mean": 0.0,
+            "baseline_std": 0.0
+          },
+          "schema_version": 1
+        },
+        "exploitation": {
+          "probability_30d": 0.0734,
+          "distinct_cves": 5,
+          "scored_cves": 1,
+          "coverage": 0.2,
+          "kev_cves": 0,
+          "top_drivers": [
+            {
+              "cve": "CVE-2020-28500",
+              "epss": 0.0734,
+              "percentile": 0.9434,
+              "kev": false
+            }
+          ],
+          "assumption": "independent",
+          "schema_version": 1
+        },
+        "remediation": {
+          "mttr_days": {
+            "critical": null,
+            "high": null,
+            "medium": null,
+            "low": null,
+            "unknown": null,
+            "overall": null
+          },
+          "resolved_total": 0,
+          "reopened_total": 0,
+          "sla": {
+            "budgets_days": {
+              "critical": 7,
+              "high": 30,
+              "medium": 90,
+              "low": 180,
+              "unknown": 90
+            },
+            "overdue": 0,
+            "due_soon": 0,
+            "ok": 5,
+            "by_severity_overdue": {},
+            "worst_offenders": []
+          },
+          "velocity": {
+            "window_days": 30,
+            "new_findings": 5,
+            "resolved_findings": 0,
+            "net": 5
+          },
+          "schema_version": 1
+        },
+        "remediation_stats": {
+          "status_counts": {
+            "open": 5,
+            "in_progress": 0,
+            "fixed": 0,
+            "accepted_risk": 0,
+            "closed": 0
+          },
+          "aging_count": 0,
+          "sla": {
+            "overdue": 0,
+            "due_soon": 0,
+            "ok": 5
+          }
+        },
+        "risk_map": {
+          "items": [
+            {
+              "sbom_id": "f5e7f4c4-8a16-4c70-93d8-092173885437",
+              "run_id": 31,
+              "name": "UAT R3 1792486718006046000 SBOM 1",
+              "project": "UAT R3 1792486718006046000",
+              "findings_total": 5,
+              "critical": 0,
+              "high": 2,
+              "medium": 3,
+              "low": 0,
+              "unknown": 0,
+              "dominant": "high",
+              "last_analysed": "2026-10-20T09:15:48+00:00"
+            },
+            {
+              "sbom_id": "98cfb1f3-6ebc-4727-8222-56921377ce0f",
+              "run_id": 27,
+              "name": "UAT R3 1792486718006046000 SBOM 2",
+              "project": "UAT R3 1792486718006046000",
+              "findings_total": 0,
+              "critical": 0,
+              "high": 0,
+              "medium": 0,
+              "low": 0,
+              "unknown": 0,
+              "dominant": "none",
+              "last_analysed": "2026-10-20T09:02:59+00:00"
+            }
+          ],
+          "schema_version": 1
+        },
+        "risk_matrix": {
+          "points": [
+            {
+              "vuln_id": "CVE-2020-28500",
+              "component": "lodash@4.17.20",
+              "severity": "medium",
+              "cvss": 5.3,
+              "has_fix": true,
+              "epss": 0.0734,
+              "kev": false
+            },
+            {
+              "vuln_id": "CVE-2026-4800",
+              "component": "lodash@4.17.20",
+              "severity": "high",
+              "cvss": 8.1,
+              "has_fix": true,
+              "epss": 0.0,
+              "kev": false
+            },
+            {
+              "vuln_id": "CVE-2021-23337",
+              "component": "lodash@4.17.20",
+              "severity": "high",
+              "cvss": 7.2,
+              "has_fix": true,
+              "epss": 0.0,
+              "kev": false
+            },
+            {
+              "vuln_id": "CVE-2025-13465",
+              "component": "lodash@4.17.20",
+              "severity": "medium",
+              "cvss": 6.5,
+              "has_fix": true,
+              "epss": 0.0,
+              "kev": false
+            },
+            {
+              "vuln_id": "CVE-2026-2950",
+              "component": "lodash@4.17.20",
+              "severity": "medium",
+              "cvss": 6.5,
+              "has_fix": true,
+              "epss": 0.0,
+              "kev": false
+            }
+          ],
+          "total_distinct": 5,
+          "unplotted_no_cvss": 0,
+          "limit": 300,
+          "schema_version": 1
+        },
+        "recent_sboms": [
+          {
+            "id": "98cfb1f3-6ebc-4727-8222-56921377ce0f",
+            "sbom_name": "UAT R3 1792486718006046000 SBOM 2",
+            "created_on": "2026-10-20T08:58:38+00:00"
+          },
+          {
+            "id": "f5e7f4c4-8a16-4c70-93d8-092173885437",
+            "sbom_name": "UAT R3 1792486718006046000 SBOM 1",
+            "created_on": "2026-10-20T08:58:38+00:00"
+          }
+        ],
+        "lifetime": {
+          "sboms_scanned_total": 2,
+          "projects_total": 1,
+          "runs_executed_total": 3,
+          "runs_completed_total": 3,
+          "runs_distinct_dates": 1,
+          "runs_executed_this_week": 3,
+          "findings_surfaced_total": 5,
+          "findings_resolved_total": 0,
+          "first_run_at": "2026-10-20T09:02:58+00:00",
+          "days_monitoring": 0,
+          "schema_version": 1
+        }
+      },
+      "request_id": "d005ed8272aa"
+    },
+    "result": "PASS",
+    "time": "2026-10-20T09:15:55.727604+00:00"
+  },
+  {
+    "id": "R3-DASHBOARD-INACTIVATE-OWNED",
+    "role": "admin",
+    "preconditions": "Verified isolated Greenfield UUID; task-owned fixtures; credentials kept in memory",
+    "stepsExecuted": "Deactivate only second freshly created SBOM",
+    "expected": "200 INACTIVE",
+    "actual": {
+      "status": 200,
+      "data": {
+        "logical_sbom_id": "9ed20982-806c-4ae0-9e35-8d2af64e1f86",
+        "lifecycle_status": "INACTIVE",
+        "lifecycle_revision": 1,
+        "analysis_requires_reanalysis": false,
+        "processing_eligibility": {
+          "eligible": false,
+          "reason_code": "SBOM_INACTIVE",
+          "reason": "Analysis unavailable because this SBOM is inactive."
+        },
+        "id": "98cfb1f3-6ebc-4727-8222-56921377ce0f",
+        "sbom_name": "UAT R3 1792486718006046000 SBOM 2",
+        "sbom_data": null,
+        "sbom_type": null,
+        "projectid": "d016fed5-336c-4234-a3ef-83964c6cbf57",
+        "project_id": "d016fed5-336c-4234-a3ef-83964c6cbf57",
+        "project_name": "UAT R3 1792486718006046000",
+        "product_id": "67289be2-ba05-4469-b158-c64859613caa",
+        "product_name": "UAT R3 1792486718006046000 Application",
+        "component_count": 2,
+        "created_on": "2026-10-20T08:58:38+00:00",
+        "sbom_version": null,
+        "parent_id": null,
+        "change_summary": null,
+        "completeness_score": 64.0,
+        "completeness_report": {
+          "completeness_score": 64.0,
+          "missing_fields": [
+            {
+              "bom_ref": "uat-app",
+              "name": "uat-gateway",
+              "version": "1.0.0",
+              "missing": [
+                "license",
+                "hash"
+              ]
+            },
+            {
+              "bom_ref": "uat-lodash",
+              "name": "lodash",
+              "version": "4.17.20",
+              "missing": [
+                "license",
+                "hash"
+              ]
+            }
+          ],
+          "document_warnings": [],
+          "total_components": 2,
+          "complete_components": 0
+        },
+        "created_by": "admin@olympus.example.test",
+        "productver": null,
+        "modified_on": null,
+        "modified_by": null,
+        "name": "UAT R3 1792486718006046000 SBOM 2",
+        "product_version": null,
+        "format": "cyclonedx",
+        "spec_version": "1.6",
+        "created_at": "2026-10-20T08:58:38+00:00",
+        "updated_at": null,
+        "description": null,
+        "status": "validated",
+        "failed_stage": null,
+        "validation_errors": null,
+        "error_count": 0,
+        "warning_count": 0,
+        "validated_at": "2026-10-20T08:58:38+00:00",
+        "workspace_id": "038c29d3-4c6e-4109-8caf-7ab30a4a2e0d",
+        "validation_session_id": "038c29d3-4c6e-4109-8caf-7ab30a4a2e0d",
+        "repair_workspace_url": "/repair/038c29d3-4c6e-4109-8caf-7ab30a4a2e0d",
+        "workspace_available": true,
+        "workspace_source": "existing_workspace",
+        "workspace_unavailable_reason": null,
+        "validation_status": "valid",
+        "detected_format": "cyclonedx_json",
+        "detected_spec_version": "1.6",
+        "original_size_bytes": 649,
+        "original_sha256": "97c3dfbe6788c034007363641beb92a5920f601692f9a6838a787db3963485f5",
+        "original_format": "cyclonedx",
+        "current_format": "cyclonedx",
+        "converted_from_format": null,
+        "source_sbom_id": null,
+        "converted_sbom_id": null,
+        "conversion_status": null,
+        "conversion_warnings_json": null,
+        "conversion_report_json": null,
+        "converted_at": null,
+        "converted_by": null,
+        "enrichment_status": "completed",
+        "conversion_started_at": null,
+        "conversion_completed_at": null,
+        "enrichment_started_at": "2026-10-20T08:58:38+00:00",
+        "enrichment_completed_at": "2026-10-20T08:58:38+00:00",
+        "last_enriched_at": "2026-10-20T08:58:38+00:00",
+        "conversion_error": null,
+        "enrichment_error": null,
+        "component_extraction_status": "completed",
+        "component_extraction_error": null,
+        "component_extraction_attempted_at": "2026-10-20T08:58:38+00:00",
+        "component_extraction_completed_at": "2026-10-20T08:58:38+00:00",
+        "latest_analysis": {
+          "is_current": true,
+          "run_id": 27,
+          "status": "completed",
+          "result": "pass",
+          "finding_count": 0,
+          "critical_count": 0,
+          "high_count": 0,
+          "medium_count": 0,
+          "low_count": 0,
+          "risk_score": 0.0,
+          "risk_level": "none",
+          "started_at": "2026-10-20T09:02:59+00:00",
+          "completed_at": "2026-10-20T09:02:59+00:00",
+          "error_message": null
+        }
+      },
+      "request_id": "a2addf99781a"
+    },
+    "result": "PASS",
+    "time": "2026-10-20T09:15:55.871638+00:00"
+  },
+  {
+    "id": "R3-DASHBOARD-INACTIVE-EXCLUDED-admin",
+    "role": "admin",
+    "preconditions": "Verified isolated Greenfield UUID; task-owned fixtures; credentials kept in memory",
+    "stepsExecuted": "Read same project/application scope after owned deactivation",
+    "expected": "200 one eligible stored SBOM and identical scoped metrics",
+    "actual": {
+      "status": 200,
+      "data": {
+        "scope": {
+          "posture": [
+            {
+              "target_sbom_id": "f5e7f4c4-8a16-4c70-93d8-092173885437",
+              "posture_sbom_id": "f5e7f4c4-8a16-4c70-93d8-092173885437",
+              "tenant_id": "3a900179-36bf-4b5f-b2e1-2a4a9d06e6af",
+              "projectid": "d016fed5-336c-4234-a3ef-83964c6cbf57",
+              "product_id": "67289be2-ba05-4469-b158-c64859613caa",
+              "designated_sbom_id": null,
+              "stored_designated_sbom_id": null,
+              "selection_mode": "AUTO",
+              "application_name": "UAT R3 1792486718006046000 Application",
+              "current_sbom": {
+                "id": "f5e7f4c4-8a16-4c70-93d8-092173885437",
+                "name": "UAT R3 1792486718006046000 SBOM 1",
+                "version": null
+              },
+              "effective_current_sbom": {
+                "id": "f5e7f4c4-8a16-4c70-93d8-092173885437",
+                "name": "UAT R3 1792486718006046000 SBOM 1",
+                "version": null
+              },
+              "invalid_selection": false,
+              "designated_current_sbom_id": null,
+              "analysis_completed_on": "2026-10-20T09:15:48+00:00",
+              "fallback_reason": null,
+              "latest_uploaded": {
+                "id": "f5e7f4c4-8a16-4c70-93d8-092173885437",
+                "name": "UAT R3 1792486718006046000 SBOM 1",
+                "version": null
+              },
+              "latest_analyzed": {
+                "id": "f5e7f4c4-8a16-4c70-93d8-092173885437",
+                "name": "UAT R3 1792486718006046000 SBOM 1",
+                "version": null
+              },
+              "posture_sbom": {
+                "id": "f5e7f4c4-8a16-4c70-93d8-092173885437",
+                "name": "UAT R3 1792486718006046000 SBOM 1",
+                "version": null
+              },
+              "analysis_run_id": 31,
+              "analysis_finding_rows": 5,
+              "analysis_status": "ANALYZED",
+              "last_known_posture": false,
+              "coverage_incomplete": false,
+              "warning": null,
+              "designation_required": false
+            }
+          ],
+          "level": "APPLICATION",
+          "tenant": {
+            "id": "3a900179-36bf-4b5f-b2e1-2a4a9d06e6af",
+            "name": "Olympus"
+          },
+          "project": {
+            "id": "d016fed5-336c-4234-a3ef-83964c6cbf57",
+            "name": "UAT R3 1792486718006046000"
+          },
+          "application": {
+            "id": "67289be2-ba05-4469-b158-c64859613caa",
+            "name": "UAT R3 1792486718006046000 Application"
+          },
+          "sbom": null
+        },
+        "posture": {
+          "severity": {
+            "critical": 0,
+            "high": 2,
+            "medium": 3,
+            "low": 0,
+            "unknown": 0
+          },
+          "kev_count": 0,
+          "high_epss_count": 1,
+          "needs_review_count": 5,
+          "fix_available_count": 5,
+          "last_successful_run_at": "2026-10-20T09:15:48+00:00",
+          "total_sboms": 1,
+          "total_sboms_analysed": 1,
+          "total_applications_scanned": 1,
+          "total_active_projects": 1,
+          "total_findings": 5,
+          "distinct_vulnerabilities": 5,
+          "net_7day": {
+            "added": 5,
+            "resolved": 0,
+            "is_first_period": true,
+            "window_days": 7
+          },
+          "net_7day_added": 5,
+          "net_7day_resolved": 0,
+          "headline_state": "high_only",
+          "primary_action": "view_top_sboms",
+          "coverage_status": "complete",
+          "coverage_gap_sources": [],
+          "schema_version": 1
+        },
+        "lifecycle": {
+          "total_components": 2,
+          "supported_count": 0,
+          "eol_count": 0,
+          "eos_count": 0,
+          "eof_count": 0,
+          "deprecated_count": 0,
+          "unsupported_count": 0,
+          "unknown_count": 2,
+          "eol_soon_count": 0,
+          "possibly_unmaintained_count": 0,
+          "stale_lifecycle_count": 0,
+          "top_risky_components": [],
+          "recommended_upgrades": [
+            {
+              "id": 51,
+              "name": "lodash",
+              "version": "4.17.20",
+              "ecosystem": "npm",
+              "purl": "pkg:npm/lodash@4.17.20",
+              "cpe": null,
+              "supplier": "UAT",
+              "license": null,
+              "lifecycle_status": "Unknown",
+              "eos_date": null,
+              "eol_date": null,
+              "eof_date": null,
+              "deprecated": false,
+              "unsupported": false,
+              "maintenance_status": null,
+              "latest_version": "4.18.1",
+              "latest_supported_version": null,
+              "recommended_version": "4.18.1",
+              "recommendation": "Review upgrade to latest registry version 4.18.1.",
+              "source_name": "npm registry",
+              "source_url": "https://www.npmjs.com/package/lodash",
+              "confidence": "Low",
+              "checked_at": "2026-10-19T13:00:01+00:00",
+              "evidence": {
+                "dist_tags": {
+                  "latest": "4.18.1"
+                },
+                "repository_url": "https://github.com/lodash/lodash",
+                "provider_key": "package_registry",
+                "cache_policy": {
+                  "known_days": 14,
+                  "unknown_hours": 24,
+                  "failure_minutes": 30,
+                  "deprecated_days": 7
+                },
+                "deps.dev": {
+                  "package": {},
+                  "version": {
+                    "versionKey": {
+                      "system": "NPM",
+                      "name": "lodash",
+                      "version": "4.17.20"
+                    },
+                    "isDefault": false,
+                    "licenses": [
+                      "MIT"
+                    ],
+                    "links": [
+                      {
+                        "label": "HOMEPAGE",
+                        "url": "https://lodash.com/"
+                      },
+                      {
+                        "label": "ISSUE_TRACKER",
+                        "url": "https://github.com/lodash/lodash/issues"
+                      },
+                      {
+                        "label": "ORIGIN",
+                        "url": "https://registry.npmjs.org/lodash/4.17.20"
+                      },
+                      {
+                        "label": "SOURCE_REPO",
+                        "url": "git+https://github.com/lodash/lodash.git"
+                      }
+                    ],
+                    "publishedAt": "2020-08-13T16:53:54Z"
+                  },
+                  "advisory_count": 5,
+                  "advisories": [
+                    {
+                      "id": "GHSA-29mw-wpgm-hmr9"
+                    },
+                    {
+                      "id": "GHSA-35jh-r3h4-6jhm"
+                    },
+                    {
+                      "id": "GHSA-f23m-r3pf-42rh"
+                    },
+                    {
+                      "id": "GHSA-r5fr-rjxr-66jc"
+                    },
+                    {
+                      "id": "GHSA-xxjr-mmjv-4gpg"
+                    }
+                  ],
+                  "provider_key": "deps_dev",
+                  "cache_policy": {
+                    "known_days": null,
+                    "unknown_hours": null,
+                    "failure_minutes": null,
+                    "deprecated_days": null
+                  }
+                },
+                "OSV": {
+                  "vulnerability_count": 5,
+                  "fixed_versions": [
+                    "4.17.21",
+                    "4.18.0",
+                    "4.17.23"
+                  ],
+                  "vuln_ids": [
+                    "GHSA-29mw-wpgm-hmr9",
+                    "GHSA-35jh-r3h4-6jhm",
+                    "GHSA-f23m-r3pf-42rh",
+                    "GHSA-r5fr-rjxr-66jc",
+                    "GHSA-xxjr-mmjv-4gpg"
+                  ],
+                  "provider_key": "osv",
+                  "cache_policy": {
+                    "known_days": null,
+                    "unknown_hours": null,
+                    "failure_minutes": null,
+                    "deprecated_days": null
+                  }
+                },
+                "provider_outcomes": [
+                  {
+                    "provider": "npm registry",
+                    "provider_key": "package_registry",
+                    "status": "Unknown",
+                    "error": null,
+                    "checked_at": "2026-10-19T13:00:01+00:00"
+                  },
+                  {
+                    "provider": "deps.dev",
+                    "provider_key": "deps_dev",
+                    "status": "Unknown",
+                    "error": null,
+                    "checked_at": "2026-10-19T13:00:02+00:00"
+                  },
+                  {
+                    "provider": "OSV",
+                    "provider_key": "osv",
+                    "status": "Unknown",
+                    "error": null,
+                    "checked_at": "2026-10-19T13:00:03+00:00"
+                  }
+                ],
+                "cache_hit": true,
+                "stale_cache": false,
+                "cache_expires_at": "2026-10-20T13:00:03+00:00",
+                "risk_level": "UNKNOWN"
+              },
+              "risk_level": "UNKNOWN",
+              "is_stale": false,
+              "manual_override": false
+            }
+          ],
+          "eol_components": 0,
+          "eos_upcoming": 0,
+          "unsupported": 0,
+          "stale_count": 0
+        },
+        "health": {
+          "completeness_score": 64.0,
+          "missing_metadata": 4,
+          "outdated_components": 0
+        },
+        "vex": {
+          "affected_count": 0,
+          "not_affected_count": 0,
+          "fixed_count": 0,
+          "under_investigation_count": 5,
+          "unknown_count": 0,
+          "vulnerabilities_reduced_by_vex": 0,
+          "vulnerabilities_requiring_action": 5,
+          "top_affected_components": [],
+          "total_contexts": 5,
+          "matched_count": 0,
+          "analyzer_only_count": 5,
+          "vex_only_count": 0,
+          "conflict_review_count": 0,
+          "revalidation_required_count": 0,
+          "unresolved_mapping_count": 0,
+          "needs_review_count": 0
+        },
+        "vulnerability_age": {
+          "buckets": {
+            "le_30d": 0,
+            "d31_90": 0,
+            "d91_365": 3,
+            "gt_365": 2,
+            "unknown": 0
+          },
+          "total": 5,
+          "period": "all",
+          "date_from": null,
+          "date_to": null,
+          "schema_version": 1
+        },
+        "trend": {
+          "days": 30,
+          "points": [
+            {
+              "date": "2026-09-21",
+              "critical": 0,
+              "high": 0,
+              "medium": 0,
+              "low": 0,
+              "unknown": 0,
+              "total": 0
+            },
+            {
+              "date": "2026-09-22",
+              "critical": 0,
+              "high": 0,
+              "medium": 0,
+              "low": 0,
+              "unknown": 0,
+              "total": 0
+            },
+            {
+              "date": "2026-09-23",
+              "critical": 0,
+              "high": 0,
+              "medium": 0,
+              "low": 0,
+              "unknown": 0,
+              "total": 0
+            },
+            {
+              "date": "2026-09-24",
+              "critical": 0,
+              "high": 0,
+              "medium": 0,
+              "low": 0,
+              "unknown": 0,
+              "total": 0
+            },
+            {
+              "date": "2026-09-25",
+              "critical": 0,
+              "high": 0,
+              "medium": 0,
+              "low": 0,
+              "unknown": 0,
+              "total": 0
+            },
+            {
+              "date": "2026-09-26",
+              "critical": 0,
+              "high": 0,
+              "medium": 0,
+              "low": 0,
+              "unknown": 0,
+              "total": 0
+            },
+            {
+              "date": "2026-09-27",
+              "critical": 0,
+              "high": 0,
+              "medium": 0,
+              "low": 0,
+              "unknown": 0,
+              "total": 0
+            },
+            {
+              "date": "2026-09-28",
+              "critical": 0,
+              "high": 0,
+              "medium": 0,
+              "low": 0,
+              "unknown": 0,
+              "total": 0
+            },
+            {
+              "date": "2026-09-29",
+              "critical": 0,
+              "high": 0,
+              "medium": 0,
+              "low": 0,
+              "unknown": 0,
+              "total": 0
+            },
+            {
+              "date": "2026-09-30",
+              "critical": 0,
+              "high": 0,
+              "medium": 0,
+              "low": 0,
+              "unknown": 0,
+              "total": 0
+            },
+            {
+              "date": "2026-10-01",
+              "critical": 0,
+              "high": 0,
+              "medium": 0,
+              "low": 0,
+              "unknown": 0,
+              "total": 0
+            },
+            {
+              "date": "2026-10-02",
+              "critical": 0,
+              "high": 0,
+              "medium": 0,
+              "low": 0,
+              "unknown": 0,
+              "total": 0
+            },
+            {
+              "date": "2026-10-03",
+              "critical": 0,
+              "high": 0,
+              "medium": 0,
+              "low": 0,
+              "unknown": 0,
+              "total": 0
+            },
+            {
+              "date": "2026-10-04",
+              "critical": 0,
+              "high": 0,
+              "medium": 0,
+              "low": 0,
+              "unknown": 0,
+              "total": 0
+            },
+            {
+              "date": "2026-10-05",
+              "critical": 0,
+              "high": 0,
+              "medium": 0,
+              "low": 0,
+              "unknown": 0,
+              "total": 0
+            },
+            {
+              "date": "2026-10-06",
+              "critical": 0,
+              "high": 0,
+              "medium": 0,
+              "low": 0,
+              "unknown": 0,
+              "total": 0
+            },
+            {
+              "date": "2026-10-07",
+              "critical": 0,
+              "high": 0,
+              "medium": 0,
+              "low": 0,
+              "unknown": 0,
+              "total": 0
+            },
+            {
+              "date": "2026-10-08",
+              "critical": 0,
+              "high": 0,
+              "medium": 0,
+              "low": 0,
+              "unknown": 0,
+              "total": 0
+            },
+            {
+              "date": "2026-10-09",
+              "critical": 0,
+              "high": 0,
+              "medium": 0,
+              "low": 0,
+              "unknown": 0,
+              "total": 0
+            },
+            {
+              "date": "2026-10-10",
+              "critical": 0,
+              "high": 0,
+              "medium": 0,
+              "low": 0,
+              "unknown": 0,
+              "total": 0
+            },
+            {
+              "date": "2026-10-11",
+              "critical": 0,
+              "high": 0,
+              "medium": 0,
+              "low": 0,
+              "unknown": 0,
+              "total": 0
+            },
+            {
+              "date": "2026-10-12",
+              "critical": 0,
+              "high": 0,
+              "medium": 0,
+              "low": 0,
+              "unknown": 0,
+              "total": 0
+            },
+            {
+              "date": "2026-10-13",
+              "critical": 0,
+              "high": 0,
+              "medium": 0,
+              "low": 0,
+              "unknown": 0,
+              "total": 0
+            },
+            {
+              "date": "2026-10-14",
+              "critical": 0,
+              "high": 0,
+              "medium": 0,
+              "low": 0,
+              "unknown": 0,
+              "total": 0
+            },
+            {
+              "date": "2026-10-15",
+              "critical": 0,
+              "high": 0,
+              "medium": 0,
+              "low": 0,
+              "unknown": 0,
+              "total": 0
+            },
+            {
+              "date": "2026-10-16",
+              "critical": 0,
+              "high": 0,
+              "medium": 0,
+              "low": 0,
+              "unknown": 0,
+              "total": 0
+            },
+            {
+              "date": "2026-10-17",
+              "critical": 0,
+              "high": 0,
+              "medium": 0,
+              "low": 0,
+              "unknown": 0,
+              "total": 0
+            },
+            {
+              "date": "2026-10-18",
+              "critical": 0,
+              "high": 0,
+              "medium": 0,
+              "low": 0,
+              "unknown": 0,
+              "total": 0
+            },
+            {
+              "date": "2026-10-19",
+              "critical": 0,
+              "high": 0,
+              "medium": 0,
+              "low": 0,
+              "unknown": 0,
+              "total": 0
+            },
+            {
+              "date": "2026-10-20",
+              "critical": 0,
+              "high": 2,
+              "medium": 3,
+              "low": 0,
+              "unknown": 0,
+              "total": 5
+            }
+          ],
+          "series": [
+            {
+              "date": "2026-09-21",
+              "critical": 0,
+              "high": 0,
+              "medium": 0,
+              "low": 0,
+              "unknown": 0,
+              "total": 0
+            },
+            {
+              "date": "2026-09-22",
+              "critical": 0,
+              "high": 0,
+              "medium": 0,
+              "low": 0,
+              "unknown": 0,
+              "total": 0
+            },
+            {
+              "date": "2026-09-23",
+              "critical": 0,
+              "high": 0,
+              "medium": 0,
+              "low": 0,
+              "unknown": 0,
+              "total": 0
+            },
+            {
+              "date": "2026-09-24",
+              "critical": 0,
+              "high": 0,
+              "medium": 0,
+              "low": 0,
+              "unknown": 0,
+              "total": 0
+            },
+            {
+              "date": "2026-09-25",
+              "critical": 0,
+              "high": 0,
+              "medium": 0,
+              "low": 0,
+              "unknown": 0,
+              "total": 0
+            },
+            {
+              "date": "2026-09-26",
+              "critical": 0,
+              "high": 0,
+              "medium": 0,
+              "low": 0,
+              "unknown": 0,
+              "total": 0
+            },
+            {
+              "date": "2026-09-27",
+              "critical": 0,
+              "high": 0,
+              "medium": 0,
+              "low": 0,
+              "unknown": 0,
+              "total": 0
+            },
+            {
+              "date": "2026-09-28",
+              "critical": 0,
+              "high": 0,
+              "medium": 0,
+              "low": 0,
+              "unknown": 0,
+              "total": 0
+            },
+            {
+              "date": "2026-09-29",
+              "critical": 0,
+              "high": 0,
+              "medium": 0,
+              "low": 0,
+              "unknown": 0,
+              "total": 0
+            },
+            {
+              "date": "2026-09-30",
+              "critical": 0,
+              "high": 0,
+              "medium": 0,
+              "low": 0,
+              "unknown": 0,
+              "total": 0
+            },
+            {
+              "date": "2026-10-01",
+              "critical": 0,
+              "high": 0,
+              "medium": 0,
+              "low": 0,
+              "unknown": 0,
+              "total": 0
+            },
+            {
+              "date": "2026-10-02",
+              "critical": 0,
+              "high": 0,
+              "medium": 0,
+              "low": 0,
+              "unknown": 0,
+              "total": 0
+            },
+            {
+              "date": "2026-10-03",
+              "critical": 0,
+              "high": 0,
+              "medium": 0,
+              "low": 0,
+              "unknown": 0,
+              "total": 0
+            },
+            {
+              "date": "2026-10-04",
+              "critical": 0,
+              "high": 0,
+              "medium": 0,
+              "low": 0,
+              "unknown": 0,
+              "total": 0
+            },
+            {
+              "date": "2026-10-05",
+              "critical": 0,
+              "high": 0,
+              "medium": 0,
+              "low": 0,
+              "unknown": 0,
+              "total": 0
+            },
+            {
+              "date": "2026-10-06",
+              "critical": 0,
+              "high": 0,
+              "medium": 0,
+              "low": 0,
+              "unknown": 0,
+              "total": 0
+            },
+            {
+              "date": "2026-10-07",
+              "critical": 0,
+              "high": 0,
+              "medium": 0,
+              "low": 0,
+              "unknown": 0,
+              "total": 0
+            },
+            {
+              "date": "2026-10-08",
+              "critical": 0,
+              "high": 0,
+              "medium": 0,
+              "low": 0,
+              "unknown": 0,
+              "total": 0
+            },
+            {
+              "date": "2026-10-09",
+              "critical": 0,
+              "high": 0,
+              "medium": 0,
+              "low": 0,
+              "unknown": 0,
+              "total": 0
+            },
+            {
+              "date": "2026-10-10",
+              "critical": 0,
+              "high": 0,
+              "medium": 0,
+              "low": 0,
+              "unknown": 0,
+              "total": 0
+            },
+            {
+              "date": "2026-10-11",
+              "critical": 0,
+              "high": 0,
+              "medium": 0,
+              "low": 0,
+              "unknown": 0,
+              "total": 0
+            },
+            {
+              "date": "2026-10-12",
+              "critical": 0,
+              "high": 0,
+              "medium": 0,
+              "low": 0,
+              "unknown": 0,
+              "total": 0
+            },
+            {
+              "date": "2026-10-13",
+              "critical": 0,
+              "high": 0,
+              "medium": 0,
+              "low": 0,
+              "unknown": 0,
+              "total": 0
+            },
+            {
+              "date": "2026-10-14",
+              "critical": 0,
+              "high": 0,
+              "medium": 0,
+              "low": 0,
+              "unknown": 0,
+              "total": 0
+            },
+            {
+              "date": "2026-10-15",
+              "critical": 0,
+              "high": 0,
+              "medium": 0,
+              "low": 0,
+              "unknown": 0,
+              "total": 0
+            },
+            {
+              "date": "2026-10-16",
+              "critical": 0,
+              "high": 0,
+              "medium": 0,
+              "low": 0,
+              "unknown": 0,
+              "total": 0
+            },
+            {
+              "date": "2026-10-17",
+              "critical": 0,
+              "high": 0,
+              "medium": 0,
+              "low": 0,
+              "unknown": 0,
+              "total": 0
+            },
+            {
+              "date": "2026-10-18",
+              "critical": 0,
+              "high": 0,
+              "medium": 0,
+              "low": 0,
+              "unknown": 0,
+              "total": 0
+            },
+            {
+              "date": "2026-10-19",
+              "critical": 0,
+              "high": 0,
+              "medium": 0,
+              "low": 0,
+              "unknown": 0,
+              "total": 0
+            },
+            {
+              "date": "2026-10-20",
+              "critical": 0,
+              "high": 2,
+              "medium": 3,
+              "low": 0,
+              "unknown": 0,
+              "total": 5
+            }
+          ],
+          "annotations": [
+            {
+              "date": "2026-10-20",
+              "kind": "sbom_uploaded",
+              "label": "UAT R3 1792486718006046000 SBOM 1 uploaded",
+              "count": 1
+            }
+          ],
+          "avg_total": 0.17,
+          "earliest_run_date": "2026-10-20",
+          "runs_total": 2,
+          "runs_distinct_dates": 1,
+          "granularity": null,
+          "schema_version": 1
+        },
+        "forecast": {
+          "history": [
+            {
+              "date": "2026-09-21",
+              "total": 0
+            },
+            {
+              "date": "2026-09-22",
+              "total": 0
+            },
+            {
+              "date": "2026-09-23",
+              "total": 0
+            },
+            {
+              "date": "2026-09-24",
+              "total": 0
+            },
+            {
+              "date": "2026-09-25",
+              "total": 0
+            },
+            {
+              "date": "2026-09-26",
+              "total": 0
+            },
+            {
+              "date": "2026-09-27",
+              "total": 0
+            },
+            {
+              "date": "2026-09-28",
+              "total": 0
+            },
+            {
+              "date": "2026-09-29",
+              "total": 0
+            },
+            {
+              "date": "2026-09-30",
+              "total": 0
+            },
+            {
+              "date": "2026-10-01",
+              "total": 0
+            },
+            {
+              "date": "2026-10-02",
+              "total": 0
+            },
+            {
+              "date": "2026-10-03",
+              "total": 0
+            },
+            {
+              "date": "2026-10-04",
+              "total": 0
+            },
+            {
+              "date": "2026-10-05",
+              "total": 0
+            },
+            {
+              "date": "2026-10-06",
+              "total": 0
+            },
+            {
+              "date": "2026-10-07",
+              "total": 0
+            },
+            {
+              "date": "2026-10-08",
+              "total": 0
+            },
+            {
+              "date": "2026-10-09",
+              "total": 0
+            },
+            {
+              "date": "2026-10-10",
+              "total": 0
+            },
+            {
+              "date": "2026-10-11",
+              "total": 0
+            },
+            {
+              "date": "2026-10-12",
+              "total": 0
+            },
+            {
+              "date": "2026-10-13",
+              "total": 0
+            },
+            {
+              "date": "2026-10-14",
+              "total": 0
+            },
+            {
+              "date": "2026-10-15",
+              "total": 0
+            },
+            {
+              "date": "2026-10-16",
+              "total": 0
+            },
+            {
+              "date": "2026-10-17",
+              "total": 0
+            },
+            {
+              "date": "2026-10-18",
+              "total": 0
+            },
+            {
+              "date": "2026-10-19",
+              "total": 0
+            },
+            {
+              "date": "2026-10-20",
+              "total": 5
+            }
+          ],
+          "history_days": 30,
+          "horizon_days": 14,
+          "insufficient_history": true,
+          "projection": [],
+          "slope_per_day": 0.0,
+          "r_squared": 0.0,
+          "current_total": 5,
+          "projected_total": null,
+          "days_to_zero": null,
+          "anomaly": {
+            "detected": true,
+            "zscore": null,
+            "delta": 5,
+            "baseline_mean": 0.0,
+            "baseline_std": 0.0
+          },
+          "schema_version": 1
+        },
+        "exploitation": {
+          "probability_30d": 0.0734,
+          "distinct_cves": 5,
+          "scored_cves": 1,
+          "coverage": 0.2,
+          "kev_cves": 0,
+          "top_drivers": [
+            {
+              "cve": "CVE-2020-28500",
+              "epss": 0.0734,
+              "percentile": 0.9434,
+              "kev": false
+            }
+          ],
+          "assumption": "independent",
+          "schema_version": 1
+        },
+        "remediation": {
+          "mttr_days": {
+            "critical": null,
+            "high": null,
+            "medium": null,
+            "low": null,
+            "unknown": null,
+            "overall": null
+          },
+          "resolved_total": 0,
+          "reopened_total": 0,
+          "sla": {
+            "budgets_days": {
+              "critical": 7,
+              "high": 30,
+              "medium": 90,
+              "low": 180,
+              "unknown": 90
+            },
+            "overdue": 0,
+            "due_soon": 0,
+            "ok": 5,
+            "by_severity_overdue": {},
+            "worst_offenders": []
+          },
+          "velocity": {
+            "window_days": 30,
+            "new_findings": 5,
+            "resolved_findings": 0,
+            "net": 5
+          },
+          "schema_version": 1
+        },
+        "remediation_stats": {
+          "status_counts": {
+            "open": 5,
+            "in_progress": 0,
+            "fixed": 0,
+            "accepted_risk": 0,
+            "closed": 0
+          },
+          "aging_count": 0,
+          "sla": {
+            "overdue": 0,
+            "due_soon": 0,
+            "ok": 5
+          }
+        },
+        "risk_map": {
+          "items": [
+            {
+              "sbom_id": "f5e7f4c4-8a16-4c70-93d8-092173885437",
+              "run_id": 31,
+              "name": "UAT R3 1792486718006046000 SBOM 1",
+              "project": "UAT R3 1792486718006046000",
+              "findings_total": 5,
+              "critical": 0,
+              "high": 2,
+              "medium": 3,
+              "low": 0,
+              "unknown": 0,
+              "dominant": "high",
+              "last_analysed": "2026-10-20T09:15:48+00:00"
+            }
+          ],
+          "schema_version": 1
+        },
+        "risk_matrix": {
+          "points": [
+            {
+              "vuln_id": "CVE-2020-28500",
+              "component": "lodash@4.17.20",
+              "severity": "medium",
+              "cvss": 5.3,
+              "has_fix": true,
+              "epss": 0.0734,
+              "kev": false
+            },
+            {
+              "vuln_id": "CVE-2026-4800",
+              "component": "lodash@4.17.20",
+              "severity": "high",
+              "cvss": 8.1,
+              "has_fix": true,
+              "epss": 0.0,
+              "kev": false
+            },
+            {
+              "vuln_id": "CVE-2021-23337",
+              "component": "lodash@4.17.20",
+              "severity": "high",
+              "cvss": 7.2,
+              "has_fix": true,
+              "epss": 0.0,
+              "kev": false
+            },
+            {
+              "vuln_id": "CVE-2025-13465",
+              "component": "lodash@4.17.20",
+              "severity": "medium",
+              "cvss": 6.5,
+              "has_fix": true,
+              "epss": 0.0,
+              "kev": false
+            },
+            {
+              "vuln_id": "CVE-2026-2950",
+              "component": "lodash@4.17.20",
+              "severity": "medium",
+              "cvss": 6.5,
+              "has_fix": true,
+              "epss": 0.0,
+              "kev": false
+            }
+          ],
+          "total_distinct": 5,
+          "unplotted_no_cvss": 0,
+          "limit": 300,
+          "schema_version": 1
+        },
+        "recent_sboms": [
+          {
+            "id": "f5e7f4c4-8a16-4c70-93d8-092173885437",
+            "sbom_name": "UAT R3 1792486718006046000 SBOM 1",
+            "created_on": "2026-10-20T08:58:38+00:00"
+          }
+        ],
+        "lifetime": {
+          "sboms_scanned_total": 1,
+          "projects_total": 1,
+          "runs_executed_total": 2,
+          "runs_completed_total": 2,
+          "runs_distinct_dates": 1,
+          "runs_executed_this_week": 2,
+          "findings_surfaced_total": 5,
+          "findings_resolved_total": 0,
+          "first_run_at": "2026-10-20T09:02:58+00:00",
+          "days_monitoring": 0,
+          "schema_version": 1
+        }
+      },
+      "request_id": "ce03cb28ec65"
+    },
+    "result": "PASS",
+    "time": "2026-10-20T09:16:01.469499+00:00"
+  },
+  {
+    "id": "R3-DASHBOARD-INACTIVE-EXCLUDED-analyst",
+    "role": "analyst",
+    "preconditions": "Verified isolated Greenfield UUID; task-owned fixtures; credentials kept in memory",
+    "stepsExecuted": "Read same project/application scope after owned deactivation",
+    "expected": "200 one eligible stored SBOM and identical scoped metrics",
+    "actual": {
+      "status": 200,
+      "data": {
+        "scope": {
+          "posture": [
+            {
+              "target_sbom_id": "f5e7f4c4-8a16-4c70-93d8-092173885437",
+              "posture_sbom_id": "f5e7f4c4-8a16-4c70-93d8-092173885437",
+              "tenant_id": "3a900179-36bf-4b5f-b2e1-2a4a9d06e6af",
+              "projectid": "d016fed5-336c-4234-a3ef-83964c6cbf57",
+              "product_id": "67289be2-ba05-4469-b158-c64859613caa",
+              "designated_sbom_id": null,
+              "stored_designated_sbom_id": null,
+              "selection_mode": "AUTO",
+              "application_name": "UAT R3 1792486718006046000 Application",
+              "current_sbom": {
+                "id": "f5e7f4c4-8a16-4c70-93d8-092173885437",
+                "name": "UAT R3 1792486718006046000 SBOM 1",
+                "version": null
+              },
+              "effective_current_sbom": {
+                "id": "f5e7f4c4-8a16-4c70-93d8-092173885437",
+                "name": "UAT R3 1792486718006046000 SBOM 1",
+                "version": null
+              },
+              "invalid_selection": false,
+              "designated_current_sbom_id": null,
+              "analysis_completed_on": "2026-10-20T09:15:48+00:00",
+              "fallback_reason": null,
+              "latest_uploaded": {
+                "id": "f5e7f4c4-8a16-4c70-93d8-092173885437",
+                "name": "UAT R3 1792486718006046000 SBOM 1",
+                "version": null
+              },
+              "latest_analyzed": {
+                "id": "f5e7f4c4-8a16-4c70-93d8-092173885437",
+                "name": "UAT R3 1792486718006046000 SBOM 1",
+                "version": null
+              },
+              "posture_sbom": {
+                "id": "f5e7f4c4-8a16-4c70-93d8-092173885437",
+                "name": "UAT R3 1792486718006046000 SBOM 1",
+                "version": null
+              },
+              "analysis_run_id": 31,
+              "analysis_finding_rows": 5,
+              "analysis_status": "ANALYZED",
+              "last_known_posture": false,
+              "coverage_incomplete": false,
+              "warning": null,
+              "designation_required": false
+            }
+          ],
+          "level": "APPLICATION",
+          "tenant": {
+            "id": "3a900179-36bf-4b5f-b2e1-2a4a9d06e6af",
+            "name": "Olympus"
+          },
+          "project": {
+            "id": "d016fed5-336c-4234-a3ef-83964c6cbf57",
+            "name": "UAT R3 1792486718006046000"
+          },
+          "application": {
+            "id": "67289be2-ba05-4469-b158-c64859613caa",
+            "name": "UAT R3 1792486718006046000 Application"
+          },
+          "sbom": null
+        },
+        "posture": {
+          "severity": {
+            "critical": 0,
+            "high": 2,
+            "medium": 3,
+            "low": 0,
+            "unknown": 0
+          },
+          "kev_count": 0,
+          "high_epss_count": 1,
+          "needs_review_count": 5,
+          "fix_available_count": 5,
+          "last_successful_run_at": "2026-10-20T09:15:48+00:00",
+          "total_sboms": 1,
+          "total_sboms_analysed": 1,
+          "total_applications_scanned": 1,
+          "total_active_projects": 1,
+          "total_findings": 5,
+          "distinct_vulnerabilities": 5,
+          "net_7day": {
+            "added": 5,
+            "resolved": 0,
+            "is_first_period": true,
+            "window_days": 7
+          },
+          "net_7day_added": 5,
+          "net_7day_resolved": 0,
+          "headline_state": "high_only",
+          "primary_action": "view_top_sboms",
+          "coverage_status": "complete",
+          "coverage_gap_sources": [],
+          "schema_version": 1
+        },
+        "lifecycle": {
+          "total_components": 2,
+          "supported_count": 0,
+          "eol_count": 0,
+          "eos_count": 0,
+          "eof_count": 0,
+          "deprecated_count": 0,
+          "unsupported_count": 0,
+          "unknown_count": 2,
+          "eol_soon_count": 0,
+          "possibly_unmaintained_count": 0,
+          "stale_lifecycle_count": 0,
+          "top_risky_components": [],
+          "recommended_upgrades": [
+            {
+              "id": 51,
+              "name": "lodash",
+              "version": "4.17.20",
+              "ecosystem": "npm",
+              "purl": "pkg:npm/lodash@4.17.20",
+              "cpe": null,
+              "supplier": "UAT",
+              "license": null,
+              "lifecycle_status": "Unknown",
+              "eos_date": null,
+              "eol_date": null,
+              "eof_date": null,
+              "deprecated": false,
+              "unsupported": false,
+              "maintenance_status": null,
+              "latest_version": "4.18.1",
+              "latest_supported_version": null,
+              "recommended_version": "4.18.1",
+              "recommendation": "Review upgrade to latest registry version 4.18.1.",
+              "source_name": "npm registry",
+              "source_url": "https://www.npmjs.com/package/lodash",
+              "confidence": "Low",
+              "checked_at": "2026-10-19T13:00:01+00:00",
+              "evidence": {
+                "dist_tags": {
+                  "latest": "4.18.1"
+                },
+                "repository_url": "https://github.com/lodash/lodash",
+                "provider_key": "package_registry",
+                "cache_policy": {
+                  "known_days": 14,
+                  "unknown_hours": 24,
+                  "failure_minutes": 30,
+                  "deprecated_days": 7
+                },
+                "deps.dev": {
+                  "package": {},
+                  "version": {
+                    "versionKey": {
+                      "system": "NPM",
+                      "name": "lodash",
+                      "version": "4.17.20"
+                    },
+                    "isDefault": false,
+                    "licenses": [
+                      "MIT"
+                    ],
+                    "links": [
+                      {
+                        "label": "HOMEPAGE",
+                        "url": "https://lodash.com/"
+                      },
+                      {
+                        "label": "ISSUE_TRACKER",
+                        "url": "https://github.com/lodash/lodash/issues"
+                      },
+                      {
+                        "label": "ORIGIN",
+                        "url": "https://registry.npmjs.org/lodash/4.17.20"
+                      },
+                      {
+                        "label": "SOURCE_REPO",
+                        "url": "git+https://github.com/lodash/lodash.git"
+                      }
+                    ],
+                    "publishedAt": "2020-08-13T16:53:54Z"
+                  },
+                  "advisory_count": 5,
+                  "advisories": [
+                    {
+                      "id": "GHSA-29mw-wpgm-hmr9"
+                    },
+                    {
+                      "id": "GHSA-35jh-r3h4-6jhm"
+                    },
+                    {
+                      "id": "GHSA-f23m-r3pf-42rh"
+                    },
+                    {
+                      "id": "GHSA-r5fr-rjxr-66jc"
+                    },
+                    {
+                      "id": "GHSA-xxjr-mmjv-4gpg"
+                    }
+                  ],
+                  "provider_key": "deps_dev",
+                  "cache_policy": {
+                    "known_days": null,
+                    "unknown_hours": null,
+                    "failure_minutes": null,
+                    "deprecated_days": null
+                  }
+                },
+                "OSV": {
+                  "vulnerability_count": 5,
+                  "fixed_versions": [
+                    "4.17.21",
+                    "4.18.0",
+                    "4.17.23"
+                  ],
+                  "vuln_ids": [
+                    "GHSA-29mw-wpgm-hmr9",
+                    "GHSA-35jh-r3h4-6jhm",
+                    "GHSA-f23m-r3pf-42rh",
+                    "GHSA-r5fr-rjxr-66jc",
+                    "GHSA-xxjr-mmjv-4gpg"
+                  ],
+                  "provider_key": "osv",
+                  "cache_policy": {
+                    "known_days": null,
+                    "unknown_hours": null,
+                    "failure_minutes": null,
+                    "deprecated_days": null
+                  }
+                },
+                "provider_outcomes": [
+                  {
+                    "provider": "npm registry",
+                    "provider_key": "package_registry",
+                    "status": "Unknown",
+                    "error": null,
+                    "checked_at": "2026-10-19T13:00:01+00:00"
+                  },
+                  {
+                    "provider": "deps.dev",
+                    "provider_key": "deps_dev",
+                    "status": "Unknown",
+                    "error": null,
+                    "checked_at": "2026-10-19T13:00:02+00:00"
+                  },
+                  {
+                    "provider": "OSV",
+                    "provider_key": "osv",
+                    "status": "Unknown",
+                    "error": null,
+                    "checked_at": "2026-10-19T13:00:03+00:00"
+                  }
+                ],
+                "cache_hit": true,
+                "stale_cache": false,
+                "cache_expires_at": "2026-10-20T13:00:03+00:00",
+                "risk_level": "UNKNOWN"
+              },
+              "risk_level": "UNKNOWN",
+              "is_stale": false,
+              "manual_override": false
+            }
+          ],
+          "eol_components": 0,
+          "eos_upcoming": 0,
+          "unsupported": 0,
+          "stale_count": 0
+        },
+        "health": {
+          "completeness_score": 64.0,
+          "missing_metadata": 4,
+          "outdated_components": 0
+        },
+        "vex": {
+          "affected_count": 0,
+          "not_affected_count": 0,
+          "fixed_count": 0,
+          "under_investigation_count": 5,
+          "unknown_count": 0,
+          "vulnerabilities_reduced_by_vex": 0,
+          "vulnerabilities_requiring_action": 5,
+          "top_affected_components": [],
+          "total_contexts": 5,
+          "matched_count": 0,
+          "analyzer_only_count": 5,
+          "vex_only_count": 0,
+          "conflict_review_count": 0,
+          "revalidation_required_count": 0,
+          "unresolved_mapping_count": 0,
+          "needs_review_count": 0
+        },
+        "vulnerability_age": {
+          "buckets": {
+            "le_30d": 0,
+            "d31_90": 0,
+            "d91_365": 3,
+            "gt_365": 2,
+            "unknown": 0
+          },
+          "total": 5,
+          "period": "all",
+          "date_from": null,
+          "date_to": null,
+          "schema_version": 1
+        },
+        "trend": {
+          "days": 30,
+          "points": [
+            {
+              "date": "2026-09-21",
+              "critical": 0,
+              "high": 0,
+              "medium": 0,
+              "low": 0,
+              "unknown": 0,
+              "total": 0
+            },
+            {
+              "date": "2026-09-22",
+              "critical": 0,
+              "high": 0,
+              "medium": 0,
+              "low": 0,
+              "unknown": 0,
+              "total": 0
+            },
+            {
+              "date": "2026-09-23",
+              "critical": 0,
+              "high": 0,
+              "medium": 0,
+              "low": 0,
+              "unknown": 0,
+              "total": 0
+            },
+            {
+              "date": "2026-09-24",
+              "critical": 0,
+              "high": 0,
+              "medium": 0,
+              "low": 0,
+              "unknown": 0,
+              "total": 0
+            },
+            {
+              "date": "2026-09-25",
+              "critical": 0,
+              "high": 0,
+              "medium": 0,
+              "low": 0,
+              "unknown": 0,
+              "total": 0
+            },
+            {
+              "date": "2026-09-26",
+              "critical": 0,
+              "high": 0,
+              "medium": 0,
+              "low": 0,
+              "unknown": 0,
+              "total": 0
+            },
+            {
+              "date": "2026-09-27",
+              "critical": 0,
+              "high": 0,
+              "medium": 0,
+              "low": 0,
+              "unknown": 0,
+              "total": 0
+            },
+            {
+              "date": "2026-09-28",
+              "critical": 0,
+              "high": 0,
+              "medium": 0,
+              "low": 0,
+              "unknown": 0,
+              "total": 0
+            },
+            {
+              "date": "2026-09-29",
+              "critical": 0,
+              "high": 0,
+              "medium": 0,
+              "low": 0,
+              "unknown": 0,
+              "total": 0
+            },
+            {
+              "date": "2026-09-30",
+              "critical": 0,
+              "high": 0,
+              "medium": 0,
+              "low": 0,
+              "unknown": 0,
+              "total": 0
+            },
+            {
+              "date": "2026-10-01",
+              "critical": 0,
+              "high": 0,
+              "medium": 0,
+              "low": 0,
+              "unknown": 0,
+              "total": 0
+            },
+            {
+              "date": "2026-10-02",
+              "critical": 0,
+              "high": 0,
+              "medium": 0,
+              "low": 0,
+              "unknown": 0,
+              "total": 0
+            },
+            {
+              "date": "2026-10-03",
+              "critical": 0,
+              "high": 0,
+              "medium": 0,
+              "low": 0,
+              "unknown": 0,
+              "total": 0
+            },
+            {
+              "date": "2026-10-04",
+              "critical": 0,
+              "high": 0,
+              "medium": 0,
+              "low": 0,
+              "unknown": 0,
+              "total": 0
+            },
+            {
+              "date": "2026-10-05",
+              "critical": 0,
+              "high": 0,
+              "medium": 0,
+              "low": 0,
+              "unknown": 0,
+              "total": 0
+            },
+            {
+              "date": "2026-10-06",
+              "critical": 0,
+              "high": 0,
+              "medium": 0,
+              "low": 0,
+              "unknown": 0,
+              "total": 0
+            },
+            {
+              "date": "2026-10-07",
+              "critical": 0,
+              "high": 0,
+              "medium": 0,
+              "low": 0,
+              "unknown": 0,
+              "total": 0
+            },
+            {
+              "date": "2026-10-08",
+              "critical": 0,
+              "high": 0,
+              "medium": 0,
+              "low": 0,
+              "unknown": 0,
+              "total": 0
+            },
+            {
+              "date": "2026-10-09",
+              "critical": 0,
+              "high": 0,
+              "medium": 0,
+              "low": 0,
+              "unknown": 0,
+              "total": 0
+            },
+            {
+              "date": "2026-10-10",
+              "critical": 0,
+              "high": 0,
+              "medium": 0,
+              "low": 0,
+              "unknown": 0,
+              "total": 0
+            },
+            {
+              "date": "2026-10-11",
+              "critical": 0,
+              "high": 0,
+              "medium": 0,
+              "low": 0,
+              "unknown": 0,
+              "total": 0
+            },
+            {
+              "date": "2026-10-12",
+              "critical": 0,
+              "high": 0,
+              "medium": 0,
+              "low": 0,
+              "unknown": 0,
+              "total": 0
+            },
+            {
+              "date": "2026-10-13",
+              "critical": 0,
+              "high": 0,
+              "medium": 0,
+              "low": 0,
+              "unknown": 0,
+              "total": 0
+            },
+            {
+              "date": "2026-10-14",
+              "critical": 0,
+              "high": 0,
+              "medium": 0,
+              "low": 0,
+              "unknown": 0,
+              "total": 0
+            },
+            {
+              "date": "2026-10-15",
+              "critical": 0,
+              "high": 0,
+              "medium": 0,
+              "low": 0,
+              "unknown": 0,
+              "total": 0
+            },
+            {
+              "date": "2026-10-16",
+              "critical": 0,
+              "high": 0,
+              "medium": 0,
+              "low": 0,
+              "unknown": 0,
+              "total": 0
+            },
+            {
+              "date": "2026-10-17",
+              "critical": 0,
+              "high": 0,
+              "medium": 0,
+              "low": 0,
+              "unknown": 0,
+              "total": 0
+            },
+            {
+              "date": "2026-10-18",
+              "critical": 0,
+              "high": 0,
+              "medium": 0,
+              "low": 0,
+              "unknown": 0,
+              "total": 0
+            },
+            {
+              "date": "2026-10-19",
+              "critical": 0,
+              "high": 0,
+              "medium": 0,
+              "low": 0,
+              "unknown": 0,
+              "total": 0
+            },
+            {
+              "date": "2026-10-20",
+              "critical": 0,
+              "high": 2,
+              "medium": 3,
+              "low": 0,
+              "unknown": 0,
+              "total": 5
+            }
+          ],
+          "series": [
+            {
+              "date": "2026-09-21",
+              "critical": 0,
+              "high": 0,
+              "medium": 0,
+              "low": 0,
+              "unknown": 0,
+              "total": 0
+            },
+            {
+              "date": "2026-09-22",
+              "critical": 0,
+              "high": 0,
+              "medium": 0,
+              "low": 0,
+              "unknown": 0,
+              "total": 0
+            },
+            {
+              "date": "2026-09-23",
+              "critical": 0,
+              "high": 0,
+              "medium": 0,
+              "low": 0,
+              "unknown": 0,
+              "total": 0
+            },
+            {
+              "date": "2026-09-24",
+              "critical": 0,
+              "high": 0,
+              "medium": 0,
+              "low": 0,
+              "unknown": 0,
+              "total": 0
+            },
+            {
+              "date": "2026-09-25",
+              "critical": 0,
+              "high": 0,
+              "medium": 0,
+              "low": 0,
+              "unknown": 0,
+              "total": 0
+            },
+            {
+              "date": "2026-09-26",
+              "critical": 0,
+              "high": 0,
+              "medium": 0,
+              "low": 0,
+              "unknown": 0,
+              "total": 0
+            },
+            {
+              "date": "2026-09-27",
+              "critical": 0,
+              "high": 0,
+              "medium": 0,
+              "low": 0,
+              "unknown": 0,
+              "total": 0
+            },
+            {
+              "date": "2026-09-28",
+              "critical": 0,
+              "high": 0,
+              "medium": 0,
+              "low": 0,
+              "unknown": 0,
+              "total": 0
+            },
+            {
+              "date": "2026-09-29",
+              "critical": 0,
+              "high": 0,
+              "medium": 0,
+              "low": 0,
+              "unknown": 0,
+              "total": 0
+            },
+            {
+              "date": "2026-09-30",
+              "critical": 0,
+              "high": 0,
+              "medium": 0,
+              "low": 0,
+              "unknown": 0,
+              "total": 0
+            },
+            {
+              "date": "2026-10-01",
+              "critical": 0,
+              "high": 0,
+              "medium": 0,
+              "low": 0,
+              "unknown": 0,
+              "total": 0
+            },
+            {
+              "date": "2026-10-02",
+              "critical": 0,
+              "high": 0,
+              "medium": 0,
+              "low": 0,
+              "unknown": 0,
+              "total": 0
+            },
+            {
+              "date": "2026-10-03",
+              "critical": 0,
+              "high": 0,
+              "medium": 0,
+              "low": 0,
+              "unknown": 0,
+              "total": 0
+            },
+            {
+              "date": "2026-10-04",
+              "critical": 0,
+              "high": 0,
+              "medium": 0,
+              "low": 0,
+              "unknown": 0,
+              "total": 0
+            },
+            {
+              "date": "2026-10-05",
+              "critical": 0,
+              "high": 0,
+              "medium": 0,
+              "low": 0,
+              "unknown": 0,
+              "total": 0
+            },
+            {
+              "date": "2026-10-06",
+              "critical": 0,
+              "high": 0,
+              "medium": 0,
+              "low": 0,
+              "unknown": 0,
+              "total": 0
+            },
+            {
+              "date": "2026-10-07",
+              "critical": 0,
+              "high": 0,
+              "medium": 0,
+              "low": 0,
+              "unknown": 0,
+              "total": 0
+            },
+            {
+              "date": "2026-10-08",
+              "critical": 0,
+              "high": 0,
+              "medium": 0,
+              "low": 0,
+              "unknown": 0,
+              "total": 0
+            },
+            {
+              "date": "2026-10-09",
+              "critical": 0,
+              "high": 0,
+              "medium": 0,
+              "low": 0,
+              "unknown": 0,
+              "total": 0
+            },
+            {
+              "date": "2026-10-10",
+              "critical": 0,
+              "high": 0,
+              "medium": 0,
+              "low": 0,
+              "unknown": 0,
+              "total": 0
+            },
+            {
+              "date": "2026-10-11",
+              "critical": 0,
+              "high": 0,
+              "medium": 0,
+              "low": 0,
+              "unknown": 0,
+              "total": 0
+            },
+            {
+              "date": "2026-10-12",
+              "critical": 0,
+              "high": 0,
+              "medium": 0,
+              "low": 0,
+              "unknown": 0,
+              "total": 0
+            },
+            {
+              "date": "2026-10-13",
+              "critical": 0,
+              "high": 0,
+              "medium": 0,
+              "low": 0,
+              "unknown": 0,
+              "total": 0
+            },
+            {
+              "date": "2026-10-14",
+              "critical": 0,
+              "high": 0,
+              "medium": 0,
+              "low": 0,
+              "unknown": 0,
+              "total": 0
+            },
+            {
+              "date": "2026-10-15",
+              "critical": 0,
+              "high": 0,
+              "medium": 0,
+              "low": 0,
+              "unknown": 0,
+              "total": 0
+            },
+            {
+              "date": "2026-10-16",
+              "critical": 0,
+              "high": 0,
+              "medium": 0,
+              "low": 0,
+              "unknown": 0,
+              "total": 0
+            },
+            {
+              "date": "2026-10-17",
+              "critical": 0,
+              "high": 0,
+              "medium": 0,
+              "low": 0,
+              "unknown": 0,
+              "total": 0
+            },
+            {
+              "date": "2026-10-18",
+              "critical": 0,
+              "high": 0,
+              "medium": 0,
+              "low": 0,
+              "unknown": 0,
+              "total": 0
+            },
+            {
+              "date": "2026-10-19",
+              "critical": 0,
+              "high": 0,
+              "medium": 0,
+              "low": 0,
+              "unknown": 0,
+              "total": 0
+            },
+            {
+              "date": "2026-10-20",
+              "critical": 0,
+              "high": 2,
+              "medium": 3,
+              "low": 0,
+              "unknown": 0,
+              "total": 5
+            }
+          ],
+          "annotations": [
+            {
+              "date": "2026-10-20",
+              "kind": "sbom_uploaded",
+              "label": "UAT R3 1792486718006046000 SBOM 1 uploaded",
+              "count": 1
+            }
+          ],
+          "avg_total": 0.17,
+          "earliest_run_date": "2026-10-20",
+          "runs_total": 2,
+          "runs_distinct_dates": 1,
+          "granularity": null,
+          "schema_version": 1
+        },
+        "forecast": {
+          "history": [
+            {
+              "date": "2026-09-21",
+              "total": 0
+            },
+            {
+              "date": "2026-09-22",
+              "total": 0
+            },
+            {
+              "date": "2026-09-23",
+              "total": 0
+            },
+            {
+              "date": "2026-09-24",
+              "total": 0
+            },
+            {
+              "date": "2026-09-25",
+              "total": 0
+            },
+            {
+              "date": "2026-09-26",
+              "total": 0
+            },
+            {
+              "date": "2026-09-27",
+              "total": 0
+            },
+            {
+              "date": "2026-09-28",
+              "total": 0
+            },
+            {
+              "date": "2026-09-29",
+              "total": 0
+            },
+            {
+              "date": "2026-09-30",
+              "total": 0
+            },
+            {
+              "date": "2026-10-01",
+              "total": 0
+            },
+            {
+              "date": "2026-10-02",
+              "total": 0
+            },
+            {
+              "date": "2026-10-03",
+              "total": 0
+            },
+            {
+              "date": "2026-10-04",
+              "total": 0
+            },
+            {
+              "date": "2026-10-05",
+              "total": 0
+            },
+            {
+              "date": "2026-10-06",
+              "total": 0
+            },
+            {
+              "date": "2026-10-07",
+              "total": 0
+            },
+            {
+              "date": "2026-10-08",
+              "total": 0
+            },
+            {
+              "date": "2026-10-09",
+              "total": 0
+            },
+            {
+              "date": "2026-10-10",
+              "total": 0
+            },
+            {
+              "date": "2026-10-11",
+              "total": 0
+            },
+            {
+              "date": "2026-10-12",
+              "total": 0
+            },
+            {
+              "date": "2026-10-13",
+              "total": 0
+            },
+            {
+              "date": "2026-10-14",
+              "total": 0
+            },
+            {
+              "date": "2026-10-15",
+              "total": 0
+            },
+            {
+              "date": "2026-10-16",
+              "total": 0
+            },
+            {
+              "date": "2026-10-17",
+              "total": 0
+            },
+            {
+              "date": "2026-10-18",
+              "total": 0
+            },
+            {
+              "date": "2026-10-19",
+              "total": 0
+            },
+            {
+              "date": "2026-10-20",
+              "total": 5
+            }
+          ],
+          "history_days": 30,
+          "horizon_days": 14,
+          "insufficient_history": true,
+          "projection": [],
+          "slope_per_day": 0.0,
+          "r_squared": 0.0,
+          "current_total": 5,
+          "projected_total": null,
+          "days_to_zero": null,
+          "anomaly": {
+            "detected": true,
+            "zscore": null,
+            "delta": 5,
+            "baseline_mean": 0.0,
+            "baseline_std": 0.0
+          },
+          "schema_version": 1
+        },
+        "exploitation": {
+          "probability_30d": 0.0734,
+          "distinct_cves": 5,
+          "scored_cves": 1,
+          "coverage": 0.2,
+          "kev_cves": 0,
+          "top_drivers": [
+            {
+              "cve": "CVE-2020-28500",
+              "epss": 0.0734,
+              "percentile": 0.9434,
+              "kev": false
+            }
+          ],
+          "assumption": "independent",
+          "schema_version": 1
+        },
+        "remediation": {
+          "mttr_days": {
+            "critical": null,
+            "high": null,
+            "medium": null,
+            "low": null,
+            "unknown": null,
+            "overall": null
+          },
+          "resolved_total": 0,
+          "reopened_total": 0,
+          "sla": {
+            "budgets_days": {
+              "critical": 7,
+              "high": 30,
+              "medium": 90,
+              "low": 180,
+              "unknown": 90
+            },
+            "overdue": 0,
+            "due_soon": 0,
+            "ok": 5,
+            "by_severity_overdue": {},
+            "worst_offenders": []
+          },
+          "velocity": {
+            "window_days": 30,
+            "new_findings": 5,
+            "resolved_findings": 0,
+            "net": 5
+          },
+          "schema_version": 1
+        },
+        "remediation_stats": {
+          "status_counts": {
+            "open": 5,
+            "in_progress": 0,
+            "fixed": 0,
+            "accepted_risk": 0,
+            "closed": 0
+          },
+          "aging_count": 0,
+          "sla": {
+            "overdue": 0,
+            "due_soon": 0,
+            "ok": 5
+          }
+        },
+        "risk_map": {
+          "items": [
+            {
+              "sbom_id": "f5e7f4c4-8a16-4c70-93d8-092173885437",
+              "run_id": 31,
+              "name": "UAT R3 1792486718006046000 SBOM 1",
+              "project": "UAT R3 1792486718006046000",
+              "findings_total": 5,
+              "critical": 0,
+              "high": 2,
+              "medium": 3,
+              "low": 0,
+              "unknown": 0,
+              "dominant": "high",
+              "last_analysed": "2026-10-20T09:15:48+00:00"
+            }
+          ],
+          "schema_version": 1
+        },
+        "risk_matrix": {
+          "points": [
+            {
+              "vuln_id": "CVE-2020-28500",
+              "component": "lodash@4.17.20",
+              "severity": "medium",
+              "cvss": 5.3,
+              "has_fix": true,
+              "epss": 0.0734,
+              "kev": false
+            },
+            {
+              "vuln_id": "CVE-2026-4800",
+              "component": "lodash@4.17.20",
+              "severity": "high",
+              "cvss": 8.1,
+              "has_fix": true,
+              "epss": 0.0,
+              "kev": false
+            },
+            {
+              "vuln_id": "CVE-2021-23337",
+              "component": "lodash@4.17.20",
+              "severity": "high",
+              "cvss": 7.2,
+              "has_fix": true,
+              "epss": 0.0,
+              "kev": false
+            },
+            {
+              "vuln_id": "CVE-2025-13465",
+              "component": "lodash@4.17.20",
+              "severity": "medium",
+              "cvss": 6.5,
+              "has_fix": true,
+              "epss": 0.0,
+              "kev": false
+            },
+            {
+              "vuln_id": "CVE-2026-2950",
+              "component": "lodash@4.17.20",
+              "severity": "medium",
+              "cvss": 6.5,
+              "has_fix": true,
+              "epss": 0.0,
+              "kev": false
+            }
+          ],
+          "total_distinct": 5,
+          "unplotted_no_cvss": 0,
+          "limit": 300,
+          "schema_version": 1
+        },
+        "recent_sboms": [
+          {
+            "id": "f5e7f4c4-8a16-4c70-93d8-092173885437",
+            "sbom_name": "UAT R3 1792486718006046000 SBOM 1",
+            "created_on": "2026-10-20T08:58:38+00:00"
+          }
+        ],
+        "lifetime": {
+          "sboms_scanned_total": 1,
+          "projects_total": 1,
+          "runs_executed_total": 2,
+          "runs_completed_total": 2,
+          "runs_distinct_dates": 1,
+          "runs_executed_this_week": 2,
+          "findings_surfaced_total": 5,
+          "findings_resolved_total": 0,
+          "first_run_at": "2026-10-20T09:02:58+00:00",
+          "days_monitoring": 0,
+          "schema_version": 1
+        }
+      },
+      "request_id": "5f1352554cdc"
+    },
+    "result": "PASS",
+    "time": "2026-10-20T09:16:06.359394+00:00"
+  },
+  {
+    "id": "R3-DASHBOARD-INACTIVE-EXCLUDED-developer",
+    "role": "developer",
+    "preconditions": "Verified isolated Greenfield UUID; task-owned fixtures; credentials kept in memory",
+    "stepsExecuted": "Read same project/application scope after owned deactivation",
+    "expected": "200 one eligible stored SBOM and identical scoped metrics",
+    "actual": {
+      "status": 200,
+      "data": {
+        "scope": {
+          "posture": [
+            {
+              "target_sbom_id": "f5e7f4c4-8a16-4c70-93d8-092173885437",
+              "posture_sbom_id": "f5e7f4c4-8a16-4c70-93d8-092173885437",
+              "tenant_id": "3a900179-36bf-4b5f-b2e1-2a4a9d06e6af",
+              "projectid": "d016fed5-336c-4234-a3ef-83964c6cbf57",
+              "product_id": "67289be2-ba05-4469-b158-c64859613caa",
+              "designated_sbom_id": null,
+              "stored_designated_sbom_id": null,
+              "selection_mode": "AUTO",
+              "application_name": "UAT R3 1792486718006046000 Application",
+              "current_sbom": {
+                "id": "f5e7f4c4-8a16-4c70-93d8-092173885437",
+                "name": "UAT R3 1792486718006046000 SBOM 1",
+                "version": null
+              },
+              "effective_current_sbom": {
+                "id": "f5e7f4c4-8a16-4c70-93d8-092173885437",
+                "name": "UAT R3 1792486718006046000 SBOM 1",
+                "version": null
+              },
+              "invalid_selection": false,
+              "designated_current_sbom_id": null,
+              "analysis_completed_on": "2026-10-20T09:15:48+00:00",
+              "fallback_reason": null,
+              "latest_uploaded": {
+                "id": "f5e7f4c4-8a16-4c70-93d8-092173885437",
+                "name": "UAT R3 1792486718006046000 SBOM 1",
+                "version": null
+              },
+              "latest_analyzed": {
+                "id": "f5e7f4c4-8a16-4c70-93d8-092173885437",
+                "name": "UAT R3 1792486718006046000 SBOM 1",
+                "version": null
+              },
+              "posture_sbom": {
+                "id": "f5e7f4c4-8a16-4c70-93d8-092173885437",
+                "name": "UAT R3 1792486718006046000 SBOM 1",
+                "version": null
+              },
+              "analysis_run_id": 31,
+              "analysis_finding_rows": 5,
+              "analysis_status": "ANALYZED",
+              "last_known_posture": false,
+              "coverage_incomplete": false,
+              "warning": null,
+              "designation_required": false
+            }
+          ],
+          "level": "APPLICATION",
+          "tenant": {
+            "id": "3a900179-36bf-4b5f-b2e1-2a4a9d06e6af",
+            "name": "Olympus"
+          },
+          "project": {
+            "id": "d016fed5-336c-4234-a3ef-83964c6cbf57",
+            "name": "UAT R3 1792486718006046000"
+          },
+          "application": {
+            "id": "67289be2-ba05-4469-b158-c64859613caa",
+            "name": "UAT R3 1792486718006046000 Application"
+          },
+          "sbom": null
+        },
+        "posture": {
+          "severity": {
+            "critical": 0,
+            "high": 2,
+            "medium": 3,
+            "low": 0,
+            "unknown": 0
+          },
+          "kev_count": 0,
+          "high_epss_count": 1,
+          "needs_review_count": 5,
+          "fix_available_count": 5,
+          "last_successful_run_at": "2026-10-20T09:15:48+00:00",
+          "total_sboms": 1,
+          "total_sboms_analysed": 1,
+          "total_applications_scanned": 1,
+          "total_active_projects": 1,
+          "total_findings": 5,
+          "distinct_vulnerabilities": 5,
+          "net_7day": {
+            "added": 5,
+            "resolved": 0,
+            "is_first_period": true,
+            "window_days": 7
+          },
+          "net_7day_added": 5,
+          "net_7day_resolved": 0,
+          "headline_state": "high_only",
+          "primary_action": "view_top_sboms",
+          "coverage_status": "complete",
+          "coverage_gap_sources": [],
+          "schema_version": 1
+        },
+        "lifecycle": {
+          "total_components": 2,
+          "supported_count": 0,
+          "eol_count": 0,
+          "eos_count": 0,
+          "eof_count": 0,
+          "deprecated_count": 0,
+          "unsupported_count": 0,
+          "unknown_count": 2,
+          "eol_soon_count": 0,
+          "possibly_unmaintained_count": 0,
+          "stale_lifecycle_count": 0,
+          "top_risky_components": [],
+          "recommended_upgrades": [
+            {
+              "id": 51,
+              "name": "lodash",
+              "version": "4.17.20",
+              "ecosystem": "npm",
+              "purl": "pkg:npm/lodash@4.17.20",
+              "cpe": null,
+              "supplier": "UAT",
+              "license": null,
+              "lifecycle_status": "Unknown",
+              "eos_date": null,
+              "eol_date": null,
+              "eof_date": null,
+              "deprecated": false,
+              "unsupported": false,
+              "maintenance_status": null,
+              "latest_version": "4.18.1",
+              "latest_supported_version": null,
+              "recommended_version": "4.18.1",
+              "recommendation": "Review upgrade to latest registry version 4.18.1.",
+              "source_name": "npm registry",
+              "source_url": "https://www.npmjs.com/package/lodash",
+              "confidence": "Low",
+              "checked_at": "2026-10-19T13:00:01+00:00",
+              "evidence": {
+                "dist_tags": {
+                  "latest": "4.18.1"
+                },
+                "repository_url": "https://github.com/lodash/lodash",
+                "provider_key": "package_registry",
+                "cache_policy": {
+                  "known_days": 14,
+                  "unknown_hours": 24,
+                  "failure_minutes": 30,
+                  "deprecated_days": 7
+                },
+                "deps.dev": {
+                  "package": {},
+                  "version": {
+                    "versionKey": {
+                      "system": "NPM",
+                      "name": "lodash",
+                      "version": "4.17.20"
+                    },
+                    "isDefault": false,
+                    "licenses": [
+                      "MIT"
+                    ],
+                    "links": [
+                      {
+                        "label": "HOMEPAGE",
+                        "url": "https://lodash.com/"
+                      },
+                      {
+                        "label": "ISSUE_TRACKER",
+                        "url": "https://github.com/lodash/lodash/issues"
+                      },
+                      {
+                        "label": "ORIGIN",
+                        "url": "https://registry.npmjs.org/lodash/4.17.20"
+                      },
+                      {
+                        "label": "SOURCE_REPO",
+                        "url": "git+https://github.com/lodash/lodash.git"
+                      }
+                    ],
+                    "publishedAt": "2020-08-13T16:53:54Z"
+                  },
+                  "advisory_count": 5,
+                  "advisories": [
+                    {
+                      "id": "GHSA-29mw-wpgm-hmr9"
+                    },
+                    {
+                      "id": "GHSA-35jh-r3h4-6jhm"
+                    },
+                    {
+                      "id": "GHSA-f23m-r3pf-42rh"
+                    },
+                    {
+                      "id": "GHSA-r5fr-rjxr-66jc"
+                    },
+                    {
+                      "id": "GHSA-xxjr-mmjv-4gpg"
+                    }
+                  ],
+                  "provider_key": "deps_dev",
+                  "cache_policy": {
+                    "known_days": null,
+                    "unknown_hours": null,
+                    "failure_minutes": null,
+                    "deprecated_days": null
+                  }
+                },
+                "OSV": {
+                  "vulnerability_count": 5,
+                  "fixed_versions": [
+                    "4.17.21",
+                    "4.18.0",
+                    "4.17.23"
+                  ],
+                  "vuln_ids": [
+                    "GHSA-29mw-wpgm-hmr9",
+                    "GHSA-35jh-r3h4-6jhm",
+                    "GHSA-f23m-r3pf-42rh",
+                    "GHSA-r5fr-rjxr-66jc",
+                    "GHSA-xxjr-mmjv-4gpg"
+                  ],
+                  "provider_key": "osv",
+                  "cache_policy": {
+                    "known_days": null,
+                    "unknown_hours": null,
+                    "failure_minutes": null,
+                    "deprecated_days": null
+                  }
+                },
+                "provider_outcomes": [
+                  {
+                    "provider": "npm registry",
+                    "provider_key": "package_registry",
+                    "status": "Unknown",
+                    "error": null,
+                    "checked_at": "2026-10-19T13:00:01+00:00"
+                  },
+                  {
+                    "provider": "deps.dev",
+                    "provider_key": "deps_dev",
+                    "status": "Unknown",
+                    "error": null,
+                    "checked_at": "2026-10-19T13:00:02+00:00"
+                  },
+                  {
+                    "provider": "OSV",
+                    "provider_key": "osv",
+                    "status": "Unknown",
+                    "error": null,
+                    "checked_at": "2026-10-19T13:00:03+00:00"
+                  }
+                ],
+                "cache_hit": true,
+                "stale_cache": false,
+                "cache_expires_at": "2026-10-20T13:00:03+00:00",
+                "risk_level": "UNKNOWN"
+              },
+              "risk_level": "UNKNOWN",
+              "is_stale": false,
+              "manual_override": false
+            }
+          ],
+          "eol_components": 0,
+          "eos_upcoming": 0,
+          "unsupported": 0,
+          "stale_count": 0
+        },
+        "health": {
+          "completeness_score": 64.0,
+          "missing_metadata": 4,
+          "outdated_components": 0
+        },
+        "vex": {
+          "affected_count": 0,
+          "not_affected_count": 0,
+          "fixed_count": 0,
+          "under_investigation_count": 5,
+          "unknown_count": 0,
+          "vulnerabilities_reduced_by_vex": 0,
+          "vulnerabilities_requiring_action": 5,
+          "top_affected_components": [],
+          "total_contexts": 5,
+          "matched_count": 0,
+          "analyzer_only_count": 5,
+          "vex_only_count": 0,
+          "conflict_review_count": 0,
+          "revalidation_required_count": 0,
+          "unresolved_mapping_count": 0,
+          "needs_review_count": 0
+        },
+        "vulnerability_age": {
+          "buckets": {
+            "le_30d": 0,
+            "d31_90": 0,
+            "d91_365": 3,
+            "gt_365": 2,
+            "unknown": 0
+          },
+          "total": 5,
+          "period": "all",
+          "date_from": null,
+          "date_to": null,
+          "schema_version": 1
+        },
+        "trend": {
+          "days": 30,
+          "points": [
+            {
+              "date": "2026-09-21",
+              "critical": 0,
+              "high": 0,
+              "medium": 0,
+              "low": 0,
+              "unknown": 0,
+              "total": 0
+            },
+            {
+              "date": "2026-09-22",
+              "critical": 0,
+              "high": 0,
+              "medium": 0,
+              "low": 0,
+              "unknown": 0,
+              "total": 0
+            },
+            {
+              "date": "2026-09-23",
+              "critical": 0,
+              "high": 0,
+              "medium": 0,
+              "low": 0,
+              "unknown": 0,
+              "total": 0
+            },
+            {
+              "date": "2026-09-24",
+              "critical": 0,
+              "high": 0,
+              "medium": 0,
+              "low": 0,
+              "unknown": 0,
+              "total": 0
+            },
+            {
+              "date": "2026-09-25",
+              "critical": 0,
+              "high": 0,
+              "medium": 0,
+              "low": 0,
+              "unknown": 0,
+              "total": 0
+            },
+            {
+              "date": "2026-09-26",
+              "critical": 0,
+              "high": 0,
+              "medium": 0,
+              "low": 0,
+              "unknown": 0,
+              "total": 0
+            },
+            {
+              "date": "2026-09-27",
+              "critical": 0,
+              "high": 0,
+              "medium": 0,
+              "low": 0,
+              "unknown": 0,
+              "total": 0
+            },
+            {
+              "date": "2026-09-28",
+              "critical": 0,
+              "high": 0,
+              "medium": 0,
+              "low": 0,
+              "unknown": 0,
+              "total": 0
+            },
+            {
+              "date": "2026-09-29",
+              "critical": 0,
+              "high": 0,
+              "medium": 0,
+              "low": 0,
+              "unknown": 0,
+              "total": 0
+            },
+            {
+              "date": "2026-09-30",
+              "critical": 0,
+              "high": 0,
+              "medium": 0,
+              "low": 0,
+              "unknown": 0,
+              "total": 0
+            },
+            {
+              "date": "2026-10-01",
+              "critical": 0,
+              "high": 0,
+              "medium": 0,
+              "low": 0,
+              "unknown": 0,
+              "total": 0
+            },
+            {
+              "date": "2026-10-02",
+              "critical": 0,
+              "high": 0,
+              "medium": 0,
+              "low": 0,
+              "unknown": 0,
+              "total": 0
+            },
+            {
+              "date": "2026-10-03",
+              "critical": 0,
+              "high": 0,
+              "medium": 0,
+              "low": 0,
+              "unknown": 0,
+              "total": 0
+            },
+            {
+              "date": "2026-10-04",
+              "critical": 0,
+              "high": 0,
+              "medium": 0,
+              "low": 0,
+              "unknown": 0,
+              "total": 0
+            },
+            {
+              "date": "2026-10-05",
+              "critical": 0,
+              "high": 0,
+              "medium": 0,
+              "low": 0,
+              "unknown": 0,
+              "total": 0
+            },
+            {
+              "date": "2026-10-06",
+              "critical": 0,
+              "high": 0,
+              "medium": 0,
+              "low": 0,
+              "unknown": 0,
+              "total": 0
+            },
+            {
+              "date": "2026-10-07",
+              "critical": 0,
+              "high": 0,
+              "medium": 0,
+              "low": 0,
+              "unknown": 0,
+              "total": 0
+            },
+            {
+              "date": "2026-10-08",
+              "critical": 0,
+              "high": 0,
+              "medium": 0,
+              "low": 0,
+              "unknown": 0,
+              "total": 0
+            },
+            {
+              "date": "2026-10-09",
+              "critical": 0,
+              "high": 0,
+              "medium": 0,
+              "low": 0,
+              "unknown": 0,
+              "total": 0
+            },
+            {
+              "date": "2026-10-10",
+              "critical": 0,
+              "high": 0,
+              "medium": 0,
+              "low": 0,
+              "unknown": 0,
+              "total": 0
+            },
+            {
+              "date": "2026-10-11",
+              "critical": 0,
+              "high": 0,
+              "medium": 0,
+              "low": 0,
+              "unknown": 0,
+              "total": 0
+            },
+            {
+              "date": "2026-10-12",
+              "critical": 0,
+              "high": 0,
+              "medium": 0,
+              "low": 0,
+              "unknown": 0,
+              "total": 0
+            },
+            {
+              "date": "2026-10-13",
+              "critical": 0,
+              "high": 0,
+              "medium": 0,
+              "low": 0,
+              "unknown": 0,
+              "total": 0
+            },
+            {
+              "date": "2026-10-14",
+              "critical": 0,
+              "high": 0,
+              "medium": 0,
+              "low": 0,
+              "unknown": 0,
+              "total": 0
+            },
+            {
+              "date": "2026-10-15",
+              "critical": 0,
+              "high": 0,
+              "medium": 0,
+              "low": 0,
+              "unknown": 0,
+              "total": 0
+            },
+            {
+              "date": "2026-10-16",
+              "critical": 0,
+              "high": 0,
+              "medium": 0,
+              "low": 0,
+              "unknown": 0,
+              "total": 0
+            },
+            {
+              "date": "2026-10-17",
+              "critical": 0,
+              "high": 0,
+              "medium": 0,
+              "low": 0,
+              "unknown": 0,
+              "total": 0
+            },
+            {
+              "date": "2026-10-18",
+              "critical": 0,
+              "high": 0,
+              "medium": 0,
+              "low": 0,
+              "unknown": 0,
+              "total": 0
+            },
+            {
+              "date": "2026-10-19",
+              "critical": 0,
+              "high": 0,
+              "medium": 0,
+              "low": 0,
+              "unknown": 0,
+              "total": 0
+            },
+            {
+              "date": "2026-10-20",
+              "critical": 0,
+              "high": 2,
+              "medium": 3,
+              "low": 0,
+              "unknown": 0,
+              "total": 5
+            }
+          ],
+          "series": [
+            {
+              "date": "2026-09-21",
+              "critical": 0,
+              "high": 0,
+              "medium": 0,
+              "low": 0,
+              "unknown": 0,
+              "total": 0
+            },
+            {
+              "date": "2026-09-22",
+              "critical": 0,
+              "high": 0,
+              "medium": 0,
+              "low": 0,
+              "unknown": 0,
+              "total": 0
+            },
+            {
+              "date": "2026-09-23",
+              "critical": 0,
+              "high": 0,
+              "medium": 0,
+              "low": 0,
+              "unknown": 0,
+              "total": 0
+            },
+            {
+              "date": "2026-09-24",
+              "critical": 0,
+              "high": 0,
+              "medium": 0,
+              "low": 0,
+              "unknown": 0,
+              "total": 0
+            },
+            {
+              "date": "2026-09-25",
+              "critical": 0,
+              "high": 0,
+              "medium": 0,
+              "low": 0,
+              "unknown": 0,
+              "total": 0
+            },
+            {
+              "date": "2026-09-26",
+              "critical": 0,
+              "high": 0,
+              "medium": 0,
+              "low": 0,
+              "unknown": 0,
+              "total": 0
+            },
+            {
+              "date": "2026-09-27",
+              "critical": 0,
+              "high": 0,
+              "medium": 0,
+              "low": 0,
+              "unknown": 0,
+              "total": 0
+            },
+            {
+              "date": "2026-09-28",
+              "critical": 0,
+              "high": 0,
+              "medium": 0,
+              "low": 0,
+              "unknown": 0,
+              "total": 0
+            },
+            {
+              "date": "2026-09-29",
+              "critical": 0,
+              "high": 0,
+              "medium": 0,
+              "low": 0,
+              "unknown": 0,
+              "total": 0
+            },
+            {
+              "date": "2026-09-30",
+              "critical": 0,
+              "high": 0,
+              "medium": 0,
+              "low": 0,
+              "unknown": 0,
+              "total": 0
+            },
+            {
+              "date": "2026-10-01",
+              "critical": 0,
+              "high": 0,
+              "medium": 0,
+              "low": 0,
+              "unknown": 0,
+              "total": 0
+            },
+            {
+              "date": "2026-10-02",
+              "critical": 0,
+              "high": 0,
+              "medium": 0,
+              "low": 0,
+              "unknown": 0,
+              "total": 0
+            },
+            {
+              "date": "2026-10-03",
+              "critical": 0,
+              "high": 0,
+              "medium": 0,
+              "low": 0,
+              "unknown": 0,
+              "total": 0
+            },
+            {
+              "date": "2026-10-04",
+              "critical": 0,
+              "high": 0,
+              "medium": 0,
+              "low": 0,
+              "unknown": 0,
+              "total": 0
+            },
+            {
+              "date": "2026-10-05",
+              "critical": 0,
+              "high": 0,
+              "medium": 0,
+              "low": 0,
+              "unknown": 0,
+              "total": 0
+            },
+            {
+              "date": "2026-10-06",
+              "critical": 0,
+              "high": 0,
+              "medium": 0,
+              "low": 0,
+              "unknown": 0,
+              "total": 0
+            },
+            {
+              "date": "2026-10-07",
+              "critical": 0,
+              "high": 0,
+              "medium": 0,
+              "low": 0,
+              "unknown": 0,
+              "total": 0
+            },
+            {
+              "date": "2026-10-08",
+              "critical": 0,
+              "high": 0,
+              "medium": 0,
+              "low": 0,
+              "unknown": 0,
+              "total": 0
+            },
+            {
+              "date": "2026-10-09",
+              "critical": 0,
+              "high": 0,
+              "medium": 0,
+              "low": 0,
+              "unknown": 0,
+              "total": 0
+            },
+            {
+              "date": "2026-10-10",
+              "critical": 0,
+              "high": 0,
+              "medium": 0,
+              "low": 0,
+              "unknown": 0,
+              "total": 0
+            },
+            {
+              "date": "2026-10-11",
+              "critical": 0,
+              "high": 0,
+              "medium": 0,
+              "low": 0,
+              "unknown": 0,
+              "total": 0
+            },
+            {
+              "date": "2026-10-12",
+              "critical": 0,
+              "high": 0,
+              "medium": 0,
+              "low": 0,
+              "unknown": 0,
+              "total": 0
+            },
+            {
+              "date": "2026-10-13",
+              "critical": 0,
+              "high": 0,
+              "medium": 0,
+              "low": 0,
+              "unknown": 0,
+              "total": 0
+            },
+            {
+              "date": "2026-10-14",
+              "critical": 0,
+              "high": 0,
+              "medium": 0,
+              "low": 0,
+              "unknown": 0,
+              "total": 0
+            },
+            {
+              "date": "2026-10-15",
+              "critical": 0,
+              "high": 0,
+              "medium": 0,
+              "low": 0,
+              "unknown": 0,
+              "total": 0
+            },
+            {
+              "date": "2026-10-16",
+              "critical": 0,
+              "high": 0,
+              "medium": 0,
+              "low": 0,
+              "unknown": 0,
+              "total": 0
+            },
+            {
+              "date": "2026-10-17",
+              "critical": 0,
+              "high": 0,
+              "medium": 0,
+              "low": 0,
+              "unknown": 0,
+              "total": 0
+            },
+            {
+              "date": "2026-10-18",
+              "critical": 0,
+              "high": 0,
+              "medium": 0,
+              "low": 0,
+              "unknown": 0,
+              "total": 0
+            },
+            {
+              "date": "2026-10-19",
+              "critical": 0,
+              "high": 0,
+              "medium": 0,
+              "low": 0,
+              "unknown": 0,
+              "total": 0
+            },
+            {
+              "date": "2026-10-20",
+              "critical": 0,
+              "high": 2,
+              "medium": 3,
+              "low": 0,
+              "unknown": 0,
+              "total": 5
+            }
+          ],
+          "annotations": [
+            {
+              "date": "2026-10-20",
+              "kind": "sbom_uploaded",
+              "label": "UAT R3 1792486718006046000 SBOM 1 uploaded",
+              "count": 1
+            }
+          ],
+          "avg_total": 0.17,
+          "earliest_run_date": "2026-10-20",
+          "runs_total": 2,
+          "runs_distinct_dates": 1,
+          "granularity": null,
+          "schema_version": 1
+        },
+        "forecast": {
+          "history": [
+            {
+              "date": "2026-09-21",
+              "total": 0
+            },
+            {
+              "date": "2026-09-22",
+              "total": 0
+            },
+            {
+              "date": "2026-09-23",
+              "total": 0
+            },
+            {
+              "date": "2026-09-24",
+              "total": 0
+            },
+            {
+              "date": "2026-09-25",
+              "total": 0
+            },
+            {
+              "date": "2026-09-26",
+              "total": 0
+            },
+            {
+              "date": "2026-09-27",
+              "total": 0
+            },
+            {
+              "date": "2026-09-28",
+              "total": 0
+            },
+            {
+              "date": "2026-09-29",
+              "total": 0
+            },
+            {
+              "date": "2026-09-30",
+              "total": 0
+            },
+            {
+              "date": "2026-10-01",
+              "total": 0
+            },
+            {
+              "date": "2026-10-02",
+              "total": 0
+            },
+            {
+              "date": "2026-10-03",
+              "total": 0
+            },
+            {
+              "date": "2026-10-04",
+              "total": 0
+            },
+            {
+              "date": "2026-10-05",
+              "total": 0
+            },
+            {
+              "date": "2026-10-06",
+              "total": 0
+            },
+            {
+              "date": "2026-10-07",
+              "total": 0
+            },
+            {
+              "date": "2026-10-08",
+              "total": 0
+            },
+            {
+              "date": "2026-10-09",
+              "total": 0
+            },
+            {
+              "date": "2026-10-10",
+              "total": 0
+            },
+            {
+              "date": "2026-10-11",
+              "total": 0
+            },
+            {
+              "date": "2026-10-12",
+              "total": 0
+            },
+            {
+              "date": "2026-10-13",
+              "total": 0
+            },
+            {
+              "date": "2026-10-14",
+              "total": 0
+            },
+            {
+              "date": "2026-10-15",
+              "total": 0
+            },
+            {
+              "date": "2026-10-16",
+              "total": 0
+            },
+            {
+              "date": "2026-10-17",
+              "total": 0
+            },
+            {
+              "date": "2026-10-18",
+              "total": 0
+            },
+            {
+              "date": "2026-10-19",
+              "total": 0
+            },
+            {
+              "date": "2026-10-20",
+              "total": 5
+            }
+          ],
+          "history_days": 30,
+          "horizon_days": 14,
+          "insufficient_history": true,
+          "projection": [],
+          "slope_per_day": 0.0,
+          "r_squared": 0.0,
+          "current_total": 5,
+          "projected_total": null,
+          "days_to_zero": null,
+          "anomaly": {
+            "detected": true,
+            "zscore": null,
+            "delta": 5,
+            "baseline_mean": 0.0,
+            "baseline_std": 0.0
+          },
+          "schema_version": 1
+        },
+        "exploitation": {
+          "probability_30d": 0.0734,
+          "distinct_cves": 5,
+          "scored_cves": 1,
+          "coverage": 0.2,
+          "kev_cves": 0,
+          "top_drivers": [
+            {
+              "cve": "CVE-2020-28500",
+              "epss": 0.0734,
+              "percentile": 0.9434,
+              "kev": false
+            }
+          ],
+          "assumption": "independent",
+          "schema_version": 1
+        },
+        "remediation": {
+          "mttr_days": {
+            "critical": null,
+            "high": null,
+            "medium": null,
+            "low": null,
+            "unknown": null,
+            "overall": null
+          },
+          "resolved_total": 0,
+          "reopened_total": 0,
+          "sla": {
+            "budgets_days": {
+              "critical": 7,
+              "high": 30,
+              "medium": 90,
+              "low": 180,
+              "unknown": 90
+            },
+            "overdue": 0,
+            "due_soon": 0,
+            "ok": 5,
+            "by_severity_overdue": {},
+            "worst_offenders": []
+          },
+          "velocity": {
+            "window_days": 30,
+            "new_findings": 5,
+            "resolved_findings": 0,
+            "net": 5
+          },
+          "schema_version": 1
+        },
+        "remediation_stats": {
+          "status_counts": {
+            "open": 5,
+            "in_progress": 0,
+            "fixed": 0,
+            "accepted_risk": 0,
+            "closed": 0
+          },
+          "aging_count": 0,
+          "sla": {
+            "overdue": 0,
+            "due_soon": 0,
+            "ok": 5
+          }
+        },
+        "risk_map": {
+          "items": [
+            {
+              "sbom_id": "f5e7f4c4-8a16-4c70-93d8-092173885437",
+              "run_id": 31,
+              "name": "UAT R3 1792486718006046000 SBOM 1",
+              "project": "UAT R3 1792486718006046000",
+              "findings_total": 5,
+              "critical": 0,
+              "high": 2,
+              "medium": 3,
+              "low": 0,
+              "unknown": 0,
+              "dominant": "high",
+              "last_analysed": "2026-10-20T09:15:48+00:00"
+            }
+          ],
+          "schema_version": 1
+        },
+        "risk_matrix": {
+          "points": [
+            {
+              "vuln_id": "CVE-2020-28500",
+              "component": "lodash@4.17.20",
+              "severity": "medium",
+              "cvss": 5.3,
+              "has_fix": true,
+              "epss": 0.0734,
+              "kev": false
+            },
+            {
+              "vuln_id": "CVE-2026-4800",
+              "component": "lodash@4.17.20",
+              "severity": "high",
+              "cvss": 8.1,
+              "has_fix": true,
+              "epss": 0.0,
+              "kev": false
+            },
+            {
+              "vuln_id": "CVE-2021-23337",
+              "component": "lodash@4.17.20",
+              "severity": "high",
+              "cvss": 7.2,
+              "has_fix": true,
+              "epss": 0.0,
+              "kev": false
+            },
+            {
+              "vuln_id": "CVE-2025-13465",
+              "component": "lodash@4.17.20",
+              "severity": "medium",
+              "cvss": 6.5,
+              "has_fix": true,
+              "epss": 0.0,
+              "kev": false
+            },
+            {
+              "vuln_id": "CVE-2026-2950",
+              "component": "lodash@4.17.20",
+              "severity": "medium",
+              "cvss": 6.5,
+              "has_fix": true,
+              "epss": 0.0,
+              "kev": false
+            }
+          ],
+          "total_distinct": 5,
+          "unplotted_no_cvss": 0,
+          "limit": 300,
+          "schema_version": 1
+        },
+        "recent_sboms": [
+          {
+            "id": "f5e7f4c4-8a16-4c70-93d8-092173885437",
+            "sbom_name": "UAT R3 1792486718006046000 SBOM 1",
+            "created_on": "2026-10-20T08:58:38+00:00"
+          }
+        ],
+        "lifetime": {
+          "sboms_scanned_total": 1,
+          "projects_total": 1,
+          "runs_executed_total": 2,
+          "runs_completed_total": 2,
+          "runs_distinct_dates": 1,
+          "runs_executed_this_week": 2,
+          "findings_surfaced_total": 5,
+          "findings_resolved_total": 0,
+          "first_run_at": "2026-10-20T09:02:58+00:00",
+          "days_monitoring": 0,
+          "schema_version": 1
+        }
+      },
+      "request_id": "962372205313"
+    },
+    "result": "PASS",
+    "time": "2026-10-20T09:16:11.137344+00:00"
+  },
+  {
+    "id": "R3-DASHBOARD-INACTIVE-EXCLUDED-viewer",
+    "role": "viewer",
+    "preconditions": "Verified isolated Greenfield UUID; task-owned fixtures; credentials kept in memory",
+    "stepsExecuted": "Read same project/application scope after owned deactivation",
+    "expected": "200 one eligible stored SBOM and identical scoped metrics",
+    "actual": {
+      "status": 200,
+      "data": {
+        "scope": {
+          "posture": [
+            {
+              "target_sbom_id": "f5e7f4c4-8a16-4c70-93d8-092173885437",
+              "posture_sbom_id": "f5e7f4c4-8a16-4c70-93d8-092173885437",
+              "tenant_id": "3a900179-36bf-4b5f-b2e1-2a4a9d06e6af",
+              "projectid": "d016fed5-336c-4234-a3ef-83964c6cbf57",
+              "product_id": "67289be2-ba05-4469-b158-c64859613caa",
+              "designated_sbom_id": null,
+              "stored_designated_sbom_id": null,
+              "selection_mode": "AUTO",
+              "application_name": "UAT R3 1792486718006046000 Application",
+              "current_sbom": {
+                "id": "f5e7f4c4-8a16-4c70-93d8-092173885437",
+                "name": "UAT R3 1792486718006046000 SBOM 1",
+                "version": null
+              },
+              "effective_current_sbom": {
+                "id": "f5e7f4c4-8a16-4c70-93d8-092173885437",
+                "name": "UAT R3 1792486718006046000 SBOM 1",
+                "version": null
+              },
+              "invalid_selection": false,
+              "designated_current_sbom_id": null,
+              "analysis_completed_on": "2026-10-20T09:15:48+00:00",
+              "fallback_reason": null,
+              "latest_uploaded": {
+                "id": "f5e7f4c4-8a16-4c70-93d8-092173885437",
+                "name": "UAT R3 1792486718006046000 SBOM 1",
+                "version": null
+              },
+              "latest_analyzed": {
+                "id": "f5e7f4c4-8a16-4c70-93d8-092173885437",
+                "name": "UAT R3 1792486718006046000 SBOM 1",
+                "version": null
+              },
+              "posture_sbom": {
+                "id": "f5e7f4c4-8a16-4c70-93d8-092173885437",
+                "name": "UAT R3 1792486718006046000 SBOM 1",
+                "version": null
+              },
+              "analysis_run_id": 31,
+              "analysis_finding_rows": 5,
+              "analysis_status": "ANALYZED",
+              "last_known_posture": false,
+              "coverage_incomplete": false,
+              "warning": null,
+              "designation_required": false
+            }
+          ],
+          "level": "APPLICATION",
+          "tenant": {
+            "id": "3a900179-36bf-4b5f-b2e1-2a4a9d06e6af",
+            "name": "Olympus"
+          },
+          "project": {
+            "id": "d016fed5-336c-4234-a3ef-83964c6cbf57",
+            "name": "UAT R3 1792486718006046000"
+          },
+          "application": {
+            "id": "67289be2-ba05-4469-b158-c64859613caa",
+            "name": "UAT R3 1792486718006046000 Application"
+          },
+          "sbom": null
+        },
+        "posture": {
+          "severity": {
+            "critical": 0,
+            "high": 2,
+            "medium": 3,
+            "low": 0,
+            "unknown": 0
+          },
+          "kev_count": 0,
+          "high_epss_count": 1,
+          "needs_review_count": 5,
+          "fix_available_count": 5,
+          "last_successful_run_at": "2026-10-20T09:15:48+00:00",
+          "total_sboms": 1,
+          "total_sboms_analysed": 1,
+          "total_applications_scanned": 1,
+          "total_active_projects": 1,
+          "total_findings": 5,
+          "distinct_vulnerabilities": 5,
+          "net_7day": {
+            "added": 5,
+            "resolved": 0,
+            "is_first_period": true,
+            "window_days": 7
+          },
+          "net_7day_added": 5,
+          "net_7day_resolved": 0,
+          "headline_state": "high_only",
+          "primary_action": "view_top_sboms",
+          "coverage_status": "complete",
+          "coverage_gap_sources": [],
+          "schema_version": 1
+        },
+        "lifecycle": {
+          "total_components": 2,
+          "supported_count": 0,
+          "eol_count": 0,
+          "eos_count": 0,
+          "eof_count": 0,
+          "deprecated_count": 0,
+          "unsupported_count": 0,
+          "unknown_count": 2,
+          "eol_soon_count": 0,
+          "possibly_unmaintained_count": 0,
+          "stale_lifecycle_count": 0,
+          "top_risky_components": [],
+          "recommended_upgrades": [
+            {
+              "id": 51,
+              "name": "lodash",
+              "version": "4.17.20",
+              "ecosystem": "npm",
+              "purl": "pkg:npm/lodash@4.17.20",
+              "cpe": null,
+              "supplier": "UAT",
+              "license": null,
+              "lifecycle_status": "Unknown",
+              "eos_date": null,
+              "eol_date": null,
+              "eof_date": null,
+              "deprecated": false,
+              "unsupported": false,
+              "maintenance_status": null,
+              "latest_version": "4.18.1",
+              "latest_supported_version": null,
+              "recommended_version": "4.18.1",
+              "recommendation": "Review upgrade to latest registry version 4.18.1.",
+              "source_name": "npm registry",
+              "source_url": "https://www.npmjs.com/package/lodash",
+              "confidence": "Low",
+              "checked_at": "2026-10-19T13:00:01+00:00",
+              "evidence": {
+                "dist_tags": {
+                  "latest": "4.18.1"
+                },
+                "repository_url": "https://github.com/lodash/lodash",
+                "provider_key": "package_registry",
+                "cache_policy": {
+                  "known_days": 14,
+                  "unknown_hours": 24,
+                  "failure_minutes": 30,
+                  "deprecated_days": 7
+                },
+                "deps.dev": {
+                  "package": {},
+                  "version": {
+                    "versionKey": {
+                      "system": "NPM",
+                      "name": "lodash",
+                      "version": "4.17.20"
+                    },
+                    "isDefault": false,
+                    "licenses": [
+                      "MIT"
+                    ],
+                    "links": [
+                      {
+                        "label": "HOMEPAGE",
+                        "url": "https://lodash.com/"
+                      },
+                      {
+                        "label": "ISSUE_TRACKER",
+                        "url": "https://github.com/lodash/lodash/issues"
+                      },
+                      {
+                        "label": "ORIGIN",
+                        "url": "https://registry.npmjs.org/lodash/4.17.20"
+                      },
+                      {
+                        "label": "SOURCE_REPO",
+                        "url": "git+https://github.com/lodash/lodash.git"
+                      }
+                    ],
+                    "publishedAt": "2020-08-13T16:53:54Z"
+                  },
+                  "advisory_count": 5,
+                  "advisories": [
+                    {
+                      "id": "GHSA-29mw-wpgm-hmr9"
+                    },
+                    {
+                      "id": "GHSA-35jh-r3h4-6jhm"
+                    },
+                    {
+                      "id": "GHSA-f23m-r3pf-42rh"
+                    },
+                    {
+                      "id": "GHSA-r5fr-rjxr-66jc"
+                    },
+                    {
+                      "id": "GHSA-xxjr-mmjv-4gpg"
+                    }
+                  ],
+                  "provider_key": "deps_dev",
+                  "cache_policy": {
+                    "known_days": null,
+                    "unknown_hours": null,
+                    "failure_minutes": null,
+                    "deprecated_days": null
+                  }
+                },
+                "OSV": {
+                  "vulnerability_count": 5,
+                  "fixed_versions": [
+                    "4.17.21",
+                    "4.18.0",
+                    "4.17.23"
+                  ],
+                  "vuln_ids": [
+                    "GHSA-29mw-wpgm-hmr9",
+                    "GHSA-35jh-r3h4-6jhm",
+                    "GHSA-f23m-r3pf-42rh",
+                    "GHSA-r5fr-rjxr-66jc",
+                    "GHSA-xxjr-mmjv-4gpg"
+                  ],
+                  "provider_key": "osv",
+                  "cache_policy": {
+                    "known_days": null,
+                    "unknown_hours": null,
+                    "failure_minutes": null,
+                    "deprecated_days": null
+                  }
+                },
+                "provider_outcomes": [
+                  {
+                    "provider": "npm registry",
+                    "provider_key": "package_registry",
+                    "status": "Unknown",
+                    "error": null,
+                    "checked_at": "2026-10-19T13:00:01+00:00"
+                  },
+                  {
+                    "provider": "deps.dev",
+                    "provider_key": "deps_dev",
+                    "status": "Unknown",
+                    "error": null,
+                    "checked_at": "2026-10-19T13:00:02+00:00"
+                  },
+                  {
+                    "provider": "OSV",
+                    "provider_key": "osv",
+                    "status": "Unknown",
+                    "error": null,
+                    "checked_at": "2026-10-19T13:00:03+00:00"
+                  }
+                ],
+                "cache_hit": true,
+                "stale_cache": false,
+                "cache_expires_at": "2026-10-20T13:00:03+00:00",
+                "risk_level": "UNKNOWN"
+              },
+              "risk_level": "UNKNOWN",
+              "is_stale": false,
+              "manual_override": false
+            }
+          ],
+          "eol_components": 0,
+          "eos_upcoming": 0,
+          "unsupported": 0,
+          "stale_count": 0
+        },
+        "health": {
+          "completeness_score": 64.0,
+          "missing_metadata": 4,
+          "outdated_components": 0
+        },
+        "vex": {
+          "affected_count": 0,
+          "not_affected_count": 0,
+          "fixed_count": 0,
+          "under_investigation_count": 5,
+          "unknown_count": 0,
+          "vulnerabilities_reduced_by_vex": 0,
+          "vulnerabilities_requiring_action": 5,
+          "top_affected_components": [],
+          "total_contexts": 5,
+          "matched_count": 0,
+          "analyzer_only_count": 5,
+          "vex_only_count": 0,
+          "conflict_review_count": 0,
+          "revalidation_required_count": 0,
+          "unresolved_mapping_count": 0,
+          "needs_review_count": 0
+        },
+        "vulnerability_age": {
+          "buckets": {
+            "le_30d": 0,
+            "d31_90": 0,
+            "d91_365": 3,
+            "gt_365": 2,
+            "unknown": 0
+          },
+          "total": 5,
+          "period": "all",
+          "date_from": null,
+          "date_to": null,
+          "schema_version": 1
+        },
+        "trend": {
+          "days": 30,
+          "points": [
+            {
+              "date": "2026-09-21",
+              "critical": 0,
+              "high": 0,
+              "medium": 0,
+              "low": 0,
+              "unknown": 0,
+              "total": 0
+            },
+            {
+              "date": "2026-09-22",
+              "critical": 0,
+              "high": 0,
+              "medium": 0,
+              "low": 0,
+              "unknown": 0,
+              "total": 0
+            },
+            {
+              "date": "2026-09-23",
+              "critical": 0,
+              "high": 0,
+              "medium": 0,
+              "low": 0,
+              "unknown": 0,
+              "total": 0
+            },
+            {
+              "date": "2026-09-24",
+              "critical": 0,
+              "high": 0,
+              "medium": 0,
+              "low": 0,
+              "unknown": 0,
+              "total": 0
+            },
+            {
+              "date": "2026-09-25",
+              "critical": 0,
+              "high": 0,
+              "medium": 0,
+              "low": 0,
+              "unknown": 0,
+              "total": 0
+            },
+            {
+              "date": "2026-09-26",
+              "critical": 0,
+              "high": 0,
+              "medium": 0,
+              "low": 0,
+              "unknown": 0,
+              "total": 0
+            },
+            {
+              "date": "2026-09-27",
+              "critical": 0,
+              "high": 0,
+              "medium": 0,
+              "low": 0,
+              "unknown": 0,
+              "total": 0
+            },
+            {
+              "date": "2026-09-28",
+              "critical": 0,
+              "high": 0,
+              "medium": 0,
+              "low": 0,
+              "unknown": 0,
+              "total": 0
+            },
+            {
+              "date": "2026-09-29",
+              "critical": 0,
+              "high": 0,
+              "medium": 0,
+              "low": 0,
+              "unknown": 0,
+              "total": 0
+            },
+            {
+              "date": "2026-09-30",
+              "critical": 0,
+              "high": 0,
+              "medium": 0,
+              "low": 0,
+              "unknown": 0,
+              "total": 0
+            },
+            {
+              "date": "2026-10-01",
+              "critical": 0,
+              "high": 0,
+              "medium": 0,
+              "low": 0,
+              "unknown": 0,
+              "total": 0
+            },
+            {
+              "date": "2026-10-02",
+              "critical": 0,
+              "high": 0,
+              "medium": 0,
+              "low": 0,
+              "unknown": 0,
+              "total": 0
+            },
+            {
+              "date": "2026-10-03",
+              "critical": 0,
+              "high": 0,
+              "medium": 0,
+              "low": 0,
+              "unknown": 0,
+              "total": 0
+            },
+            {
+              "date": "2026-10-04",
+              "critical": 0,
+              "high": 0,
+              "medium": 0,
+              "low": 0,
+              "unknown": 0,
+              "total": 0
+            },
+            {
+              "date": "2026-10-05",
+              "critical": 0,
+              "high": 0,
+              "medium": 0,
+              "low": 0,
+              "unknown": 0,
+              "total": 0
+            },
+            {
+              "date": "2026-10-06",
+              "critical": 0,
+              "high": 0,
+              "medium": 0,
+              "low": 0,
+              "unknown": 0,
+              "total": 0
+            },
+            {
+              "date": "2026-10-07",
+              "critical": 0,
+              "high": 0,
+              "medium": 0,
+              "low": 0,
+              "unknown": 0,
+              "total": 0
+            },
+            {
+              "date": "2026-10-08",
+              "critical": 0,
+              "high": 0,
+              "medium": 0,
+              "low": 0,
+              "unknown": 0,
+              "total": 0
+            },
+            {
+              "date": "2026-10-09",
+              "critical": 0,
+              "high": 0,
+              "medium": 0,
+              "low": 0,
+              "unknown": 0,
+              "total": 0
+            },
+            {
+              "date": "2026-10-10",
+              "critical": 0,
+              "high": 0,
+              "medium": 0,
+              "low": 0,
+              "unknown": 0,
+              "total": 0
+            },
+            {
+              "date": "2026-10-11",
+              "critical": 0,
+              "high": 0,
+              "medium": 0,
+              "low": 0,
+              "unknown": 0,
+              "total": 0
+            },
+            {
+              "date": "2026-10-12",
+              "critical": 0,
+              "high": 0,
+              "medium": 0,
+              "low": 0,
+              "unknown": 0,
+              "total": 0
+            },
+            {
+              "date": "2026-10-13",
+              "critical": 0,
+              "high": 0,
+              "medium": 0,
+              "low": 0,
+              "unknown": 0,
+              "total": 0
+            },
+            {
+              "date": "2026-10-14",
+              "critical": 0,
+              "high": 0,
+              "medium": 0,
+              "low": 0,
+              "unknown": 0,
+              "total": 0
+            },
+            {
+              "date": "2026-10-15",
+              "critical": 0,
+              "high": 0,
+              "medium": 0,
+              "low": 0,
+              "unknown": 0,
+              "total": 0
+            },
+            {
+              "date": "2026-10-16",
+              "critical": 0,
+              "high": 0,
+              "medium": 0,
+              "low": 0,
+              "unknown": 0,
+              "total": 0
+            },
+            {
+              "date": "2026-10-17",
+              "critical": 0,
+              "high": 0,
+              "medium": 0,
+              "low": 0,
+              "unknown": 0,
+              "total": 0
+            },
+            {
+              "date": "2026-10-18",
+              "critical": 0,
+              "high": 0,
+              "medium": 0,
+              "low": 0,
+              "unknown": 0,
+              "total": 0
+            },
+            {
+              "date": "2026-10-19",
+              "critical": 0,
+              "high": 0,
+              "medium": 0,
+              "low": 0,
+              "unknown": 0,
+              "total": 0
+            },
+            {
+              "date": "2026-10-20",
+              "critical": 0,
+              "high": 2,
+              "medium": 3,
+              "low": 0,
+              "unknown": 0,
+              "total": 5
+            }
+          ],
+          "series": [
+            {
+              "date": "2026-09-21",
+              "critical": 0,
+              "high": 0,
+              "medium": 0,
+              "low": 0,
+              "unknown": 0,
+              "total": 0
+            },
+            {
+              "date": "2026-09-22",
+              "critical": 0,
+              "high": 0,
+              "medium": 0,
+              "low": 0,
+              "unknown": 0,
+              "total": 0
+            },
+            {
+              "date": "2026-09-23",
+              "critical": 0,
+              "high": 0,
+              "medium": 0,
+              "low": 0,
+              "unknown": 0,
+              "total": 0
+            },
+            {
+              "date": "2026-09-24",
+              "critical": 0,
+              "high": 0,
+              "medium": 0,
+              "low": 0,
+              "unknown": 0,
+              "total": 0
+            },
+            {
+              "date": "2026-09-25",
+              "critical": 0,
+              "high": 0,
+              "medium": 0,
+              "low": 0,
+              "unknown": 0,
+              "total": 0
+            },
+            {
+              "date": "2026-09-26",
+              "critical": 0,
+              "high": 0,
+              "medium": 0,
+              "low": 0,
+              "unknown": 0,
+              "total": 0
+            },
+            {
+              "date": "2026-09-27",
+              "critical": 0,
+              "high": 0,
+              "medium": 0,
+              "low": 0,
+              "unknown": 0,
+              "total": 0
+            },
+            {
+              "date": "2026-09-28",
+              "critical": 0,
+              "high": 0,
+              "medium": 0,
+              "low": 0,
+              "unknown": 0,
+              "total": 0
+            },
+            {
+              "date": "2026-09-29",
+              "critical": 0,
+              "high": 0,
+              "medium": 0,
+              "low": 0,
+              "unknown": 0,
+              "total": 0
+            },
+            {
+              "date": "2026-09-30",
+              "critical": 0,
+              "high": 0,
+              "medium": 0,
+              "low": 0,
+              "unknown": 0,
+              "total": 0
+            },
+            {
+              "date": "2026-10-01",
+              "critical": 0,
+              "high": 0,
+              "medium": 0,
+              "low": 0,
+              "unknown": 0,
+              "total": 0
+            },
+            {
+              "date": "2026-10-02",
+              "critical": 0,
+              "high": 0,
+              "medium": 0,
+              "low": 0,
+              "unknown": 0,
+              "total": 0
+            },
+            {
+              "date": "2026-10-03",
+              "critical": 0,
+              "high": 0,
+              "medium": 0,
+              "low": 0,
+              "unknown": 0,
+              "total": 0
+            },
+            {
+              "date": "2026-10-04",
+              "critical": 0,
+              "high": 0,
+              "medium": 0,
+              "low": 0,
+              "unknown": 0,
+              "total": 0
+            },
+            {
+              "date": "2026-10-05",
+              "critical": 0,
+              "high": 0,
+              "medium": 0,
+              "low": 0,
+              "unknown": 0,
+              "total": 0
+            },
+            {
+              "date": "2026-10-06",
+              "critical": 0,
+              "high": 0,
+              "medium": 0,
+              "low": 0,
+              "unknown": 0,
+              "total": 0
+            },
+            {
+              "date": "2026-10-07",
+              "critical": 0,
+              "high": 0,
+              "medium": 0,
+              "low": 0,
+              "unknown": 0,
+              "total": 0
+            },
+            {
+              "date": "2026-10-08",
+              "critical": 0,
+              "high": 0,
+              "medium": 0,
+              "low": 0,
+              "unknown": 0,
+              "total": 0
+            },
+            {
+              "date": "2026-10-09",
+              "critical": 0,
+              "high": 0,
+              "medium": 0,
+              "low": 0,
+              "unknown": 0,
+              "total": 0
+            },
+            {
+              "date": "2026-10-10",
+              "critical": 0,
+              "high": 0,
+              "medium": 0,
+              "low": 0,
+              "unknown": 0,
+              "total": 0
+            },
+            {
+              "date": "2026-10-11",
+              "critical": 0,
+              "high": 0,
+              "medium": 0,
+              "low": 0,
+              "unknown": 0,
+              "total": 0
+            },
+            {
+              "date": "2026-10-12",
+              "critical": 0,
+              "high": 0,
+              "medium": 0,
+              "low": 0,
+              "unknown": 0,
+              "total": 0
+            },
+            {
+              "date": "2026-10-13",
+              "critical": 0,
+              "high": 0,
+              "medium": 0,
+              "low": 0,
+              "unknown": 0,
+              "total": 0
+            },
+            {
+              "date": "2026-10-14",
+              "critical": 0,
+              "high": 0,
+              "medium": 0,
+              "low": 0,
+              "unknown": 0,
+              "total": 0
+            },
+            {
+              "date": "2026-10-15",
+              "critical": 0,
+              "high": 0,
+              "medium": 0,
+              "low": 0,
+              "unknown": 0,
+              "total": 0
+            },
+            {
+              "date": "2026-10-16",
+              "critical": 0,
+              "high": 0,
+              "medium": 0,
+              "low": 0,
+              "unknown": 0,
+              "total": 0
+            },
+            {
+              "date": "2026-10-17",
+              "critical": 0,
+              "high": 0,
+              "medium": 0,
+              "low": 0,
+              "unknown": 0,
+              "total": 0
+            },
+            {
+              "date": "2026-10-18",
+              "critical": 0,
+              "high": 0,
+              "medium": 0,
+              "low": 0,
+              "unknown": 0,
+              "total": 0
+            },
+            {
+              "date": "2026-10-19",
+              "critical": 0,
+              "high": 0,
+              "medium": 0,
+              "low": 0,
+              "unknown": 0,
+              "total": 0
+            },
+            {
+              "date": "2026-10-20",
+              "critical": 0,
+              "high": 2,
+              "medium": 3,
+              "low": 0,
+              "unknown": 0,
+              "total": 5
+            }
+          ],
+          "annotations": [
+            {
+              "date": "2026-10-20",
+              "kind": "sbom_uploaded",
+              "label": "UAT R3 1792486718006046000 SBOM 1 uploaded",
+              "count": 1
+            }
+          ],
+          "avg_total": 0.17,
+          "earliest_run_date": "2026-10-20",
+          "runs_total": 2,
+          "runs_distinct_dates": 1,
+          "granularity": null,
+          "schema_version": 1
+        },
+        "forecast": {
+          "history": [
+            {
+              "date": "2026-09-21",
+              "total": 0
+            },
+            {
+              "date": "2026-09-22",
+              "total": 0
+            },
+            {
+              "date": "2026-09-23",
+              "total": 0
+            },
+            {
+              "date": "2026-09-24",
+              "total": 0
+            },
+            {
+              "date": "2026-09-25",
+              "total": 0
+            },
+            {
+              "date": "2026-09-26",
+              "total": 0
+            },
+            {
+              "date": "2026-09-27",
+              "total": 0
+            },
+            {
+              "date": "2026-09-28",
+              "total": 0
+            },
+            {
+              "date": "2026-09-29",
+              "total": 0
+            },
+            {
+              "date": "2026-09-30",
+              "total": 0
+            },
+            {
+              "date": "2026-10-01",
+              "total": 0
+            },
+            {
+              "date": "2026-10-02",
+              "total": 0
+            },
+            {
+              "date": "2026-10-03",
+              "total": 0
+            },
+            {
+              "date": "2026-10-04",
+              "total": 0
+            },
+            {
+              "date": "2026-10-05",
+              "total": 0
+            },
+            {
+              "date": "2026-10-06",
+              "total": 0
+            },
+            {
+              "date": "2026-10-07",
+              "total": 0
+            },
+            {
+              "date": "2026-10-08",
+              "total": 0
+            },
+            {
+              "date": "2026-10-09",
+              "total": 0
+            },
+            {
+              "date": "2026-10-10",
+              "total": 0
+            },
+            {
+              "date": "2026-10-11",
+              "total": 0
+            },
+            {
+              "date": "2026-10-12",
+              "total": 0
+            },
+            {
+              "date": "2026-10-13",
+              "total": 0
+            },
+            {
+              "date": "2026-10-14",
+              "total": 0
+            },
+            {
+              "date": "2026-10-15",
+              "total": 0
+            },
+            {
+              "date": "2026-10-16",
+              "total": 0
+            },
+            {
+              "date": "2026-10-17",
+              "total": 0
+            },
+            {
+              "date": "2026-10-18",
+              "total": 0
+            },
+            {
+              "date": "2026-10-19",
+              "total": 0
+            },
+            {
+              "date": "2026-10-20",
+              "total": 5
+            }
+          ],
+          "history_days": 30,
+          "horizon_days": 14,
+          "insufficient_history": true,
+          "projection": [],
+          "slope_per_day": 0.0,
+          "r_squared": 0.0,
+          "current_total": 5,
+          "projected_total": null,
+          "days_to_zero": null,
+          "anomaly": {
+            "detected": true,
+            "zscore": null,
+            "delta": 5,
+            "baseline_mean": 0.0,
+            "baseline_std": 0.0
+          },
+          "schema_version": 1
+        },
+        "exploitation": {
+          "probability_30d": 0.0734,
+          "distinct_cves": 5,
+          "scored_cves": 1,
+          "coverage": 0.2,
+          "kev_cves": 0,
+          "top_drivers": [
+            {
+              "cve": "CVE-2020-28500",
+              "epss": 0.0734,
+              "percentile": 0.9434,
+              "kev": false
+            }
+          ],
+          "assumption": "independent",
+          "schema_version": 1
+        },
+        "remediation": {
+          "mttr_days": {
+            "critical": null,
+            "high": null,
+            "medium": null,
+            "low": null,
+            "unknown": null,
+            "overall": null
+          },
+          "resolved_total": 0,
+          "reopened_total": 0,
+          "sla": {
+            "budgets_days": {
+              "critical": 7,
+              "high": 30,
+              "medium": 90,
+              "low": 180,
+              "unknown": 90
+            },
+            "overdue": 0,
+            "due_soon": 0,
+            "ok": 5,
+            "by_severity_overdue": {},
+            "worst_offenders": []
+          },
+          "velocity": {
+            "window_days": 30,
+            "new_findings": 5,
+            "resolved_findings": 0,
+            "net": 5
+          },
+          "schema_version": 1
+        },
+        "remediation_stats": {
+          "status_counts": {
+            "open": 5,
+            "in_progress": 0,
+            "fixed": 0,
+            "accepted_risk": 0,
+            "closed": 0
+          },
+          "aging_count": 0,
+          "sla": {
+            "overdue": 0,
+            "due_soon": 0,
+            "ok": 5
+          }
+        },
+        "risk_map": {
+          "items": [
+            {
+              "sbom_id": "f5e7f4c4-8a16-4c70-93d8-092173885437",
+              "run_id": 31,
+              "name": "UAT R3 1792486718006046000 SBOM 1",
+              "project": "UAT R3 1792486718006046000",
+              "findings_total": 5,
+              "critical": 0,
+              "high": 2,
+              "medium": 3,
+              "low": 0,
+              "unknown": 0,
+              "dominant": "high",
+              "last_analysed": "2026-10-20T09:15:48+00:00"
+            }
+          ],
+          "schema_version": 1
+        },
+        "risk_matrix": {
+          "points": [
+            {
+              "vuln_id": "CVE-2020-28500",
+              "component": "lodash@4.17.20",
+              "severity": "medium",
+              "cvss": 5.3,
+              "has_fix": true,
+              "epss": 0.0734,
+              "kev": false
+            },
+            {
+              "vuln_id": "CVE-2026-4800",
+              "component": "lodash@4.17.20",
+              "severity": "high",
+              "cvss": 8.1,
+              "has_fix": true,
+              "epss": 0.0,
+              "kev": false
+            },
+            {
+              "vuln_id": "CVE-2021-23337",
+              "component": "lodash@4.17.20",
+              "severity": "high",
+              "cvss": 7.2,
+              "has_fix": true,
+              "epss": 0.0,
+              "kev": false
+            },
+            {
+              "vuln_id": "CVE-2025-13465",
+              "component": "lodash@4.17.20",
+              "severity": "medium",
+              "cvss": 6.5,
+              "has_fix": true,
+              "epss": 0.0,
+              "kev": false
+            },
+            {
+              "vuln_id": "CVE-2026-2950",
+              "component": "lodash@4.17.20",
+              "severity": "medium",
+              "cvss": 6.5,
+              "has_fix": true,
+              "epss": 0.0,
+              "kev": false
+            }
+          ],
+          "total_distinct": 5,
+          "unplotted_no_cvss": 0,
+          "limit": 300,
+          "schema_version": 1
+        },
+        "recent_sboms": [
+          {
+            "id": "f5e7f4c4-8a16-4c70-93d8-092173885437",
+            "sbom_name": "UAT R3 1792486718006046000 SBOM 1",
+            "created_on": "2026-10-20T08:58:38+00:00"
+          }
+        ],
+        "lifetime": {
+          "sboms_scanned_total": 1,
+          "projects_total": 1,
+          "runs_executed_total": 2,
+          "runs_completed_total": 2,
+          "runs_distinct_dates": 1,
+          "runs_executed_this_week": 2,
+          "findings_surfaced_total": 5,
+          "findings_resolved_total": 0,
+          "first_run_at": "2026-10-20T09:02:58+00:00",
+          "days_monitoring": 0,
+          "schema_version": 1
+        }
+      },
+      "request_id": "e6b2cf9fd280"
+    },
+    "result": "PASS",
+    "time": "2026-10-20T09:16:14.839672+00:00"
+  },
+  {
+    "id": "R3-DASHBOARD-INACTIVE-OPTIONS",
+    "role": "admin",
+    "preconditions": "Verified isolated Greenfield UUID; task-owned fixtures; credentials kept in memory",
+    "stepsExecuted": "Read actual dependent SBOM choices",
+    "expected": "Active UUID present, inactive UUID excluded",
+    "actual": {
+      "status": 200,
+      "data": {
+        "items": [
+          {
+            "id": "f5e7f4c4-8a16-4c70-93d8-092173885437",
+            "name": "UAT R3 1792486718006046000 SBOM 1",
+            "version": null,
+            "display_name": "UAT R3 1792486718006046000 SBOM 1"
+          }
+        ]
+      },
+      "request_id": "6bb44f6e8bd1"
+    },
+    "result": "PASS",
+    "time": "2026-10-20T09:16:14.931609+00:00"
+  },
+  {
+    "id": "R3-DASHBOARD-OWNED-FOREIGN",
+    "role": "foreign",
+    "preconditions": "Verified isolated Greenfield UUID; task-owned fixtures; credentials kept in memory",
+    "stepsExecuted": "Foreign user supplies known R3 UUID hierarchy",
+    "expected": "404",
+    "actual": {
+      "status": 404,
+      "data": {
+        "detail": "Resource not found"
+      },
+      "request_id": "aca6841c309f"
+    },
+    "result": "PASS",
+    "time": "2026-10-20T09:16:15.225341+00:00"
+  },
+  {
+    "id": "R3-EXPORT-pdf",
+    "role": "admin",
+    "preconditions": "Verified isolated Greenfield UUID; task-owned fixtures; credentials kept in memory",
+    "stepsExecuted": "Generate and inspect real pdf artifact",
+    "expected": "200 valid content and downloadable headers",
+    "actual": {
+      "status": 200,
+      "bytes": 7804,
+      "contentType": "application/pdf",
+      "download": "attachment; filename=\"round3.pdf\"",
+      "headerValid": true,
+      "sha256": "1721bd7dcf284d848e216cd22cb46c79000660ca63f50fa3f0000d28a4b31492"
+    },
+    "result": "PASS",
+    "time": "2026-10-20T09:16:15.320400+00:00"
+  },
+  {
+    "id": "R3-EXPORT-pdf-viewer",
+    "role": "viewer",
+    "preconditions": "Verified isolated Greenfield UUID; task-owned fixtures; credentials kept in memory",
+    "stepsExecuted": "Direct viewer export of known owned resource",
+    "expected": "403",
+    "actual": {
+      "status": 403,
+      "data": {
+        "detail": "Insufficient permission"
+      },
+      "request_id": "5f5220c03b5b"
+    },
+    "result": "PASS",
+    "time": "2026-10-20T09:16:15.348948+00:00"
+  },
+  {
+    "id": "R3-EXPORT-pdf-foreign",
+    "role": "foreign",
+    "preconditions": "Verified isolated Greenfield UUID; task-owned fixtures; credentials kept in memory",
+    "stepsExecuted": "Direct foreign export of known owned resource",
+    "expected": "404",
+    "actual": {
+      "status": 404,
+      "data": {
+        "detail": "Run 31 not found."
+      },
+      "request_id": "263fb80e1b9d"
+    },
+    "result": "PASS",
+    "time": "2026-10-20T09:16:15.385795+00:00"
+  },
+  {
+    "id": "R3-EXPORT-sarif",
+    "role": "admin",
+    "preconditions": "Verified isolated Greenfield UUID; task-owned fixtures; credentials kept in memory",
+    "stepsExecuted": "Generate and inspect real sarif artifact",
+    "expected": "200 valid content and downloadable headers",
+    "actual": {
+      "status": 200,
+      "bytes": 33396,
+      "contentType": "application/json",
+      "download": "attachment; filename=\"sbom_findings_31.sarif\"",
+      "version": "2.1.0",
+      "results": 5,
+      "sha256": "8f516b2dd362ba2ca95c47894bd26f3e895d616535a884daad69ae8882fb8161"
+    },
+    "result": "PASS",
+    "time": "2026-10-20T09:16:15.446513+00:00"
+  },
+  {
+    "id": "R3-EXPORT-sarif-viewer",
+    "role": "viewer",
+    "preconditions": "Verified isolated Greenfield UUID; task-owned fixtures; credentials kept in memory",
+    "stepsExecuted": "Direct viewer export of known owned resource",
+    "expected": "403",
+    "actual": {
+      "status": 403,
+      "data": {
+        "detail": "Insufficient permission"
+      },
+      "request_id": "c8d26baa2e82"
+    },
+    "result": "PASS",
+    "time": "2026-10-20T09:16:15.475909+00:00"
+  },
+  {
+    "id": "R3-EXPORT-sarif-foreign",
+    "role": "foreign",
+    "preconditions": "Verified isolated Greenfield UUID; task-owned fixtures; credentials kept in memory",
+    "stepsExecuted": "Direct foreign export of known owned resource",
+    "expected": "404",
+    "actual": {
+      "status": 404,
+      "data": {
+        "detail": "Analysis run not found"
+      },
+      "request_id": "8a6ca55349ed"
+    },
+    "result": "PASS",
+    "time": "2026-10-20T09:16:15.502625+00:00"
+  },
+  {
+    "id": "R3-EXPORT-csv",
+    "role": "admin",
+    "preconditions": "Verified isolated Greenfield UUID; task-owned fixtures; credentials kept in memory",
+    "stepsExecuted": "Generate and inspect real csv artifact",
+    "expected": "200 valid content and downloadable headers",
+    "actual": {
+      "status": 200,
+      "bytes": 1902,
+      "contentType": "text/csv; charset=utf-8",
+      "download": "attachment; filename=\"sbom_findings_31.csv\"",
+      "rows": 5,
+      "fields": [
+        "vuln_id",
+        "cve",
+        "severity",
+        "score",
+        "component_name",
+        "component_version",
+        "cpe",
+        "purl",
+        "published_on",
+        "attack_vector",
+        "cwe",
+        "fixed_versions",
+        "reference_url",
+        "source",
+        "description",
+        "match_strategy",
+        "match_reason",
+        "matched_range",
+        "match_confidence",
+        "vex_status",
+        "vex_source",
+        "cvss_source",
+        "cvss_version",
+        "rating_disagreement",
+        "provider_observation_count"
+      ],
+      "sha256": "86d02943c97bbc2c9641e6558fc1b075d94921ca23e2b9539fe58747eae679ad"
+    },
+    "result": "PASS",
+    "time": "2026-10-20T09:16:15.546672+00:00"
+  },
+  {
+    "id": "R3-EXPORT-csv-viewer",
+    "role": "viewer",
+    "preconditions": "Verified isolated Greenfield UUID; task-owned fixtures; credentials kept in memory",
+    "stepsExecuted": "Direct viewer export of known owned resource",
+    "expected": "403",
+    "actual": {
+      "status": 403,
+      "data": {
+        "detail": "Insufficient permission"
+      },
+      "request_id": "0d9d1a84d904"
+    },
+    "result": "PASS",
+    "time": "2026-10-20T09:16:15.571834+00:00"
+  },
+  {
+    "id": "R3-EXPORT-csv-foreign",
+    "role": "foreign",
+    "preconditions": "Verified isolated Greenfield UUID; task-owned fixtures; credentials kept in memory",
+    "stepsExecuted": "Direct foreign export of known owned resource",
+    "expected": "404",
+    "actual": {
+      "status": 404,
+      "data": {
+        "detail": "Analysis run not found"
+      },
+      "request_id": "6415bcf379ac"
+    },
+    "result": "PASS",
+    "time": "2026-10-20T09:16:15.595946+00:00"
+  },
+  {
+    "id": "R3-EXPORT-xlsx",
+    "role": "admin",
+    "preconditions": "Verified isolated Greenfield UUID; task-owned fixtures; credentials kept in memory",
+    "stepsExecuted": "Generate and inspect real xlsx artifact",
+    "expected": "200 valid content and downloadable headers",
+    "actual": {
+      "status": 200,
+      "bytes": 6108,
+      "contentType": "application/vnd.openxmlformats-officedocument.spreadsheetml.sheet",
+      "download": "attachment; filename=\"sbom-29-vulnerability-report.xlsx\"",
+      "sheets": [
+        "Vulnerabilities"
+      ],
+      "sheetRows": {
+        "Vulnerabilities": 6
+      },
+      "sha256": "74040a134d72697970a8df0fe1ed5d5c51c428725d24fd2c8f7dbcf7f7a71f20"
+    },
+    "result": "PASS",
+    "time": "2026-10-20T09:16:15.799767+00:00"
+  },
+  {
+    "id": "R3-EXPORT-xlsx-viewer",
+    "role": "viewer",
+    "preconditions": "Verified isolated Greenfield UUID; task-owned fixtures; credentials kept in memory",
+    "stepsExecuted": "Direct viewer export of known owned resource",
+    "expected": "403",
+    "actual": {
+      "status": 403,
+      "data": {
+        "detail": "Insufficient permission"
+      },
+      "request_id": "72c8c42ea4bb"
+    },
+    "result": "PASS",
+    "time": "2026-10-20T09:16:15.838577+00:00"
+  },
+  {
+    "id": "R3-EXPORT-xlsx-foreign",
+    "role": "foreign",
+    "preconditions": "Verified isolated Greenfield UUID; task-owned fixtures; credentials kept in memory",
+    "stepsExecuted": "Direct foreign export of known owned resource",
+    "expected": "404",
+    "actual": {
+      "status": 404,
+      "data": {
+        "detail": "Resource not found"
+      },
+      "request_id": "edd5e91fa67c"
+    },
+    "result": "PASS",
+    "time": "2026-10-20T09:16:15.884007+00:00"
+  },
+  {
+    "id": "R3-FDA-LIFECYCLE-REFRESH",
+    "role": "admin",
+    "preconditions": "Verified isolated Greenfield UUID; task-owned fixtures; credentials kept in memory",
+    "stepsExecuted": "Request supported lifecycle evidence for own fresh fixture",
+    "expected": "Record actual configured lifecycle availability",
+    "actual": {
+      "status": 200,
+      "data": {
+        "sbom_id": "f5e7f4c4-8a16-4c70-93d8-092173885437",
+        "total_components": 2,
+        "unique_identities": 2,
+        "cache_hits": 0,
+        "provider_lookups": 2,
+        "updated_components": 2,
+        "unknown_count": 2,
+        "eol_count": 0,
+        "eos_count": 0,
+        "deprecated_count": 0,
+        "provider_errors": [],
+        "components_enriched": 2,
+        "stale_components": 0
+      },
+      "request_id": "822c2675e387"
+    },
+    "result": "PASS",
+    "time": "2026-10-20T09:16:18.025363+00:00"
+  },
+  {
+    "id": "R3-EXPORT-FDA",
+    "role": "admin",
+    "preconditions": "Verified isolated Greenfield UUID; task-owned fixtures; credentials kept in memory",
+    "stepsExecuted": "Export required FDA workbook with synthetic metadata and explicit finding run",
+    "expected": "200 populated workbook; otherwise preserve actual evidence prerequisite",
+    "actual": {
+      "status": 200,
+      "bytes": 125847,
+      "sheets": [
+        "Instructions",
+        "SBOM Metadata",
+        "SBOM Components",
+        "Environment & 3rd-Party Deps",
+        "Vulnerabilities & VEX",
+        "Lifecycle & Support Plan",
+        "Supplier & Security Contacts",
+        "FDA Compliance Dashboard"
+      ],
+      "rows": {
+        "Instructions": 48,
+        "SBOM Metadata": 47,
+        "SBOM Components": 500,
+        "Environment & 3rd-Party Deps": 500,
+        "Vulnerabilities & VEX": 500,
+        "Lifecycle & Support Plan": 500,
+        "Supplier & Security Contacts": 500,
+        "FDA Compliance Dashboard": 42
+      }
+    },
+    "result": "PASS",
+    "time": "2026-10-20T09:16:20.674275+00:00"
+  }
+]

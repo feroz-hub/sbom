@@ -36,7 +36,7 @@ export default function RootLayout({
       <head>
         <script dangerouslySetInnerHTML={{ __html: themeInitScript }} />
       </head>
-      <body className="bg-background min-h-screen font-sans antialiased text-foreground">
+      <body className="bg-background min-h-screen supports-[min-height:100dvh]:min-h-dvh font-sans antialiased text-foreground">
         <Providers>
           <AppShell>{children}</AppShell>
         </Providers>

@@ -1,26 +1,25 @@
 'use client';
 
+import { PermissionButton } from '@/components/ui/PermissionButton';
+
 import Link from 'next/link';
 import { usePathname } from 'next/navigation';
-import { useContext } from 'react';
+import { useCancelAiBatch, useCancelAiFixes } from '@/hooks/useAiFix';
+import { useNotifications } from '@/hooks/useNotifications';
+import { getApiErrorMessage } from '@/lib/notifications';
+import { isAiBatchTerminal } from '@/lib/aiBatchSync';
 import { CheckCircle2, Loader2, Sparkles, XCircle } from 'lucide-react';
-import { useQuery, useQueryClient } from '@tanstack/react-query';
+import { useQuery } from '@tanstack/react-query';
 import {
-  cancelRunAiBatch,
-  cancelRunAiFixes,
   getRunAiBatch,
   getRunAiFixProgress,
 } from '@/lib/api';
 import type { AiBatchProgress } from '@/types/ai';
 import { useTrackedAiBatches } from './useGlobalAiBatchProgress';
 import { batchProgressQueryKey } from './AiBatchProgressProvider';
-import { AiBatchProgressContext, type AiBatchTrackingKey } from './AiBatchProgressContext';
+import { type AiBatchTrackingKey } from './AiBatchProgressContext';
 
 const MAX_VISIBLE = 3;
-
-function isTerminal(status: AiBatchProgress['status']): boolean {
-  return status === 'complete' || status === 'failed' || status === 'cancelled';
-}
 
 function statusIcon(status: AiBatchProgress['status']) {
   if (status === 'complete') return <CheckCircle2 className="h-4 w-4 text-emerald-600" aria-hidden />;
@@ -54,10 +53,11 @@ interface RowProps {
 }
 
 function GlobalBatchRow({ entry, compact = false }: RowProps) {
-  const qc = useQueryClient();
-  const ctx = useContext(AiBatchProgressContext);
   const { runId, batchId, scopeLabel } = entry;
   const queryKey = batchProgressQueryKey(runId, batchId);
+  const cancelLegacy = useCancelAiFixes(runId);
+  const cancelBatch = useCancelAiBatch(runId);
+  const { showError } = useNotifications();
   const { data: progress } = useQuery<AiBatchProgress | null>({
     queryKey,
     queryFn: ({ signal }) => {
@@ -70,7 +70,7 @@ function GlobalBatchRow({ entry, compact = false }: RowProps) {
 
   if (!progress) return null;
 
-  const inFlight = !isTerminal(progress.status);
+  const inFlight = !isAiBatchTerminal(progress);
   const pct = progressPct(progress);
   // The banner row's scope label prefers the live progress payload
   // (which the worker may have refined) but falls back to whatever the
@@ -79,21 +79,12 @@ function GlobalBatchRow({ entry, compact = false }: RowProps) {
   const label = progress.scope_label ?? scopeLabel ?? null;
 
   const onCancel = async () => {
-    // Optimistic dismiss: the user clicked Cancel, so the row should
-    // disappear regardless of what the backend does next. The cancel
-    // POST runs in the background; if there was a real worker, its
-    // own terminal envelope will still update any other surfaces
-    // (run-detail page, batches list).
-    ctx?.unregister(runId, batchId);
     try {
-      if (batchId == null) {
-        await cancelRunAiFixes(runId);
-      } else {
-        await cancelRunAiBatch(runId, batchId);
-      }
-      qc.invalidateQueries({ queryKey });
-    } catch {
-      /* user can retry — toast on the originating page already covers errors */
+      if (batchId == null) await cancelLegacy.mutateAsync();
+      else await cancelBatch.mutateAsync(batchId);
+      // Cooperative acknowledgment: keep tracking until the worker confirms its outcome.
+    } catch (error) {
+      showError(getApiErrorMessage(error, 'Unable to cancel AI generation. Please try again.'));
     }
   };
 
@@ -116,7 +107,7 @@ function GlobalBatchRow({ entry, compact = false }: RowProps) {
             href={`/analysis/${runId}`}
             className="truncate text-xs font-semibold text-hcl-navy hover:underline"
           >
-            Run #{runId}
+            Analysis run
           </Link>
           {label ? (
             <span className="truncate rounded-md bg-surface-muted px-1.5 py-0.5 text-[10px] font-medium uppercase tracking-wide text-hcl-muted">
@@ -140,13 +131,14 @@ function GlobalBatchRow({ entry, compact = false }: RowProps) {
         ) : null}
       </div>
       {inFlight && !compact ? (
-        <button
+        <PermissionButton size="sm" variant="ghost" permission={"tenant:settings:update"}
           type="button"
           onClick={onCancel}
+          disabled={cancelLegacy.isPending || cancelBatch.isPending || progress.cancel_requested}
           className="shrink-0 rounded-md border border-border-subtle bg-surface px-2 py-1 text-[11px] font-medium text-hcl-navy hover:bg-surface-muted focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-hcl-blue/30"
         >
           Cancel
-        </button>
+        </PermissionButton>
       ) : null}
     </div>
   );
@@ -172,8 +164,8 @@ export function GlobalAiBatchBanner() {
 
   // If the user is on /analysis/<id> for a tracked run, drop every
   // entry for that run so the page banner is the canonical surface.
-  const onRunDetailMatch = pathname?.match(/^\/analysis\/(\d+)/);
-  const currentRunId = onRunDetailMatch ? Number(onRunDetailMatch[1]) : null;
+  const onRunDetailMatch = pathname?.match(/^\/analysis\/([0-9a-f-]+)/i);
+  const currentRunId = onRunDetailMatch ? onRunDetailMatch[1] : null;
   const visible = tracked.filter((entry) => entry.runId !== currentRunId);
 
   if (visible.length === 0) return null;

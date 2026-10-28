@@ -1,0 +1,15 @@
+{
+  "checks": 18,
+  "PASS": 18,
+  "FAIL": 0,
+  "navigationCount": 16,
+  "navigationElapsedMs": {
+    "min": 1060,
+    "median": 16379.5,
+    "max": 27392
+  },
+  "frontendSamePID": true,
+  "memoryRestartWarningDelta": 0,
+  "emptyResponseMentionDelta": 0,
+  "scope": "Two rounds8modules and2cleancontexts concurrent session reads. This bounded serial follow-up does not prove absence of a leak or resolve full-regression resource contention. Prior load timeout retained."
+}

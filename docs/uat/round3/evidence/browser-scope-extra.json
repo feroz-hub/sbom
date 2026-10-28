@@ -1,0 +1,24 @@
+[
+  {
+    "id": "R3-DASHBOARD-SCOPE-SWITCH",
+    "role": "admin",
+    "stepsExecuted": "Switch from complete R1 hierarchy to fresh R3 project using actual dropdown",
+    "expected": "Children reset; new project UUID retained",
+    "actual": {
+      "project": "d016fed5-336c-4234-a3ef-83964c6cbf57",
+      "application": "",
+      "sbom": ""
+    },
+    "result": "PASS"
+  },
+  {
+    "id": "R3-DASHBOARD-SCOPE-EXECUTION",
+    "role": "admin",
+    "stepsExecuted": "Execute actual scoped browser acceptance",
+    "expected": "Complete required scope/inactive checks",
+    "actual": {
+      "error": "UUID absent from actual Application choices"
+    },
+    "result": "FAIL"
+  }
+]

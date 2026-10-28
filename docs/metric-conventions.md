@@ -140,3 +140,11 @@ fix it before the math.
 - Adding a new surface → no update here. Pick the right convention via the flowchart and call the existing function. Add a row to `dashboard-metrics-spec.md` if you needed a new function.
 - Migrating a file out of `_LEGACY_DIRECT_QUERY_ALLOWLIST` → no update here, just remove the entry in the same PR.
 - Discovering a fourth convention is needed → STOP. Re-read the surface's label and goal. Talk to the audit owner before adding to this doc.
+
+## Version-aware current posture
+
+Current aggregate scope resolves through `app/metrics/posture.py`: honor valid designated Current SBOM, otherwise active lineage targets; retain eligible analyzed ancestor posture while a replacement is pending. Inventory upload chronology is not a security result. Historical investigations use an explicit separate scope. See [lifecycle completion](vex/lifecycle-completion-2026-10-09.md) for policy and evidence.
+
+### Selection policy update — 2026-10-09
+
+The current-state projection now distinguishes persisted AUTO/MANUAL_PIN selection, effective current and actual posture source. Upload chronology does not promote security posture. Migration `077_sbom_selection_mode` conservatively pins existing non-null selections. Current metrics use active, non-obsolete successful analysis snapshots; pending/failed uploads retain explicitly labeled last-known evidence. Ineligible manual selections remain visible, and missing evidence is `NO_POSTURE`, not a successful zero result. See [the implementation report](vex/lifecycle-implementation-2026-10-09.md) for the authoritative policy and validation.

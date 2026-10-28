@@ -1,23 +1,25 @@
 'use client';
 
-import { useState, useEffect, useRef } from 'react';
+import { useState, useEffect, useRef, useId } from 'react';
 import { Search, UserCheck, ChevronDown, ChevronUp, Loader2 } from 'lucide-react';
-import { type UserSearchResult, searchPlatformUsers, searchTenantUserCandidates } from '@/lib/api';
+import { type UserSearchResult, searchPlatformUsers, searchTenantUserCandidates, searchPlatformTenantAdminCandidates } from '@/lib/api';
 import { VerificationBadge, UserStatusBadge } from './StatusBadges';
 import { getRoleLabel } from '@/lib/roles';
 
 interface UserSearchComboboxProps {
-  tenantId?: number;
+  tenantId?: (string | number);
   onSelect: (user: UserSearchResult | null) => void;
   selectedUser: UserSearchResult | null;
   placeholder?: string;
   requireEligible?: boolean;
+  governance?: boolean;
+  revision?: number;
 }
 
 export function isEligibleAdministrator(user: UserSearchResult): boolean {
   return (
     user.status === 'ACTIVE'
-    && user.email_verified
+    && (user.email_verified || Boolean(user.providers?.includes('MICROSOFT_ENTRA')))
     && !user.verification_required
   );
 }
@@ -38,6 +40,8 @@ export function UserSearchCombobox({
   selectedUser,
   placeholder = 'Search existing SBOM users by email or name…',
   requireEligible = false,
+  governance = false,
+  revision = 0,
 }: UserSearchComboboxProps) {
   const [query, setQuery] = useState('');
   const [results, setResults] = useState<UserSearchResult[]>([]);
@@ -47,6 +51,16 @@ export function UserSearchCombobox({
   const [showTechDetails, setShowTechDetails] = useState(false);
   const containerRef = useRef<HTMLDivElement>(null);
   const requestIdRef = useRef(0);
+  const listId = useId();
+  const [activeIndex, setActiveIndex] = useState(-1);
+  const isDisabled = (user: UserSearchResult) =>
+    (requireEligible && !isEligibleAdministrator(user)) || Boolean(tenantId && user.tenant_membership);
+  const selectUser = (user: UserSearchResult) => {
+    if (isDisabled(user)) return;
+    onSelect(user);
+    setOpen(false);
+    setQuery('');
+  };
 
   useEffect(() => {
     function handleClickOutside(e: MouseEvent) {
@@ -55,13 +69,17 @@ export function UserSearchCombobox({
       }
     }
     if (open) {
-      document.addEventListener('mousedown', handleClickOutside);
-      return () => document.removeEventListener('mousedown', handleClickOutside);
+      document.addEventListener('click', handleClickOutside);
+      return () => document.removeEventListener('click', handleClickOutside);
     }
   }, [open]);
 
   useEffect(() => {
-    if (!query.trim()) {
+    const currentRequestId = ++requestIdRef.current;
+    let cancelled = false;
+    setActiveIndex(-1);
+    setResults([]);
+    if (query.trim().length < 2) {
       setResults([]);
       setLoading(false);
       setSearchError(null);
@@ -69,34 +87,33 @@ export function UserSearchCombobox({
       return;
     }
 
-    const currentRequestId = ++requestIdRef.current;
-
     const timer = setTimeout(async () => {
       setLoading(true);
+      setOpen(true);
       setSearchError(null);
       try {
         const data = tenantId
           ? await searchTenantUserCandidates(tenantId, query)
-          : await searchPlatformUsers(query);
-        if (currentRequestId === requestIdRef.current) {
+          : governance ? await searchPlatformTenantAdminCandidates(query) : await searchPlatformUsers(query);
+        if (!cancelled && currentRequestId === requestIdRef.current) {
           setResults(data);
           setOpen(true);
         }
       } catch (err: unknown) {
-        if (currentRequestId === requestIdRef.current) {
+        if (!cancelled && currentRequestId === requestIdRef.current) {
           setResults([]);
           setSearchError(getSearchErrorMessage(err));
           setOpen(true);
         }
       } finally {
-        if (currentRequestId === requestIdRef.current) {
+        if (!cancelled && currentRequestId === requestIdRef.current) {
           setLoading(false);
         }
       }
     }, 250);
 
-    return () => clearTimeout(timer);
-  }, [query, tenantId]);
+    return () => { cancelled = true; clearTimeout(timer); };
+  }, [query, tenantId, governance, revision]);
 
   if (selectedUser) {
     return (
@@ -127,7 +144,7 @@ export function UserSearchCombobox({
 
         <div className="flex flex-wrap items-center gap-2 pt-1 border-t border-border/50">
           <UserStatusBadge status={selectedUser.status} />
-          <VerificationBadge verified={selectedUser.email_verified} />
+          {selectedUser.providers?.includes('MICROSOFT_ENTRA') ? <span>Microsoft Entra identity</span> : <VerificationBadge verified={selectedUser.email_verified} />}
           {selectedUser.verification_required && (
             <span className="rounded-full bg-amber-100 px-2 py-0.5 text-xs font-medium text-amber-800">
               Verification required
@@ -145,7 +162,7 @@ export function UserSearchCombobox({
           )}
           {(selectedUser.tenant_memberships ?? []).map((membership) => (
             <span key={membership.tenant_id} className="text-xs text-hcl-muted">
-              {membership.tenant_name || `Tenant #${membership.tenant_id}`}: {' '}
+              {membership.tenant_name || 'Tenant membership'}: {' '}
               <strong className="text-foreground">
                 {(membership.roles?.length ? membership.roles : [membership.role])
                   .map(getRoleLabel)
@@ -156,7 +173,7 @@ export function UserSearchCombobox({
           ))}
         </div>
 
-        {selectedUser.external_subject && (
+        {!tenantId && !governance && selectedUser.external_subject && (
           <div>
             <button
               type="button"
@@ -168,7 +185,7 @@ export function UserSearchCombobox({
             </button>
             {showTechDetails && (
               <div className="mt-2 rounded bg-background p-2 text-xs font-mono text-hcl-muted border border-border">
-                <p>User ID: {selectedUser.id}</p>
+                <p>{selectedUser.display_name || selectedUser.email || 'Selected account'}</p>
                 <p>HCL.CS Subject: {selectedUser.external_subject}</p>
                 {selectedUser.external_issuer && <p>Issuer: {selectedUser.external_issuer}</p>}
               </div>
@@ -185,10 +202,42 @@ export function UserSearchCombobox({
         <Search className="absolute left-3 top-2.5 h-4 w-4 text-hcl-muted" />
         <input
           type="text"
+          role="combobox"
+          aria-autocomplete="list"
+          aria-haspopup="listbox"
+          aria-expanded={open}
+          aria-controls={open ? listId : undefined}
+          aria-activedescendant={open && activeIndex >= 0 ? `${listId}-${activeIndex}` : undefined}
+          aria-label={tenantId ? 'Search existing user' : 'Search users by email or name'}
           value={query}
           onChange={(e) => setQuery(e.target.value)}
           onFocus={() => {
-            if (results.length > 0) setOpen(true);
+            if (query.trim().length >= 2) setOpen(true);
+          }}
+          onKeyDown={event => {
+            if (event.key === 'Escape' && (open || loading)) {
+              event.preventDefault();
+              event.stopPropagation();
+              ++requestIdRef.current;
+              setLoading(false);
+              setOpen(false);
+            } else if (event.key === 'Tab') {
+              setOpen(false);
+            } else if (event.key === 'ArrowDown' || event.key === 'ArrowUp') {
+              event.preventDefault();
+              setOpen(true);
+              const eligible = results.map((user, index) => isDisabled(user) ? -1 : index).filter(index => index >= 0);
+              if (!eligible.length) return;
+              const position = eligible.indexOf(activeIndex);
+              const next = event.key === 'ArrowDown'
+                ? eligible[(position + 1) % eligible.length]
+                : eligible[(position <= 0 ? eligible.length : position) - 1];
+              setActiveIndex(next);
+              document.getElementById(`${listId}-${next}`)?.scrollIntoView?.({ block: 'nearest' });
+            } else if (event.key === 'Enter' && open && activeIndex >= 0) {
+              event.preventDefault();
+              selectUser(results[activeIndex]);
+            }
           }}
           placeholder={placeholder}
           className="w-full rounded-lg border border-border bg-background pl-9 pr-9 py-2 text-sm text-foreground focus:border-hcl-blue focus:outline-none"
@@ -202,7 +251,9 @@ export function UserSearchCombobox({
       </div>
 
       {open && (
-        <div className="absolute left-0 right-0 top-full mt-1 z-50 max-h-64 overflow-y-auto rounded-xl border border-border bg-surface shadow-elev-3 p-1">
+        <div id={listId} role="listbox" aria-label="Existing user candidates" aria-busy={loading}
+          className="relative mt-1 max-h-64 overflow-y-auto overscroll-contain rounded-xl border border-border bg-surface shadow-elev-3 p-1">
+          {loading && <p className="p-4 text-center text-xs text-hcl-muted">Searching users…</p>}
           {results.length === 0 && !loading && (
             <div className="p-4 text-center text-xs text-hcl-muted">
               {searchError
@@ -212,24 +263,20 @@ export function UserSearchCombobox({
                   : 'No matching existing SBOM users found. Users must sign in to SBOM Analyser at least once to be discoverable.'}
             </div>
           )}
-          {results.map((user) => {
-            const disabled = (
-              (requireEligible && !isEligibleAdministrator(user))
-              || Boolean(tenantId && user.tenant_membership)
-            );
+          {results.map((user, index) => {
+            const disabled = isDisabled(user);
             return (
             <button
               key={user.id}
+              id={`${listId}-${index}`}
+              role="option"
+              aria-selected={activeIndex === index}
+              tabIndex={-1}
               type="button"
               disabled={disabled}
               aria-disabled={disabled}
-              onClick={() => {
-                if (disabled) return;
-                onSelect(user);
-                setOpen(false);
-                setQuery('');
-              }}
-              className="flex w-full items-start justify-between rounded-lg p-2.5 text-left text-sm hover:bg-surface-muted disabled:cursor-not-allowed disabled:opacity-50 transition-colors border-b border-border/30 last:border-0"
+              onClick={() => selectUser(user)}
+              className={`flex w-full items-start justify-between rounded-lg p-2.5 text-left text-sm hover:bg-surface-muted disabled:cursor-not-allowed disabled:opacity-50 transition-colors border-b border-border/30 last:border-0 ${activeIndex === index ? 'bg-surface-muted' : ''}`}
             >
               <div className="min-w-0 flex-1">
                 <p className="font-semibold text-foreground truncate">
@@ -239,7 +286,7 @@ export function UserSearchCombobox({
                 {user.username && <p className="text-xs text-hcl-muted truncate">@{user.username}</p>}
                 <div className="flex flex-wrap items-center gap-1.5 mt-1">
                   <UserStatusBadge status={user.status} />
-                  <VerificationBadge verified={user.email_verified} />
+                  {user.providers?.includes('MICROSOFT_ENTRA') ? <span>Microsoft Entra identity</span> : <VerificationBadge verified={user.email_verified} />}
                   {user.verification_required && (
                     <span className="text-[11px] font-medium text-amber-700">Verification required</span>
                   )}

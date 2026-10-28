@@ -2,6 +2,7 @@ from __future__ import annotations
 
 from datetime import UTC, date, datetime, timedelta
 from typing import Any
+from uuid import uuid4
 
 import pytest
 from app.db import SessionLocal
@@ -17,6 +18,7 @@ from app.services.lifecycle.normalizer import (
 from app.services.lifecycle.osv_provider import OSVProvider
 from app.services.lifecycle.package_registry_provider import PackageRegistryProvider
 from app.services.lifecycle.provider_base import LifecycleProvider
+from app.services.lifecycle.provider_config_service import configuration_cache_namespace
 from app.services.lifecycle.repository_health_provider import RepositoryHealthProvider
 from app.services.lifecycle.types import (
     DEPRECATED,
@@ -34,12 +36,15 @@ from app.services.lifecycle.types import (
 )
 from sqlalchemy import select
 
+from tests.tenant_fixture_scope import verified_fixture_tenant
+
 
 @pytest.fixture()
 def db(client):
     session = SessionLocal()
     try:
-        yield session
+        with verified_fixture_tenant(session, 1):
+            yield session
     finally:
         session.rollback()
         session.close()
@@ -171,29 +176,34 @@ def test_endoflife_date_provider_marks_eol_from_matching_cycle():
     assert result.eol_date == "2027-10-31"
     assert result.eos_date == "2027-04-01"
     assert result.source_name == "endoflife.date"
-    assert result.recommended_version == "3.11.9"
+    assert result.latest_version == "3.11.9"
+    assert result.recommended_version is None
+    assert result.latest_supported_version is None
+    assert "supported version 3.11.9" not in (result.recommendation or "")
 
 
 def test_endoflife_date_provider_uses_debian_distro_qualifier_for_package_rows():
     provider = EndOfLifeDateProvider(
-        http_get=lambda url: [
-            {
-                "cycle": "13",
-                "codename": "Trixie",
-                "eol": "2028-08-09",
-                "extendedSupport": "2030-06-30",
-                "latest": "13.5",
-            },
-            {
-                "cycle": "12",
-                "codename": "Bookworm",
-                "eol": "2026-07-11",
-                "extendedSupport": "2028-06-30",
-                "latest": "12.14",
-            },
-        ]
-        if "debian" in url
-        else [],
+        http_get=lambda url: (
+            [
+                {
+                    "cycle": "13",
+                    "codename": "Trixie",
+                    "eol": "2028-08-09",
+                    "extendedSupport": "2030-06-30",
+                    "latest": "13.5",
+                },
+                {
+                    "cycle": "12",
+                    "codename": "Bookworm",
+                    "eol": "2026-07-11",
+                    "extendedSupport": "2028-06-30",
+                    "latest": "12.14",
+                },
+            ]
+            if "debian" in url
+            else []
+        ),
         today=date(2026, 7, 2),
     )
     component = NormalizedComponent(
@@ -437,6 +447,7 @@ def test_lifecycle_cache_hit_avoids_provider_call(db):
     db.add(component)
     db.add(
         ComponentLifecycleCache(
+            configuration_namespace=configuration_cache_namespace(db),
             lookup_key="fallback:generic:cache-package:1.0.0:",
             normalized_name="cache-package",
             normalized_version="1.0.0",
@@ -458,6 +469,9 @@ def test_lifecycle_cache_hit_avoids_provider_call(db):
 
     assert result.lifecycle_status == DEPRECATED
     assert component.lifecycle_source == "Cached Provider"
+    assert result.evidence["cache_hit"] is True
+    assert result.evidence["stale_cache"] is False
+    assert result.evidence["cache_expires_at"]
     assert component.lifecycle_is_stale is False
     assert component.latest_version == "2.0.0"
 
@@ -478,6 +492,7 @@ def test_unknown_distro_package_cache_is_rechecked(db):
     normalized = normalize_component(component)
     db.add(
         ComponentLifecycleCache(
+            configuration_namespace=configuration_cache_namespace(db),
             lookup_key=build_lifecycle_lookup_key(normalized),
             normalized_name=normalized.normalized_name,
             normalized_version=normalized.normalized_version,
@@ -522,6 +537,7 @@ def test_expired_cache_is_kept_as_stale_when_providers_have_no_data(db):
     db.add(component)
     db.add(
         ComponentLifecycleCache(
+            configuration_namespace=configuration_cache_namespace(db),
             lookup_key="fallback:generic:stale-package:1.0.0:",
             normalized_name="stale-package",
             normalized_version="1.0.0",
@@ -607,6 +623,11 @@ def test_apply_manual_lifecycle_override_does_not_call_external_providers(db, mo
 
 
 def test_lifecycle_refresh_override_report_and_dashboard_endpoints(client, db):
+    from app.core.context import minimal_background_context, tenant_scope
+    from app.services.lifecycle.provider_config_service import configuration_cache_namespace
+
+    with tenant_scope(minimal_background_context(1)):
+        namespace = configuration_cache_namespace(db)
     sbom = SBOMSource(sbom_name="api-lifecycle", sbom_data="{}", status="validated")
     db.add(sbom)
     db.flush()
@@ -614,6 +635,7 @@ def test_lifecycle_refresh_override_report_and_dashboard_endpoints(client, db):
     db.add(component)
     db.add(
         ComponentLifecycleCache(
+            configuration_namespace=namespace,
             normalized_name="api-package",
             normalized_version="1.0.0",
             ecosystem="generic",
@@ -630,7 +652,7 @@ def test_lifecycle_refresh_override_report_and_dashboard_endpoints(client, db):
     )
     db.commit()
 
-    refresh_response = client.post(f"/api/sboms/{sbom.id}/lifecycle/refresh?force=false")
+    refresh_response = client.post(f"/api/sboms/{sbom.public_id}/lifecycle/refresh?force=false")
     assert refresh_response.status_code == 200
     assert refresh_response.json()["components_enriched"] == 1
 
@@ -638,7 +660,7 @@ def test_lifecycle_refresh_override_report_and_dashboard_endpoints(client, db):
     assert component.lifecycle_status == EOL
     assert component.unsupported is True
 
-    report_response = client.get(f"/api/sboms/{sbom.id}/lifecycle/report")
+    report_response = client.get(f"/api/sboms/{sbom.public_id}/lifecycle/report")
     assert report_response.status_code == 200
     report = report_response.json()
     assert report["summary"]["eol_count"] == 1
@@ -651,7 +673,7 @@ def test_lifecycle_refresh_override_report_and_dashboard_endpoints(client, db):
     assert dashboard["eol_count"] >= 1
 
     override_response = client.patch(
-        f"/api/components/{component.id}/lifecycle-override",
+        f"/api/components/{component.public_id}/lifecycle-override",
         json={
             "lifecycle_status": "Unsupported",
             "reason": "Vendor support contract ended.",
@@ -668,7 +690,7 @@ def test_lifecycle_refresh_override_report_and_dashboard_endpoints(client, db):
     assert body["lifecycle_manual_override"] is True
 
     invalid_response = client.patch(
-        f"/api/components/{component.id}/lifecycle-override",
+        f"/api/components/{component.public_id}/lifecycle-override",
         json={"lifecycle_status": "Totally Invalid"},
     )
     assert invalid_response.status_code == 422
@@ -695,7 +717,7 @@ def test_lifecycle_diagnostics_endpoint(client, db):
     db.add(component)
     db.commit()
 
-    diag_response = client.get(f"/api/sboms/{sbom.id}/lifecycle/diagnostics")
+    diag_response = client.get(f"/api/sboms/{sbom.public_id}/lifecycle/diagnostics")
     assert diag_response.status_code == 200
     diag = diag_response.json()
     assert diag["component_count"] == 1
@@ -723,7 +745,7 @@ def test_manual_lifecycle_override_validation_and_audit(client, db):
     start_time = time.time()
 
     override_res = client.patch(
-        f"/api/components/{component.id}/lifecycle-override",
+        f"/api/components/{component.public_id}/lifecycle-override",
         json={
             "lifecycle_status": "EOL",
             "maintenance_status": "Unsupported",
@@ -781,21 +803,21 @@ def test_manual_lifecycle_override_validation_and_audit(client, db):
 
     # 4. Invalid status returns 422
     invalid_status = client.patch(
-        f"/api/components/{component.id}/lifecycle-override",
+        f"/api/components/{component.public_id}/lifecycle-override",
         json={"lifecycle_status": "Not A Status", "reason": "Test reason"},
     )
     assert invalid_status.status_code == 422
 
     # 5. Invalid date format returns 422
     invalid_date = client.patch(
-        f"/api/components/{component.id}/lifecycle-override",
+        f"/api/components/{component.public_id}/lifecycle-override",
         json={"lifecycle_status": "EOL", "eos_date": "2026/06/30", "reason": "Test reason"},
     )
     assert invalid_date.status_code == 422
 
     # 6. Missing component returns 404
     missing_comp = client.patch(
-        "/api/components/999999/lifecycle-override", json={"lifecycle_status": "EOL", "reason": "Test reason"}
+        f"/api/components/{uuid4()}/lifecycle-override", json={"lifecycle_status": "EOL", "reason": "Test reason"}
     )
     assert missing_comp.status_code == 404
 

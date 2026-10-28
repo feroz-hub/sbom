@@ -1,0 +1,13 @@
+[
+  {
+    "id": "R3-UI-REPAIR-EXECUTION",
+    "role": "admin",
+    "stepsExecuted": "Execute actual proposal/review/decision UI",
+    "expected": "Complete workflow",
+    "actual": {
+      "error": "page.goto: Timeout 60000ms exceeded.\nCall log:\n\u001b[2m  - navigating to \"https://localhost:13000/native-sign-in\", waiting until \"domcontentloaded\"\u001b[22m\n",
+      "path": null
+    },
+    "result": "FAIL"
+  }
+]

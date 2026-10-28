@@ -20,6 +20,8 @@ class CurrentContext:
     identity_roles: frozenset[str] = frozenset()
 
     def has_permission(self, permission: str) -> bool:
+        if permission.startswith("platform:") and (not self.is_platform_admin or self.tenant_id is not None):
+            return False
         return permission in self.permissions
 
     def actor_label(self) -> str:
@@ -34,7 +36,7 @@ def get_bound_context() -> CurrentContext | None:
     return _current_context.get()
 
 
-def bind_context(context: CurrentContext) -> Token:
+def bind_context(context: CurrentContext | None) -> Token:
     return _current_context.set(context)
 
 
@@ -46,7 +48,7 @@ def reset_context(token: Token) -> None:
 
 
 @contextmanager
-def tenant_scope(context: CurrentContext) -> Iterator[None]:
+def tenant_scope(context: CurrentContext | None) -> Iterator[None]:
     token = bind_context(context)
     try:
         yield

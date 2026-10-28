@@ -1,0 +1,46 @@
+name: sbom-greenfield-uuid-dev
+services:
+  postgres:
+    image: postgres@sha256:1a6ab3f5345eb6dbe04a1349529caabdb0ab09293a09590fad07b2246bfa4b54
+    pull_policy: never
+    environment:
+      POSTGRES_DB: sbom_greenfield_uuid
+      POSTGRES_USER: greenfield_setup
+      POSTGRES_PASSWORD_FILE: /run/secrets/setup_password
+      POSTGRES_INITDB_ARGS: --auth-host=scram-sha-256
+    ports: ["127.0.0.1:56044:5432"]
+    volumes: ["pgdata:/var/lib/postgresql/data"]
+    secrets: [setup_password]
+    networks: [access]
+    mem_limit: 768m
+    cpus: 1.5
+    pids_limit: 192
+    shm_size: 128m
+    healthcheck:
+      test: ["CMD-SHELL", "pg_isready -U greenfield_setup -d sbom_greenfield_uuid"]
+      interval: 3s
+      timeout: 2s
+      retries: 20
+  redis:
+    image: redis@sha256:e7723ff73d963f5cc6d9c4643ea3d989527a402a319239054e9472a7fb9219a2
+    pull_policy: never
+    command: ["redis-server", "--appendonly", "yes"]
+    ports: ["127.0.0.1:56381:6379"]
+    volumes: ["redisdata:/data"]
+    networks: [access]
+    mem_limit: 192m
+  mailpit:
+    image: axllent/mailpit@sha256:98b916bd3c8d61f7633a52d3ea2f58d00620cb01ca57ab59edde68c347a95365
+    pull_policy: never
+    ports: ["127.0.0.1:1026:1025", "127.0.0.1:8026:8025"]
+    networks: [access]
+    mem_limit: 128m
+secrets:
+  setup_password:
+    file: ${GREENFIELD_STATE}/setup-password
+volumes:
+  pgdata:
+  redisdata:
+networks:
+  access:
+    driver: bridge

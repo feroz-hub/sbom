@@ -27,7 +27,7 @@ from ..normalize import normalize_spdx
 
 _STAGE = "semantic"
 
-_SPDXID_RE = re.compile(r"^(SPDXRef|DocumentRef)-[a-zA-Z0-9.\-]+$")
+_SPDXID_RE = re.compile(r"^SPDXRef-[a-zA-Z0-9.\-]+$")
 # Annex D `license-ref`: an optional cross-document prefix then LicenseRef-<idstring>.
 # These never appear in the SPDX License List, so they are checked by shape.
 _LICENSE_REF_RE = re.compile(r"^(?:DocumentRef-[a-zA-Z0-9.\-]+:)?LicenseRef-[a-zA-Z0-9.\-]+$")
@@ -57,6 +57,23 @@ def run(ctx: ValidationContext) -> ValidationContext:
     if doc is None or ctx.spec_version is None:
         return ctx
 
+    declarations = [(doc, "")]
+    for key in ("packages", "files", "snippets"):
+        declarations.extend((value, f"{key}[{i}].") for i, value in enumerate(doc.get(key) or []) if isinstance(value, dict))
+    seen_refs = set()
+    for obj, prefix in declarations:
+        ref = obj.get("SPDXID")
+        if prefix.startswith("snippets["):
+            _check_spdxid(ref, prefix + "SPDXID", ctx)
+        if isinstance(ref, str):
+            if ref in seen_refs:
+                ctx.report.add(E.E048_SPDXID_DUPLICATE, stage=_STAGE, path=prefix + "SPDXID",
+                               message="SPDXID is declared by multiple objects.", remediation="Disambiguate identities without guessing relationship targets.")
+            seen_refs.add(ref)
+    for i, ref in enumerate(doc.get("documentDescribes") or []):
+        if isinstance(ref, str) and (ref not in seen_refs or ref == doc.get("SPDXID")):
+            ctx.report.add(E.E072_RELATIONSHIP_ELEMENT_DANGLING, stage=_STAGE, path=f"documentDescribes[{i}]",
+                           message="documentDescribes references an undeclared local SPDXID.", remediation="Resolve an exact existing package identity.")
     _check_spdxid(doc.get("SPDXID"), "SPDXID", ctx)
     _check_data_license(doc.get("dataLicense"), ctx)
     _check_namespace(doc.get("documentNamespace"), ctx)
@@ -137,6 +154,14 @@ def run(ctx: ValidationContext) -> ValidationContext:
     for index, file_block in enumerate(doc.get("files") or []):
         if isinstance(file_block, dict):
             _check_spdxid(file_block.get("SPDXID"), f"files[{index}].SPDXID", ctx)
+            licenses = [("licenseConcluded", file_block.get("licenseConcluded"))]
+            licenses.extend((f"licenseInfoInFiles[{j}]", value) for j, value in enumerate(file_block.get("licenseInfoInFiles") or []))
+            for key, value in licenses:
+                if isinstance(value, str) and value not in {"NONE", "NOASSERTION"}:
+                    _check_license_expression(value, f"files[{index}].{key}", ctx)
+            for j, checksum in enumerate(file_block.get("checksums") or []):
+                if isinstance(checksum, dict):
+                    _check_checksum(checksum, f"files[{index}].checksums[{j}]", ctx)
 
     _check_describes_relationship(doc, ctx)
 
@@ -154,7 +179,7 @@ def _check_spdxid(value: object, path: str, ctx: ValidationContext) -> None:
             E.E040_SPDXID_MALFORMED,
             stage=_STAGE,
             path=path,
-            message=f"SPDXID '{value}' does not match SPDXRef-/DocumentRef-[a-zA-Z0-9.-]+ pattern.",
+            message=f"SPDXID '{value}' does not match SPDXRef-[a-zA-Z0-9.-]+ pattern.",
             remediation="Rename the SPDXID to start with `SPDXRef-` and contain only [a-zA-Z0-9.-].",
             spec_reference="SPDX 2.3 §3.2",
         )
@@ -223,7 +248,7 @@ def _check_checksum(chk: dict, path: str, ctx: ValidationContext) -> None:
     value = chk.get("checksumValue")
     if not isinstance(alg, str) or not isinstance(value, str):
         return
-    expected = _HASH_LENGTHS.get(alg.upper().replace("-", ""))
+    expected = {key.upper().replace("-", ""): length for key, length in _HASH_LENGTHS.items()}.get(alg.upper().replace("-", ""))
     if expected is None:
         # schema check should have caught the enum mismatch; fall through
         return

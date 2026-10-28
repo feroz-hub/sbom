@@ -4,7 +4,7 @@ from __future__ import annotations
 
 import logging
 import time
-from datetime import UTC, datetime
+from datetime import UTC, datetime, timedelta
 from typing import Any
 
 from fastapi import HTTPException
@@ -64,7 +64,7 @@ class LifecycleEnrichmentService:
         self,
         *,
         providers: list[LifecycleProvider] | None = None,
-        cache_ttl_days: int = DEFAULT_CACHE_TTL_DAYS,
+        cache_ttl_days: int | None = None,
         provider_timeout_seconds: float | None = None,
         provider_max_concurrent: int | None = None,
     ) -> None:
@@ -78,6 +78,7 @@ class LifecycleEnrichmentService:
             int(provider_max_concurrent or getattr(settings, "lifecycle_provider_max_concurrent", 3)),
         )
         self._explicit_providers = providers is not None
+        self._configuration_namespace = "legacy"
         self.providers = providers if providers is not None else self._default_providers(settings)
         self._provider_registry = LifecycleProviderRegistry()
         self.cache_ttl_days = cache_ttl_days
@@ -92,9 +93,7 @@ class LifecycleEnrichmentService:
         providers.extend(build_vendor_providers(timeout_seconds=self.provider_timeout_seconds))
         if bool(getattr(settings, "openeox_enabled", False)):
             feed_urls = [
-                url.strip()
-                for url in str(getattr(settings, "openeox_feed_urls", "") or "").split(",")
-                if url.strip()
+                url.strip() for url in str(getattr(settings, "openeox_feed_urls", "") or "").split(",") if url.strip()
             ]
             providers.append(
                 OpenEoXProvider(
@@ -173,6 +172,7 @@ class LifecycleEnrichmentService:
                     self._apply_result(component, manual, normalized)
                     summary["updated_components"] += 1
                 summary["components_enriched"] += len(group)
+                _tally_status(summary, manual, count=len(group))
                 continue
 
             cache_entry = self._read_cache(db, normalized)
@@ -188,10 +188,11 @@ class LifecycleEnrichmentService:
                     self._apply_result(component, result, normalized)
                     summary["updated_components"] += 1
                 summary["components_enriched"] += len(group)
-                _tally_status(summary, result)
+                _tally_status(summary, result, count=len(group))
                 continue
 
             result, errors = self._lookup_providers(normalized, providers)
+            cache_fallback = False
             summary["provider_lookups"] += 1
             if errors:
                 summary["provider_errors"].extend(errors)
@@ -199,15 +200,27 @@ class LifecycleEnrichmentService:
             if cache_entry is not None:
                 cache_confidence = cache_entry.confidence or "Unknown"
                 cache_status = cache_entry.lifecycle_status or UNKNOWN
-                if cache_status != UNKNOWN and cache_confidence in {HIGH, MEDIUM} and result.lifecycle_status == UNKNOWN:
+                if (
+                    cache_status != UNKNOWN
+                    and cache_confidence in {HIGH, MEDIUM}
+                    and result.lifecycle_status == UNKNOWN
+                    and self._within_stale_policy(cache_entry)
+                ):
                     stale = self._cache_expired(cache_entry)
+                    cache_fallback = True
                     result = self._result_from_cache(cache_entry, normalized, stale=stale)
+                    result.evidence = {**result.evidence, "refresh_errors": errors}
                     summary["cache_hits"] += 1
-                    if stale:
-                        summary["stale_components"] += len(group)
 
-            if not result.manual_override:
-                cache_rows.append(lifecycle_cache_row_from_result(normalized, result, cache_ttl_days=self.cache_ttl_days))
+            if not result.manual_override and not result.stale and not cache_fallback:
+                cache_rows.append(
+                    lifecycle_cache_row_from_result(
+                        normalized,
+                        result,
+                        cache_ttl_days=self.cache_ttl_days,
+                        configuration_namespace=self._configuration_namespace,
+                    )
+                )
 
             for component in group:
                 self._apply_result(component, result, normalized)
@@ -215,7 +228,7 @@ class LifecycleEnrichmentService:
                 if result.stale:
                     summary["stale_components"] += 1
             summary["components_enriched"] += len(group)
-            _tally_status(summary, result)
+            _tally_status(summary, result, count=len(group))
 
         if cache_rows:
             upsert_lifecycle_cache_entries(db, cache_rows)
@@ -289,9 +302,15 @@ class LifecycleEnrichmentService:
         if cache_entry is not None:
             cache_confidence = cache_entry.confidence or "Unknown"
             cache_status = cache_entry.lifecycle_status or UNKNOWN
-            if cache_status != UNKNOWN and cache_confidence in {HIGH, MEDIUM} and result.lifecycle_status == UNKNOWN:
+            if (
+                cache_status != UNKNOWN
+                and cache_confidence in {HIGH, MEDIUM}
+                and result.lifecycle_status == UNKNOWN
+                and self._within_stale_policy(cache_entry)
+            ):
                 stale = self._cache_expired(cache_entry)
                 result = self._result_from_cache(cache_entry, normalized, stale=stale)
+                result.evidence = {**result.evidence, "refresh_errors": _errors}
                 self._apply_result(component, result, normalized)
                 return result
 
@@ -407,6 +426,13 @@ class LifecycleEnrichmentService:
         }
 
     def _providers_for_run(self, db: Session) -> list[LifecycleProvider]:
+        from .provider_config_service import configuration_cache_namespace
+
+        self._run_db = db
+        self._configuration_namespace = configuration_cache_namespace(db)
+        # Circuit breakers must not let a failing override suppress another
+        # tenant's provider, and must reset when this effective config changes.
+        self._status_tracker = get_provider_status_tracker(self._configuration_namespace)
         providers = (
             self.providers
             if self._explicit_providers
@@ -433,17 +459,39 @@ class LifecycleEnrichmentService:
     ) -> tuple[LifecycleResult, list[str]]:
         if not providers:
             return unknown_result(component).canonicalized(), []
-        return lookup_provider_chain(
+        result, errors = lookup_provider_chain(
             providers,
             component,
             timeout_seconds=self.provider_timeout_seconds,
             status_tracker=self._status_tracker,
         )
+        if not self._explicit_providers:
+            from ...services.configuration_scope import current_configuration_tenant
+            from .provider_config_service import LifecycleProviderConfigService
+
+            service = LifecycleProviderConfigService()
+            for outcome in result.evidence.get("provider_outcomes", []):
+                if not outcome.get("provider_key"):
+                    continue
+                row = service.get_config(self._run_db, outcome["provider_key"])
+                if row.tenant_id == current_configuration_tenant():
+                    row.last_lookup_at = outcome["checked_at"]
+                    if outcome.get("error"):
+                        row.last_failure_at = outcome["checked_at"]
+                        row.last_failure_message = outcome["error"]
+                        row.health_status = "degraded"
+            self._run_db.flush()
+        return result, errors
 
     def _read_cache(self, db: Session, component: NormalizedComponent) -> ComponentLifecycleCache | None:
         lookup_key = build_lifecycle_lookup_key(component)
         cached = (
-            db.execute(select(ComponentLifecycleCache).where(ComponentLifecycleCache.lookup_key == lookup_key))
+            db.execute(
+                select(ComponentLifecycleCache).where(
+                    ComponentLifecycleCache.lookup_key == lookup_key,
+                    ComponentLifecycleCache.configuration_namespace == self._configuration_namespace,
+                )
+            )
             .scalars()
             .first()
         )
@@ -451,6 +499,7 @@ class LifecycleEnrichmentService:
             return cached
         name, version, ecosystem, purl, _cpe = component.cache_identity
         statement = select(ComponentLifecycleCache).where(
+            ComponentLifecycleCache.configuration_namespace == self._configuration_namespace,
             ComponentLifecycleCache.normalized_name == name,
             ComponentLifecycleCache.normalized_version == version,
             ComponentLifecycleCache.ecosystem == ecosystem,
@@ -459,12 +508,26 @@ class LifecycleEnrichmentService:
         return db.execute(statement).scalars().first()
 
     def _write_cache(self, db: Session, component: NormalizedComponent, result: LifecycleResult) -> None:
-        if result.manual_override:
+        if result.manual_override or result.stale:
             return
         upsert_lifecycle_cache_entries(
             db,
-            [lifecycle_cache_row_from_result(component, result, cache_ttl_days=self.cache_ttl_days)],
+            [
+                lifecycle_cache_row_from_result(
+                    component,
+                    result,
+                    cache_ttl_days=self.cache_ttl_days,
+                    configuration_namespace=self._configuration_namespace,
+                )
+            ],
         )
+
+    def _within_stale_policy(self, entry):
+        try:
+            expiration = datetime.fromisoformat(entry.expires_at.replace("Z", "+00:00"))
+            return datetime.now(UTC) <= expiration + timedelta(days=get_settings().lifecycle_cache_max_stale_days)
+        except (ValueError, AttributeError):
+            return False
 
     def _cache_expired(self, cache_entry: ComponentLifecycleCache) -> bool:
         try:
@@ -496,8 +559,7 @@ class LifecycleEnrichmentService:
         stale: bool,
     ) -> LifecycleResult:
         evidence = cache_entry.evidence_json if isinstance(cache_entry.evidence_json, dict) else {}
-        if stale:
-            evidence = {**evidence, "stale_cache": True, "cache_expires_at": cache_entry.expires_at}
+        evidence = {**evidence, "cache_hit": True, "stale_cache": stale, "cache_expires_at": cache_entry.expires_at}
         return LifecycleResult(
             component_name=component.normalized_name,
             component_version=component.normalized_version,
@@ -574,16 +636,16 @@ def _group_components_by_identity(components: list[SBOMComponent]) -> dict[str, 
     return groups
 
 
-def _tally_status(summary: dict[str, Any], result: LifecycleResult) -> None:
+def _tally_status(summary: dict[str, Any], result: LifecycleResult, *, count: int = 1) -> None:
     status = canonical_status(result.lifecycle_status)
     if status == UNKNOWN:
-        summary["unknown_count"] += 1
+        summary["unknown_count"] += count
     elif status == EOL:
-        summary["eol_count"] += 1
+        summary["eol_count"] += count
     elif status == EOS:
-        summary["eos_count"] += 1
+        summary["eos_count"] += count
     elif status == DEPRECATED:
-        summary["deprecated_count"] += 1
+        summary["deprecated_count"] += count
 
 
 def summarize_components(components: list[SBOMComponent]) -> dict[str, Any]:

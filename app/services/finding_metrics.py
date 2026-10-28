@@ -16,6 +16,7 @@ from types import SimpleNamespace
 from typing import Any
 
 from ..models import AnalysisFinding, AnalysisRun
+from ..sources.reconciliation import canonical_vulnerability, occurrence_identity, reconcile
 
 SEVERITY_ORDER = {"UNKNOWN": 0, "LOW": 1, "MEDIUM": 2, "HIGH": 3, "CRITICAL": 4}
 SEVERITIES = ("CRITICAL", "HIGH", "MEDIUM", "LOW", "UNKNOWN")
@@ -30,6 +31,11 @@ class RunFindingMetrics:
     unique_vulnerabilities: int
     ai_fix_eligible_findings: int
     severity_counts: dict[str, int]
+    cvss_scored_findings: int = 0
+    cvss_unknown_findings: int = 0
+    total_component_entries: int | None = None
+    unique_package_releases: int | None = None
+    unresolved_component_entries: int | None = None
 
 
 def parse_json_list(value: Any) -> list[str]:
@@ -63,49 +69,17 @@ def merge_severity(left: Any, right: Any) -> str:
 
 
 def canonical_vulnerability_id(vuln_id: Any, aliases: Iterable[Any] | None = None) -> str:
-    """Pick one canonical vulnerability identity from a provider id + aliases."""
-    values: list[str] = []
-    if vuln_id:
-        values.append(str(vuln_id).strip())
-    values.extend(str(alias).strip() for alias in (aliases or []) if str(alias).strip())
-
-    upper_values = [v.upper() for v in values if v]
-    for value in upper_values:
-        if _CVE_RE.match(value):
-            return value
-    for value in upper_values:
-        if _GHSA_RE.match(value):
-            return value
-    for value in upper_values:
-        if value.startswith("OSV-"):
-            return value
-    return upper_values[0] if upper_values else "UNKNOWN-VULNERABILITY"
+    return canonical_vulnerability(vuln_id, list(aliases or []))
 
 
 def component_identity_from_dict(finding: dict[str, Any]) -> str:
-    component_id = finding.get("component_id")
-    if component_id is not None:
-        return f"id:{component_id}"
-    purl = str(finding.get("purl") or "").strip().lower()
-    if purl:
-        return f"purl:{purl}"
-    cpe = str(finding.get("cpe") or "").strip().lower()
-    if cpe:
-        return f"cpe:{cpe}"
-    name = str(finding.get("normalized_name") or finding.get("component_name") or finding.get("name") or "").strip().lower()
-    version = str(finding.get("component_version") or finding.get("version") or "").strip().lower()
-    ecosystem = str(finding.get("ecosystem") or "").strip().lower()
-    return f"component:{ecosystem}:{name}:{version}"
+    return occurrence_identity(finding)
 
 
 def component_identity_from_row(finding: Any) -> str:
-    if finding.component_id is not None:
-        return f"id:{finding.component_id}"
-    if finding.cpe:
-        return f"cpe:{finding.cpe.strip().lower()}"
-    name = (finding.component_name or "").strip().lower()
-    version = (finding.component_version or "").strip().lower()
-    return f"component::{name}:{version}"
+    return occurrence_identity({"component_id": finding.component_id,
+                                "analysis_run_id": getattr(finding, "analysis_run_id", None),
+                                "id": getattr(finding, "id", None)})
 
 
 def canonical_finding_key_from_dict(finding: dict[str, Any]) -> tuple[str, str]:
@@ -144,59 +118,7 @@ def _merge_sources(left: Any, right: Any) -> list[str]:
 
 
 def deduplicate_finding_dicts(findings: Iterable[dict[str, Any]]) -> list[dict[str, Any]]:
-    """Merge duplicate provider observations before persistence."""
-    merged: dict[tuple[str, str], dict[str, Any]] = {}
-    for finding in findings:
-        if not isinstance(finding, dict):
-            continue
-        key = canonical_finding_key_from_dict(finding)
-        canonical_id = key[1]
-        if key not in merged:
-            row = dict(finding)
-            row["vuln_id"] = canonical_id
-            row["aliases"] = _merge_string_lists(row.get("aliases"), finding.get("vuln_id"), finding.get("id"))
-            row["sources"] = _merge_sources(row.get("sources"), row.get("source"))
-            merged[key] = row
-            continue
-
-        existing = merged[key]
-        existing["vuln_id"] = canonical_id
-        existing["sources"] = _merge_sources(existing.get("sources"), finding.get("sources") or finding.get("source"))
-        existing["aliases"] = _merge_string_lists(
-            existing.get("aliases"),
-            finding.get("aliases"),
-            finding.get("vuln_id"),
-            finding.get("id"),
-        )
-        existing["references"] = _merge_string_lists(existing.get("references"), finding.get("references"))
-        existing["fixed_versions"] = _merge_string_lists(existing.get("fixed_versions"), finding.get("fixed_versions"))
-        existing["cwe"] = _merge_string_lists(existing.get("cwe"), finding.get("cwe"))
-        existing["severity"] = merge_severity(existing.get("severity"), finding.get("severity"))
-        if finding.get("score") is not None and (
-            existing.get("score") is None or float(finding.get("score") or 0) > float(existing.get("score") or 0)
-        ):
-            existing["score"] = finding.get("score")
-        for field in (
-            "title",
-            "description",
-            "url",
-            "purl",
-            "ecosystem",
-            "normalized_name",
-            "bom_ref",
-            "package_type",
-            "match_reason",
-            "matched_range",
-            "match_strategy",
-            "match_confidence",
-            "applicability_status",
-            "attack_vector",
-            "vector",
-            "cvss_version",
-        ):
-            if not existing.get(field) and finding.get(field):
-                existing[field] = finding[field]
-    return list(merged.values())
+    return reconcile([f for f in findings if isinstance(f, dict)])
 
 
 def _finding_view(finding: AnalysisFinding) -> Any:
@@ -229,30 +151,22 @@ def _finding_view(finding: AnalysisFinding) -> Any:
 
 
 def canonicalize_finding_rows(findings: Iterable[AnalysisFinding]) -> list[Any]:
-    """Return representative rows merged by canonical component-vulnerability key."""
-    grouped: dict[tuple[str, str], AnalysisFinding] = {}
+    dictionaries = []
     for finding in findings:
-        key = canonical_finding_key_from_row(finding)
-        existing = grouped.get(key)
-        if existing is None:
-            grouped[key] = _finding_view(finding)
-            continue
-
-        existing.source = ",".join(_merge_sources(existing.source, finding.source)) or existing.source
-        existing.aliases = json.dumps(
-            _merge_string_lists(existing.aliases, finding.aliases, existing.vuln_id, finding.vuln_id)
-        )
-        existing.fixed_versions = json.dumps(_merge_string_lists(existing.fixed_versions, finding.fixed_versions)) or None
-        existing.cwe = ",".join(_merge_string_lists(existing.cwe, finding.cwe)) or existing.cwe
-        existing.severity = merge_severity(existing.severity, finding.severity)
-        if finding.score is not None and (existing.score is None or finding.score > existing.score):
-            existing.score = finding.score
-            existing.vector = finding.vector or existing.vector
-            existing.cvss_version = finding.cvss_version or existing.cvss_version
-        for field in ("title", "description", "reference_url", "published_on", "attack_vector", "match_reason", "matched_range", "match_strategy", "match_confidence"):
-            if not getattr(existing, field, None) and getattr(finding, field, None):
-                setattr(existing, field, getattr(finding, field))
-    return list(grouped.values())
+        row = vars(_finding_view(finding)).copy()
+        evidence = getattr(finding, "evidence_json", None) or {}
+        row.update(evidence)
+        row["sources"] = _merge_sources(finding.source, None)
+        for field in ("aliases", "fixed_versions", "cwe"):
+            row[field] = parse_json_list(row.get(field))
+        dictionaries.append(row)
+    result = []
+    for row in reconcile(dictionaries):
+        row["source"] = ",".join(row.pop("sources", []))
+        for field in ("aliases", "fixed_versions", "cwe"):
+            row[field] = json.dumps(row.get(field) or [])
+        result.append(SimpleNamespace(**row))
+    return result
 
 
 def _ai_fix_eligible(finding: Any) -> bool:
@@ -298,12 +212,21 @@ def calculate_run_finding_metrics(
         if _ai_fix_eligible(finding):
             ai_eligible += 1
 
+    try:
+        metadata = json.loads(run.raw_report or "{}").get("analysis_metadata", {}) if run else {}
+    except (ValueError, TypeError, AttributeError):
+        metadata = {}
     return RunFindingMetrics(
-        raw_observation_count=_raw_observation_count(run, len(rows)),
+        raw_observation_count=_raw_observation_count(run, max(len(rows), sum(len(f.source_observations) or 1 for f in canonical_rows))),
         total_findings=len(canonical_rows),
         unique_vulnerabilities=len(unique_vulns),
         ai_fix_eligible_findings=ai_eligible,
         severity_counts=severity_counts,
+        cvss_scored_findings=sum(f.score is not None for f in canonical_rows),
+        cvss_unknown_findings=sum(f.score is None for f in canonical_rows),
+        total_component_entries=metadata.get("total_component_entries"),
+        unique_package_releases=metadata.get("unique_package_releases"),
+        unresolved_component_entries=metadata.get("unresolved_component_entries"),
     )
 
 
@@ -323,4 +246,40 @@ def metrics_to_dict(metrics: RunFindingMetrics) -> dict[str, Any]:
         "unique_vulnerabilities": metrics.unique_vulnerabilities,
         "ai_fix_eligible_findings": metrics.ai_fix_eligible_findings,
         "severity_counts": metrics.severity_counts,
+        "total_component_entries": metrics.total_component_entries,
+        "unique_package_releases": metrics.unique_package_releases,
+        "unresolved_component_entries": metrics.unresolved_component_entries,
+        "cvss_scored_findings": metrics.cvss_scored_findings,
+        "cvss_unknown_findings": metrics.cvss_unknown_findings,
+        "cvss_coverage": metrics.cvss_scored_findings / metrics.total_findings if metrics.total_findings else None,
     }
+
+
+def equivalent_vulnerability_ids(finding: Any) -> set[str]:
+    """Only use non-ambiguous aliases for existing workflow records."""
+    primary = str(finding.vuln_id or "").upper()
+    aliases = {value.upper() for value in parse_json_list(finding.aliases)}
+    cves = {value for value in {primary, *aliases} if _CVE_RE.fullmatch(value)}
+    return {primary} if len(cves) > 1 else {primary, *aliases}
+
+
+def vex_for_finding(vex: dict, finding: Any) -> Any:
+    candidates = [vex[(finding.component_id, vid)] for vid in equivalent_vulnerability_ids(finding)
+                  if (finding.component_id, vid) in vex]
+    if not candidates or len({item.status for item in candidates}) > 1:
+        return None
+    return vex.get((finding.component_id, str(finding.vuln_id).upper())) or candidates[0]
+
+
+def remediation_for_finding(remediations: dict, finding: Any) -> Any:
+    direct = remediations.get((finding.vuln_id, finding.component_name, finding.component_version))
+    if direct is not None:
+        return direct
+    names = {finding.component_name, getattr(finding, "normalized_name", None)}
+    # Alternate names are accepted only from this resolved occurrence's evidence.
+    if finding.component_id is not None:
+        names.update(obs.get("component_name") for obs in getattr(finding, "source_observations", []))
+    identities = equivalent_vulnerability_ids(finding)
+    candidates = [item for (vid, name, version), item in remediations.items()
+                  if vid.upper() in identities and name in names and version == finding.component_version]
+    return candidates[0] if len(candidates) == 1 else None

@@ -1,0 +1,163 @@
+[
+  {
+    "id": "R1-SETUP-OSV",
+    "phase": "before",
+    "role": "admin",
+    "expected": "OSV produces real findings in disposable scope",
+    "actual": {
+      "status": 200,
+      "complete": [
+        {
+          "runId": 22,
+          "status": "FINDINGS",
+          "total": 5,
+          "critical": 0,
+          "high": 2,
+          "medium": 3,
+          "low": 0,
+          "unknown": 0,
+          "errors": 0,
+          "duration_ms": 1509,
+          "provider_status": []
+        }
+      ]
+    },
+    "result": "PASS",
+    "time": "2026-10-20T03:06:44.986002+00:00"
+  },
+  {
+    "id": "UAT-VEX-DETAIL",
+    "phase": "before",
+    "role": "admin",
+    "expected": "Detail serializes analyzer confidence without HTTP 500",
+    "actual": {
+      "status": 500,
+      "data": {
+        "detail": {
+          "code": "internal_error",
+          "message": "Internal server error.",
+          "correlation_id": "cdc193633c42"
+        }
+      },
+      "request_id": "cdc193633c42"
+    },
+    "result": "FAIL",
+    "time": "2026-10-20T03:06:46.791038+00:00"
+  },
+  {
+    "id": "UAT-VEX-DECISION",
+    "phase": "before",
+    "role": "admin",
+    "expected": "One decision returns 200 with persisted row_version",
+    "actual": {
+      "status": 500,
+      "response": {
+        "detail": {
+          "code": "internal_error",
+          "message": "Internal server error.",
+          "correlation_id": "29a83216146f"
+        }
+      },
+      "beforeVersion": 1,
+      "persistedVersion": 3,
+      "request_id": "29a83216146f"
+    },
+    "result": "FAIL",
+    "time": "2026-10-20T03:06:47.806847+00:00"
+  },
+  {
+    "id": "UAT-VEX-STALE",
+    "phase": "before",
+    "role": "admin",
+    "expected": "Stale version returns 409 and does not mutate again",
+    "actual": {
+      "status": 500,
+      "response": {
+        "detail": {
+          "code": "internal_error",
+          "message": "Internal server error.",
+          "correlation_id": "da10c59a0ed6"
+        }
+      },
+      "beforeStale": {
+        "id": 47,
+        "canonical_vulnerability_id": "CVE-2020-28500",
+        "aliases": [
+          "GHSA-29MW-WPGM-HMR9"
+        ],
+        "severity": "MEDIUM",
+        "component_id": "06036bc5-2ed5-40cf-82c8-52b9cb39c84d",
+        "component_name": "lodash",
+        "component_version": "4.17.20",
+        "project_id": "3b481333-d56a-4730-9427-7fc5c332309a",
+        "project_name": "UAT R1 1792465600082474000",
+        "product_id": "256b25f8-b44b-4a14-a1b2-2dedae5aa4dc",
+        "product_name": "UAT R1 1792465600082474000 Application",
+        "sbom_id": "a18b1310-f4d9-401f-b8b1-f6beee5933ac",
+        "sbom_name": "UAT R1 1792465600082474000 SBOM",
+        "sbom_version": null,
+        "historical": false,
+        "analysis_run_id": 22,
+        "analyzer_detection_state": "DETECTED",
+        "analyzer_sources": [
+          "OSV"
+        ],
+        "vex_source": "Manual VEX Override",
+        "native_vex_status": "under_investigation",
+        "effective_status": "UNDER_INVESTIGATION",
+        "reconciliation_status": "MATCHED",
+        "justification": null,
+        "assigned_to": null,
+        "assigned_to_label": "Unassigned",
+        "assigned_to_is_self": false,
+        "assigned_to_active": false,
+        "reviewed_by": "admin@olympus.example.test",
+        "last_seen_at": "2026-10-20T03:06:47+00:00",
+        "updated_at": "2026-10-20T03:06:47+00:00",
+        "row_version": 3,
+        "needs_review": false
+      },
+      "afterStale": {
+        "id": 47,
+        "canonical_vulnerability_id": "CVE-2020-28500",
+        "aliases": [
+          "GHSA-29MW-WPGM-HMR9"
+        ],
+        "severity": "MEDIUM",
+        "component_id": "06036bc5-2ed5-40cf-82c8-52b9cb39c84d",
+        "component_name": "lodash",
+        "component_version": "4.17.20",
+        "project_id": "3b481333-d56a-4730-9427-7fc5c332309a",
+        "project_name": "UAT R1 1792465600082474000",
+        "product_id": "256b25f8-b44b-4a14-a1b2-2dedae5aa4dc",
+        "product_name": "UAT R1 1792465600082474000 Application",
+        "sbom_id": "a18b1310-f4d9-401f-b8b1-f6beee5933ac",
+        "sbom_name": "UAT R1 1792465600082474000 SBOM",
+        "sbom_version": null,
+        "historical": false,
+        "analysis_run_id": 22,
+        "analyzer_detection_state": "DETECTED",
+        "analyzer_sources": [
+          "OSV"
+        ],
+        "vex_source": "Manual VEX Override",
+        "native_vex_status": "under_investigation",
+        "effective_status": "UNDER_INVESTIGATION",
+        "reconciliation_status": "MATCHED",
+        "justification": null,
+        "assigned_to": null,
+        "assigned_to_label": "Unassigned",
+        "assigned_to_is_self": false,
+        "assigned_to_active": false,
+        "reviewed_by": "admin@olympus.example.test",
+        "last_seen_at": "2026-10-20T03:06:47+00:00",
+        "updated_at": "2026-10-20T03:06:47+00:00",
+        "row_version": 3,
+        "needs_review": false
+      },
+      "request_id": "da10c59a0ed6"
+    },
+    "result": "FAIL",
+    "time": "2026-10-20T03:06:48.724045+00:00"
+  }
+]

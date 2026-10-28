@@ -19,6 +19,7 @@ from .types import (
     HIGH,
     MEDIUM,
     SUPPORTED,
+    UNKNOWN,
     UNSUPPORTED,
     LifecycleResult,
     NormalizedComponent,
@@ -286,7 +287,7 @@ def _result_from_record(
     current = today or datetime.now(UTC).date()
     eol_date = _iso_date(record.get("eol_date") or record.get("eol"))
     reason = str(record.get("eol_reason") or "").strip().lower()
-    status = SUPPORTED
+    status = SUPPORTED if eol_date or record.get("support") is True or record.get("supported") is True else UNKNOWN
     if reason == "registry_deprecated":
         status = DEPRECATED
     elif record.get("eol") is True or (eol_date and _parse_date(eol_date) and _parse_date(eol_date) < current):

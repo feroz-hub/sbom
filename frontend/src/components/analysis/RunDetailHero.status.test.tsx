@@ -7,7 +7,7 @@ import type { AnalysisRun, SourceQuerySummary } from '@/types';
 
 function run(overrides: Partial<AnalysisRun>): AnalysisRun {
   return {
-    id: 5,
+    id: "00000000-0000-4000-8000-000000000005",
     sbom_id: 3,
     sbom_name: 'App',
     project_id: null,

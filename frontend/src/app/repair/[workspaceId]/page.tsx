@@ -1,7 +1,7 @@
 'use client';
 
 import { use } from 'react';
-import { TopBar } from '@/components/layout/TopBar';
+import { Breadcrumb } from '@/components/layout/Breadcrumb';
 import { ValidationRepairWorkspace } from '@/components/sboms/ValidationRepairWorkspace';
 
 interface RepairPageProps {
@@ -13,12 +13,9 @@ export default function RepairPage({ params }: RepairPageProps) {
 
   return (
     <div className="flex min-h-0 flex-1 flex-col overflow-hidden">
-      <TopBar
-        title="Repair Workspace"
-        breadcrumbs={[{ label: 'SBOMs', href: '/sboms' }, { label: 'Repair Workspace' }]}
-      />
-      <div className="min-h-0 flex-1 overflow-hidden px-6 py-4">
-        <ValidationRepairWorkspace sessionId={workspaceId} />
+      <Breadcrumb className="shrink-0 px-3 pt-3 md:px-4 xl:px-6" items={[{ label: 'SBOMs', href: '/sboms' }, { label: 'Repair Workspace' }]} />
+      <div className="min-h-0 flex-1 overflow-auto px-3 py-3 md:px-4 md:py-4 xl:px-6">
+        <ValidationRepairWorkspace key={workspaceId} sessionId={workspaceId} />
       </div>
     </div>
   );

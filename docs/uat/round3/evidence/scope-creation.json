@@ -1,0 +1,205 @@
+[
+  {
+    "id": "R3-PROJECT-CREATE",
+    "role": "admin",
+    "preconditions": "Verified isolated Greenfield UUID; task-owned fixtures; credentials kept in memory",
+    "stepsExecuted": "Create owned project",
+    "expected": "201 UUID project",
+    "actual": {
+      "status": 201,
+      "data": {
+        "id": "d016fed5-336c-4234-a3ef-83964c6cbf57",
+        "project_name": "UAT R3 1792486718006046000",
+        "project_details": null,
+        "project_status": 1,
+        "created_on": "2026-10-20T08:58:38+00:00",
+        "created_by": "admin@olympus.example.test",
+        "modified_on": null,
+        "modified_by": null,
+        "sbom_count": 0
+      },
+      "request_id": "2b9880fc16f2"
+    },
+    "result": "PASS",
+    "time": "2026-10-20T08:58:38.368863+00:00"
+  },
+  {
+    "id": "R3-APPLICATION-CREATE",
+    "role": "admin",
+    "preconditions": "Verified isolated Greenfield UUID; task-owned fixtures; credentials kept in memory",
+    "stepsExecuted": "Create owned application",
+    "expected": "201 UUID application",
+    "actual": {
+      "status": 201,
+      "data": {
+        "id": "67289be2-ba05-4469-b158-c64859613caa",
+        "tenant_id": "3a900179-36bf-4b5f-b2e1-2a4a9d06e6af",
+        "project_id": "d016fed5-336c-4234-a3ef-83964c6cbf57",
+        "name": "UAT R3 1792486718006046000 Application",
+        "normalized_name": "uat r3 1792486718006046000 application",
+        "slug": "uat-r3-1792486718006046000-application",
+        "description": null,
+        "product_key": null,
+        "vendor": null,
+        "category": null,
+        "status": "active",
+        "latest_version": null,
+        "metadata_json": null,
+        "created_by": "admin@olympus.example.test",
+        "created_at": "2026-10-20T08:58:38+00:00",
+        "updated_at": "2026-10-20T08:58:38+00:00",
+        "is_active": true,
+        "deleted_at": null,
+        "sbom_count": 0,
+        "latest_sbom_id": null,
+        "latest_sbom_version": null,
+        "current_sbom_id": null,
+        "current_sbom_version": null,
+        "current_sbom_mode": "AUTO"
+      },
+      "request_id": "a03d1074eedd"
+    },
+    "result": "PASS",
+    "time": "2026-10-20T08:58:38.413678+00:00"
+  },
+  {
+    "id": "R3-SBOM-UPLOAD-1",
+    "role": "admin",
+    "preconditions": "Verified isolated Greenfield UUID; task-owned fixtures; credentials kept in memory",
+    "stepsExecuted": "Upload valid fixture with project/application UUIDs",
+    "expected": "202 public UUID",
+    "actual": {
+      "status": 202,
+      "data": {
+        "status": "valid",
+        "workspace_id": "bff26b94-7787-4dc2-8534-289569797071",
+        "validation_session_id": "bff26b94-7787-4dc2-8534-289569797071",
+        "repair_workspace_url": "/repair/bff26b94-7787-4dc2-8534-289569797071",
+        "sbom_id": "f5e7f4c4-8a16-4c70-93d8-092173885437",
+        "logical_sbom_id": "750fe433-6f15-46a1-a5e2-b5a1a6c66e3d",
+        "sbom_name": "UAT R3 1792486718006046000 SBOM 1",
+        "sbom_version": null,
+        "product_version": null,
+        "project_id": "d016fed5-336c-4234-a3ef-83964c6cbf57",
+        "product_id": "67289be2-ba05-4469-b158-c64859613caa",
+        "product_name": "UAT R3 1792486718006046000 Application",
+        "is_current": false,
+        "project_name": "UAT R3 1792486718006046000",
+        "spec": "cyclonedx",
+        "spec_version": "1.6",
+        "detected_format": "cyclonedx_json",
+        "detected_spec_version": "1.6",
+        "detection_confidence": 0.99,
+        "detection_evidence": {
+          "evidence": [
+            "bomFormat=CycloneDX",
+            "components present"
+          ],
+          "warnings": []
+        },
+        "file_size_bytes": 649,
+        "total_lines": 1,
+        "sha256": "43b8d9a2f4d0a58d28ec567d66d4505980b7a203c8905521142775ac2543b468",
+        "is_large_file": false,
+        "full_editor_allowed": true,
+        "components": 2,
+        "validation_errors": [],
+        "validation_warnings": [],
+        "warnings": [],
+        "info": [],
+        "enrichment_status": "pending",
+        "validation_status": "valid",
+        "message": "SBOM uploaded successfully. Enrichment is running in background."
+      },
+      "request_id": "fec89f1c4fe5"
+    },
+    "result": "PASS",
+    "time": "2026-10-20T08:58:38.664634+00:00"
+  },
+  {
+    "id": "R3-SBOM-UPLOAD-2",
+    "role": "admin",
+    "preconditions": "Verified isolated Greenfield UUID; task-owned fixtures; credentials kept in memory",
+    "stepsExecuted": "Upload valid fixture with project/application UUIDs",
+    "expected": "202 public UUID",
+    "actual": {
+      "status": 202,
+      "data": {
+        "status": "valid",
+        "workspace_id": "038c29d3-4c6e-4109-8caf-7ab30a4a2e0d",
+        "validation_session_id": "038c29d3-4c6e-4109-8caf-7ab30a4a2e0d",
+        "repair_workspace_url": "/repair/038c29d3-4c6e-4109-8caf-7ab30a4a2e0d",
+        "sbom_id": "98cfb1f3-6ebc-4727-8222-56921377ce0f",
+        "logical_sbom_id": "9ed20982-806c-4ae0-9e35-8d2af64e1f86",
+        "sbom_name": "UAT R3 1792486718006046000 SBOM 2",
+        "sbom_version": null,
+        "product_version": null,
+        "project_id": "d016fed5-336c-4234-a3ef-83964c6cbf57",
+        "product_id": "67289be2-ba05-4469-b158-c64859613caa",
+        "product_name": "UAT R3 1792486718006046000 Application",
+        "is_current": false,
+        "project_name": "UAT R3 1792486718006046000",
+        "spec": "cyclonedx",
+        "spec_version": "1.6",
+        "detected_format": "cyclonedx_json",
+        "detected_spec_version": "1.6",
+        "detection_confidence": 0.99,
+        "detection_evidence": {
+          "evidence": [
+            "bomFormat=CycloneDX",
+            "components present"
+          ],
+          "warnings": []
+        },
+        "file_size_bytes": 649,
+        "total_lines": 1,
+        "sha256": "97c3dfbe6788c034007363641beb92a5920f601692f9a6838a787db3963485f5",
+        "is_large_file": false,
+        "full_editor_allowed": true,
+        "components": 2,
+        "validation_errors": [],
+        "validation_warnings": [],
+        "warnings": [],
+        "info": [],
+        "enrichment_status": "pending",
+        "validation_status": "valid",
+        "message": "SBOM uploaded successfully. Enrichment is running in background."
+      },
+      "request_id": "5b2e0500251f"
+    },
+    "result": "PASS",
+    "time": "2026-10-20T08:58:38.803097+00:00"
+  },
+  {
+    "id": "R3-CRON-BASELINE-10",
+    "role": "admin",
+    "preconditions": "Verified isolated Greenfield UUID; task-owned fixtures; credentials kept in memory",
+    "stepsExecuted": "Submit disabled custom schedule before dependency correction",
+    "expected": "Reproduce missing supported dependency; no cron syntax acceptance",
+    "actual": {
+      "status": 422,
+      "data": {
+        "detail": "CUSTOM cadence needs the 'croniter' package; pip install croniter"
+      },
+      "request_id": "8fbb5c4e5286"
+    },
+    "result": "PASS",
+    "time": "2026-10-20T08:58:38.848201+00:00"
+  },
+  {
+    "id": "R3-CRON-BASELINE-11",
+    "role": "admin",
+    "preconditions": "Verified isolated Greenfield UUID; task-owned fixtures; credentials kept in memory",
+    "stepsExecuted": "Submit disabled custom schedule before dependency correction",
+    "expected": "Reproduce missing supported dependency; no cron syntax acceptance",
+    "actual": {
+      "status": 422,
+      "data": {
+        "detail": "CUSTOM cadence needs the 'croniter' package; pip install croniter"
+      },
+      "request_id": "ff489c5909b3"
+    },
+    "result": "PASS",
+    "time": "2026-10-20T08:58:38.879417+00:00"
+  }
+]

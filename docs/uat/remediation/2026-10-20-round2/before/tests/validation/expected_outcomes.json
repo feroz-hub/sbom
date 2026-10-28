@@ -1,0 +1,18 @@
+{
+  "_doc": "Expected outcome of running the full pipeline against each fixture. Keys are paths under tests/fixtures/sboms/. Values: {http_status: int, must_contain: [<code>, ...], must_not_contain: [<code>, ...]}",
+
+  "valid/spdx_2_3_minimal.json":              {"http_status": 202, "must_contain": [], "must_not_contain": ["SBOM_VAL_E040_SPDXID_MALFORMED", "SBOM_VAL_E042_DATA_LICENSE_INVALID"]},
+  "valid/spdx_2_3_realistic.json":            {"http_status": 202, "must_contain": [], "must_not_contain": ["SBOM_VAL_E040_SPDXID_MALFORMED"]},
+  "valid/cyclonedx_1_5_minimal.json":         {"http_status": 202, "must_contain": [], "must_not_contain": ["SBOM_VAL_E050_SERIAL_NUMBER_INVALID", "SBOM_VAL_E051_BOM_REF_DUPLICATE", "SBOM_VAL_E052_PURL_INVALID"]},
+  "valid/cyclonedx_1_6_realistic.xml":        {"http_status": 202, "must_contain": [], "must_not_contain": []},
+
+  "invalid/spdx_missing_data_license.json":   {"http_status": 422, "must_contain": [], "must_not_contain": []},
+  "invalid/spdx_bad_spdxid_format.json":      {"http_status": 422, "must_contain": ["SBOM_VAL_E040_SPDXID_MALFORMED"], "must_not_contain": []},
+  "invalid/cyclonedx_dangling_dep_ref.json":  {"http_status": 422, "must_contain": ["SBOM_VAL_E070_DEPENDENCY_REF_DANGLING"], "must_not_contain": []},
+  "invalid/cyclonedx_duplicate_bom_ref.json": {"http_status": 422, "must_contain": ["SBOM_VAL_E051_BOM_REF_DUPLICATE"], "must_not_contain": []},
+  "invalid/cyclonedx_bad_purl.json":          {"http_status": 422, "must_contain": ["SBOM_VAL_E052_PURL_INVALID"], "must_not_contain": []},
+
+  "edge/cyclonedx_with_cycle.json":           {"http_status": 202, "must_contain": ["SBOM_VAL_W074_DEPENDENCY_CYCLE_DETECTED"], "must_not_contain": []},
+  "edge/spdx_with_external_doc_ref.json":     {"http_status": 202, "must_contain": [], "must_not_contain": ["SBOM_VAL_E072_RELATIONSHIP_ELEMENT_DANGLING"]},
+  "edge/utf8_bom_prefix.json":                {"http_status": 202, "must_contain": [], "must_not_contain": ["SBOM_VAL_E004_ENCODING_NOT_UTF8"]}
+}

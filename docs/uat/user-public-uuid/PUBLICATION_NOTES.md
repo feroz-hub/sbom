@@ -1,0 +1,15 @@
+# IAM UUID Git publication scope
+
+This delivery publishes the 73 source files listed in `evidence/implementation-source-sha256.json`, the six implementation reports, and the curated evidence listed in `evidence/published-evidence-sha256.json`. The original patch describes the implementation relative to commit aa264cd3673b074b3f9c15c9cc72a4ed95bdb222.
+
+The recorded test runs preceded Git delivery. Delivery verifies their original bytes and source freeze; it does not describe them as newly executed tests. Seven backend skips, 52 ESLint warnings, four unchanged global-script Ruff findings and live-provider/staging limitations remain explicit in TEST_RESULTS.md. The final source manifest is authoritative; intermediate development counters describe their historical snapshots.
+
+Failed/interrupted-run logs, incident records, credential-rotation/Redis cleanup evidence and older aggregate delivery manifests remain local and are excluded from publication. Historical failures remain described in the reports. Nothing was deleted or rewritten to conceal a failure. References in historical report sections to those local-only artifacts do not imply their publication here. Private originals remain protected outside Git.
+
+The published final passing JUnit and node-result inventory contain a deliberate synthetic `user:pass` HTTP URL in the unsafe-endpoint-rejection test name. It is a negative security fixture, not an application credential. No private key, JWT, authenticated browser trace, cookie, password hash or real credential URL is included.
+
+Gitleaks 8.30.1 scans use built-in rules, no baseline suppression and no allow-comment bypass. Its 170 initial findings were individually verified as source SHA256 values, including comparison to the previous Git commit where appropriate. The exact file/line adjudications are in `evidence/git-delivery-secret-review.json`; no secret-detection rule was disabled. Exact staged-byte scans and their results are recorded separately in the Git delivery report.
+
+Unrelated historical migration experiments, prior UAT screenshots, workspaces, application data, caches, downloaded artifacts, local credentials and environment files are outside this delivery. Database migration 101 remains unapplied to the populated Greenfield database. Matching application services must not be restarted against revision 100. Database cutover, service restart, staging acceptance and deployment require separate authorization.
+
+Git whitespace inspection reports only verbatim terminal-log whitespace in eslint-full.log, frontend-build.log and frontend-full-final.log, plus single-space blank context lines required by the original implementation-source.patch. These four evidence files retain their original execution/patch bytes. All application/test source and human-written delivery documentation pass whitespace checks. The full diagnostic is retained privately; a separate check excludes only those four verbatim artifacts. No source whitespace rule or Git configuration is changed.

@@ -120,6 +120,7 @@ class _FindingKey:
     vuln_id_canonical: str  # uppercase, classified-or-raw
     component_name: str  # lowercase
     component_version: str  # raw; empty string if missing
+    component_identity: str = ""  # VEX adapter: package identity, never CVE alone
 
 
 @dataclass(frozen=True)
@@ -203,6 +204,102 @@ class CompareService:
         self._write_cache(result)
         return result
 
+    def compare_vex_versions(self, tenant_id: int, run_a_id: int, run_b_id: int) -> dict:
+        """Conservative version adapter over Compare v2's existing set diff.
+
+        Uses stored aliases and package identities, without changing legacy
+        Compare v2 responses/cache. Unmapped/ambiguous contexts stay unresolved.
+        A changed component version is new/absent, never inferred persistence.
+        """
+        from collections import Counter, defaultdict
+
+        from ..metrics.vex import version_comparison_evidence, vex_run_source_summary
+        from .vex.identity import canonical_vulnerability, parse_alias_column
+        from .vex.version_evidence import package_identity
+        runs, rows, inventory = version_comparison_evidence(self._db, tenant_id, [run_a_id, run_b_id])
+        by_run = {r.id: r for r in runs}
+        if len(by_run) != 2:
+            raise RunNotFoundError(run_a_id if run_a_id not in by_run else run_b_id)
+        a, b = by_run[run_a_id], by_run[run_b_id]
+        self._guard_status(a)
+        self._guard_status(b)
+        source_a = vex_run_source_summary(self._db, tenant_id=tenant_id, run_id=a.id)
+        source_b = vex_run_source_summary(self._db, tenant_id=tenant_id, run_id=b.id)
+        def coverage(source):
+            return {(r.get('source'), r.get('status')) for r in source}
+        incomplete = a.run_status == 'PARTIAL' or b.run_status == 'PARTIAL' or bool(a.query_error_count or b.query_error_count)
+        incomplete = incomplete or bool(source_a and source_b and coverage(source_a) != coverage(source_b))
+        incomplete = incomplete or any(str(row.get('status', '')).lower() in {'error', 'failed', 'skipped', 'unavailable'}
+                                       for row in [*source_a, *source_b])
+        limitations = []
+        if incomplete:
+            limitations.append('Analysis source coverage differs or is incomplete; absent findings are unresolved, not remediated.')
+        if not source_a or not source_b:
+            limitations.append('Per-source coverage evidence is unavailable for one or both analyses. No remediation assertion is made.')
+        components = {a.id: {}, b.id: {}}
+        for run in runs:
+            components[run.id] = {c.id: c for c in inventory if c.sbom_id == run.sbom_id}
+        counts = {run_id: Counter(package_identity(c) for c in values.values()) for run_id, values in components.items()}
+        current_components_by_identity = defaultdict(list)
+        for component in components[b.id].values():
+            current_components_by_identity[package_identity(component)].append(component)
+        maps, evidence, uncertain = {a.id: {}, b.id: {}}, {}, []
+        seen_uncertain = set()
+        for finding, component in rows:
+            run_id = finding.analysis_run_id
+            identity = package_identity(component) if component else None
+            vuln = canonical_vulnerability(finding.vuln_id, aliases=parse_alias_column(finding.aliases)).canonical_id
+            version = component.version if component else finding.component_version
+            name = component.name if component else finding.component_name
+            info = {'vulnerability_id': vuln, 'component_id': finding.component_id,
+                    'component_name': name, 'component_version': version, 'purl': component.purl if component else None,
+                    'sbom_id': by_run[run_id].sbom_id, 'analysis_run_id': run_id,
+                    'aliases': parse_alias_column(finding.aliases)}
+            if identity is None or counts[run_id][identity] != 1:
+                token = (run_id, vuln, finding.component_id, name, version)
+                if token not in seen_uncertain:
+                    seen_uncertain.add(token)
+                    uncertain.append({'category': 'UNRESOLVED_COMPARISON', 'previous': info if run_id == a.id else None,
+                                      'current': info if run_id == b.id else None, 'reason': 'Component identity is missing or ambiguous.'})
+                continue
+            key = _FindingKey(vuln, (name or '').lower(), version or '', repr(identity))
+            loaded = _LoadedFinding(finding.vuln_id, _severity_from_str(finding.severity), name or '', version or '',
+                                    component.purl, _fix_available(finding.fixed_versions))
+            if key not in maps[run_id] or _severity_ord(loaded.severity) > _severity_ord(maps[run_id][key].severity):
+                maps[run_id][key] = loaded
+                evidence[(run_id, key)] = info
+        # The existing Compare v2 algorithm owns added/resolved/unchanged diffing.
+        items = list(uncertain)
+        # _FindingKey includes package identity, so same-name packages never merge.
+        keys = sorted(set(maps[a.id]) | set(maps[b.id]), key=repr)
+        for key in keys:
+            previous, current = evidence.get((a.id, key)), evidence.get((b.id, key))
+            diff = self._diff_findings({key: maps[a.id][key]} if previous else {}, {key: maps[b.id][key]} if current else {})[0]
+            category = {'added': 'NEW', 'resolved': 'NO_LONGER_OBSERVED', 'unchanged': 'STILL_DETECTED', 'severity_changed': 'STILL_DETECTED'}[diff.change_kind.value.lower()]
+            reason = 'Reason not determined.'
+            current_component = None
+            if category == 'NO_LONGER_OBSERVED':
+                if incomplete:
+                    category, reason = 'UNRESOLVED_COMPARISON', limitations[0]
+                else:
+                    identity = package_identity(components[a.id][previous['component_id']])
+                    candidates = current_components_by_identity.get(identity, [])
+                    if len(candidates) == 1:
+                        c = candidates[0]
+                        current_component = {'id': c.id, 'name': c.name, 'version': c.version, 'purl': c.purl, 'sbom_id': b.sbom_id}
+                    if len(candidates) == 1 and candidates[0].version != previous['component_version']:
+                        reason = 'Vulnerability no longer observed after the component version changed.'
+                    elif not candidates:
+                        reason = 'Component is absent from the current SBOM; vulnerability no longer observed.'
+            items.append({'category': category, 'previous': previous, 'current': current, 'current_component': current_component, 'reason': reason})
+        totals = Counter(item['category'] for item in items)
+        return {'previous_run_id': a.id, 'current_run_id': b.id, 'previous_sbom_id': a.sbom_id,
+                'current_sbom_id': b.sbom_id, 'previous_findings': len(maps[a.id]) + sum(i['previous'] is not None for i in uncertain),
+                'current_findings': len(maps[b.id]) + sum(i['current'] is not None for i in uncertain),
+                'still_detected': totals['STILL_DETECTED'], 'new': totals['NEW'],
+                'no_longer_observed': totals['NO_LONGER_OBSERVED'], 'unresolved_comparison': totals['UNRESOLVED_COMPARISON'],
+                'limitations': limitations, 'items': items}
+
     def invalidate_for_run(self, run_id: int) -> int:
         """Delete every cache row referencing ``run_id``. Returns row count."""
         rows = (
@@ -232,6 +329,10 @@ class CompareService:
         return run
 
     def _guard_status(self, run: AnalysisRun) -> None:
+        from .sbom_lifecycle import require_processing
+        require_processing(self._db.get(SBOMSource, run.sbom_id), operation="Comparison")
+        if not run.is_current:
+            raise RunNotReadyError(run.id, "OBSOLETE")
         status = (run.run_status or "").upper()
         if status not in COMPARABLE_RUN_STATUSES:
             raise RunNotReadyError(run.id, status)
@@ -367,12 +468,27 @@ class CompareService:
         # is set (most rows). Findings without a component_id still produce a
         # row, just with purl=None.
         stmt = (
-            select(AnalysisFinding, SBOMComponent.purl)
+            select(AnalysisFinding, SBOMComponent)
             .where(AnalysisFinding.analysis_run_id == run_id)
             .outerjoin(SBOMComponent, SBOMComponent.id == AnalysisFinding.component_id)
         )
         out: dict[_FindingKey, _LoadedFinding] = {}
-        for finding, purl in self._db.execute(stmt).all():
+        from .finding_metrics import canonicalize_finding_rows
+        loaded_rows = self._db.execute(stmt).all()
+        inventory = {f.component_id: component for f, component in loaded_rows if component}
+        def occurrence_context(component):
+            return (component.purl or "", component.bom_ref or "", component.hashes or "", component.scope or "")
+        context_counts = {}
+        for component in inventory.values():
+            context = occurrence_context(component)
+            context_counts[context] = context_counts.get(context, 0) + 1
+        for finding in canonicalize_finding_rows(f for f, _ in loaded_rows):
+            component = inventory.get(finding.component_id)
+            purl = component.purl if component else None
+            context = occurrence_context(component) if component else ()
+            identity = repr(context) if purl or (component and component.bom_ref) else ""
+            if context_counts.get(context, 0) > 1:
+                identity += f":occurrence:{finding.component_id}"
             vuln_id_raw = (finding.vuln_id or "").strip()
             if not vuln_id_raw:
                 continue
@@ -383,12 +499,10 @@ class CompareService:
                 vuln_id_canonical=canonical,
                 component_name=comp_name.lower(),
                 component_version=comp_ver,
+                component_identity=identity,
             )
-            # Multi-source fan-out can produce multiple rows for the same
-            # finding identity (e.g. NVD + OSV both find CVE-X on pkg@1.2.3).
-            # The schema's uq_analysis_finding_run_vuln_cpe key uses CPE,
-            # which can differ between sources. Collapse on identity here
-            # and prefer the most-severe.
+            # Provider duplicates were reconciled above. Preserve distinct
+            # declared package, artifact, and occurrence contexts in the diff.
             existing = out.get(key)
             sev = _severity_from_str(finding.severity)
             if existing is not None and _severity_ord(existing.severity) >= _severity_ord(sev):
@@ -643,19 +757,19 @@ class CompareService:
 
     def _summarize_run(self, run: AnalysisRun) -> RunSummary:
         sbom_name = run.sbom_name
+        sbom = self._db.get(SBOMSource, run.sbom_id) if run.sbom_id is not None else None
         project_name: str | None = None
         if run.project_id is not None:
             proj = self._db.get(Projects, run.project_id)
             if proj is not None:
                 project_name = proj.project_name
-        if sbom_name is None and run.sbom_id is not None:
-            sbom = self._db.get(SBOMSource, run.sbom_id)
-            if sbom is not None:
-                sbom_name = sbom.sbom_name
+        if sbom_name is None and sbom is not None:
+            sbom_name = sbom.sbom_name
         return RunSummary(
             id=run.id,
             sbom_id=run.sbom_id,
             sbom_name=sbom_name,
+            sbom_version=(sbom.sbom_version or sbom.productver) if sbom else None,
             project_id=run.project_id,
             project_name=project_name,
             run_status=(run.run_status or "").upper(),
@@ -677,7 +791,7 @@ def compute_cache_key(run_a_id: int, run_b_id: int) -> str:
     ``compare(A, B)`` and ``compare(B, A)`` MUST hit the same cache row.
     """
     lo, hi = sorted((int(run_a_id), int(run_b_id)))
-    return hashlib.sha256(f"{lo}:{hi}".encode("ascii")).hexdigest()
+    return hashlib.sha256(f"reconciliation-v1:{lo}:{hi}".encode("ascii")).hexdigest()
 
 
 def _canonicalize_vuln_id(raw: str) -> str:

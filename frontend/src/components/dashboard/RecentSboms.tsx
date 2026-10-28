@@ -1,3 +1,4 @@
+import { PermissionLink } from '@/components/ui/PermissionLink';
 import Link from 'next/link';
 import { FileText, ArrowRight, ListTree } from 'lucide-react';
 import { Card, CardHeader, CardTitle, CardContent } from '@/components/ui/Card';
@@ -30,13 +31,13 @@ export function RecentSboms({ sboms, isLoading }: RecentSbomsProps) {
         ) : !sboms?.length ? (
           <div className="text-center py-10 px-4 space-y-3">
             <p className="text-hcl-muted text-sm">No SBOMs uploaded yet.</p>
-            <Link
+            <PermissionLink permission="sbom:upload"
               href="/sboms"
               className="inline-flex items-center gap-2 rounded-lg bg-primary px-4 py-2 text-sm font-medium text-white shadow-sm hover:bg-hcl-dark focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-hcl-blue/50"
             >
               <FileText className="h-4 w-4" aria-hidden />
               Go to SBOMs to upload
-            </Link>
+            </PermissionLink>
           </div>
         ) : (
           <ul className="divide-y divide-border">

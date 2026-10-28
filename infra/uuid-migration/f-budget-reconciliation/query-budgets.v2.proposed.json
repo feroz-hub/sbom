@@ -1,0 +1,3744 @@
+{
+  "accepted": false,
+  "approvals": {},
+  "observation_plan_canonical_sha256": "1ec37dbcb12550ffcc6406c346cbe7420c89d70a8673b5ff2fed0f4b59b4071f",
+  "rows": {
+    "047_email_verification_tokens": {
+      "actions": {
+        "unit_execute": {
+          "limits": {
+            "attempts": 1,
+            "catalog_queries": 256,
+            "connect_seconds": 5,
+            "cooperative_unit_seconds": 120,
+            "idle_transaction_ms": 30000,
+            "lock_ms": 1000,
+            "marker_statements": 2,
+            "migration_statements": 558,
+            "session_statements": 2,
+            "simultaneous_connections": 1,
+            "statement_ms": 30000,
+            "transaction_controls": 4
+          },
+          "phase_caps": {
+            "body": 0,
+            "coordinator": 2,
+            "initialization": 16,
+            "locked_reinspection": 54,
+            "post_body": 75,
+            "preflight": 54
+          }
+        },
+        "unit_readback": {
+          "limits": {
+            "attempts": 1,
+            "catalog_queries": 96,
+            "connect_seconds": 5,
+            "cooperative_unit_seconds": 120,
+            "idle_transaction_ms": 30000,
+            "lock_ms": 1000,
+            "marker_statements": 2,
+            "migration_statements": 558,
+            "session_statements": 2,
+            "simultaneous_connections": 1,
+            "statement_ms": 30000,
+            "transaction_controls": 4
+          },
+          "phase_caps": {
+            "initialization": 16,
+            "readback": 75
+          }
+        },
+        "unit_validate": {
+          "limits": {
+            "attempts": 1,
+            "catalog_queries": 72,
+            "connect_seconds": 5,
+            "cooperative_unit_seconds": 120,
+            "idle_transaction_ms": 30000,
+            "lock_ms": 1000,
+            "marker_statements": 2,
+            "migration_statements": 558,
+            "session_statements": 2,
+            "simultaneous_connections": 1,
+            "statement_ms": 30000,
+            "transaction_controls": 4
+          },
+          "phase_caps": {
+            "initialization": 16,
+            "preflight": 54
+          }
+        }
+      },
+      "old_limits": {
+        "attempts": 1,
+        "catalog_queries": 256,
+        "connect_seconds": 5,
+        "cooperative_unit_seconds": 120,
+        "idle_transaction_ms": 30000,
+        "lock_ms": 1000,
+        "marker_statements": 2,
+        "migration_statements": 558,
+        "session_statements": 2,
+        "simultaneous_connections": 1,
+        "statement_ms": 30000,
+        "transaction_controls": 4
+      },
+      "previous": null
+    },
+    "048_authorization_catalog": {
+      "actions": {
+        "unit_execute": {
+          "limits": {
+            "attempts": 1,
+            "catalog_queries": 552,
+            "connect_seconds": 5,
+            "cooperative_unit_seconds": 120,
+            "idle_transaction_ms": 30000,
+            "lock_ms": 1000,
+            "marker_statements": 1,
+            "migration_statements": 2048,
+            "session_statements": 2,
+            "simultaneous_connections": 1,
+            "statement_ms": 30000,
+            "transaction_controls": 4
+          },
+          "phase_caps": {
+            "body": 304,
+            "coordinator": 2,
+            "initialization": 16,
+            "locked_reinspection": 75,
+            "post_body": 79,
+            "preflight": 75
+          }
+        },
+        "unit_readback": {
+          "limits": {
+            "attempts": 1,
+            "catalog_queries": 96,
+            "connect_seconds": 5,
+            "cooperative_unit_seconds": 120,
+            "idle_transaction_ms": 30000,
+            "lock_ms": 1000,
+            "marker_statements": 1,
+            "migration_statements": 2048,
+            "session_statements": 2,
+            "simultaneous_connections": 1,
+            "statement_ms": 30000,
+            "transaction_controls": 4
+          },
+          "phase_caps": {
+            "initialization": 16,
+            "readback": 79
+          }
+        },
+        "unit_validate": {
+          "limits": {
+            "attempts": 1,
+            "catalog_queries": 96,
+            "connect_seconds": 5,
+            "cooperative_unit_seconds": 120,
+            "idle_transaction_ms": 30000,
+            "lock_ms": 1000,
+            "marker_statements": 1,
+            "migration_statements": 2048,
+            "session_statements": 2,
+            "simultaneous_connections": 1,
+            "statement_ms": 30000,
+            "transaction_controls": 4
+          },
+          "phase_caps": {
+            "initialization": 16,
+            "preflight": 75
+          }
+        }
+      },
+      "old_limits": {
+        "attempts": 1,
+        "catalog_queries": 256,
+        "connect_seconds": 5,
+        "cooperative_unit_seconds": 120,
+        "idle_transaction_ms": 30000,
+        "lock_ms": 1000,
+        "marker_statements": 1,
+        "migration_statements": 2048,
+        "session_statements": 2,
+        "simultaneous_connections": 1,
+        "statement_ms": 30000,
+        "transaction_controls": 4
+      },
+      "previous": "047_email_verification_tokens"
+    },
+    "049_tenant_multi_role_assignments": {
+      "actions": {
+        "unit_execute": {
+          "limits": {
+            "attempts": 1,
+            "catalog_queries": 440,
+            "connect_seconds": 5,
+            "cooperative_unit_seconds": 120,
+            "idle_transaction_ms": 30000,
+            "lock_ms": 1000,
+            "marker_statements": 1,
+            "migration_statements": 512,
+            "session_statements": 2,
+            "simultaneous_connections": 1,
+            "statement_ms": 30000,
+            "transaction_controls": 4
+          },
+          "phase_caps": {
+            "body": 176,
+            "coordinator": 2,
+            "initialization": 16,
+            "locked_reinspection": 79,
+            "post_body": 81,
+            "preflight": 79
+          }
+        },
+        "unit_readback": {
+          "limits": {
+            "attempts": 1,
+            "catalog_queries": 104,
+            "connect_seconds": 5,
+            "cooperative_unit_seconds": 120,
+            "idle_transaction_ms": 30000,
+            "lock_ms": 1000,
+            "marker_statements": 1,
+            "migration_statements": 512,
+            "session_statements": 2,
+            "simultaneous_connections": 1,
+            "statement_ms": 30000,
+            "transaction_controls": 4
+          },
+          "phase_caps": {
+            "initialization": 16,
+            "readback": 81
+          }
+        },
+        "unit_validate": {
+          "limits": {
+            "attempts": 1,
+            "catalog_queries": 96,
+            "connect_seconds": 5,
+            "cooperative_unit_seconds": 120,
+            "idle_transaction_ms": 30000,
+            "lock_ms": 1000,
+            "marker_statements": 1,
+            "migration_statements": 512,
+            "session_statements": 2,
+            "simultaneous_connections": 1,
+            "statement_ms": 30000,
+            "transaction_controls": 4
+          },
+          "phase_caps": {
+            "initialization": 16,
+            "preflight": 79
+          }
+        }
+      },
+      "old_limits": {
+        "attempts": 1,
+        "catalog_queries": 256,
+        "connect_seconds": 5,
+        "cooperative_unit_seconds": 120,
+        "idle_transaction_ms": 30000,
+        "lock_ms": 1000,
+        "marker_statements": 1,
+        "migration_statements": 512,
+        "session_statements": 2,
+        "simultaneous_connections": 1,
+        "statement_ms": 30000,
+        "transaction_controls": 4
+      },
+      "previous": "048_authorization_catalog"
+    },
+    "050_optional_external_tenant_mapping": {
+      "actions": {
+        "unit_execute": {
+          "limits": {
+            "attempts": 1,
+            "catalog_queries": 272,
+            "connect_seconds": 5,
+            "cooperative_unit_seconds": 120,
+            "idle_transaction_ms": 30000,
+            "lock_ms": 1000,
+            "marker_statements": 1,
+            "migration_statements": 512,
+            "session_statements": 2,
+            "simultaneous_connections": 1,
+            "statement_ms": 30000,
+            "transaction_controls": 4
+          },
+          "phase_caps": {
+            "body": 8,
+            "coordinator": 2,
+            "initialization": 16,
+            "locked_reinspection": 81,
+            "post_body": 81,
+            "preflight": 81
+          }
+        },
+        "unit_readback": {
+          "limits": {
+            "attempts": 1,
+            "catalog_queries": 104,
+            "connect_seconds": 5,
+            "cooperative_unit_seconds": 120,
+            "idle_transaction_ms": 30000,
+            "lock_ms": 1000,
+            "marker_statements": 1,
+            "migration_statements": 512,
+            "session_statements": 2,
+            "simultaneous_connections": 1,
+            "statement_ms": 30000,
+            "transaction_controls": 4
+          },
+          "phase_caps": {
+            "initialization": 16,
+            "readback": 81
+          }
+        },
+        "unit_validate": {
+          "limits": {
+            "attempts": 1,
+            "catalog_queries": 104,
+            "connect_seconds": 5,
+            "cooperative_unit_seconds": 120,
+            "idle_transaction_ms": 30000,
+            "lock_ms": 1000,
+            "marker_statements": 1,
+            "migration_statements": 512,
+            "session_statements": 2,
+            "simultaneous_connections": 1,
+            "statement_ms": 30000,
+            "transaction_controls": 4
+          },
+          "phase_caps": {
+            "initialization": 16,
+            "preflight": 81
+          }
+        }
+      },
+      "old_limits": {
+        "attempts": 1,
+        "catalog_queries": 256,
+        "connect_seconds": 5,
+        "cooperative_unit_seconds": 120,
+        "idle_transaction_ms": 30000,
+        "lock_ms": 1000,
+        "marker_statements": 1,
+        "migration_statements": 512,
+        "session_statements": 2,
+        "simultaneous_connections": 1,
+        "statement_ms": 30000,
+        "transaction_controls": 4
+      },
+      "previous": "049_tenant_multi_role_assignments"
+    },
+    "051_report_subscription": {
+      "actions": {
+        "unit_execute": {
+          "limits": {
+            "attempts": 1,
+            "catalog_queries": 280,
+            "connect_seconds": 5,
+            "cooperative_unit_seconds": 120,
+            "idle_transaction_ms": 30000,
+            "lock_ms": 1000,
+            "marker_statements": 1,
+            "migration_statements": 512,
+            "session_statements": 2,
+            "simultaneous_connections": 1,
+            "statement_ms": 30000,
+            "transaction_controls": 4
+          },
+          "phase_caps": {
+            "body": 16,
+            "coordinator": 2,
+            "initialization": 16,
+            "locked_reinspection": 81,
+            "post_body": 82,
+            "preflight": 81
+          }
+        },
+        "unit_readback": {
+          "limits": {
+            "attempts": 1,
+            "catalog_queries": 104,
+            "connect_seconds": 5,
+            "cooperative_unit_seconds": 120,
+            "idle_transaction_ms": 30000,
+            "lock_ms": 1000,
+            "marker_statements": 1,
+            "migration_statements": 512,
+            "session_statements": 2,
+            "simultaneous_connections": 1,
+            "statement_ms": 30000,
+            "transaction_controls": 4
+          },
+          "phase_caps": {
+            "initialization": 16,
+            "readback": 82
+          }
+        },
+        "unit_validate": {
+          "limits": {
+            "attempts": 1,
+            "catalog_queries": 104,
+            "connect_seconds": 5,
+            "cooperative_unit_seconds": 120,
+            "idle_transaction_ms": 30000,
+            "lock_ms": 1000,
+            "marker_statements": 1,
+            "migration_statements": 512,
+            "session_statements": 2,
+            "simultaneous_connections": 1,
+            "statement_ms": 30000,
+            "transaction_controls": 4
+          },
+          "phase_caps": {
+            "initialization": 16,
+            "preflight": 81
+          }
+        }
+      },
+      "old_limits": {
+        "attempts": 1,
+        "catalog_queries": 256,
+        "connect_seconds": 5,
+        "cooperative_unit_seconds": 120,
+        "idle_transaction_ms": 30000,
+        "lock_ms": 1000,
+        "marker_statements": 1,
+        "migration_statements": 512,
+        "session_statements": 2,
+        "simultaneous_connections": 1,
+        "statement_ms": 30000,
+        "transaction_controls": 4
+      },
+      "previous": "050_optional_external_tenant_mapping"
+    },
+    "052_report_delivery_artifact": {
+      "actions": {
+        "unit_execute": {
+          "limits": {
+            "attempts": 1,
+            "catalog_queries": 288,
+            "connect_seconds": 5,
+            "cooperative_unit_seconds": 120,
+            "idle_transaction_ms": 30000,
+            "lock_ms": 1000,
+            "marker_statements": 1,
+            "migration_statements": 512,
+            "session_statements": 2,
+            "simultaneous_connections": 1,
+            "statement_ms": 30000,
+            "transaction_controls": 4
+          },
+          "phase_caps": {
+            "body": 16,
+            "coordinator": 2,
+            "initialization": 16,
+            "locked_reinspection": 82,
+            "post_body": 84,
+            "preflight": 82
+          }
+        },
+        "unit_readback": {
+          "limits": {
+            "attempts": 1,
+            "catalog_queries": 104,
+            "connect_seconds": 5,
+            "cooperative_unit_seconds": 120,
+            "idle_transaction_ms": 30000,
+            "lock_ms": 1000,
+            "marker_statements": 1,
+            "migration_statements": 512,
+            "session_statements": 2,
+            "simultaneous_connections": 1,
+            "statement_ms": 30000,
+            "transaction_controls": 4
+          },
+          "phase_caps": {
+            "initialization": 16,
+            "readback": 84
+          }
+        },
+        "unit_validate": {
+          "limits": {
+            "attempts": 1,
+            "catalog_queries": 104,
+            "connect_seconds": 5,
+            "cooperative_unit_seconds": 120,
+            "idle_transaction_ms": 30000,
+            "lock_ms": 1000,
+            "marker_statements": 1,
+            "migration_statements": 512,
+            "session_statements": 2,
+            "simultaneous_connections": 1,
+            "statement_ms": 30000,
+            "transaction_controls": 4
+          },
+          "phase_caps": {
+            "initialization": 16,
+            "preflight": 82
+          }
+        }
+      },
+      "old_limits": {
+        "attempts": 1,
+        "catalog_queries": 256,
+        "connect_seconds": 5,
+        "cooperative_unit_seconds": 120,
+        "idle_transaction_ms": 30000,
+        "lock_ms": 1000,
+        "marker_statements": 1,
+        "migration_statements": 512,
+        "session_statements": 2,
+        "simultaneous_connections": 1,
+        "statement_ms": 30000,
+        "transaction_controls": 4
+      },
+      "previous": "051_report_subscription"
+    },
+    "053_tenant_analysis_schedule": {
+      "actions": {
+        "unit_execute": {
+          "limits": {
+            "attempts": 1,
+            "catalog_queries": 336,
+            "connect_seconds": 5,
+            "cooperative_unit_seconds": 120,
+            "idle_transaction_ms": 30000,
+            "lock_ms": 1000,
+            "marker_statements": 1,
+            "migration_statements": 512,
+            "session_statements": 2,
+            "simultaneous_connections": 1,
+            "statement_ms": 30000,
+            "transaction_controls": 4
+          },
+          "phase_caps": {
+            "body": 64,
+            "coordinator": 2,
+            "initialization": 16,
+            "locked_reinspection": 84,
+            "post_body": 84,
+            "preflight": 84
+          }
+        },
+        "unit_readback": {
+          "limits": {
+            "attempts": 1,
+            "catalog_queries": 104,
+            "connect_seconds": 5,
+            "cooperative_unit_seconds": 120,
+            "idle_transaction_ms": 30000,
+            "lock_ms": 1000,
+            "marker_statements": 1,
+            "migration_statements": 512,
+            "session_statements": 2,
+            "simultaneous_connections": 1,
+            "statement_ms": 30000,
+            "transaction_controls": 4
+          },
+          "phase_caps": {
+            "initialization": 16,
+            "readback": 84
+          }
+        },
+        "unit_validate": {
+          "limits": {
+            "attempts": 1,
+            "catalog_queries": 104,
+            "connect_seconds": 5,
+            "cooperative_unit_seconds": 120,
+            "idle_transaction_ms": 30000,
+            "lock_ms": 1000,
+            "marker_statements": 1,
+            "migration_statements": 512,
+            "session_statements": 2,
+            "simultaneous_connections": 1,
+            "statement_ms": 30000,
+            "transaction_controls": 4
+          },
+          "phase_caps": {
+            "initialization": 16,
+            "preflight": 84
+          }
+        }
+      },
+      "old_limits": {
+        "attempts": 1,
+        "catalog_queries": 256,
+        "connect_seconds": 5,
+        "cooperative_unit_seconds": 120,
+        "idle_transaction_ms": 30000,
+        "lock_ms": 1000,
+        "marker_statements": 1,
+        "migration_statements": 512,
+        "session_statements": 2,
+        "simultaneous_connections": 1,
+        "statement_ms": 30000,
+        "transaction_controls": 4
+      },
+      "previous": "052_report_delivery_artifact"
+    },
+    "054_hierarchical_scheduler": {
+      "actions": {
+        "unit_execute": {
+          "limits": {
+            "attempts": 1,
+            "catalog_queries": 488,
+            "connect_seconds": 5,
+            "cooperative_unit_seconds": 120,
+            "idle_transaction_ms": 30000,
+            "lock_ms": 1000,
+            "marker_statements": 1,
+            "migration_statements": 512,
+            "session_statements": 2,
+            "simultaneous_connections": 1,
+            "statement_ms": 30000,
+            "transaction_controls": 4
+          },
+          "phase_caps": {
+            "body": 216,
+            "coordinator": 2,
+            "initialization": 16,
+            "locked_reinspection": 84,
+            "post_body": 84,
+            "preflight": 84
+          }
+        },
+        "unit_readback": {
+          "limits": {
+            "attempts": 1,
+            "catalog_queries": 104,
+            "connect_seconds": 5,
+            "cooperative_unit_seconds": 120,
+            "idle_transaction_ms": 30000,
+            "lock_ms": 1000,
+            "marker_statements": 1,
+            "migration_statements": 512,
+            "session_statements": 2,
+            "simultaneous_connections": 1,
+            "statement_ms": 30000,
+            "transaction_controls": 4
+          },
+          "phase_caps": {
+            "initialization": 16,
+            "readback": 84
+          }
+        },
+        "unit_validate": {
+          "limits": {
+            "attempts": 1,
+            "catalog_queries": 104,
+            "connect_seconds": 5,
+            "cooperative_unit_seconds": 120,
+            "idle_transaction_ms": 30000,
+            "lock_ms": 1000,
+            "marker_statements": 1,
+            "migration_statements": 512,
+            "session_statements": 2,
+            "simultaneous_connections": 1,
+            "statement_ms": 30000,
+            "transaction_controls": 4
+          },
+          "phase_caps": {
+            "initialization": 16,
+            "preflight": 84
+          }
+        }
+      },
+      "old_limits": {
+        "attempts": 1,
+        "catalog_queries": 256,
+        "connect_seconds": 5,
+        "cooperative_unit_seconds": 120,
+        "idle_transaction_ms": 30000,
+        "lock_ms": 1000,
+        "marker_statements": 1,
+        "migration_statements": 512,
+        "session_statements": 2,
+        "simultaneous_connections": 1,
+        "statement_ms": 30000,
+        "transaction_controls": 4
+      },
+      "previous": "053_tenant_analysis_schedule"
+    },
+    "055_ai_model_registry": {
+      "actions": {
+        "unit_execute": {
+          "limits": {
+            "attempts": 1,
+            "catalog_queries": 392,
+            "connect_seconds": 5,
+            "cooperative_unit_seconds": 120,
+            "idle_transaction_ms": 30000,
+            "lock_ms": 1000,
+            "marker_statements": 1,
+            "migration_statements": 512,
+            "session_statements": 2,
+            "simultaneous_connections": 1,
+            "statement_ms": 30000,
+            "transaction_controls": 4
+          },
+          "phase_caps": {
+            "body": 120,
+            "coordinator": 2,
+            "initialization": 16,
+            "locked_reinspection": 84,
+            "post_body": 85,
+            "preflight": 84
+          }
+        },
+        "unit_readback": {
+          "limits": {
+            "attempts": 1,
+            "catalog_queries": 104,
+            "connect_seconds": 5,
+            "cooperative_unit_seconds": 120,
+            "idle_transaction_ms": 30000,
+            "lock_ms": 1000,
+            "marker_statements": 1,
+            "migration_statements": 512,
+            "session_statements": 2,
+            "simultaneous_connections": 1,
+            "statement_ms": 30000,
+            "transaction_controls": 4
+          },
+          "phase_caps": {
+            "initialization": 16,
+            "readback": 85
+          }
+        },
+        "unit_validate": {
+          "limits": {
+            "attempts": 1,
+            "catalog_queries": 104,
+            "connect_seconds": 5,
+            "cooperative_unit_seconds": 120,
+            "idle_transaction_ms": 30000,
+            "lock_ms": 1000,
+            "marker_statements": 1,
+            "migration_statements": 512,
+            "session_statements": 2,
+            "simultaneous_connections": 1,
+            "statement_ms": 30000,
+            "transaction_controls": 4
+          },
+          "phase_caps": {
+            "initialization": 16,
+            "preflight": 84
+          }
+        }
+      },
+      "old_limits": {
+        "attempts": 1,
+        "catalog_queries": 256,
+        "connect_seconds": 5,
+        "cooperative_unit_seconds": 120,
+        "idle_transaction_ms": 30000,
+        "lock_ms": 1000,
+        "marker_statements": 1,
+        "migration_statements": 512,
+        "session_statements": 2,
+        "simultaneous_connections": 1,
+        "statement_ms": 30000,
+        "transaction_controls": 4
+      },
+      "previous": "054_hierarchical_scheduler"
+    },
+    "056_vex_investigation": {
+      "actions": {
+        "unit_execute": {
+          "limits": {
+            "attempts": 1,
+            "catalog_queries": 568,
+            "connect_seconds": 5,
+            "cooperative_unit_seconds": 120,
+            "idle_transaction_ms": 30000,
+            "lock_ms": 1000,
+            "marker_statements": 1,
+            "migration_statements": 512,
+            "session_statements": 2,
+            "simultaneous_connections": 1,
+            "statement_ms": 30000,
+            "transaction_controls": 4
+          },
+          "phase_caps": {
+            "body": 288,
+            "coordinator": 2,
+            "initialization": 16,
+            "locked_reinspection": 85,
+            "post_body": 86,
+            "preflight": 85
+          }
+        },
+        "unit_readback": {
+          "limits": {
+            "attempts": 1,
+            "catalog_queries": 104,
+            "connect_seconds": 5,
+            "cooperative_unit_seconds": 120,
+            "idle_transaction_ms": 30000,
+            "lock_ms": 1000,
+            "marker_statements": 1,
+            "migration_statements": 512,
+            "session_statements": 2,
+            "simultaneous_connections": 1,
+            "statement_ms": 30000,
+            "transaction_controls": 4
+          },
+          "phase_caps": {
+            "initialization": 16,
+            "readback": 86
+          }
+        },
+        "unit_validate": {
+          "limits": {
+            "attempts": 1,
+            "catalog_queries": 104,
+            "connect_seconds": 5,
+            "cooperative_unit_seconds": 120,
+            "idle_transaction_ms": 30000,
+            "lock_ms": 1000,
+            "marker_statements": 1,
+            "migration_statements": 512,
+            "session_statements": 2,
+            "simultaneous_connections": 1,
+            "statement_ms": 30000,
+            "transaction_controls": 4
+          },
+          "phase_caps": {
+            "initialization": 16,
+            "preflight": 85
+          }
+        }
+      },
+      "old_limits": {
+        "attempts": 1,
+        "catalog_queries": 256,
+        "connect_seconds": 5,
+        "cooperative_unit_seconds": 120,
+        "idle_transaction_ms": 30000,
+        "lock_ms": 1000,
+        "marker_statements": 1,
+        "migration_statements": 512,
+        "session_statements": 2,
+        "simultaneous_connections": 1,
+        "statement_ms": 30000,
+        "transaction_controls": 4
+      },
+      "previous": "055_ai_model_registry"
+    },
+    "057_vex_audit_hardening": {
+      "actions": {
+        "unit_execute": {
+          "limits": {
+            "attempts": 1,
+            "catalog_queries": 528,
+            "connect_seconds": 5,
+            "cooperative_unit_seconds": 120,
+            "idle_transaction_ms": 30000,
+            "lock_ms": 1000,
+            "marker_statements": 1,
+            "migration_statements": 512,
+            "session_statements": 2,
+            "simultaneous_connections": 1,
+            "statement_ms": 30000,
+            "transaction_controls": 4
+          },
+          "phase_caps": {
+            "body": 248,
+            "coordinator": 2,
+            "initialization": 16,
+            "locked_reinspection": 86,
+            "post_body": 86,
+            "preflight": 86
+          }
+        },
+        "unit_readback": {
+          "limits": {
+            "attempts": 1,
+            "catalog_queries": 104,
+            "connect_seconds": 5,
+            "cooperative_unit_seconds": 120,
+            "idle_transaction_ms": 30000,
+            "lock_ms": 1000,
+            "marker_statements": 1,
+            "migration_statements": 512,
+            "session_statements": 2,
+            "simultaneous_connections": 1,
+            "statement_ms": 30000,
+            "transaction_controls": 4
+          },
+          "phase_caps": {
+            "initialization": 16,
+            "readback": 86
+          }
+        },
+        "unit_validate": {
+          "limits": {
+            "attempts": 1,
+            "catalog_queries": 104,
+            "connect_seconds": 5,
+            "cooperative_unit_seconds": 120,
+            "idle_transaction_ms": 30000,
+            "lock_ms": 1000,
+            "marker_statements": 1,
+            "migration_statements": 512,
+            "session_statements": 2,
+            "simultaneous_connections": 1,
+            "statement_ms": 30000,
+            "transaction_controls": 4
+          },
+          "phase_caps": {
+            "initialization": 16,
+            "preflight": 86
+          }
+        }
+      },
+      "old_limits": {
+        "attempts": 1,
+        "catalog_queries": 256,
+        "connect_seconds": 5,
+        "cooperative_unit_seconds": 120,
+        "idle_transaction_ms": 30000,
+        "lock_ms": 1000,
+        "marker_statements": 1,
+        "migration_statements": 512,
+        "session_statements": 2,
+        "simultaneous_connections": 1,
+        "statement_ms": 30000,
+        "transaction_controls": 4
+      },
+      "previous": "056_vex_investigation"
+    },
+    "058_vex_source_format": {
+      "actions": {
+        "unit_execute": {
+          "limits": {
+            "attempts": 1,
+            "catalog_queries": 400,
+            "connect_seconds": 5,
+            "cooperative_unit_seconds": 120,
+            "idle_transaction_ms": 30000,
+            "lock_ms": 1000,
+            "marker_statements": 1,
+            "migration_statements": 512,
+            "session_statements": 2,
+            "simultaneous_connections": 1,
+            "statement_ms": 30000,
+            "transaction_controls": 4
+          },
+          "phase_caps": {
+            "body": 120,
+            "coordinator": 2,
+            "initialization": 16,
+            "locked_reinspection": 86,
+            "post_body": 86,
+            "preflight": 86
+          }
+        },
+        "unit_readback": {
+          "limits": {
+            "attempts": 1,
+            "catalog_queries": 104,
+            "connect_seconds": 5,
+            "cooperative_unit_seconds": 120,
+            "idle_transaction_ms": 30000,
+            "lock_ms": 1000,
+            "marker_statements": 1,
+            "migration_statements": 512,
+            "session_statements": 2,
+            "simultaneous_connections": 1,
+            "statement_ms": 30000,
+            "transaction_controls": 4
+          },
+          "phase_caps": {
+            "initialization": 16,
+            "readback": 86
+          }
+        },
+        "unit_validate": {
+          "limits": {
+            "attempts": 1,
+            "catalog_queries": 104,
+            "connect_seconds": 5,
+            "cooperative_unit_seconds": 120,
+            "idle_transaction_ms": 30000,
+            "lock_ms": 1000,
+            "marker_statements": 1,
+            "migration_statements": 512,
+            "session_statements": 2,
+            "simultaneous_connections": 1,
+            "statement_ms": 30000,
+            "transaction_controls": 4
+          },
+          "phase_caps": {
+            "initialization": 16,
+            "preflight": 86
+          }
+        }
+      },
+      "old_limits": {
+        "attempts": 1,
+        "catalog_queries": 256,
+        "connect_seconds": 5,
+        "cooperative_unit_seconds": 120,
+        "idle_transaction_ms": 30000,
+        "lock_ms": 1000,
+        "marker_statements": 1,
+        "migration_statements": 512,
+        "session_statements": 2,
+        "simultaneous_connections": 1,
+        "statement_ms": 30000,
+        "transaction_controls": 4
+      },
+      "previous": "057_vex_audit_hardening"
+    },
+    "059_vex_analyzer_sources": {
+      "actions": {
+        "unit_execute": {
+          "limits": {
+            "attempts": 1,
+            "catalog_queries": 376,
+            "connect_seconds": 5,
+            "cooperative_unit_seconds": 120,
+            "idle_transaction_ms": 30000,
+            "lock_ms": 1000,
+            "marker_statements": 1,
+            "migration_statements": 512,
+            "session_statements": 2,
+            "simultaneous_connections": 1,
+            "statement_ms": 30000,
+            "transaction_controls": 4
+          },
+          "phase_caps": {
+            "body": 96,
+            "coordinator": 2,
+            "initialization": 16,
+            "locked_reinspection": 86,
+            "post_body": 86,
+            "preflight": 86
+          }
+        },
+        "unit_readback": {
+          "limits": {
+            "attempts": 1,
+            "catalog_queries": 104,
+            "connect_seconds": 5,
+            "cooperative_unit_seconds": 120,
+            "idle_transaction_ms": 30000,
+            "lock_ms": 1000,
+            "marker_statements": 1,
+            "migration_statements": 512,
+            "session_statements": 2,
+            "simultaneous_connections": 1,
+            "statement_ms": 30000,
+            "transaction_controls": 4
+          },
+          "phase_caps": {
+            "initialization": 16,
+            "readback": 86
+          }
+        },
+        "unit_validate": {
+          "limits": {
+            "attempts": 1,
+            "catalog_queries": 104,
+            "connect_seconds": 5,
+            "cooperative_unit_seconds": 120,
+            "idle_transaction_ms": 30000,
+            "lock_ms": 1000,
+            "marker_statements": 1,
+            "migration_statements": 512,
+            "session_statements": 2,
+            "simultaneous_connections": 1,
+            "statement_ms": 30000,
+            "transaction_controls": 4
+          },
+          "phase_caps": {
+            "initialization": 16,
+            "preflight": 86
+          }
+        }
+      },
+      "old_limits": {
+        "attempts": 1,
+        "catalog_queries": 256,
+        "connect_seconds": 5,
+        "cooperative_unit_seconds": 120,
+        "idle_transaction_ms": 30000,
+        "lock_ms": 1000,
+        "marker_statements": 1,
+        "migration_statements": 512,
+        "session_statements": 2,
+        "simultaneous_connections": 1,
+        "statement_ms": 30000,
+        "transaction_controls": 4
+      },
+      "previous": "058_vex_source_format"
+    },
+    "060_native_identity_foundation": {
+      "actions": {
+        "unit_execute": {
+          "limits": {
+            "attempts": 1,
+            "catalog_queries": 360,
+            "connect_seconds": 5,
+            "cooperative_unit_seconds": 120,
+            "idle_transaction_ms": 30000,
+            "lock_ms": 1000,
+            "marker_statements": 1,
+            "migration_statements": 512,
+            "session_statements": 2,
+            "simultaneous_connections": 1,
+            "statement_ms": 30000,
+            "transaction_controls": 4
+          },
+          "phase_caps": {
+            "body": 80,
+            "coordinator": 2,
+            "initialization": 16,
+            "locked_reinspection": 86,
+            "post_body": 89,
+            "preflight": 86
+          }
+        },
+        "unit_readback": {
+          "limits": {
+            "attempts": 1,
+            "catalog_queries": 112,
+            "connect_seconds": 5,
+            "cooperative_unit_seconds": 120,
+            "idle_transaction_ms": 30000,
+            "lock_ms": 1000,
+            "marker_statements": 1,
+            "migration_statements": 512,
+            "session_statements": 2,
+            "simultaneous_connections": 1,
+            "statement_ms": 30000,
+            "transaction_controls": 4
+          },
+          "phase_caps": {
+            "initialization": 16,
+            "readback": 89
+          }
+        },
+        "unit_validate": {
+          "limits": {
+            "attempts": 1,
+            "catalog_queries": 104,
+            "connect_seconds": 5,
+            "cooperative_unit_seconds": 120,
+            "idle_transaction_ms": 30000,
+            "lock_ms": 1000,
+            "marker_statements": 1,
+            "migration_statements": 512,
+            "session_statements": 2,
+            "simultaneous_connections": 1,
+            "statement_ms": 30000,
+            "transaction_controls": 4
+          },
+          "phase_caps": {
+            "initialization": 16,
+            "preflight": 86
+          }
+        }
+      },
+      "old_limits": {
+        "attempts": 1,
+        "catalog_queries": 256,
+        "connect_seconds": 5,
+        "cooperative_unit_seconds": 120,
+        "idle_transaction_ms": 30000,
+        "lock_ms": 1000,
+        "marker_statements": 1,
+        "migration_statements": 512,
+        "session_statements": 2,
+        "simultaneous_connections": 1,
+        "statement_ms": 30000,
+        "transaction_controls": 4
+      },
+      "previous": "059_vex_analyzer_sources"
+    },
+    "061_security_mail_outbox": {
+      "actions": {
+        "unit_execute": {
+          "limits": {
+            "attempts": 1,
+            "catalog_queries": 296,
+            "connect_seconds": 5,
+            "cooperative_unit_seconds": 120,
+            "idle_transaction_ms": 30000,
+            "lock_ms": 1000,
+            "marker_statements": 1,
+            "migration_statements": 512,
+            "session_statements": 2,
+            "simultaneous_connections": 1,
+            "statement_ms": 30000,
+            "transaction_controls": 4
+          },
+          "phase_caps": {
+            "body": 8,
+            "coordinator": 2,
+            "initialization": 16,
+            "locked_reinspection": 89,
+            "post_body": 90,
+            "preflight": 89
+          }
+        },
+        "unit_readback": {
+          "limits": {
+            "attempts": 1,
+            "catalog_queries": 112,
+            "connect_seconds": 5,
+            "cooperative_unit_seconds": 120,
+            "idle_transaction_ms": 30000,
+            "lock_ms": 1000,
+            "marker_statements": 1,
+            "migration_statements": 512,
+            "session_statements": 2,
+            "simultaneous_connections": 1,
+            "statement_ms": 30000,
+            "transaction_controls": 4
+          },
+          "phase_caps": {
+            "initialization": 16,
+            "readback": 90
+          }
+        },
+        "unit_validate": {
+          "limits": {
+            "attempts": 1,
+            "catalog_queries": 112,
+            "connect_seconds": 5,
+            "cooperative_unit_seconds": 120,
+            "idle_transaction_ms": 30000,
+            "lock_ms": 1000,
+            "marker_statements": 1,
+            "migration_statements": 512,
+            "session_statements": 2,
+            "simultaneous_connections": 1,
+            "statement_ms": 30000,
+            "transaction_controls": 4
+          },
+          "phase_caps": {
+            "initialization": 16,
+            "preflight": 89
+          }
+        }
+      },
+      "old_limits": {
+        "attempts": 1,
+        "catalog_queries": 256,
+        "connect_seconds": 5,
+        "cooperative_unit_seconds": 120,
+        "idle_transaction_ms": 30000,
+        "lock_ms": 1000,
+        "marker_statements": 1,
+        "migration_statements": 512,
+        "session_statements": 2,
+        "simultaneous_connections": 1,
+        "statement_ms": 30000,
+        "transaction_controls": 4
+      },
+      "previous": "060_native_identity_foundation"
+    },
+    "062_native_platform_bootstrap": {
+      "actions": {
+        "unit_execute": {
+          "limits": {
+            "attempts": 1,
+            "catalog_queries": 304,
+            "connect_seconds": 5,
+            "cooperative_unit_seconds": 120,
+            "idle_transaction_ms": 30000,
+            "lock_ms": 1000,
+            "marker_statements": 1,
+            "migration_statements": 512,
+            "session_statements": 2,
+            "simultaneous_connections": 1,
+            "statement_ms": 30000,
+            "transaction_controls": 4
+          },
+          "phase_caps": {
+            "body": 8,
+            "coordinator": 2,
+            "initialization": 16,
+            "locked_reinspection": 90,
+            "post_body": 91,
+            "preflight": 90
+          }
+        },
+        "unit_readback": {
+          "limits": {
+            "attempts": 1,
+            "catalog_queries": 112,
+            "connect_seconds": 5,
+            "cooperative_unit_seconds": 120,
+            "idle_transaction_ms": 30000,
+            "lock_ms": 1000,
+            "marker_statements": 1,
+            "migration_statements": 512,
+            "session_statements": 2,
+            "simultaneous_connections": 1,
+            "statement_ms": 30000,
+            "transaction_controls": 4
+          },
+          "phase_caps": {
+            "initialization": 16,
+            "readback": 91
+          }
+        },
+        "unit_validate": {
+          "limits": {
+            "attempts": 1,
+            "catalog_queries": 112,
+            "connect_seconds": 5,
+            "cooperative_unit_seconds": 120,
+            "idle_transaction_ms": 30000,
+            "lock_ms": 1000,
+            "marker_statements": 1,
+            "migration_statements": 512,
+            "session_statements": 2,
+            "simultaneous_connections": 1,
+            "statement_ms": 30000,
+            "transaction_controls": 4
+          },
+          "phase_caps": {
+            "initialization": 16,
+            "preflight": 90
+          }
+        }
+      },
+      "old_limits": {
+        "attempts": 1,
+        "catalog_queries": 256,
+        "connect_seconds": 5,
+        "cooperative_unit_seconds": 120,
+        "idle_transaction_ms": 30000,
+        "lock_ms": 1000,
+        "marker_statements": 1,
+        "migration_statements": 512,
+        "session_statements": 2,
+        "simultaneous_connections": 1,
+        "statement_ms": 30000,
+        "transaction_controls": 4
+      },
+      "previous": "061_security_mail_outbox"
+    },
+    "063_microsoft_entra_identity": {
+      "actions": {
+        "unit_execute": {
+          "limits": {
+            "attempts": 1,
+            "catalog_queries": 304,
+            "connect_seconds": 5,
+            "cooperative_unit_seconds": 120,
+            "idle_transaction_ms": 30000,
+            "lock_ms": 1000,
+            "marker_statements": 1,
+            "migration_statements": 512,
+            "session_statements": 2,
+            "simultaneous_connections": 1,
+            "statement_ms": 30000,
+            "transaction_controls": 4
+          },
+          "phase_caps": {
+            "body": 8,
+            "coordinator": 2,
+            "initialization": 16,
+            "locked_reinspection": 91,
+            "post_body": 91,
+            "preflight": 91
+          }
+        },
+        "unit_readback": {
+          "limits": {
+            "attempts": 1,
+            "catalog_queries": 112,
+            "connect_seconds": 5,
+            "cooperative_unit_seconds": 120,
+            "idle_transaction_ms": 30000,
+            "lock_ms": 1000,
+            "marker_statements": 1,
+            "migration_statements": 512,
+            "session_statements": 2,
+            "simultaneous_connections": 1,
+            "statement_ms": 30000,
+            "transaction_controls": 4
+          },
+          "phase_caps": {
+            "initialization": 16,
+            "readback": 91
+          }
+        },
+        "unit_validate": {
+          "limits": {
+            "attempts": 1,
+            "catalog_queries": 112,
+            "connect_seconds": 5,
+            "cooperative_unit_seconds": 120,
+            "idle_transaction_ms": 30000,
+            "lock_ms": 1000,
+            "marker_statements": 1,
+            "migration_statements": 512,
+            "session_statements": 2,
+            "simultaneous_connections": 1,
+            "statement_ms": 30000,
+            "transaction_controls": 4
+          },
+          "phase_caps": {
+            "initialization": 16,
+            "preflight": 91
+          }
+        }
+      },
+      "old_limits": {
+        "attempts": 1,
+        "catalog_queries": 256,
+        "connect_seconds": 5,
+        "cooperative_unit_seconds": 120,
+        "idle_transaction_ms": 30000,
+        "lock_ms": 1000,
+        "marker_statements": 1,
+        "migration_statements": 512,
+        "session_statements": 2,
+        "simultaneous_connections": 1,
+        "statement_ms": 30000,
+        "transaction_controls": 4
+      },
+      "previous": "062_native_platform_bootstrap"
+    },
+    "064_platform_tenant_v2": {
+      "actions": {
+        "unit_execute": {
+          "limits": {
+            "attempts": 1,
+            "catalog_queries": 528,
+            "connect_seconds": 5,
+            "cooperative_unit_seconds": 120,
+            "idle_transaction_ms": 30000,
+            "lock_ms": 1000,
+            "marker_statements": 1,
+            "migration_statements": 2048,
+            "session_statements": 2,
+            "simultaneous_connections": 1,
+            "statement_ms": 30000,
+            "transaction_controls": 4
+          },
+          "phase_caps": {
+            "body": 232,
+            "coordinator": 2,
+            "initialization": 16,
+            "locked_reinspection": 91,
+            "post_body": 91,
+            "preflight": 91
+          }
+        },
+        "unit_readback": {
+          "limits": {
+            "attempts": 1,
+            "catalog_queries": 112,
+            "connect_seconds": 5,
+            "cooperative_unit_seconds": 120,
+            "idle_transaction_ms": 30000,
+            "lock_ms": 1000,
+            "marker_statements": 1,
+            "migration_statements": 2048,
+            "session_statements": 2,
+            "simultaneous_connections": 1,
+            "statement_ms": 30000,
+            "transaction_controls": 4
+          },
+          "phase_caps": {
+            "initialization": 16,
+            "readback": 91
+          }
+        },
+        "unit_validate": {
+          "limits": {
+            "attempts": 1,
+            "catalog_queries": 112,
+            "connect_seconds": 5,
+            "cooperative_unit_seconds": 120,
+            "idle_transaction_ms": 30000,
+            "lock_ms": 1000,
+            "marker_statements": 1,
+            "migration_statements": 2048,
+            "session_statements": 2,
+            "simultaneous_connections": 1,
+            "statement_ms": 30000,
+            "transaction_controls": 4
+          },
+          "phase_caps": {
+            "initialization": 16,
+            "preflight": 91
+          }
+        }
+      },
+      "old_limits": {
+        "attempts": 1,
+        "catalog_queries": 256,
+        "connect_seconds": 5,
+        "cooperative_unit_seconds": 120,
+        "idle_transaction_ms": 30000,
+        "lock_ms": 1000,
+        "marker_statements": 1,
+        "migration_statements": 2048,
+        "session_statements": 2,
+        "simultaneous_connections": 1,
+        "statement_ms": 30000,
+        "transaction_controls": 4
+      },
+      "previous": "063_microsoft_entra_identity"
+    },
+    "065_scoped_configuration": {
+      "actions": {
+        "unit_execute": {
+          "limits": {
+            "attempts": 1,
+            "catalog_queries": 656,
+            "connect_seconds": 5,
+            "cooperative_unit_seconds": 120,
+            "idle_transaction_ms": 30000,
+            "lock_ms": 1000,
+            "marker_statements": 1,
+            "migration_statements": 512,
+            "session_statements": 2,
+            "simultaneous_connections": 1,
+            "statement_ms": 30000,
+            "transaction_controls": 4
+          },
+          "phase_caps": {
+            "body": 360,
+            "coordinator": 2,
+            "initialization": 16,
+            "locked_reinspection": 91,
+            "post_body": 91,
+            "preflight": 91
+          }
+        },
+        "unit_readback": {
+          "limits": {
+            "attempts": 1,
+            "catalog_queries": 112,
+            "connect_seconds": 5,
+            "cooperative_unit_seconds": 120,
+            "idle_transaction_ms": 30000,
+            "lock_ms": 1000,
+            "marker_statements": 1,
+            "migration_statements": 512,
+            "session_statements": 2,
+            "simultaneous_connections": 1,
+            "statement_ms": 30000,
+            "transaction_controls": 4
+          },
+          "phase_caps": {
+            "initialization": 16,
+            "readback": 91
+          }
+        },
+        "unit_validate": {
+          "limits": {
+            "attempts": 1,
+            "catalog_queries": 112,
+            "connect_seconds": 5,
+            "cooperative_unit_seconds": 120,
+            "idle_transaction_ms": 30000,
+            "lock_ms": 1000,
+            "marker_statements": 1,
+            "migration_statements": 512,
+            "session_statements": 2,
+            "simultaneous_connections": 1,
+            "statement_ms": 30000,
+            "transaction_controls": 4
+          },
+          "phase_caps": {
+            "initialization": 16,
+            "preflight": 91
+          }
+        }
+      },
+      "old_limits": {
+        "attempts": 1,
+        "catalog_queries": 256,
+        "connect_seconds": 5,
+        "cooperative_unit_seconds": 120,
+        "idle_transaction_ms": 30000,
+        "lock_ms": 1000,
+        "marker_statements": 1,
+        "migration_statements": 512,
+        "session_statements": 2,
+        "simultaneous_connections": 1,
+        "statement_ms": 30000,
+        "transaction_controls": 4
+      },
+      "previous": "064_platform_tenant_v2"
+    },
+    "066_platform_config_permissions": {
+      "actions": {
+        "unit_execute": {
+          "limits": {
+            "attempts": 1,
+            "catalog_queries": 520,
+            "connect_seconds": 5,
+            "cooperative_unit_seconds": 120,
+            "idle_transaction_ms": 30000,
+            "lock_ms": 1000,
+            "marker_statements": 1,
+            "migration_statements": 512,
+            "session_statements": 2,
+            "simultaneous_connections": 1,
+            "statement_ms": 30000,
+            "transaction_controls": 4
+          },
+          "phase_caps": {
+            "body": 224,
+            "coordinator": 2,
+            "initialization": 16,
+            "locked_reinspection": 91,
+            "post_body": 91,
+            "preflight": 91
+          }
+        },
+        "unit_readback": {
+          "limits": {
+            "attempts": 1,
+            "catalog_queries": 112,
+            "connect_seconds": 5,
+            "cooperative_unit_seconds": 120,
+            "idle_transaction_ms": 30000,
+            "lock_ms": 1000,
+            "marker_statements": 1,
+            "migration_statements": 512,
+            "session_statements": 2,
+            "simultaneous_connections": 1,
+            "statement_ms": 30000,
+            "transaction_controls": 4
+          },
+          "phase_caps": {
+            "initialization": 16,
+            "readback": 91
+          }
+        },
+        "unit_validate": {
+          "limits": {
+            "attempts": 1,
+            "catalog_queries": 112,
+            "connect_seconds": 5,
+            "cooperative_unit_seconds": 120,
+            "idle_transaction_ms": 30000,
+            "lock_ms": 1000,
+            "marker_statements": 1,
+            "migration_statements": 512,
+            "session_statements": 2,
+            "simultaneous_connections": 1,
+            "statement_ms": 30000,
+            "transaction_controls": 4
+          },
+          "phase_caps": {
+            "initialization": 16,
+            "preflight": 91
+          }
+        }
+      },
+      "old_limits": {
+        "attempts": 1,
+        "catalog_queries": 256,
+        "connect_seconds": 5,
+        "cooperative_unit_seconds": 120,
+        "idle_transaction_ms": 30000,
+        "lock_ms": 1000,
+        "marker_statements": 1,
+        "migration_statements": 512,
+        "session_statements": 2,
+        "simultaneous_connections": 1,
+        "statement_ms": 30000,
+        "transaction_controls": 4
+      },
+      "previous": "065_scoped_configuration"
+    },
+    "067_component_advisor_foundation": {
+      "actions": {
+        "unit_execute": {
+          "limits": {
+            "attempts": 1,
+            "catalog_queries": 552,
+            "connect_seconds": 5,
+            "cooperative_unit_seconds": 120,
+            "idle_transaction_ms": 30000,
+            "lock_ms": 1000,
+            "marker_statements": 1,
+            "migration_statements": 512,
+            "session_statements": 2,
+            "simultaneous_connections": 1,
+            "statement_ms": 30000,
+            "transaction_controls": 4
+          },
+          "phase_caps": {
+            "body": 256,
+            "coordinator": 2,
+            "initialization": 16,
+            "locked_reinspection": 91,
+            "post_body": 91,
+            "preflight": 91
+          }
+        },
+        "unit_readback": {
+          "limits": {
+            "attempts": 1,
+            "catalog_queries": 112,
+            "connect_seconds": 5,
+            "cooperative_unit_seconds": 120,
+            "idle_transaction_ms": 30000,
+            "lock_ms": 1000,
+            "marker_statements": 1,
+            "migration_statements": 512,
+            "session_statements": 2,
+            "simultaneous_connections": 1,
+            "statement_ms": 30000,
+            "transaction_controls": 4
+          },
+          "phase_caps": {
+            "initialization": 16,
+            "readback": 91
+          }
+        },
+        "unit_validate": {
+          "limits": {
+            "attempts": 1,
+            "catalog_queries": 112,
+            "connect_seconds": 5,
+            "cooperative_unit_seconds": 120,
+            "idle_transaction_ms": 30000,
+            "lock_ms": 1000,
+            "marker_statements": 1,
+            "migration_statements": 512,
+            "session_statements": 2,
+            "simultaneous_connections": 1,
+            "statement_ms": 30000,
+            "transaction_controls": 4
+          },
+          "phase_caps": {
+            "initialization": 16,
+            "preflight": 91
+          }
+        }
+      },
+      "old_limits": {
+        "attempts": 1,
+        "catalog_queries": 256,
+        "connect_seconds": 5,
+        "cooperative_unit_seconds": 120,
+        "idle_transaction_ms": 30000,
+        "lock_ms": 1000,
+        "marker_statements": 1,
+        "migration_statements": 512,
+        "session_statements": 2,
+        "simultaneous_connections": 1,
+        "statement_ms": 30000,
+        "transaction_controls": 4
+      },
+      "previous": "066_platform_config_permissions"
+    },
+    "068_component_advisor_policies": {
+      "actions": {
+        "unit_execute": {
+          "limits": {
+            "attempts": 1,
+            "catalog_queries": 592,
+            "connect_seconds": 5,
+            "cooperative_unit_seconds": 120,
+            "idle_transaction_ms": 30000,
+            "lock_ms": 1000,
+            "marker_statements": 1,
+            "migration_statements": 512,
+            "session_statements": 2,
+            "simultaneous_connections": 1,
+            "statement_ms": 30000,
+            "transaction_controls": 4
+          },
+          "phase_caps": {
+            "body": 296,
+            "coordinator": 2,
+            "initialization": 16,
+            "locked_reinspection": 91,
+            "post_body": 94,
+            "preflight": 91
+          }
+        },
+        "unit_readback": {
+          "limits": {
+            "attempts": 1,
+            "catalog_queries": 112,
+            "connect_seconds": 5,
+            "cooperative_unit_seconds": 120,
+            "idle_transaction_ms": 30000,
+            "lock_ms": 1000,
+            "marker_statements": 1,
+            "migration_statements": 512,
+            "session_statements": 2,
+            "simultaneous_connections": 1,
+            "statement_ms": 30000,
+            "transaction_controls": 4
+          },
+          "phase_caps": {
+            "initialization": 16,
+            "readback": 94
+          }
+        },
+        "unit_validate": {
+          "limits": {
+            "attempts": 1,
+            "catalog_queries": 112,
+            "connect_seconds": 5,
+            "cooperative_unit_seconds": 120,
+            "idle_transaction_ms": 30000,
+            "lock_ms": 1000,
+            "marker_statements": 1,
+            "migration_statements": 512,
+            "session_statements": 2,
+            "simultaneous_connections": 1,
+            "statement_ms": 30000,
+            "transaction_controls": 4
+          },
+          "phase_caps": {
+            "initialization": 16,
+            "preflight": 91
+          }
+        }
+      },
+      "old_limits": {
+        "attempts": 1,
+        "catalog_queries": 256,
+        "connect_seconds": 5,
+        "cooperative_unit_seconds": 120,
+        "idle_transaction_ms": 30000,
+        "lock_ms": 1000,
+        "marker_statements": 1,
+        "migration_statements": 512,
+        "session_statements": 2,
+        "simultaneous_connections": 1,
+        "statement_ms": 30000,
+        "transaction_controls": 4
+      },
+      "previous": "067_component_advisor_foundation"
+    },
+    "069_component_recommendations": {
+      "actions": {
+        "unit_execute": {
+          "limits": {
+            "attempts": 1,
+            "catalog_queries": 360,
+            "connect_seconds": 5,
+            "cooperative_unit_seconds": 120,
+            "idle_transaction_ms": 30000,
+            "lock_ms": 1000,
+            "marker_statements": 1,
+            "migration_statements": 512,
+            "session_statements": 2,
+            "simultaneous_connections": 1,
+            "statement_ms": 30000,
+            "transaction_controls": 4
+          },
+          "phase_caps": {
+            "body": 56,
+            "coordinator": 2,
+            "initialization": 16,
+            "locked_reinspection": 94,
+            "post_body": 96,
+            "preflight": 94
+          }
+        },
+        "unit_readback": {
+          "limits": {
+            "attempts": 1,
+            "catalog_queries": 112,
+            "connect_seconds": 5,
+            "cooperative_unit_seconds": 120,
+            "idle_transaction_ms": 30000,
+            "lock_ms": 1000,
+            "marker_statements": 1,
+            "migration_statements": 512,
+            "session_statements": 2,
+            "simultaneous_connections": 1,
+            "statement_ms": 30000,
+            "transaction_controls": 4
+          },
+          "phase_caps": {
+            "initialization": 16,
+            "readback": 96
+          }
+        },
+        "unit_validate": {
+          "limits": {
+            "attempts": 1,
+            "catalog_queries": 112,
+            "connect_seconds": 5,
+            "cooperative_unit_seconds": 120,
+            "idle_transaction_ms": 30000,
+            "lock_ms": 1000,
+            "marker_statements": 1,
+            "migration_statements": 512,
+            "session_statements": 2,
+            "simultaneous_connections": 1,
+            "statement_ms": 30000,
+            "transaction_controls": 4
+          },
+          "phase_caps": {
+            "initialization": 16,
+            "preflight": 94
+          }
+        }
+      },
+      "old_limits": {
+        "attempts": 1,
+        "catalog_queries": 256,
+        "connect_seconds": 5,
+        "cooperative_unit_seconds": 120,
+        "idle_transaction_ms": 30000,
+        "lock_ms": 1000,
+        "marker_statements": 1,
+        "migration_statements": 512,
+        "session_statements": 2,
+        "simultaneous_connections": 1,
+        "statement_ms": 30000,
+        "transaction_controls": 4
+      },
+      "previous": "068_component_advisor_policies"
+    },
+    "070_component_recommendation_compatibility": {
+      "actions": {
+        "unit_execute": {
+          "limits": {
+            "attempts": 1,
+            "catalog_queries": 360,
+            "connect_seconds": 5,
+            "cooperative_unit_seconds": 120,
+            "idle_transaction_ms": 30000,
+            "lock_ms": 1000,
+            "marker_statements": 1,
+            "migration_statements": 512,
+            "session_statements": 2,
+            "simultaneous_connections": 1,
+            "statement_ms": 30000,
+            "transaction_controls": 4
+          },
+          "phase_caps": {
+            "body": 48,
+            "coordinator": 2,
+            "initialization": 16,
+            "locked_reinspection": 96,
+            "post_body": 97,
+            "preflight": 96
+          }
+        },
+        "unit_readback": {
+          "limits": {
+            "attempts": 1,
+            "catalog_queries": 120,
+            "connect_seconds": 5,
+            "cooperative_unit_seconds": 120,
+            "idle_transaction_ms": 30000,
+            "lock_ms": 1000,
+            "marker_statements": 1,
+            "migration_statements": 512,
+            "session_statements": 2,
+            "simultaneous_connections": 1,
+            "statement_ms": 30000,
+            "transaction_controls": 4
+          },
+          "phase_caps": {
+            "initialization": 16,
+            "readback": 97
+          }
+        },
+        "unit_validate": {
+          "limits": {
+            "attempts": 1,
+            "catalog_queries": 112,
+            "connect_seconds": 5,
+            "cooperative_unit_seconds": 120,
+            "idle_transaction_ms": 30000,
+            "lock_ms": 1000,
+            "marker_statements": 1,
+            "migration_statements": 512,
+            "session_statements": 2,
+            "simultaneous_connections": 1,
+            "statement_ms": 30000,
+            "transaction_controls": 4
+          },
+          "phase_caps": {
+            "initialization": 16,
+            "preflight": 96
+          }
+        }
+      },
+      "old_limits": {
+        "attempts": 1,
+        "catalog_queries": 256,
+        "connect_seconds": 5,
+        "cooperative_unit_seconds": 120,
+        "idle_transaction_ms": 30000,
+        "lock_ms": 1000,
+        "marker_statements": 1,
+        "migration_statements": 512,
+        "session_statements": 2,
+        "simultaneous_connections": 1,
+        "statement_ms": 30000,
+        "transaction_controls": 4
+      },
+      "previous": "069_component_recommendations"
+    },
+    "071_component_recommendation_factors": {
+      "actions": {
+        "unit_execute": {
+          "limits": {
+            "attempts": 1,
+            "catalog_queries": 360,
+            "connect_seconds": 5,
+            "cooperative_unit_seconds": 120,
+            "idle_transaction_ms": 30000,
+            "lock_ms": 1000,
+            "marker_statements": 1,
+            "migration_statements": 512,
+            "session_statements": 2,
+            "simultaneous_connections": 1,
+            "statement_ms": 30000,
+            "transaction_controls": 4
+          },
+          "phase_caps": {
+            "body": 48,
+            "coordinator": 2,
+            "initialization": 16,
+            "locked_reinspection": 97,
+            "post_body": 98,
+            "preflight": 97
+          }
+        },
+        "unit_readback": {
+          "limits": {
+            "attempts": 1,
+            "catalog_queries": 120,
+            "connect_seconds": 5,
+            "cooperative_unit_seconds": 120,
+            "idle_transaction_ms": 30000,
+            "lock_ms": 1000,
+            "marker_statements": 1,
+            "migration_statements": 512,
+            "session_statements": 2,
+            "simultaneous_connections": 1,
+            "statement_ms": 30000,
+            "transaction_controls": 4
+          },
+          "phase_caps": {
+            "initialization": 16,
+            "readback": 98
+          }
+        },
+        "unit_validate": {
+          "limits": {
+            "attempts": 1,
+            "catalog_queries": 120,
+            "connect_seconds": 5,
+            "cooperative_unit_seconds": 120,
+            "idle_transaction_ms": 30000,
+            "lock_ms": 1000,
+            "marker_statements": 1,
+            "migration_statements": 512,
+            "session_statements": 2,
+            "simultaneous_connections": 1,
+            "statement_ms": 30000,
+            "transaction_controls": 4
+          },
+          "phase_caps": {
+            "initialization": 16,
+            "preflight": 97
+          }
+        }
+      },
+      "old_limits": {
+        "attempts": 1,
+        "catalog_queries": 256,
+        "connect_seconds": 5,
+        "cooperative_unit_seconds": 120,
+        "idle_transaction_ms": 30000,
+        "lock_ms": 1000,
+        "marker_statements": 1,
+        "migration_statements": 512,
+        "session_statements": 2,
+        "simultaneous_connections": 1,
+        "statement_ms": 30000,
+        "transaction_controls": 4
+      },
+      "previous": "070_component_recommendation_compatibility"
+    },
+    "072_component_recommendation_review": {
+      "actions": {
+        "unit_execute": {
+          "limits": {
+            "attempts": 1,
+            "catalog_queries": 432,
+            "connect_seconds": 5,
+            "cooperative_unit_seconds": 120,
+            "idle_transaction_ms": 30000,
+            "lock_ms": 1000,
+            "marker_statements": 1,
+            "migration_statements": 512,
+            "session_statements": 2,
+            "simultaneous_connections": 1,
+            "statement_ms": 30000,
+            "transaction_controls": 4
+          },
+          "phase_caps": {
+            "body": 112,
+            "coordinator": 2,
+            "initialization": 16,
+            "locked_reinspection": 98,
+            "post_body": 99,
+            "preflight": 98
+          }
+        },
+        "unit_readback": {
+          "limits": {
+            "attempts": 1,
+            "catalog_queries": 120,
+            "connect_seconds": 5,
+            "cooperative_unit_seconds": 120,
+            "idle_transaction_ms": 30000,
+            "lock_ms": 1000,
+            "marker_statements": 1,
+            "migration_statements": 512,
+            "session_statements": 2,
+            "simultaneous_connections": 1,
+            "statement_ms": 30000,
+            "transaction_controls": 4
+          },
+          "phase_caps": {
+            "initialization": 16,
+            "readback": 99
+          }
+        },
+        "unit_validate": {
+          "limits": {
+            "attempts": 1,
+            "catalog_queries": 120,
+            "connect_seconds": 5,
+            "cooperative_unit_seconds": 120,
+            "idle_transaction_ms": 30000,
+            "lock_ms": 1000,
+            "marker_statements": 1,
+            "migration_statements": 512,
+            "session_statements": 2,
+            "simultaneous_connections": 1,
+            "statement_ms": 30000,
+            "transaction_controls": 4
+          },
+          "phase_caps": {
+            "initialization": 16,
+            "preflight": 98
+          }
+        }
+      },
+      "old_limits": {
+        "attempts": 1,
+        "catalog_queries": 256,
+        "connect_seconds": 5,
+        "cooperative_unit_seconds": 120,
+        "idle_transaction_ms": 30000,
+        "lock_ms": 1000,
+        "marker_statements": 1,
+        "migration_statements": 512,
+        "session_statements": 2,
+        "simultaneous_connections": 1,
+        "statement_ms": 30000,
+        "transaction_controls": 4
+      },
+      "previous": "071_component_recommendation_factors"
+    },
+    "073_sbom_operational_lifecycle": {
+      "actions": {
+        "unit_execute": {
+          "limits": {
+            "attempts": 1,
+            "catalog_queries": 328,
+            "connect_seconds": 5,
+            "cooperative_unit_seconds": 120,
+            "idle_transaction_ms": 30000,
+            "lock_ms": 1000,
+            "marker_statements": 1,
+            "migration_statements": 512,
+            "session_statements": 2,
+            "simultaneous_connections": 1,
+            "statement_ms": 30000,
+            "transaction_controls": 4
+          },
+          "phase_caps": {
+            "body": 8,
+            "coordinator": 2,
+            "initialization": 16,
+            "locked_reinspection": 99,
+            "post_body": 99,
+            "preflight": 99
+          }
+        },
+        "unit_readback": {
+          "limits": {
+            "attempts": 1,
+            "catalog_queries": 120,
+            "connect_seconds": 5,
+            "cooperative_unit_seconds": 120,
+            "idle_transaction_ms": 30000,
+            "lock_ms": 1000,
+            "marker_statements": 1,
+            "migration_statements": 512,
+            "session_statements": 2,
+            "simultaneous_connections": 1,
+            "statement_ms": 30000,
+            "transaction_controls": 4
+          },
+          "phase_caps": {
+            "initialization": 16,
+            "readback": 99
+          }
+        },
+        "unit_validate": {
+          "limits": {
+            "attempts": 1,
+            "catalog_queries": 120,
+            "connect_seconds": 5,
+            "cooperative_unit_seconds": 120,
+            "idle_transaction_ms": 30000,
+            "lock_ms": 1000,
+            "marker_statements": 1,
+            "migration_statements": 512,
+            "session_statements": 2,
+            "simultaneous_connections": 1,
+            "statement_ms": 30000,
+            "transaction_controls": 4
+          },
+          "phase_caps": {
+            "initialization": 16,
+            "preflight": 99
+          }
+        }
+      },
+      "old_limits": {
+        "attempts": 1,
+        "catalog_queries": 256,
+        "connect_seconds": 5,
+        "cooperative_unit_seconds": 120,
+        "idle_transaction_ms": 30000,
+        "lock_ms": 1000,
+        "marker_statements": 1,
+        "migration_statements": 512,
+        "session_statements": 2,
+        "simultaneous_connections": 1,
+        "statement_ms": 30000,
+        "transaction_controls": 4
+      },
+      "previous": "072_component_recommendation_review"
+    },
+    "074_sbom_repair_jobs": {
+      "actions": {
+        "unit_execute": {
+          "limits": {
+            "attempts": 1,
+            "catalog_queries": 328,
+            "connect_seconds": 5,
+            "cooperative_unit_seconds": 120,
+            "idle_transaction_ms": 30000,
+            "lock_ms": 1000,
+            "marker_statements": 1,
+            "migration_statements": 512,
+            "session_statements": 2,
+            "simultaneous_connections": 1,
+            "statement_ms": 30000,
+            "transaction_controls": 4
+          },
+          "phase_caps": {
+            "body": 8,
+            "coordinator": 2,
+            "initialization": 16,
+            "locked_reinspection": 99,
+            "post_body": 100,
+            "preflight": 99
+          }
+        },
+        "unit_readback": {
+          "limits": {
+            "attempts": 1,
+            "catalog_queries": 120,
+            "connect_seconds": 5,
+            "cooperative_unit_seconds": 120,
+            "idle_transaction_ms": 30000,
+            "lock_ms": 1000,
+            "marker_statements": 1,
+            "migration_statements": 512,
+            "session_statements": 2,
+            "simultaneous_connections": 1,
+            "statement_ms": 30000,
+            "transaction_controls": 4
+          },
+          "phase_caps": {
+            "initialization": 16,
+            "readback": 100
+          }
+        },
+        "unit_validate": {
+          "limits": {
+            "attempts": 1,
+            "catalog_queries": 120,
+            "connect_seconds": 5,
+            "cooperative_unit_seconds": 120,
+            "idle_transaction_ms": 30000,
+            "lock_ms": 1000,
+            "marker_statements": 1,
+            "migration_statements": 512,
+            "session_statements": 2,
+            "simultaneous_connections": 1,
+            "statement_ms": 30000,
+            "transaction_controls": 4
+          },
+          "phase_caps": {
+            "initialization": 16,
+            "preflight": 99
+          }
+        }
+      },
+      "old_limits": {
+        "attempts": 1,
+        "catalog_queries": 256,
+        "connect_seconds": 5,
+        "cooperative_unit_seconds": 120,
+        "idle_transaction_ms": 30000,
+        "lock_ms": 1000,
+        "marker_statements": 1,
+        "migration_statements": 512,
+        "session_statements": 2,
+        "simultaneous_connections": 1,
+        "statement_ms": 30000,
+        "transaction_controls": 4
+      },
+      "previous": "073_sbom_operational_lifecycle"
+    },
+    "075_platform_advisor_policies": {
+      "actions": {
+        "unit_execute": {
+          "limits": {
+            "attempts": 1,
+            "catalog_queries": 544,
+            "connect_seconds": 5,
+            "cooperative_unit_seconds": 120,
+            "idle_transaction_ms": 30000,
+            "lock_ms": 1000,
+            "marker_statements": 1,
+            "migration_statements": 512,
+            "session_statements": 2,
+            "simultaneous_connections": 1,
+            "statement_ms": 30000,
+            "transaction_controls": 4
+          },
+          "phase_caps": {
+            "body": 224,
+            "coordinator": 2,
+            "initialization": 16,
+            "locked_reinspection": 100,
+            "post_body": 100,
+            "preflight": 100
+          }
+        },
+        "unit_readback": {
+          "limits": {
+            "attempts": 1,
+            "catalog_queries": 120,
+            "connect_seconds": 5,
+            "cooperative_unit_seconds": 120,
+            "idle_transaction_ms": 30000,
+            "lock_ms": 1000,
+            "marker_statements": 1,
+            "migration_statements": 512,
+            "session_statements": 2,
+            "simultaneous_connections": 1,
+            "statement_ms": 30000,
+            "transaction_controls": 4
+          },
+          "phase_caps": {
+            "initialization": 16,
+            "readback": 100
+          }
+        },
+        "unit_validate": {
+          "limits": {
+            "attempts": 1,
+            "catalog_queries": 120,
+            "connect_seconds": 5,
+            "cooperative_unit_seconds": 120,
+            "idle_transaction_ms": 30000,
+            "lock_ms": 1000,
+            "marker_statements": 1,
+            "migration_statements": 512,
+            "session_statements": 2,
+            "simultaneous_connections": 1,
+            "statement_ms": 30000,
+            "transaction_controls": 4
+          },
+          "phase_caps": {
+            "initialization": 16,
+            "preflight": 100
+          }
+        }
+      },
+      "old_limits": {
+        "attempts": 1,
+        "catalog_queries": 256,
+        "connect_seconds": 5,
+        "cooperative_unit_seconds": 120,
+        "idle_transaction_ms": 30000,
+        "lock_ms": 1000,
+        "marker_statements": 1,
+        "migration_statements": 512,
+        "session_statements": 2,
+        "simultaneous_connections": 1,
+        "statement_ms": 30000,
+        "transaction_controls": 4
+      },
+      "previous": "074_sbom_repair_jobs"
+    },
+    "076_logical_sbom_versions": {
+      "actions": {
+        "unit_execute": {
+          "limits": {
+            "attempts": 1,
+            "catalog_queries": 456,
+            "connect_seconds": 5,
+            "cooperative_unit_seconds": 120,
+            "idle_transaction_ms": 30000,
+            "lock_ms": 1000,
+            "marker_statements": 1,
+            "migration_statements": 512,
+            "session_statements": 2,
+            "simultaneous_connections": 1,
+            "statement_ms": 30000,
+            "transaction_controls": 4
+          },
+          "phase_caps": {
+            "body": 136,
+            "coordinator": 2,
+            "initialization": 16,
+            "locked_reinspection": 100,
+            "post_body": 101,
+            "preflight": 100
+          }
+        },
+        "unit_readback": {
+          "limits": {
+            "attempts": 1,
+            "catalog_queries": 120,
+            "connect_seconds": 5,
+            "cooperative_unit_seconds": 120,
+            "idle_transaction_ms": 30000,
+            "lock_ms": 1000,
+            "marker_statements": 1,
+            "migration_statements": 512,
+            "session_statements": 2,
+            "simultaneous_connections": 1,
+            "statement_ms": 30000,
+            "transaction_controls": 4
+          },
+          "phase_caps": {
+            "initialization": 16,
+            "readback": 101
+          }
+        },
+        "unit_validate": {
+          "limits": {
+            "attempts": 1,
+            "catalog_queries": 120,
+            "connect_seconds": 5,
+            "cooperative_unit_seconds": 120,
+            "idle_transaction_ms": 30000,
+            "lock_ms": 1000,
+            "marker_statements": 1,
+            "migration_statements": 512,
+            "session_statements": 2,
+            "simultaneous_connections": 1,
+            "statement_ms": 30000,
+            "transaction_controls": 4
+          },
+          "phase_caps": {
+            "initialization": 16,
+            "preflight": 100
+          }
+        }
+      },
+      "old_limits": {
+        "attempts": 1,
+        "catalog_queries": 256,
+        "connect_seconds": 5,
+        "cooperative_unit_seconds": 120,
+        "idle_transaction_ms": 30000,
+        "lock_ms": 1000,
+        "marker_statements": 1,
+        "migration_statements": 512,
+        "session_statements": 2,
+        "simultaneous_connections": 1,
+        "statement_ms": 30000,
+        "transaction_controls": 4
+      },
+      "previous": "075_platform_advisor_policies"
+    },
+    "077_sbom_selection_mode": {
+      "actions": {
+        "unit_execute": {
+          "limits": {
+            "attempts": 1,
+            "catalog_queries": 352,
+            "connect_seconds": 5,
+            "cooperative_unit_seconds": 120,
+            "idle_transaction_ms": 30000,
+            "lock_ms": 1000,
+            "marker_statements": 1,
+            "migration_statements": 512,
+            "session_statements": 2,
+            "simultaneous_connections": 1,
+            "statement_ms": 30000,
+            "transaction_controls": 4
+          },
+          "phase_caps": {
+            "body": 24,
+            "coordinator": 2,
+            "initialization": 16,
+            "locked_reinspection": 101,
+            "post_body": 102,
+            "preflight": 101
+          }
+        },
+        "unit_readback": {
+          "limits": {
+            "attempts": 1,
+            "catalog_queries": 120,
+            "connect_seconds": 5,
+            "cooperative_unit_seconds": 120,
+            "idle_transaction_ms": 30000,
+            "lock_ms": 1000,
+            "marker_statements": 1,
+            "migration_statements": 512,
+            "session_statements": 2,
+            "simultaneous_connections": 1,
+            "statement_ms": 30000,
+            "transaction_controls": 4
+          },
+          "phase_caps": {
+            "initialization": 16,
+            "readback": 102
+          }
+        },
+        "unit_validate": {
+          "limits": {
+            "attempts": 1,
+            "catalog_queries": 120,
+            "connect_seconds": 5,
+            "cooperative_unit_seconds": 120,
+            "idle_transaction_ms": 30000,
+            "lock_ms": 1000,
+            "marker_statements": 1,
+            "migration_statements": 512,
+            "session_statements": 2,
+            "simultaneous_connections": 1,
+            "statement_ms": 30000,
+            "transaction_controls": 4
+          },
+          "phase_caps": {
+            "initialization": 16,
+            "preflight": 101
+          }
+        }
+      },
+      "old_limits": {
+        "attempts": 1,
+        "catalog_queries": 256,
+        "connect_seconds": 5,
+        "cooperative_unit_seconds": 120,
+        "idle_transaction_ms": 30000,
+        "lock_ms": 1000,
+        "marker_statements": 1,
+        "migration_statements": 512,
+        "session_statements": 2,
+        "simultaneous_connections": 1,
+        "statement_ms": 30000,
+        "transaction_controls": 4
+      },
+      "previous": "076_logical_sbom_versions"
+    },
+    "078_finding_reconciliation": {
+      "actions": {
+        "unit_execute": {
+          "limits": {
+            "attempts": 1,
+            "catalog_queries": 336,
+            "connect_seconds": 5,
+            "cooperative_unit_seconds": 120,
+            "idle_transaction_ms": 30000,
+            "lock_ms": 1000,
+            "marker_statements": 1,
+            "migration_statements": 512,
+            "session_statements": 2,
+            "simultaneous_connections": 1,
+            "statement_ms": 30000,
+            "transaction_controls": 4
+          },
+          "phase_caps": {
+            "body": 8,
+            "coordinator": 2,
+            "initialization": 16,
+            "locked_reinspection": 102,
+            "post_body": 102,
+            "preflight": 102
+          }
+        },
+        "unit_readback": {
+          "limits": {
+            "attempts": 1,
+            "catalog_queries": 120,
+            "connect_seconds": 5,
+            "cooperative_unit_seconds": 120,
+            "idle_transaction_ms": 30000,
+            "lock_ms": 1000,
+            "marker_statements": 1,
+            "migration_statements": 512,
+            "session_statements": 2,
+            "simultaneous_connections": 1,
+            "statement_ms": 30000,
+            "transaction_controls": 4
+          },
+          "phase_caps": {
+            "initialization": 16,
+            "readback": 102
+          }
+        },
+        "unit_validate": {
+          "limits": {
+            "attempts": 1,
+            "catalog_queries": 120,
+            "connect_seconds": 5,
+            "cooperative_unit_seconds": 120,
+            "idle_transaction_ms": 30000,
+            "lock_ms": 1000,
+            "marker_statements": 1,
+            "migration_statements": 512,
+            "session_statements": 2,
+            "simultaneous_connections": 1,
+            "statement_ms": 30000,
+            "transaction_controls": 4
+          },
+          "phase_caps": {
+            "initialization": 16,
+            "preflight": 102
+          }
+        }
+      },
+      "old_limits": {
+        "attempts": 1,
+        "catalog_queries": 256,
+        "connect_seconds": 5,
+        "cooperative_unit_seconds": 120,
+        "idle_transaction_ms": 30000,
+        "lock_ms": 1000,
+        "marker_statements": 1,
+        "migration_statements": 512,
+        "session_statements": 2,
+        "simultaneous_connections": 1,
+        "statement_ms": 30000,
+        "transaction_controls": 4
+      },
+      "previous": "077_sbom_selection_mode"
+    },
+    "079_lifecycle_provider_verification": {
+      "actions": {
+        "unit_execute": {
+          "limits": {
+            "attempts": 1,
+            "catalog_queries": 344,
+            "connect_seconds": 5,
+            "cooperative_unit_seconds": 120,
+            "idle_transaction_ms": 30000,
+            "lock_ms": 1000,
+            "marker_statements": 1,
+            "migration_statements": 512,
+            "session_statements": 2,
+            "simultaneous_connections": 1,
+            "statement_ms": 30000,
+            "transaction_controls": 4
+          },
+          "phase_caps": {
+            "body": 16,
+            "coordinator": 2,
+            "initialization": 16,
+            "locked_reinspection": 102,
+            "post_body": 102,
+            "preflight": 102
+          }
+        },
+        "unit_readback": {
+          "limits": {
+            "attempts": 1,
+            "catalog_queries": 120,
+            "connect_seconds": 5,
+            "cooperative_unit_seconds": 120,
+            "idle_transaction_ms": 30000,
+            "lock_ms": 1000,
+            "marker_statements": 1,
+            "migration_statements": 512,
+            "session_statements": 2,
+            "simultaneous_connections": 1,
+            "statement_ms": 30000,
+            "transaction_controls": 4
+          },
+          "phase_caps": {
+            "initialization": 16,
+            "readback": 102
+          }
+        },
+        "unit_validate": {
+          "limits": {
+            "attempts": 1,
+            "catalog_queries": 120,
+            "connect_seconds": 5,
+            "cooperative_unit_seconds": 120,
+            "idle_transaction_ms": 30000,
+            "lock_ms": 1000,
+            "marker_statements": 1,
+            "migration_statements": 512,
+            "session_statements": 2,
+            "simultaneous_connections": 1,
+            "statement_ms": 30000,
+            "transaction_controls": 4
+          },
+          "phase_caps": {
+            "initialization": 16,
+            "preflight": 102
+          }
+        }
+      },
+      "old_limits": {
+        "attempts": 1,
+        "catalog_queries": 256,
+        "connect_seconds": 5,
+        "cooperative_unit_seconds": 120,
+        "idle_transaction_ms": 30000,
+        "lock_ms": 1000,
+        "marker_statements": 1,
+        "migration_statements": 512,
+        "session_statements": 2,
+        "simultaneous_connections": 1,
+        "statement_ms": 30000,
+        "transaction_controls": 4
+      },
+      "previous": "078_finding_reconciliation"
+    },
+    "080_uuid_public_id_expand": {
+      "actions": {
+        "unit_execute": {
+          "limits": {
+            "attempts": 1,
+            "catalog_queries": 328,
+            "connect_seconds": 5,
+            "cooperative_unit_seconds": 120,
+            "idle_transaction_ms": 5000,
+            "lock_ms": 250,
+            "marker_statements": 1,
+            "migration_statements": 512,
+            "session_statements": 2,
+            "simultaneous_connections": 1,
+            "statement_ms": 2000,
+            "transaction_controls": 4
+          },
+          "phase_caps": {
+            "body": 0,
+            "coordinator": 2,
+            "initialization": 16,
+            "locked_reinspection": 102,
+            "post_body": 102,
+            "preflight": 102
+          }
+        },
+        "unit_readback": {
+          "limits": {
+            "attempts": 1,
+            "catalog_queries": 120,
+            "connect_seconds": 5,
+            "cooperative_unit_seconds": 120,
+            "idle_transaction_ms": 5000,
+            "lock_ms": 250,
+            "marker_statements": 1,
+            "migration_statements": 512,
+            "session_statements": 2,
+            "simultaneous_connections": 1,
+            "statement_ms": 2000,
+            "transaction_controls": 4
+          },
+          "phase_caps": {
+            "initialization": 16,
+            "readback": 102
+          }
+        },
+        "unit_validate": {
+          "limits": {
+            "attempts": 1,
+            "catalog_queries": 120,
+            "connect_seconds": 5,
+            "cooperative_unit_seconds": 120,
+            "idle_transaction_ms": 5000,
+            "lock_ms": 250,
+            "marker_statements": 1,
+            "migration_statements": 512,
+            "session_statements": 2,
+            "simultaneous_connections": 1,
+            "statement_ms": 2000,
+            "transaction_controls": 4
+          },
+          "phase_caps": {
+            "initialization": 16,
+            "preflight": 102
+          }
+        }
+      },
+      "old_limits": {
+        "attempts": 1,
+        "catalog_queries": 256,
+        "connect_seconds": 5,
+        "cooperative_unit_seconds": 120,
+        "idle_transaction_ms": 5000,
+        "lock_ms": 250,
+        "marker_statements": 1,
+        "migration_statements": 512,
+        "session_statements": 2,
+        "simultaneous_connections": 1,
+        "statement_ms": 2000,
+        "transaction_controls": 4
+      },
+      "previous": "079_lifecycle_provider_verification"
+    },
+    "081_uuid_projects_expand": {
+      "actions": {
+        "unit_execute": {
+          "limits": {
+            "attempts": 1,
+            "catalog_queries": 328,
+            "connect_seconds": 5,
+            "cooperative_unit_seconds": 120,
+            "idle_transaction_ms": 5000,
+            "lock_ms": 250,
+            "marker_statements": 1,
+            "migration_statements": 512,
+            "session_statements": 2,
+            "simultaneous_connections": 1,
+            "statement_ms": 2000,
+            "transaction_controls": 4
+          },
+          "phase_caps": {
+            "body": 0,
+            "coordinator": 2,
+            "initialization": 16,
+            "locked_reinspection": 102,
+            "post_body": 102,
+            "preflight": 102
+          }
+        },
+        "unit_readback": {
+          "limits": {
+            "attempts": 1,
+            "catalog_queries": 120,
+            "connect_seconds": 5,
+            "cooperative_unit_seconds": 120,
+            "idle_transaction_ms": 5000,
+            "lock_ms": 250,
+            "marker_statements": 1,
+            "migration_statements": 512,
+            "session_statements": 2,
+            "simultaneous_connections": 1,
+            "statement_ms": 2000,
+            "transaction_controls": 4
+          },
+          "phase_caps": {
+            "initialization": 16,
+            "readback": 102
+          }
+        },
+        "unit_validate": {
+          "limits": {
+            "attempts": 1,
+            "catalog_queries": 120,
+            "connect_seconds": 5,
+            "cooperative_unit_seconds": 120,
+            "idle_transaction_ms": 5000,
+            "lock_ms": 250,
+            "marker_statements": 1,
+            "migration_statements": 512,
+            "session_statements": 2,
+            "simultaneous_connections": 1,
+            "statement_ms": 2000,
+            "transaction_controls": 4
+          },
+          "phase_caps": {
+            "initialization": 16,
+            "preflight": 102
+          }
+        }
+      },
+      "old_limits": {
+        "attempts": 1,
+        "catalog_queries": 256,
+        "connect_seconds": 5,
+        "cooperative_unit_seconds": 120,
+        "idle_transaction_ms": 5000,
+        "lock_ms": 250,
+        "marker_statements": 1,
+        "migration_statements": 512,
+        "session_statements": 2,
+        "simultaneous_connections": 1,
+        "statement_ms": 2000,
+        "transaction_controls": 4
+      },
+      "previous": "080_uuid_public_id_expand"
+    },
+    "082_uuid_products_expand": {
+      "actions": {
+        "unit_execute": {
+          "limits": {
+            "attempts": 1,
+            "catalog_queries": 328,
+            "connect_seconds": 5,
+            "cooperative_unit_seconds": 120,
+            "idle_transaction_ms": 5000,
+            "lock_ms": 250,
+            "marker_statements": 1,
+            "migration_statements": 512,
+            "session_statements": 2,
+            "simultaneous_connections": 1,
+            "statement_ms": 2000,
+            "transaction_controls": 4
+          },
+          "phase_caps": {
+            "body": 0,
+            "coordinator": 2,
+            "initialization": 16,
+            "locked_reinspection": 102,
+            "post_body": 102,
+            "preflight": 102
+          }
+        },
+        "unit_readback": {
+          "limits": {
+            "attempts": 1,
+            "catalog_queries": 120,
+            "connect_seconds": 5,
+            "cooperative_unit_seconds": 120,
+            "idle_transaction_ms": 5000,
+            "lock_ms": 250,
+            "marker_statements": 1,
+            "migration_statements": 512,
+            "session_statements": 2,
+            "simultaneous_connections": 1,
+            "statement_ms": 2000,
+            "transaction_controls": 4
+          },
+          "phase_caps": {
+            "initialization": 16,
+            "readback": 102
+          }
+        },
+        "unit_validate": {
+          "limits": {
+            "attempts": 1,
+            "catalog_queries": 120,
+            "connect_seconds": 5,
+            "cooperative_unit_seconds": 120,
+            "idle_transaction_ms": 5000,
+            "lock_ms": 250,
+            "marker_statements": 1,
+            "migration_statements": 512,
+            "session_statements": 2,
+            "simultaneous_connections": 1,
+            "statement_ms": 2000,
+            "transaction_controls": 4
+          },
+          "phase_caps": {
+            "initialization": 16,
+            "preflight": 102
+          }
+        }
+      },
+      "old_limits": {
+        "attempts": 1,
+        "catalog_queries": 256,
+        "connect_seconds": 5,
+        "cooperative_unit_seconds": 120,
+        "idle_transaction_ms": 5000,
+        "lock_ms": 250,
+        "marker_statements": 1,
+        "migration_statements": 512,
+        "session_statements": 2,
+        "simultaneous_connections": 1,
+        "statement_ms": 2000,
+        "transaction_controls": 4
+      },
+      "previous": "081_uuid_projects_expand"
+    },
+    "083_uuid_logical_sbom_expand": {
+      "actions": {
+        "unit_execute": {
+          "limits": {
+            "attempts": 1,
+            "catalog_queries": 328,
+            "connect_seconds": 5,
+            "cooperative_unit_seconds": 120,
+            "idle_transaction_ms": 5000,
+            "lock_ms": 250,
+            "marker_statements": 1,
+            "migration_statements": 512,
+            "session_statements": 2,
+            "simultaneous_connections": 1,
+            "statement_ms": 2000,
+            "transaction_controls": 4
+          },
+          "phase_caps": {
+            "body": 0,
+            "coordinator": 2,
+            "initialization": 16,
+            "locked_reinspection": 102,
+            "post_body": 102,
+            "preflight": 102
+          }
+        },
+        "unit_readback": {
+          "limits": {
+            "attempts": 1,
+            "catalog_queries": 120,
+            "connect_seconds": 5,
+            "cooperative_unit_seconds": 120,
+            "idle_transaction_ms": 5000,
+            "lock_ms": 250,
+            "marker_statements": 1,
+            "migration_statements": 512,
+            "session_statements": 2,
+            "simultaneous_connections": 1,
+            "statement_ms": 2000,
+            "transaction_controls": 4
+          },
+          "phase_caps": {
+            "initialization": 16,
+            "readback": 102
+          }
+        },
+        "unit_validate": {
+          "limits": {
+            "attempts": 1,
+            "catalog_queries": 120,
+            "connect_seconds": 5,
+            "cooperative_unit_seconds": 120,
+            "idle_transaction_ms": 5000,
+            "lock_ms": 250,
+            "marker_statements": 1,
+            "migration_statements": 512,
+            "session_statements": 2,
+            "simultaneous_connections": 1,
+            "statement_ms": 2000,
+            "transaction_controls": 4
+          },
+          "phase_caps": {
+            "initialization": 16,
+            "preflight": 102
+          }
+        }
+      },
+      "old_limits": {
+        "attempts": 1,
+        "catalog_queries": 256,
+        "connect_seconds": 5,
+        "cooperative_unit_seconds": 120,
+        "idle_transaction_ms": 5000,
+        "lock_ms": 250,
+        "marker_statements": 1,
+        "migration_statements": 512,
+        "session_statements": 2,
+        "simultaneous_connections": 1,
+        "statement_ms": 2000,
+        "transaction_controls": 4
+      },
+      "previous": "082_uuid_products_expand"
+    },
+    "084_uuid_sbom_source_expand": {
+      "actions": {
+        "unit_execute": {
+          "limits": {
+            "attempts": 1,
+            "catalog_queries": 328,
+            "connect_seconds": 5,
+            "cooperative_unit_seconds": 120,
+            "idle_transaction_ms": 5000,
+            "lock_ms": 250,
+            "marker_statements": 1,
+            "migration_statements": 512,
+            "session_statements": 2,
+            "simultaneous_connections": 1,
+            "statement_ms": 2000,
+            "transaction_controls": 4
+          },
+          "phase_caps": {
+            "body": 0,
+            "coordinator": 2,
+            "initialization": 16,
+            "locked_reinspection": 102,
+            "post_body": 102,
+            "preflight": 102
+          }
+        },
+        "unit_readback": {
+          "limits": {
+            "attempts": 1,
+            "catalog_queries": 120,
+            "connect_seconds": 5,
+            "cooperative_unit_seconds": 120,
+            "idle_transaction_ms": 5000,
+            "lock_ms": 250,
+            "marker_statements": 1,
+            "migration_statements": 512,
+            "session_statements": 2,
+            "simultaneous_connections": 1,
+            "statement_ms": 2000,
+            "transaction_controls": 4
+          },
+          "phase_caps": {
+            "initialization": 16,
+            "readback": 102
+          }
+        },
+        "unit_validate": {
+          "limits": {
+            "attempts": 1,
+            "catalog_queries": 120,
+            "connect_seconds": 5,
+            "cooperative_unit_seconds": 120,
+            "idle_transaction_ms": 5000,
+            "lock_ms": 250,
+            "marker_statements": 1,
+            "migration_statements": 512,
+            "session_statements": 2,
+            "simultaneous_connections": 1,
+            "statement_ms": 2000,
+            "transaction_controls": 4
+          },
+          "phase_caps": {
+            "initialization": 16,
+            "preflight": 102
+          }
+        }
+      },
+      "old_limits": {
+        "attempts": 1,
+        "catalog_queries": 256,
+        "connect_seconds": 5,
+        "cooperative_unit_seconds": 120,
+        "idle_transaction_ms": 5000,
+        "lock_ms": 250,
+        "marker_statements": 1,
+        "migration_statements": 512,
+        "session_statements": 2,
+        "simultaneous_connections": 1,
+        "statement_ms": 2000,
+        "transaction_controls": 4
+      },
+      "previous": "083_uuid_logical_sbom_expand"
+    },
+    "085_uuid_sbom_component_expand": {
+      "actions": {
+        "unit_execute": {
+          "limits": {
+            "attempts": 1,
+            "catalog_queries": 328,
+            "connect_seconds": 5,
+            "cooperative_unit_seconds": 120,
+            "idle_transaction_ms": 5000,
+            "lock_ms": 250,
+            "marker_statements": 1,
+            "migration_statements": 512,
+            "session_statements": 2,
+            "simultaneous_connections": 1,
+            "statement_ms": 2000,
+            "transaction_controls": 4
+          },
+          "phase_caps": {
+            "body": 0,
+            "coordinator": 2,
+            "initialization": 16,
+            "locked_reinspection": 102,
+            "post_body": 102,
+            "preflight": 102
+          }
+        },
+        "unit_readback": {
+          "limits": {
+            "attempts": 1,
+            "catalog_queries": 120,
+            "connect_seconds": 5,
+            "cooperative_unit_seconds": 120,
+            "idle_transaction_ms": 5000,
+            "lock_ms": 250,
+            "marker_statements": 1,
+            "migration_statements": 512,
+            "session_statements": 2,
+            "simultaneous_connections": 1,
+            "statement_ms": 2000,
+            "transaction_controls": 4
+          },
+          "phase_caps": {
+            "initialization": 16,
+            "readback": 102
+          }
+        },
+        "unit_validate": {
+          "limits": {
+            "attempts": 1,
+            "catalog_queries": 120,
+            "connect_seconds": 5,
+            "cooperative_unit_seconds": 120,
+            "idle_transaction_ms": 5000,
+            "lock_ms": 250,
+            "marker_statements": 1,
+            "migration_statements": 512,
+            "session_statements": 2,
+            "simultaneous_connections": 1,
+            "statement_ms": 2000,
+            "transaction_controls": 4
+          },
+          "phase_caps": {
+            "initialization": 16,
+            "preflight": 102
+          }
+        }
+      },
+      "old_limits": {
+        "attempts": 1,
+        "catalog_queries": 256,
+        "connect_seconds": 5,
+        "cooperative_unit_seconds": 120,
+        "idle_transaction_ms": 5000,
+        "lock_ms": 250,
+        "marker_statements": 1,
+        "migration_statements": 512,
+        "session_statements": 2,
+        "simultaneous_connections": 1,
+        "statement_ms": 2000,
+        "transaction_controls": 4
+      },
+      "previous": "084_uuid_sbom_source_expand"
+    },
+    "086_uuid_tenants_finalize": {
+      "actions": {
+        "unit_execute": {
+          "limits": {
+            "attempts": 1,
+            "catalog_queries": 640,
+            "connect_seconds": 5,
+            "cooperative_unit_seconds": 120,
+            "idle_transaction_ms": 5000,
+            "lock_ms": 1000,
+            "marker_statements": 1,
+            "migration_statements": 512,
+            "session_statements": 2,
+            "simultaneous_connections": 1,
+            "statement_ms": 10000,
+            "transaction_controls": 4
+          },
+          "phase_caps": {
+            "body": 276,
+            "coordinator": 2,
+            "initialization": 16,
+            "locked_reinspection": 119,
+            "post_body": 102,
+            "preflight": 119
+          }
+        },
+        "unit_readback": {
+          "limits": {
+            "attempts": 1,
+            "catalog_queries": 120,
+            "connect_seconds": 5,
+            "cooperative_unit_seconds": 120,
+            "idle_transaction_ms": 5000,
+            "lock_ms": 1000,
+            "marker_statements": 1,
+            "migration_statements": 512,
+            "session_statements": 2,
+            "simultaneous_connections": 1,
+            "statement_ms": 10000,
+            "transaction_controls": 4
+          },
+          "phase_caps": {
+            "initialization": 16,
+            "readback": 102
+          }
+        },
+        "unit_validate": {
+          "limits": {
+            "attempts": 1,
+            "catalog_queries": 136,
+            "connect_seconds": 5,
+            "cooperative_unit_seconds": 120,
+            "idle_transaction_ms": 5000,
+            "lock_ms": 1000,
+            "marker_statements": 1,
+            "migration_statements": 512,
+            "session_statements": 2,
+            "simultaneous_connections": 1,
+            "statement_ms": 10000,
+            "transaction_controls": 4
+          },
+          "phase_caps": {
+            "initialization": 16,
+            "preflight": 119
+          }
+        }
+      },
+      "old_limits": {
+        "attempts": 1,
+        "catalog_queries": 512,
+        "connect_seconds": 5,
+        "cooperative_unit_seconds": 120,
+        "idle_transaction_ms": 5000,
+        "lock_ms": 1000,
+        "marker_statements": 1,
+        "migration_statements": 512,
+        "session_statements": 2,
+        "simultaneous_connections": 1,
+        "statement_ms": 10000,
+        "transaction_controls": 4
+      },
+      "previous": "085_uuid_sbom_component_expand"
+    },
+    "087_uuid_projects_finalize": {
+      "actions": {
+        "unit_execute": {
+          "limits": {
+            "attempts": 1,
+            "catalog_queries": 632,
+            "connect_seconds": 5,
+            "cooperative_unit_seconds": 120,
+            "idle_transaction_ms": 5000,
+            "lock_ms": 1000,
+            "marker_statements": 1,
+            "migration_statements": 512,
+            "session_statements": 2,
+            "simultaneous_connections": 1,
+            "statement_ms": 10000,
+            "transaction_controls": 4
+          },
+          "phase_caps": {
+            "body": 272,
+            "coordinator": 2,
+            "initialization": 16,
+            "locked_reinspection": 119,
+            "post_body": 102,
+            "preflight": 119
+          }
+        },
+        "unit_readback": {
+          "limits": {
+            "attempts": 1,
+            "catalog_queries": 120,
+            "connect_seconds": 5,
+            "cooperative_unit_seconds": 120,
+            "idle_transaction_ms": 5000,
+            "lock_ms": 1000,
+            "marker_statements": 1,
+            "migration_statements": 512,
+            "session_statements": 2,
+            "simultaneous_connections": 1,
+            "statement_ms": 10000,
+            "transaction_controls": 4
+          },
+          "phase_caps": {
+            "initialization": 16,
+            "readback": 102
+          }
+        },
+        "unit_validate": {
+          "limits": {
+            "attempts": 1,
+            "catalog_queries": 136,
+            "connect_seconds": 5,
+            "cooperative_unit_seconds": 120,
+            "idle_transaction_ms": 5000,
+            "lock_ms": 1000,
+            "marker_statements": 1,
+            "migration_statements": 512,
+            "session_statements": 2,
+            "simultaneous_connections": 1,
+            "statement_ms": 10000,
+            "transaction_controls": 4
+          },
+          "phase_caps": {
+            "initialization": 16,
+            "preflight": 119
+          }
+        }
+      },
+      "old_limits": {
+        "attempts": 1,
+        "catalog_queries": 512,
+        "connect_seconds": 5,
+        "cooperative_unit_seconds": 120,
+        "idle_transaction_ms": 5000,
+        "lock_ms": 1000,
+        "marker_statements": 1,
+        "migration_statements": 512,
+        "session_statements": 2,
+        "simultaneous_connections": 1,
+        "statement_ms": 10000,
+        "transaction_controls": 4
+      },
+      "previous": "086_uuid_tenants_finalize"
+    },
+    "088_uuid_products_finalize": {
+      "actions": {
+        "unit_execute": {
+          "limits": {
+            "attempts": 1,
+            "catalog_queries": 632,
+            "connect_seconds": 5,
+            "cooperative_unit_seconds": 120,
+            "idle_transaction_ms": 5000,
+            "lock_ms": 1000,
+            "marker_statements": 1,
+            "migration_statements": 512,
+            "session_statements": 2,
+            "simultaneous_connections": 1,
+            "statement_ms": 10000,
+            "transaction_controls": 4
+          },
+          "phase_caps": {
+            "body": 268,
+            "coordinator": 2,
+            "initialization": 16,
+            "locked_reinspection": 119,
+            "post_body": 102,
+            "preflight": 119
+          }
+        },
+        "unit_readback": {
+          "limits": {
+            "attempts": 1,
+            "catalog_queries": 120,
+            "connect_seconds": 5,
+            "cooperative_unit_seconds": 120,
+            "idle_transaction_ms": 5000,
+            "lock_ms": 1000,
+            "marker_statements": 1,
+            "migration_statements": 512,
+            "session_statements": 2,
+            "simultaneous_connections": 1,
+            "statement_ms": 10000,
+            "transaction_controls": 4
+          },
+          "phase_caps": {
+            "initialization": 16,
+            "readback": 102
+          }
+        },
+        "unit_validate": {
+          "limits": {
+            "attempts": 1,
+            "catalog_queries": 136,
+            "connect_seconds": 5,
+            "cooperative_unit_seconds": 120,
+            "idle_transaction_ms": 5000,
+            "lock_ms": 1000,
+            "marker_statements": 1,
+            "migration_statements": 512,
+            "session_statements": 2,
+            "simultaneous_connections": 1,
+            "statement_ms": 10000,
+            "transaction_controls": 4
+          },
+          "phase_caps": {
+            "initialization": 16,
+            "preflight": 119
+          }
+        }
+      },
+      "old_limits": {
+        "attempts": 1,
+        "catalog_queries": 512,
+        "connect_seconds": 5,
+        "cooperative_unit_seconds": 120,
+        "idle_transaction_ms": 5000,
+        "lock_ms": 1000,
+        "marker_statements": 1,
+        "migration_statements": 512,
+        "session_statements": 2,
+        "simultaneous_connections": 1,
+        "statement_ms": 10000,
+        "transaction_controls": 4
+      },
+      "previous": "087_uuid_projects_finalize"
+    },
+    "089_uuid_logical_sbom_finalize": {
+      "actions": {
+        "unit_execute": {
+          "limits": {
+            "attempts": 1,
+            "catalog_queries": 624,
+            "connect_seconds": 5,
+            "cooperative_unit_seconds": 120,
+            "idle_transaction_ms": 5000,
+            "lock_ms": 1000,
+            "marker_statements": 1,
+            "migration_statements": 512,
+            "session_statements": 2,
+            "simultaneous_connections": 1,
+            "statement_ms": 10000,
+            "transaction_controls": 4
+          },
+          "phase_caps": {
+            "body": 264,
+            "coordinator": 2,
+            "initialization": 16,
+            "locked_reinspection": 119,
+            "post_body": 102,
+            "preflight": 119
+          }
+        },
+        "unit_readback": {
+          "limits": {
+            "attempts": 1,
+            "catalog_queries": 120,
+            "connect_seconds": 5,
+            "cooperative_unit_seconds": 120,
+            "idle_transaction_ms": 5000,
+            "lock_ms": 1000,
+            "marker_statements": 1,
+            "migration_statements": 512,
+            "session_statements": 2,
+            "simultaneous_connections": 1,
+            "statement_ms": 10000,
+            "transaction_controls": 4
+          },
+          "phase_caps": {
+            "initialization": 16,
+            "readback": 102
+          }
+        },
+        "unit_validate": {
+          "limits": {
+            "attempts": 1,
+            "catalog_queries": 136,
+            "connect_seconds": 5,
+            "cooperative_unit_seconds": 120,
+            "idle_transaction_ms": 5000,
+            "lock_ms": 1000,
+            "marker_statements": 1,
+            "migration_statements": 512,
+            "session_statements": 2,
+            "simultaneous_connections": 1,
+            "statement_ms": 10000,
+            "transaction_controls": 4
+          },
+          "phase_caps": {
+            "initialization": 16,
+            "preflight": 119
+          }
+        }
+      },
+      "old_limits": {
+        "attempts": 1,
+        "catalog_queries": 512,
+        "connect_seconds": 5,
+        "cooperative_unit_seconds": 120,
+        "idle_transaction_ms": 5000,
+        "lock_ms": 1000,
+        "marker_statements": 1,
+        "migration_statements": 512,
+        "session_statements": 2,
+        "simultaneous_connections": 1,
+        "statement_ms": 10000,
+        "transaction_controls": 4
+      },
+      "previous": "088_uuid_products_finalize"
+    },
+    "090_uuid_sbom_source_finalize": {
+      "actions": {
+        "unit_execute": {
+          "limits": {
+            "attempts": 1,
+            "catalog_queries": 624,
+            "connect_seconds": 5,
+            "cooperative_unit_seconds": 120,
+            "idle_transaction_ms": 5000,
+            "lock_ms": 1000,
+            "marker_statements": 1,
+            "migration_statements": 512,
+            "session_statements": 2,
+            "simultaneous_connections": 1,
+            "statement_ms": 10000,
+            "transaction_controls": 4
+          },
+          "phase_caps": {
+            "body": 260,
+            "coordinator": 2,
+            "initialization": 16,
+            "locked_reinspection": 119,
+            "post_body": 102,
+            "preflight": 119
+          }
+        },
+        "unit_readback": {
+          "limits": {
+            "attempts": 1,
+            "catalog_queries": 120,
+            "connect_seconds": 5,
+            "cooperative_unit_seconds": 120,
+            "idle_transaction_ms": 5000,
+            "lock_ms": 1000,
+            "marker_statements": 1,
+            "migration_statements": 512,
+            "session_statements": 2,
+            "simultaneous_connections": 1,
+            "statement_ms": 10000,
+            "transaction_controls": 4
+          },
+          "phase_caps": {
+            "initialization": 16,
+            "readback": 102
+          }
+        },
+        "unit_validate": {
+          "limits": {
+            "attempts": 1,
+            "catalog_queries": 136,
+            "connect_seconds": 5,
+            "cooperative_unit_seconds": 120,
+            "idle_transaction_ms": 5000,
+            "lock_ms": 1000,
+            "marker_statements": 1,
+            "migration_statements": 512,
+            "session_statements": 2,
+            "simultaneous_connections": 1,
+            "statement_ms": 10000,
+            "transaction_controls": 4
+          },
+          "phase_caps": {
+            "initialization": 16,
+            "preflight": 119
+          }
+        }
+      },
+      "old_limits": {
+        "attempts": 1,
+        "catalog_queries": 512,
+        "connect_seconds": 5,
+        "cooperative_unit_seconds": 120,
+        "idle_transaction_ms": 5000,
+        "lock_ms": 1000,
+        "marker_statements": 1,
+        "migration_statements": 512,
+        "session_statements": 2,
+        "simultaneous_connections": 1,
+        "statement_ms": 10000,
+        "transaction_controls": 4
+      },
+      "previous": "089_uuid_logical_sbom_finalize"
+    },
+    "091_uuid_sbom_component_finalize": {
+      "actions": {
+        "unit_execute": {
+          "limits": {
+            "attempts": 1,
+            "catalog_queries": 616,
+            "connect_seconds": 5,
+            "cooperative_unit_seconds": 120,
+            "idle_transaction_ms": 5000,
+            "lock_ms": 1000,
+            "marker_statements": 1,
+            "migration_statements": 512,
+            "session_statements": 2,
+            "simultaneous_connections": 1,
+            "statement_ms": 10000,
+            "transaction_controls": 4
+          },
+          "phase_caps": {
+            "body": 256,
+            "coordinator": 2,
+            "initialization": 16,
+            "locked_reinspection": 119,
+            "post_body": 102,
+            "preflight": 119
+          }
+        },
+        "unit_readback": {
+          "limits": {
+            "attempts": 1,
+            "catalog_queries": 120,
+            "connect_seconds": 5,
+            "cooperative_unit_seconds": 120,
+            "idle_transaction_ms": 5000,
+            "lock_ms": 1000,
+            "marker_statements": 1,
+            "migration_statements": 512,
+            "session_statements": 2,
+            "simultaneous_connections": 1,
+            "statement_ms": 10000,
+            "transaction_controls": 4
+          },
+          "phase_caps": {
+            "initialization": 16,
+            "readback": 102
+          }
+        },
+        "unit_validate": {
+          "limits": {
+            "attempts": 1,
+            "catalog_queries": 136,
+            "connect_seconds": 5,
+            "cooperative_unit_seconds": 120,
+            "idle_transaction_ms": 5000,
+            "lock_ms": 1000,
+            "marker_statements": 1,
+            "migration_statements": 512,
+            "session_statements": 2,
+            "simultaneous_connections": 1,
+            "statement_ms": 10000,
+            "transaction_controls": 4
+          },
+          "phase_caps": {
+            "initialization": 16,
+            "preflight": 119
+          }
+        }
+      },
+      "old_limits": {
+        "attempts": 1,
+        "catalog_queries": 512,
+        "connect_seconds": 5,
+        "cooperative_unit_seconds": 120,
+        "idle_transaction_ms": 5000,
+        "lock_ms": 1000,
+        "marker_statements": 1,
+        "migration_statements": 512,
+        "session_statements": 2,
+        "simultaneous_connections": 1,
+        "statement_ms": 10000,
+        "transaction_controls": 4
+      },
+      "previous": "090_uuid_sbom_source_finalize"
+    }
+  },
+  "schema": "w24b-per-action-budgets-v2",
+  "unchanged_allowances": "All non-catalog-query limits exactly retain original per-unit values"
+}

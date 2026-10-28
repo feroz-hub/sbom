@@ -13,42 +13,45 @@
  * of empty table between pages.
  */
 
-import { Suspense, useEffect, useMemo, useState } from 'react';
-import { keepPreviousData, useMutation, useQuery, useQueryClient } from '@tanstack/react-query';
+import { Suspense, useEffect, useMemo, useRef, useState } from 'react';
+import { useInfiniteQuery, useQuery } from '@tanstack/react-query';
 import { AlertTriangle, ShieldQuestion } from 'lucide-react';
 import { useRouter, useSearchParams } from 'next/navigation';
 import { DashboardFilters } from '@/components/dashboard/DashboardFilters';
 import { TopBar } from '@/components/layout/TopBar';
-import { VexDecisionEditor } from '@/components/vex/VexDecisionEditor';
+import { VexInvestigationDialog } from '@/components/vex/VexInvestigationDialog';
+import { VexVersionComparisonPanel } from '@/components/vex/VexVersionComparisonPanel';
+import { VexRunHistoryPanel } from '@/components/vex/VexRunHistoryPanel';
+import { PostureEvidence } from '@/components/sboms/SbomPostureNotice';
+import { AssigneeCombobox } from '@/components/vex/AssigneeCombobox';
+import { Dialog } from '@/components/ui/Dialog';
 import { Alert } from '@/components/ui/Alert';
-import { Badge } from '@/components/ui/Badge';
+import { Badge, SeverityBadge } from '@/components/ui/Badge';
 import { Button } from '@/components/ui/Button';
 import { Card } from '@/components/ui/Card';
-import { Dialog, DialogBody } from '@/components/ui/Dialog';
 import { Input } from '@/components/ui/Input';
 import { Pagination } from '@/components/ui/Pagination';
 import { Select } from '@/components/ui/Select';
 import { SkeletonRow } from '@/components/ui/Spinner';
-import { EmptyRow, SortableTh, Table, TableBody, TableHead, Td, Th } from '@/components/ui/Table';
+import { SortableTh, Table, TableBody, TableHead, Td, Th } from '@/components/ui/Table';
 import { TableFilterBar, TableSearchInput } from '@/components/ui/TableFilterBar';
 import { usePermission } from '@/hooks/usePermission';
+import { useAuth } from '@/hooks/useAuth';
 import { useToast } from '@/hooks/useToast';
 import {
   getDashboardVex,
-  getVexInvestigation,
+  getVexInvestigationSummary,
   listVexInvestigations,
-  resolveVexInvestigationComponent,
-  setVexInvestigationAssignment,
-  setVexInvestigationDecision,
+  searchVexAssignees,
   type DashboardFilterScope,
 } from '@/lib/api';
-import { invalidateVexSurfaces } from '@/lib/queryInvalidation';
 import type {
   DashboardVex,
   VexEffectiveStatus,
-  VexInvestigationDetail,
+  VexInvestigationListParams,
   VexInvestigationRow,
   VexInvestigationSortField,
+  VexInvestigationSummary,
 } from '@/types';
 
 const DEFAULT_PAGE_SIZE = 50;
@@ -88,6 +91,10 @@ const FLAGGED_RECONCILIATION = new Set([
 ]);
 
 type Filters = {
+  versionScope: 'current' | 'all' | 'historical';
+  myWork: 'all' | 'me' | 'unassigned' | 'assigned' | 'attention';
+  assignee: string;
+  unresolvedComponent: boolean;
   search: string;
   effectiveStatus: string;
   reconciliationStatus: string;
@@ -100,6 +107,10 @@ type Filters = {
 };
 
 const DEFAULT_FILTERS: Filters = {
+  versionScope: 'current',
+  myWork: 'all',
+  assignee: '',
+  unresolvedComponent: false,
   search: '',
   effectiveStatus: '',
   reconciliationStatus: '',
@@ -111,9 +122,8 @@ const DEFAULT_FILTERS: Filters = {
   sortOrder: 'desc',
 };
 
-function positiveOrNull(value: string | null): number | null {
-  const id = Number(value);
-  return value && Number.isSafeInteger(id) && id > 0 ? id : null;
+function positiveOrNull(value: string | null): string | null {
+  return value || null;
 }
 
 function positiveInteger(value: string | null, fallback: number, maximum?: number): number {
@@ -128,6 +138,11 @@ function initialState(searchParams: URLSearchParams | Readonly<URLSearchParams>)
   const sortBy = searchParams.get('sort_by');
   const sortOrder = searchParams.get('sort_order');
   const filters: Filters = {
+    versionScope: ['all', 'historical'].includes(searchParams.get('version_scope') ?? '') ? searchParams.get('version_scope') as Filters['versionScope'] : 'current',
+    myWork: ['me', 'unassigned', 'assigned', 'attention'].includes(searchParams.get('my_work') ?? '')
+      ? searchParams.get('my_work') as Filters['myWork'] : 'all',
+    assignee: searchParams.get('assignee')?.trim() ?? '',
+    unresolvedComponent: searchParams.get('unresolved_component') === 'true',
     search: searchParams.get('q')?.trim() ?? '',
     effectiveStatus: searchParams.get('effective_status')?.trim() ?? '',
     reconciliationStatus: searchParams.get('reconciliation_status')?.trim() ?? '',
@@ -145,6 +160,11 @@ function initialState(searchParams: URLSearchParams | Readonly<URLSearchParams>)
     page: positiveInteger(searchParams.get('page'), 1),
     pageSize: positiveInteger(searchParams.get('limit'), DEFAULT_PAGE_SIZE, 250),
   };
+}
+
+const WORK_LABELS = { all: 'All investigations', me: 'Assigned to me', unassigned: 'Unassigned', assigned: 'Assigned', attention: 'Needs my attention' };
+function readable(value: string) {
+  return value.toLowerCase().replaceAll('_', ' ').replace(/^./, first => first.toUpperCase());
 }
 
 function statusVariant(status: string): 'error' | 'success' | 'warning' | 'info' | 'gray' {
@@ -169,14 +189,25 @@ function VexInvestigationContent() {
   const { showToast } = useToast();
   // Backend remains the gate (VEX-SEC-001); this only shapes the UI.
   const canRead = usePermission('vex:read');
-  const canWrite = usePermission('vex:write');
+  const { user, activeTenant, activeTenantId } = useAuth();
+  const workingRole = (activeTenant?.roles ?? user?.roles ?? []).some(role => ['TENANT_ADMIN', 'SECURITY_ANALYST', 'DEVELOPER'].includes(role));
+  const [mobileFiltersOpen, setMobileFiltersOpen] = useState(false);
+  const [versionToolsOpen, setVersionToolsOpen] = useState(false);
+  const [assigneeSearch, setAssigneeSearch] = useState('');
+  const [debouncedAssigneeSearch, setDebouncedAssigneeSearch] = useState('');
+  const [assigneeLabel, setAssigneeLabel] = useState('');
+  useEffect(() => {
+    const timer = window.setTimeout(() => setDebouncedAssigneeSearch(assigneeSearch.trim()), 300);
+    return () => window.clearTimeout(timer);
+  }, [assigneeSearch]);
 
   const [initial] = useState(() => initialState(searchParams));
   const [filters, setFilters] = useState<Filters>(initial.filters);
   const [searchInput, setSearchInput] = useState(initial.filters.search);
+  const [componentInput, setComponentInput] = useState(initial.filters.component);
   const [page, setPage] = useState(initial.page);
   const [pageSize, setPageSize] = useState(initial.pageSize);
-  const [selectedId, setSelectedId] = useState<number | null>(null);
+  const [selected, setSelected] = useState<{ row: VexInvestigationRow; tab: 'details' | 'investigation' } | null>(null);
   // Section 28 requires Project / Application / SBOM filters. Reuses the
   // dashboard's own cascading control so the two surfaces cannot drift apart.
   const [scope, setScope] = useState<DashboardFilterScope>(() => ({
@@ -186,16 +217,42 @@ function VexInvestigationContent() {
   }));
 
   useEffect(() => {
+    if (searchInput.trim() === filters.search) return;
     const timer = window.setTimeout(() => {
       const search = searchInput.trim();
       setFilters((current) => (current.search === search ? current : { ...current, search }));
       setPage(1);
     }, 350);
     return () => window.clearTimeout(timer);
-  }, [searchInput]);
+  }, [searchInput, filters.search]);
+  useEffect(() => {
+    if (componentInput.trim() === filters.component) return;
+    const timer = window.setTimeout(() => { setFilters(current => ({ ...current, component: componentInput.trim() })); setPage(1); }, 300);
+    return () => window.clearTimeout(timer);
+  }, [componentInput, filters.component]);
+
+  // Ignore our own URL writes, but restore state on browser back/forward.
+  const incomingUrl = searchParams.toString();
+  const observedUrl = useRef(incomingUrl);
+  const writtenUrl = useRef(incomingUrl);
+  const restoringUrl = useRef(false);
+  useEffect(() => {
+    if (incomingUrl === observedUrl.current) return;
+    observedUrl.current = incomingUrl;
+    if (incomingUrl === writtenUrl.current) return;
+    restoringUrl.current = true;
+    const restored = initialState(new URLSearchParams(incomingUrl));
+    setFilters(restored.filters); setSearchInput(restored.filters.search);
+    setComponentInput(restored.filters.component);
+    setPage(restored.page); setPageSize(restored.pageSize);
+    const params = new URLSearchParams(incomingUrl);
+    setScope({ projectId: positiveOrNull(params.get('project_id')), applicationId: positiveOrNull(params.get('product_id')), sbomId: positiveOrNull(params.get('sbom_id')) });
+  }, [incomingUrl]);
 
   useEffect(() => {
+    if (restoringUrl.current) { restoringUrl.current = false; return; }
     const params = new URLSearchParams();
+    if (filters.versionScope !== 'current') params.set('version_scope', filters.versionScope);
     if (filters.search) params.set('q', filters.search);
     if (filters.effectiveStatus) params.set('effective_status', filters.effectiveStatus);
     if (filters.reconciliationStatus) params.set('reconciliation_status', filters.reconciliationStatus);
@@ -203,6 +260,9 @@ function VexInvestigationContent() {
     if (filters.component) params.set('component', filters.component);
     if (filters.vexSource) params.set('vex_source', filters.vexSource);
     if (filters.needsReview) params.set('needs_review', 'true');
+    if (filters.myWork !== 'all') params.set('my_work', filters.myWork);
+    if (filters.assignee) params.set('assignee', filters.assignee);
+    if (filters.unresolvedComponent) params.set('unresolved_component', 'true');
     if (filters.sortBy !== DEFAULT_FILTERS.sortBy) params.set('sort_by', filters.sortBy);
     if (filters.sortOrder !== DEFAULT_FILTERS.sortOrder) params.set('sort_order', filters.sortOrder);
     if (page !== 1) params.set('page', String(page));
@@ -211,91 +271,166 @@ function VexInvestigationContent() {
     if (scope.applicationId) params.set('product_id', String(scope.applicationId));
     if (scope.sbomId) params.set('sbom_id', String(scope.sbomId));
     const query = params.toString();
+    writtenUrl.current = query;
     router.replace(query ? `/vex-investigation?${query}` : '/vex-investigation', { scroll: false });
   }, [filters, page, pageSize, scope, router]);
 
   const offset = (page - 1) * pageSize;
 
   const summaryQuery = useQuery<DashboardVex>({
-    queryKey: ['dashboard-vex'],
+    queryKey: ['dashboard-vex', activeTenantId],
     queryFn: ({ signal }) => getDashboardVex(signal),
-  });
-
-  const listQuery = useQuery({
-    queryKey: ['vex-investigations', filters, scope, page, pageSize],
-    queryFn: ({ signal }) =>
-      listVexInvestigations(
-        {
-          q: filters.search || undefined,
-          effective_status: filters.effectiveStatus || undefined,
-          reconciliation_status: filters.reconciliationStatus || undefined,
-          severity: filters.severity || undefined,
-          component: filters.component || undefined,
-          vex_source: filters.vexSource || undefined,
-          needs_review: filters.needsReview ? true : undefined,
-          project_id: scope.projectId ?? undefined,
-          product_id: scope.applicationId ?? undefined,
-          sbom_id: scope.sbomId ?? undefined,
-          sort_by: filters.sortBy,
-          sort_order: filters.sortOrder,
-          limit: pageSize,
-          offset,
-        },
-        signal,
-      ),
-    placeholderData: keepPreviousData,
     enabled: canRead,
   });
 
-  const detailQuery = useQuery({
-    queryKey: ['vex-investigation', selectedId],
-    queryFn: ({ signal }) => getVexInvestigation(selectedId!, signal),
-    enabled: selectedId !== null,
+  // One filter object feeds the table, its total and the Current view cards,
+  // so the three can never disagree (VEX-DASH-004). Sort and paging are
+  // deliberately absent: they reorder rows but must never move a total.
+  const filterArgs = useMemo<VexInvestigationListParams>(() => ({
+    version_scope: filters.versionScope,
+    q: filters.search || undefined,
+    my_work: filters.myWork === 'all' ? undefined : filters.myWork,
+    assignee: filters.assignee || undefined,
+    unresolved_component: filters.unresolvedComponent || undefined,
+    effective_status: filters.effectiveStatus || undefined,
+    reconciliation_status: filters.reconciliationStatus || undefined,
+    severity: filters.severity || undefined,
+    component: filters.component || undefined,
+    vex_source: filters.vexSource || undefined,
+    needs_review: filters.needsReview ? true : undefined,
+    project_id: scope.projectId ?? undefined,
+    product_id: scope.applicationId ?? undefined,
+    sbom_id: scope.sbomId ?? undefined,
+  }), [filters, scope]);
+
+  const currentViewQuery = useQuery<VexInvestigationSummary>({
+    queryKey: ['vex-investigations', activeTenantId, 'summary', filterArgs],
+    queryFn: ({ signal }) => getVexInvestigationSummary(filterArgs, signal),
+    placeholderData: undefined,
+    enabled: canRead,
   });
+
+  const listQuery = useQuery({
+    queryKey: ['vex-investigations', activeTenantId, filters, scope, page, pageSize],
+    queryFn: ({ signal }) =>
+      listVexInvestigations(
+        { ...filterArgs, sort_by: filters.sortBy, sort_order: filters.sortOrder, limit: pageSize, offset },
+        signal,
+      ),
+    placeholderData: (previous, previousQuery) => previousQuery?.queryKey[1] === activeTenantId && JSON.stringify(previousQuery.queryKey[2]) === JSON.stringify(filters) && JSON.stringify(previousQuery.queryKey[3]) === JSON.stringify(scope) ? previous : undefined,
+    enabled: canRead,
+  });
+
+  const assigneesQuery = useInfiniteQuery({
+    queryKey: ['vex-assignees', activeTenantId, debouncedAssigneeSearch],
+    queryFn: ({ pageParam, signal }) => searchVexAssignees(debouncedAssigneeSearch, pageParam, signal),
+    initialPageParam: 0,
+    getNextPageParam: last => last.offset + last.items.length < last.total ? last.offset + last.limit : undefined,
+    enabled: canRead,
+  });
+  const assignees = assigneesQuery.data?.pages.flatMap(part => part.items) ?? [];
 
   const total = listQuery.data?.total ?? 0;
   const totalPages = Math.max(1, Math.ceil(total / pageSize));
   useEffect(() => {
-    if (page > totalPages) setPage(totalPages);
-  }, [page, totalPages]);
+    if (!listQuery.isFetching && !listQuery.isPlaceholderData && listQuery.data && page > totalPages) setPage(totalPages);
+  }, [page, totalPages, listQuery.isFetching, listQuery.isPlaceholderData, listQuery.data]);
 
   const rows = listQuery.data?.items ?? [];
+  // The list response carries product-wide provenance, even for an SBOM filter.
+  // Match the backend posture projection's target/evidence identity (VEX-DASH-004).
+  const postureItems = useMemo(() => (listQuery.data?.posture ?? []).filter(item => !scope.sbomId
+    || String(item.target_sbom_id) === String(scope.sbomId)
+    || String(item.posture_sbom_id) === String(scope.sbomId)), [listQuery.data?.posture, scope.sbomId]);
+  const comparisonSbomId = scope.sbomId ?? (scope.applicationId && postureItems.length === 1 ? postureItems[0].current_sbom?.id : null);
   const summary = summaryQuery.data;
 
-  const cards = useMemo(
+  const currentView = currentViewQuery.data;
+  const currentCards = useMemo(
     () => [
-      { label: 'Total Contexts', value: summary?.total_contexts, filter: {} },
-      { label: 'Affected', value: summary?.affected_count, filter: { effectiveStatus: 'AFFECTED' } },
-      { label: 'Not Affected', value: summary?.not_affected_count, filter: { effectiveStatus: 'NOT_AFFECTED' } },
-      { label: 'Fixed', value: summary?.fixed_count, filter: { effectiveStatus: 'FIXED' } },
-      {
-        label: 'Under Investigation',
-        value: summary?.under_investigation_count,
-        filter: { effectiveStatus: 'UNDER_INVESTIGATION' },
-      },
-      { label: 'Analyzer Only', value: summary?.analyzer_only_count, filter: { reconciliationStatus: 'ANALYZER_ONLY' } },
-      { label: 'VEX Only', value: summary?.vex_only_count, filter: { reconciliationStatus: 'VEX_ONLY' } },
-      { label: 'Matched', value: summary?.matched_count, filter: { reconciliationStatus: 'MATCHED' } },
-      { label: 'Needs Review', value: summary?.needs_review_count, filter: { needsReview: true } },
-      {
-        label: 'Unresolved Mapping',
-        value: summary?.unresolved_mapping_count,
-        filter: { reconciliationStatus: 'UNRESOLVED_MAPPING' },
-      },
+      { label: 'Total investigations', value: currentView?.total, filter: null },
+      { label: 'Under Investigation', value: currentView?.under_investigation_count, filter: { effectiveStatus: 'UNDER_INVESTIGATION' } },
+      { label: 'Affected', value: currentView?.affected_count, filter: { effectiveStatus: 'AFFECTED' } },
+      { label: 'Not Affected', value: currentView?.not_affected_count, filter: { effectiveStatus: 'NOT_AFFECTED' } },
+      { label: 'Fixed', value: currentView?.fixed_count, filter: { effectiveStatus: 'FIXED' } },
+      { label: 'Needs Review', value: currentView?.needs_review_count, filter: { needsReview: true } },
+    ] satisfies Array<{ label: string; value: number | undefined; filter: Partial<Filters> | null }>,
+    [currentView],
+  );
+
+  const tenantCards = useMemo(
+    () => [
+      { label: 'Total contexts', value: summary?.total_contexts },
+      { label: 'Under Investigation', value: summary?.under_investigation_count },
+      { label: 'Affected', value: summary?.affected_count },
+      { label: 'Not Affected', value: summary?.not_affected_count },
+      { label: 'Fixed', value: summary?.fixed_count },
+      { label: 'Analyzer Only', value: summary?.analyzer_only_count },
+      { label: 'VEX Only', value: summary?.vex_only_count },
+      { label: 'Matched', value: summary?.matched_count },
+      { label: 'Needs Review', value: summary?.needs_review_count },
+      { label: 'Unresolved Mapping', value: summary?.unresolved_mapping_count },
     ],
     [summary],
   );
-
-  function applyCardFilter(patch: Partial<Filters>) {
-    setFilters({ ...DEFAULT_FILTERS, search: '', ...patch });
-    setSearchInput('');
-    setPage(1);
-  }
 
   function updateFilter(patch: Partial<Filters>) {
     setFilters((current) => ({ ...current, ...patch }));
     setPage(1);
   }
+
+  function clearFilters() {
+    setFilters(DEFAULT_FILTERS); setSearchInput(''); setAssigneeLabel('');
+    setComponentInput('');
+    setScope({ projectId: null, applicationId: null, sbomId: null }); setPage(1);
+  }
+
+  const personalWorkActive = filters.myWork === 'me' || filters.assignee === 'me';
+  const unassignedActive = filters.myWork === 'unassigned' || filters.assignee === 'unassigned';
+
+  const chips: Array<{ label: string; clear: () => void }> = [];
+  if (filters.myWork !== 'all') chips.push({ label: WORK_LABELS[filters.myWork], clear: () => updateFilter({ myWork: 'all' }) });
+  if (filters.assignee) chips.push({ label: `Assignee: ${filters.assignee === 'me' ? 'Me' : filters.assignee === 'unassigned' ? 'Unassigned' : assignees.find(item => item.id === filters.assignee)?.label || assigneeLabel || 'Selected tenant user'}`, clear: () => updateFilter({ assignee: '' }) });
+  for (const [key, label] of [['severity', 'Severity'], ['effectiveStatus', 'Effective'], ['reconciliationStatus', 'Reconciliation'], ['component', 'Component'], ['vexSource', 'VEX source']] as const) {
+    if (filters[key]) chips.push({ label: `${label}: ${readable(filters[key])}`, clear: () => { if (key === 'component') setComponentInput(''); updateFilter({ [key]: '' }); } });
+  }
+  if (filters.search) chips.push({ label: `Search: ${filters.search}`, clear: () => { setSearchInput(''); updateFilter({ search: '' }); } });
+  if (filters.needsReview) chips.push({ label: 'Needs review', clear: () => updateFilter({ needsReview: false }) });
+  if (filters.unresolvedComponent) chips.push({ label: 'Unresolved component', clear: () => updateFilter({ unresolvedComponent: false }) });
+  for (const [key, label] of [['projectId', 'Project'], ['applicationId', 'Application'], ['sbomId', 'SBOM']] as const) {
+    if (scope[key]) chips.push({ label: `${label} selected`, clear: () => { setScope(current => key === 'projectId' ? { projectId: null, applicationId: null, sbomId: null } : key === 'applicationId' ? { ...current, applicationId: null, sbomId: null } : { ...current, sbomId: null }); setPage(1); } });
+  }
+  const scopeControls = <DashboardFilters scope={scope} historicalVersions={filters.versionScope !== 'current'} hideClear onChange={next => { setScope(next); setPage(1); }} isUpdating={listQuery.isFetching} />;
+  const filterControls = <div className="flex flex-wrap items-end gap-3">
+    <Select label="Version scope" value={filters.versionScope} onChange={event => { updateFilter({versionScope: event.target.value as Filters['versionScope']}); setScope(current => ({...current, sbomId: null})); }}>
+      <option value="current">Current posture</option><option value="all">All versions</option><option value="historical">Historical investigations</option>
+    </Select>
+    {workingRole ? <Select label="My work" value={filters.myWork} onChange={event => updateFilter({ myWork: event.target.value as Filters['myWork'], assignee: '' })}>
+      {Object.entries(WORK_LABELS).map(([value, label]) => <option key={value} value={value}>{label}</option>)}
+    </Select> : null}
+    <div className="min-w-[12rem] flex-1">
+      <AssigneeCombobox compact label="Filter by assignee" selected={filters.assignee}
+        selectedLabel={assigneeLabel || (filters.assignee ? 'Selected tenant user' : 'All assignees')}
+        candidates={[...(!assigneeSearch.trim() ? [{ id: '', label: 'All assignees', roles: [] }, ...(workingRole ? [{ id: 'me', label: 'Me', roles: [] }] : []), { id: 'unassigned', label: 'Unassigned', roles: [] }] : []), ...assignees]}
+        onSearch={setAssigneeSearch} loading={assigneesQuery.isFetching || assigneeSearch.trim() !== debouncedAssigneeSearch}
+        error={assigneesQuery.isError} onRetry={() => assigneesQuery.refetch()}
+        onLoadMore={assigneesQuery.hasNextPage ? () => assigneesQuery.fetchNextPage() : undefined}
+        onSelect={id => { setAssigneeLabel(assignees.find(item => item.id === id)?.label ?? (id === 'me' ? 'Me' : id === 'unassigned' ? 'Unassigned' : 'All assignees')); updateFilter({ assignee: id, myWork: 'all' }); }} />
+    </div>
+    <Select label="Severity" value={filters.severity} onChange={event => updateFilter({ severity: event.target.value })}>
+      <option value="">All severities</option>{['CRITICAL', 'HIGH', 'MEDIUM', 'LOW', 'UNKNOWN'].map(value => <option key={value} value={value}>{readable(value)}</option>)}
+    </Select>
+    <Select label="Effective status" value={filters.effectiveStatus} onChange={event => updateFilter({ effectiveStatus: event.target.value })}>
+      <option value="">All effective statuses</option>{EFFECTIVE_STATUSES.map(value => <option key={value} value={value}>{readable(value)}</option>)}
+    </Select>
+    <Select label="Reconciliation status" value={filters.reconciliationStatus} onChange={event => updateFilter({ reconciliationStatus: event.target.value })}>
+      <option value="">All reconciliation states</option>{RECONCILIATION_STATUSES.map(value => <option key={value} value={value}>{readable(value)}</option>)}
+    </Select>
+    <Input label="Component" value={componentInput} onChange={event => setComponentInput(event.target.value)} placeholder="Name or version" />
+    {/* Review is the conflict/revalidation union, distinct from mapping. */}
+    <label className="flex items-center gap-2 rounded border border-border px-2 py-2 text-xs"><input type="checkbox" checked={filters.needsReview} onChange={event => updateFilter({ needsReview: event.target.checked })} />Needs review</label>
+    <label title="Contexts without a resolved component, including VEX-only records." className="flex items-center gap-2 rounded border border-border px-2 py-2 text-xs"><input type="checkbox" checked={filters.unresolvedComponent} onChange={event => updateFilter({ unresolvedComponent: event.target.checked })} />Unresolved component</label>
+  </div>;
 
   if (!canRead) {
     return (
@@ -311,83 +446,98 @@ function VexInvestigationContent() {
   return (
     <>
       <TopBar title="VEX Investigation" />
-      <div className="space-y-4 p-6">
-        <div className="grid grid-cols-2 gap-3 md:grid-cols-5">
-          {cards.map((card) => (
-            <button
-              key={card.label}
-              type="button"
-              onClick={() => applyCardFilter(card.filter as Partial<Filters>)}
-              className="rounded-lg border border-gray-200 bg-white p-3 text-left transition hover:border-hcl-blue dark:border-gray-800 dark:bg-gray-900"
-            >
-              <div className="text-[10px] font-semibold uppercase tracking-wider text-hcl-muted">
-                {card.label}
+      <div className="min-w-0 space-y-4 p-4 sm:p-6">
+        {filters.versionScope !== 'current' && <Alert variant="info">Historical investigation evidence is read-only. Historical assignments do not grant authority on a new version.</Alert>}
+        <section aria-labelledby="vex-current-view-heading" className="space-y-2">
+          <div className="flex flex-wrap items-baseline justify-between gap-2">
+            <h2 id="vex-current-view-heading" className="text-sm font-semibold text-hcl-navy dark:text-gray-100">{filters.versionScope === 'current' ? 'Current view' : filters.versionScope === 'historical' ? 'Historical view' : 'All versions view'}</h2>
+            <p role="status" className="text-xs text-hcl-muted">
+              {currentViewQuery.isError
+                ? 'Current view metrics unavailable'
+                : chips.length
+                  ? `Counts for the ${chips.length} active filter${chips.length === 1 ? '' : 's'} below · ${filters.versionScope === 'current' ? 'current posture versions, latest successful analysis' : 'explicit historical/version scope'}`
+                  : filters.versionScope === 'current' ? 'All current posture versions in this tenant · latest successful analysis' : 'Explicit version/history scope · independent of current posture'}
+            </p>
+          </div>
+          <div className="grid grid-cols-2 gap-3 sm:grid-cols-3 xl:grid-cols-6">
+            {currentCards.map((card) => {
+              const content = (
+                <>
+                  <div className="text-[10px] font-semibold uppercase tracking-wider text-hcl-muted">{card.label}</div>
+                  <div className="mt-1 text-xl font-semibold text-hcl-navy dark:text-gray-100">{card.value ?? '—'}</div>
+                </>
+              );
+              const base = 'rounded-lg border border-gray-200 bg-white p-3 text-left dark:border-gray-800 dark:bg-gray-900';
+              return card.filter ? (
+                <button key={card.label} type="button" onClick={() => updateFilter(card.filter)} className={`${base} transition hover:border-hcl-blue`}>
+                  {content}
+                </button>
+              ) : (
+                <div key={card.label} className={base}>{content}</div>
+              );
+            })}
+          </div>
+          {currentView?.unresolved_mapping_count ? (
+            <p className="text-xs text-hcl-muted">
+              {currentView.unresolved_mapping_count} unresolved component mapping{currentView.unresolved_mapping_count === 1 ? '' : 's'} included in the total and reported separately from the status counts.
+            </p>
+          ) : null}
+        </section>
+
+        <details className="rounded-lg border border-gray-200 bg-white p-3 dark:border-gray-800 dark:bg-gray-900">
+          <summary className="cursor-pointer text-sm font-semibold text-hcl-navy dark:text-gray-100">
+            Tenant overview <span className="font-normal text-hcl-muted">· all current SBOM versions in the tenant, ignores the filters below</span>
+          </summary>
+          <dl className="mt-3 grid grid-cols-2 gap-3 md:grid-cols-5">
+            {tenantCards.map((card) => (
+              <div key={card.label}>
+                <dt className="text-[10px] font-semibold uppercase tracking-wider text-hcl-muted">{card.label}</dt>
+                <dd className="mt-1 text-lg font-semibold text-hcl-navy dark:text-gray-100">{card.value ?? '—'}</dd>
               </div>
-              <div className="mt-1 text-xl font-semibold text-hcl-navy dark:text-gray-100">
-                {card.value ?? '—'}
-              </div>
-            </button>
-          ))}
-        </div>
+            ))}
+          </dl>
+        </details>
+
+        {listQuery.data?.posture && filters.versionScope === 'current' && <PostureEvidence
+          key={`${activeTenantId}-${scope.projectId}-${scope.applicationId}-${scope.sbomId}`} items={postureItems} />}
 
         <Card>
-          <div className="border-b border-gray-200 p-3 dark:border-gray-800">
-            <DashboardFilters
-              scope={scope}
-              onChange={(next) => {
-                setScope(next);
-                setPage(1);
-              }}
-              isUpdating={listQuery.isFetching}
-            />
+          <div className="hidden border-b border-gray-200 p-3 sm:block dark:border-gray-800">
+            {!mobileFiltersOpen ? scopeControls : null}
           </div>
           <TableFilterBar>
             <TableSearchInput
               value={searchInput}
               onChange={setSearchInput}
-              placeholder="Vulnerability ID or alias..."
+              label="Search vulnerability"
+              placeholder="Search CVE, alias or vulnerability..."
             />
-            <Select
-              value={filters.effectiveStatus}
-              onChange={(event) => updateFilter({ effectiveStatus: event.target.value })}
-              aria-label="Effective status"
-            >
-              <option value="">All effective statuses</option>
-              {EFFECTIVE_STATUSES.map((status) => (
-                <option key={status} value={status}>
-                  {status.replace(/_/g, ' ')}
-                </option>
-              ))}
-            </Select>
-            <Select
-              value={filters.reconciliationStatus}
-              onChange={(event) => updateFilter({ reconciliationStatus: event.target.value })}
-              aria-label="Reconciliation status"
-            >
-              <option value="">All reconciliation states</option>
-              {RECONCILIATION_STATUSES.map((status) => (
-                <option key={status} value={status}>
-                  {status.replace(/_/g, ' ')}
-                </option>
-              ))}
-            </Select>
-            <Input
-              value={filters.component}
-              onChange={(event) => updateFilter({ component: event.target.value })}
-              placeholder="Component"
-              aria-label="Component"
-            />
-            <label className="flex items-center gap-2 text-xs text-hcl-muted">
-              <input
-                type="checkbox"
-                checked={filters.needsReview}
-                onChange={(event) => updateFilter({ needsReview: event.target.checked })}
-              />
-              Needs review
-            </label>
+            <Button variant="outline" className="sm:hidden" onClick={() => setMobileFiltersOpen(true)}>Filters ({chips.length})</Button>
           </TableFilterBar>
+          <div className="hidden border-b border-border p-3 sm:block">{!mobileFiltersOpen ? filterControls : null}</div>
+          <Dialog open={mobileFiltersOpen} onClose={() => setMobileFiltersOpen(false)} title="Investigation filters">
+            <div className="space-y-3 p-4">{scopeControls}{filterControls}
+              {chips.length ? <Button variant="ghost" onClick={clearFilters}>Clear all filters</Button> : null}
+              <Button onClick={() => setMobileFiltersOpen(false)}>Show investigations</Button>
+            </div>
+          </Dialog>
+          <div className="space-y-2 border-b border-border px-4 py-3">
+            <div className="flex flex-wrap gap-2">
+              {workingRole ? <Button size="sm" variant={personalWorkActive ? 'primary' : 'outline'} aria-pressed={personalWorkActive} onClick={() => updateFilter({ myWork: personalWorkActive ? 'all' : 'me', assignee: '' })}>Assigned to me</Button> : null}
+              {workingRole ? <Button size="sm" variant="ghost" aria-pressed={unassignedActive} onClick={() => updateFilter({ myWork: unassignedActive ? 'all' : 'unassigned', assignee: '' })}>Unassigned</Button> : null}
+              <Button size="sm" variant="ghost" aria-pressed={filters.needsReview} onClick={() => updateFilter({ needsReview: !filters.needsReview })}>Needs review</Button>
+              <Button size="sm" variant="ghost" aria-pressed={filters.severity === 'CRITICAL'} onClick={() => updateFilter({ severity: filters.severity === 'CRITICAL' ? '' : 'CRITICAL' })}>Critical</Button>
+              <Button size="sm" variant="ghost" aria-pressed={filters.reconciliationStatus === 'UNRESOLVED_MAPPING'} onClick={() => updateFilter({ reconciliationStatus: filters.reconciliationStatus === 'UNRESOLVED_MAPPING' ? '' : 'UNRESOLVED_MAPPING' })}>Unresolved mapping</Button>
+            </div>
+            {chips.length ? <div className="flex flex-wrap items-center gap-2" aria-label="Active filters">
+              {chips.map(chip => <button key={chip.label} type="button" aria-label={`Remove ${chip.label} filter`} onClick={chip.clear} className="rounded-full border border-border px-2.5 py-1 text-xs focus-visible:ring-2 focus-visible:ring-hcl-blue">{chip.label} ×</button>)}
+              <Button size="sm" variant="ghost" onClick={clearFilters}>Clear all filters</Button>
+            </div> : null}
+            <p role="status" className="text-xs text-hcl-muted">{listQuery.isFetching ? 'Updating investigations…' : listQuery.isError ? 'Investigation results unavailable' : `${total} matching investigations`}</p>
+          </div>
+          {listQuery.isError ? <Alert variant="error">Unable to load investigations. <Button size="sm" variant="ghost" onClick={() => listQuery.refetch()}>Retry</Button></Alert> : null}
 
-          <Table>
+          <Table ariaLabel="VEX investigations">
             <TableHead>
               <tr>
                 <SortableTh
@@ -441,10 +591,14 @@ function VexInvestigationContent() {
             <TableBody>
               {listQuery.isLoading ? (
                 <SkeletonRow cols={10} />
-              ) : rows.length === 0 ? (
-                <EmptyRow cols={10} message="No VEX investigations match these filters." />
+              ) : listQuery.isError ? null : rows.length === 0 ? (
+                <tr><td colSpan={10} className="p-8 text-center text-sm">
+                  <p>{workingRole && chips.length === 1 && (filters.myWork === 'me' || filters.assignee === 'me') ? "You're all caught up" : chips.length ? 'No matching investigations' : 'No investigations exist'}</p>
+                  <p className="mt-1 text-xs text-hcl-muted">{filters.myWork === 'me' || filters.assignee === 'me' ? 'No VEX investigations match your personal work filters.' : chips.length ? 'Try changing or clearing some filters.' : 'Investigations will appear when analyzer or VEX evidence is available.'}</p>
+                  {chips.length ? <Button size="sm" variant="ghost" onClick={clearFilters}>Clear filters</Button> : null}
+                </td></tr>
               ) : (
-                rows.map((row) => <InvestigationTableRow key={row.id} row={row} onOpen={setSelectedId} />)
+                rows.map((row) => <InvestigationTableRow key={row.id} row={row} onOpen={(row, tab) => setSelected({ row, tab })} />)
               )}
             </TableBody>
           </Table>
@@ -467,30 +621,27 @@ function VexInvestigationContent() {
             itemNoun="investigation"
           />
         </Card>
+        {comparisonSbomId && <section aria-label="Version history and comparison" className="rounded-xl border border-border bg-surface p-4">
+          <div className="flex flex-wrap items-center justify-between gap-3">
+            <div><h2 className="text-sm font-semibold text-hcl-navy">Version history and comparison</h2>
+              <p className="mt-1 text-xs text-hcl-muted">Review previous version evidence after triaging the investigation queue.</p></div>
+            <Button size="sm" variant="outline" aria-expanded={versionToolsOpen} aria-controls="vex-version-tools"
+              onClick={() => setVersionToolsOpen(value => !value)}>{versionToolsOpen ? 'Collapse version tools' : 'Open version tools'}</Button>
+          </div>
+          {versionToolsOpen && <div id="vex-version-tools" className="mt-4 space-y-4">
+            {filters.versionScope !== 'current' && scope.sbomId && <VexRunHistoryPanel key={`${activeTenantId}-${scope.sbomId}`} sbomId={scope.sbomId} />}
+            <VexVersionComparisonPanel key={`${activeTenantId}-${comparisonSbomId}`} sbomId={comparisonSbomId} />
+          </div>}
+        </section>}
       </div>
 
-      <Dialog
-        open={selectedId !== null}
-        onClose={() => setSelectedId(null)}
-        title="Investigation detail"
-        maxWidth="2xl"
-      >
-        <DialogBody>
-          {detailQuery.isLoading ? (
-            <p className="text-sm text-hcl-muted">Loading evidence...</p>
-          ) : detailQuery.data ? (
-            <InvestigationDetailPanel
-              detail={detailQuery.data}
-              canWrite={canWrite}
-              onSaved={() => showToast('Decision recorded', 'success')}
-              onConflict={() => {
-                detailQuery.refetch();
-                showToast('Updated by someone else — reloaded the latest version', 'error');
-              }}
-            />
-          ) : null}
-        </DialogBody>
-      </Dialog>
+      <VexInvestigationDialog
+        row={selected?.row ?? null}
+        initialTab={selected?.tab ?? 'details'}
+        onClose={() => setSelected(null)}
+        onSaved={() => showToast('VEX investigation updated', 'success')}
+        onConflict={() => showToast('Updated by someone else — reloaded the latest version', 'error')}
+      />
     </>
   );
 }
@@ -500,28 +651,32 @@ function InvestigationTableRow({
   onOpen,
 }: {
   row: VexInvestigationRow;
-  onOpen: (id: number) => void;
+  onOpen: (row: VexInvestigationRow, tab: 'details' | 'investigation') => void;
 }) {
   const flagged = FLAGGED_RECONCILIATION.has(row.reconciliation_status);
   const vexOnlyAffected = row.reconciliation_status === 'VEX_ONLY' && row.effective_status === 'AFFECTED';
   return (
     <tr className={flagged || vexOnlyAffected ? 'bg-amber-50/60 dark:bg-amber-950/20' : undefined}>
       <Td>
-        <div className="font-medium text-hcl-navy dark:text-gray-100">{row.canonical_vulnerability_id}</div>
+        <button type="button" onClick={() => onOpen(row, 'details')}
+          className="rounded font-medium text-hcl-blue underline-offset-4 hover:underline focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-hcl-blue"
+          aria-label={`View vulnerability ${row.canonical_vulnerability_id}`}>
+          {row.canonical_vulnerability_id}
+        </button>
         {row.aliases.length > 0 ? (
           <div className="text-[10px] text-hcl-muted">{row.aliases.join(', ')}</div>
         ) : null}
       </Td>
       {/* Severity describes the vulnerability and is never rewritten by VEX
           (VEX-DATA-005) — a NOT_AFFECTED context still shows CRITICAL. */}
-      <Td>{row.severity ?? '—'}</Td>
+      <Td><SeverityBadge severity={row.severity ?? "UNKNOWN"} /></Td>
       <Td>
         {row.component_name ?? <span className="text-hcl-muted">Unresolved</span>}
         {row.component_version ? (
           <span className="text-hcl-muted"> {row.component_version}</span>
         ) : null}
       </Td>
-      <Td>{row.sbom_name ?? '—'}</Td>
+      <Td>{row.sbom_name ?? '—'}{row.sbom_version && <div className="text-xs">Version {row.sbom_version}</div>}{row.historical && <Badge variant="gray">Historical · read-only</Badge>}</Td>
       <Td>{row.analyzer_detection_state ?? '—'}</Td>
       <Td>{row.native_vex_status ?? '—'}</Td>
       <Td>
@@ -534,212 +689,12 @@ function InvestigationTableRow({
           {row.reconciliation_status.replace(/_/g, ' ')}
         </span>
       </Td>
-      <Td>{row.assigned_to ?? row.reviewed_by ?? '—'}</Td>
+      <Td>{row.assigned_to ? <><span>{row.assigned_to_label ?? 'Legacy assignment'}</span>{row.assigned_to_is_self ? <Badge variant="info">You</Badge> : null}{row.assigned_to_active === false ? <span className="block text-[10px] text-hcl-muted">Inactive or legacy owner</span> : null}</> : <Badge variant="gray">Unassigned</Badge>}</Td>
       <Td>
-        <Button variant="ghost" size="sm" onClick={() => onOpen(row.id)}>
-          Open
+        <Button variant="ghost" size="sm" onClick={() => onOpen(row, 'investigation')}>
+          Investigate
         </Button>
       </Td>
     </tr>
-  );
-}
-
-function InvestigationDetailPanel({
-  detail,
-  canWrite,
-  onSaved,
-  onConflict,
-}: {
-  detail: VexInvestigationDetail;
-  canWrite: boolean;
-  onSaved: () => void;
-  onConflict: () => void;
-}) {
-  const [formError, setFormError] = useState<string | null>(null);
-  const [assignee, setAssignee] = useState(detail.internal_decision.assigned_to ?? '');
-  const [componentId, setComponentId] = useState('');
-  const queryClient = useQueryClient();
-
-  const assignment = useMutation({
-    mutationFn: () =>
-      setVexInvestigationAssignment(detail.id, {
-        assigned_to: assignee.trim() || null,
-        row_version: detail.row_version,
-        reason: assignee.trim() ? `Assigned to ${assignee.trim()}` : 'Unassigned',
-      }),
-    onSuccess: () => {
-      invalidateVexSurfaces(queryClient);
-      onSaved();
-    },
-    onError: (error: unknown) => {
-      if ((error as { status?: number })?.status === 409) return onConflict();
-      setFormError(error instanceof Error ? error.message : 'Could not save the assignment.');
-    },
-  });
-
-  const mapping = useMutation({
-    mutationFn: () =>
-      resolveVexInvestigationComponent(detail.id, {
-        component_id: Number(componentId),
-        row_version: detail.row_version,
-        reason: `Bound to component ${componentId} by analyst review`,
-      }),
-    onSuccess: () => {
-      invalidateVexSurfaces(queryClient);
-      onSaved();
-    },
-    onError: (error: unknown) => {
-      if ((error as { status?: number })?.status === 409) return onConflict();
-      setFormError(error instanceof Error ? error.message : 'Could not bind the component.');
-    },
-  });
-
-  return (
-    <div className="space-y-4">
-      <div className="grid gap-4 md:grid-cols-3">
-        <Section title="Analyzer Evidence">
-          <Row label="Detection" value={detail.analyzer_evidence.detection_state} />
-          <Row label="Sources" value={detail.analyzer_evidence.sources.join(', ')} />
-          <Row label="Run" value={detail.analyzer_evidence.analysis_run_id} />
-          <Row label="Match" value={detail.analyzer_evidence.match_strategy} />
-          <Row label="First seen" value={detail.analyzer_evidence.first_seen_at} />
-          <Row label="Last seen" value={detail.analyzer_evidence.last_seen_at} />
-        </Section>
-
-        <Section title="Imported VEX">
-          {detail.imported_vex.length === 0 ? (
-            <p className="text-xs text-hcl-muted">No imported assertions.</p>
-          ) : (
-            detail.imported_vex.map((assertion) => (
-              <div key={assertion.statement_id} className="mb-2 border-b border-gray-100 pb-2 last:border-0">
-                <div className="text-xs font-medium">
-                  {assertion.author ?? 'Unknown source'}
-                  {assertion.is_effective ? <Badge variant="info">effective</Badge> : null}
-                  {assertion.version_applicable === false ? (
-                    <Badge variant="gray">not applicable</Badge>
-                  ) : null}
-                  {assertion.superseded ? <Badge variant="gray">superseded</Badge> : null}
-                </div>
-                <Row label="Native" value={assertion.source_status} />
-                <Row label="Normalized" value={assertion.normalized_status} />
-                <Row label="Format" value={assertion.source_format} />
-                <Row label="Justification" value={assertion.justification} />
-              </div>
-            ))
-          )}
-        </Section>
-
-        <Section title="Internal Decision">
-          <Row label="Status" value={detail.internal_decision.effective_status} />
-          <Row label="Reviewer" value={detail.internal_decision.reviewer} />
-          <Row label="Assignee" value={detail.internal_decision.assigned_to} />
-          <Row label="Reason" value={detail.internal_decision.reason} />
-          <Row label="Updated" value={detail.internal_decision.updated_at} />
-        </Section>
-      </div>
-
-      <div className="grid gap-4 md:grid-cols-2">
-        <Section title="Vulnerability">
-          <Row label="Canonical" value={detail.vulnerability.canonical_vulnerability_id} />
-          <Row label="Aliases" value={detail.vulnerability.aliases.join(', ')} />
-          <Row label="Severity" value={detail.vulnerability.severity} />
-          <Row label="Reconciliation" value={detail.reconciliation_status} />
-          <Row label="Effective" value={detail.effective_status} />
-        </Section>
-        <Section title="History">
-          {detail.history.length === 0 ? (
-            <p className="text-xs text-hcl-muted">No recorded history.</p>
-          ) : (
-            detail.history.map((entry, index) => (
-              <div key={`${entry.at}-${index}`} className="text-xs">
-                <span className="text-hcl-muted">{entry.at ?? '—'}</span> · {entry.kind} ·{' '}
-                {entry.summary ?? entry.new_status}
-              </div>
-            ))
-          )}
-        </Section>
-      </div>
-
-      {canWrite ? (
-        <Section title="Ownership and mapping">
-          <div className="grid gap-2 md:grid-cols-2">
-            <Input
-              value={assignee}
-              onChange={(e) => setAssignee(e.target.value)}
-              placeholder="Assign to (blank to unassign)"
-              aria-label="Assign to"
-            />
-            <Button
-              variant="ghost"
-              disabled={assignment.isPending}
-              onClick={() => assignment.mutate()}
-            >
-              {assignment.isPending ? 'Saving...' : 'Save assignment'}
-            </Button>
-            {detail.reconciliation_status === 'UNRESOLVED_MAPPING' ? (
-              <>
-                <Input
-                  value={componentId}
-                  onChange={(e) => setComponentId(e.target.value)}
-                  placeholder="Component ID to bind"
-                  aria-label="Component ID"
-                />
-                <Button
-                  variant="ghost"
-                  disabled={mapping.isPending || !componentId.trim()}
-                  onClick={() => mapping.mutate()}
-                >
-                  {mapping.isPending ? 'Binding...' : 'Bind to component'}
-                </Button>
-              </>
-            ) : null}
-          </div>
-          {detail.reconciliation_status === 'UNRESOLVED_MAPPING' ? (
-            <p className="mt-2 text-[11px] text-hcl-muted">
-              The matcher found several equally weak candidates and refused to guess.
-              Binding re-runs reconciliation for this context.
-            </p>
-          ) : null}
-        </Section>
-      ) : null}
-
-      <Section title="Record a decision">
-        {/* The shared editor — the same component the SBOM page hosts, so the
-            fields and validation cannot drift between the two entry points. */}
-        <VexDecisionEditor
-          sbomId={detail.sbom_id}
-          componentId={detail.component.component_id ?? 0}
-          componentLabel={
-            detail.component.name
-              ? `${detail.component.name}${detail.component.version ? ` ${detail.component.version}` : ''}`
-              : undefined
-          }
-          vulnerabilityId={detail.vulnerability.canonical_vulnerability_id}
-          investigation={detail}
-          mode="full"
-          canWrite={canWrite}
-          onSaved={onSaved}
-          onConflict={onConflict}
-        />
-      </Section>
-    </div>
-  );
-}
-
-function Section({ title, children }: { title: string; children: React.ReactNode }) {
-  return (
-    <div className="rounded-lg border border-gray-200 p-3 dark:border-gray-800">
-      <div className="mb-2 text-[10px] font-semibold uppercase tracking-wider text-hcl-muted">{title}</div>
-      {children}
-    </div>
-  );
-}
-
-function Row({ label, value }: { label: string; value: string | number | null | undefined }) {
-  return (
-    <div className="flex justify-between gap-3 text-xs">
-      <span className="text-hcl-muted">{label}</span>
-      <span className="truncate text-right">{value === null || value === undefined || value === '' ? '—' : value}</span>
-    </div>
   );
 }

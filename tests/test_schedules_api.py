@@ -12,6 +12,11 @@ import json
 import uuid
 
 import pytest
+from app.db import SessionLocal
+from app.models import SBOMSource
+
+from tests.public_id_fixture import public_row
+from tests.tenant_fixture_scope import verified_fixture_tenant
 
 
 @pytest.fixture
@@ -82,8 +87,8 @@ def _stub_celery(monkeypatch):
 
     class _FakeTask:
         @staticmethod
-        def delay(sbom_id, schedule_id, report_cycle=None):  # noqa: ARG004
-            captured.append((sbom_id, schedule_id))
+        def apply_async(kwargs, task_id=None):  # noqa: ARG004
+            captured.append((kwargs["sbom_id"], kwargs["schedule_id"]))
             return None
 
     from app.workers import scheduled_analysis
@@ -315,7 +320,10 @@ def test_pause_then_resume_cycles_next_run_at(client, project_id):
     assert resumed.json()["next_run_at"] is not None
 
 
-def test_run_now_for_project_fans_out_to_member_sboms(client, project_id, sbom_id, _stub_celery):
+def test_run_now_for_project_fans_out_to_member_sboms(client, project_id, product_id, sample_sbom_dict, _stub_celery):
+    sbom_id = _product_sbom(client, project_id, product_id, sample_sbom_dict)
+    selected = client.patch(f"/api/products/{product_id}", json={"current_sbom_id": sbom_id})
+    assert selected.status_code == 200, selected.text
     create = client.post(
         f"/api/projects/{project_id}/schedule",
         json={"cadence": "DAILY"},
@@ -327,7 +335,8 @@ def test_run_now_for_project_fans_out_to_member_sboms(client, project_id, sbom_i
     body = resp.json()
     assert sbom_id in body["sbom_ids"]
     # Stub recorded the per-SBOM enqueue
-    assert (sbom_id, sched_id) in _stub_celery
+    with SessionLocal() as db, verified_fixture_tenant(db, 1):
+        assert (public_row(db, SBOMSource, sbom_id).id, sched_id) in _stub_celery
 
 
 def test_run_now_for_sbom_enqueues_only_that_sbom(client, sbom_id, _stub_celery):
@@ -340,7 +349,8 @@ def test_run_now_for_sbom_enqueues_only_that_sbom(client, sbom_id, _stub_celery)
     resp = client.post(f"/api/schedules/{sched_id}/run-now")
     assert resp.status_code == 202
     assert resp.json()["sbom_ids"] == [sbom_id]
-    assert _stub_celery == [(sbom_id, sched_id)]
+    with SessionLocal() as db, verified_fixture_tenant(db, 1):
+        assert _stub_celery == [(public_row(db, SBOMSource, sbom_id).id, sched_id)]
 
 
 def test_run_now_for_product_fans_out_to_product_sboms(
@@ -351,6 +361,8 @@ def test_run_now_for_product_fans_out_to_product_sboms(
     _stub_celery,
 ):
     sbom_id = _product_sbom(client, project_id, product_id, sample_sbom_dict)
+    selected = client.patch(f"/api/products/{product_id}", json={"current_sbom_id": sbom_id})
+    assert selected.status_code == 200, selected.text
     create = client.post(
         f"/api/products/{product_id}/schedule",
         json={"cadence": "DAILY"},
@@ -360,7 +372,8 @@ def test_run_now_for_product_fans_out_to_product_sboms(
     resp = client.post(f"/api/schedules/{sched_id}/run-now")
     assert resp.status_code == 202, resp.text
     assert resp.json()["sbom_ids"] == [sbom_id]
-    assert _stub_celery == [(sbom_id, sched_id)]
+    with SessionLocal() as db, verified_fixture_tenant(db, 1):
+        assert _stub_celery == [(public_row(db, SBOMSource, sbom_id).id, sched_id)]
 
 
 def test_run_now_returns_502_when_broker_drops_every_enqueue(client, sbom_id, monkeypatch):

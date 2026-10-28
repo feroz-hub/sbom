@@ -1,0 +1,40 @@
+{
+  "source_files": 73,
+  "frozen_files_verified": 1504,
+  "unchanged_since_broad_start": 1499,
+  "corrected_test_modules": [
+    "tests/test_analyze_endpoints_snapshot.py",
+    "tests/test_component_advisor_recommendations_api.py",
+    "tests/test_iam_user_uuid_migration.py",
+    "tests/test_public_identity_batch_serialization.py",
+    "tests/test_sboms_analyze_snapshot.py"
+  ],
+  "backend_unique": 4633,
+  "backend_counts": {
+    "PASS": 4624,
+    "SKIP": 9
+  },
+  "subtests_pass": 12,
+  "case_overlap_or_missing": 0,
+  "parameter_normalizations": 0,
+  "frontend_pass": 1838,
+  "frontend_files": 203,
+  "chrome_pass": 6,
+  "original_untracked_preserved": 1977,
+  "migrations_100_101_102_unchanged": true,
+  "subscription_router_and_iam_boundary_unchanged": true,
+  "new_test_execution": false,
+  "baseline": "bf078cd3c136b027f77586fd9c180d9741ecf076",
+  "implementation_commit": "8f9f00e1f2fc143ac3ca1893d6d94e5860865177",
+  "complete_patch_reproduces_all_source_blobs": true,
+  "source_index_gitleaks": {
+    "version": "8.30.1",
+    "files": 73,
+    "findings": 0,
+    "configuration": "Embedded default rules, clean environment, ignore inline allow comments"
+  },
+  "publication_excludes_private_logs_and_credentials": true,
+  "git_delivery_has_no_database_or_service_access": true,
+  "optional_codex_security_scan": "INCOMPLETE: report finalization rejected an incomplete semantic draft; not a scan PASS",
+  "whitespace_exception": "Exact unified patch artifact only: preserve blank context lines and preexisting context indentation via -text and whitespace=-blank-at-eol,-space-before-tab. Initial check flagged one space-before-tab context line; no source byte changed."
+}

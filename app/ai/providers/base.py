@@ -161,6 +161,8 @@ ConnectionErrorKind = Literal[
     "network",
     "auth",
     "rate_limit",
+    "provider_unavailable",
+    "configuration",
     "model_not_found",
     "invalid_response",
     "unknown",
@@ -181,6 +183,7 @@ class ConnectionTestResult(BaseModel):
     detected_models: list[str] = Field(default_factory=list)
     error_message: str | None = None
     error_kind: ConnectionErrorKind | None = None
+    http_status: int | None = None
     provider: str = ""
     model_tested: str | None = None
 

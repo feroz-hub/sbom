@@ -1,0 +1,12 @@
+[
+  {
+    "id": "R1-BROWSER-EXECUTION",
+    "role": "admin",
+    "expected": "Complete browser scenario",
+    "actual": {
+      "error": "Unknown phase"
+    },
+    "result": "FAIL",
+    "time": "2026-10-20T04:56:16.169Z"
+  }
+]

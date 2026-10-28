@@ -15,7 +15,7 @@ from __future__ import annotations
 
 import logging
 
-from fastapi import APIRouter, Depends, HTTPException, Request
+from fastapi import APIRouter, Depends, HTTPException, Query, Request
 from sqlalchemy.orm import Session
 
 from ..db import get_db
@@ -118,9 +118,12 @@ async def get_cve_detail_with_scan_context(
     scan_id: int,
     cve_id: str,
     db: Session = Depends(get_db),
+    component_id: int | None = Query(default=None, ge=1),
 ) -> CveDetailWithContext:
     """Scan-aware variant — joins SBOMComponent + computes recommended upgrade."""
     try:
-        return await _service(db).get_with_scan_context(cve_id, scan_id)
+        return await _service(db).get_with_scan_context(
+            cve_id, scan_id, **({"component_id": component_id} if component_id is not None else {})
+        )
     except UnrecognizedIdFormatError as exc:
         raise _unrecognized_response(exc.raw_id) from exc

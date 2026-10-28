@@ -1,0 +1,24 @@
+{
+  "originalEvidenceFiles": 53,
+  "originalEvidenceUnchanged": true,
+  "original485CaseReportPreservedVerbatim": true,
+  "existingChangedFiles": [
+    "docs/uat/SBOM_ANALYZER_FULL_UAT_REPORT.md",
+    "app/routers/vex_investigations.py",
+    "docs/plans/vex-implementation-plan.md",
+    "frontend/src/app/__tests__/dashboard-drilldown.integration.test.tsx",
+    "frontend/src/lib/dashboardScopeUrl.test.ts",
+    "frontend/src/lib/dashboardScopeUrl.ts",
+    "tests/test_vex_investigations_api.py"
+  ],
+  "unexpectedExistingChanges": [],
+  "missingPreexistingFiles": [],
+  "liveAcceptanceChecks": 64,
+  "liveAcceptancePasses": 64,
+  "secretScanTextFiles": 50,
+  "secretFindingCount": 0,
+  "missingEvidenceLinks": 0,
+  "noCommitPushMergeDeployment": true,
+  "linearStatusChanged": false,
+  "fullUatSignoff": "WITHHELD"
+}

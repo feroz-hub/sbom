@@ -1,0 +1,37 @@
+--- original047.sql
++++ proposed047.sql
+@@ -5,20 +5,20 @@
+ -- Dumped from database version 14.18 (Homebrew)
+ -- Dumped by pg_dump version 14.18 (Homebrew)
+ 
+-SET statement_timeout = 0;
+-SET lock_timeout = 0;
+-SET idle_in_transaction_session_timeout = 0;
+-SET client_encoding = 'UTF8';
+-SET standard_conforming_strings = on;
+-SELECT pg_catalog.set_config('search_path', '', false);
+-SET check_function_bodies = false;
+-SET xmloption = content;
+-SET client_min_messages = warning;
+-SET row_security = off;
+-
+-SET default_tablespace = '';
+-
+-SET default_table_access_method = heap;
++SET LOCAL statement_timeout = '30s';
++SET LOCAL lock_timeout = '1s';
++SET LOCAL idle_in_transaction_session_timeout = '30s';
++SET LOCAL client_encoding = 'UTF8';
++SET LOCAL standard_conforming_strings = on;
++SET LOCAL search_path = pg_catalog, public;
++SET LOCAL check_function_bodies = on;
++SET LOCAL xmloption = content;
++SET LOCAL client_min_messages = warning;
++SET LOCAL row_security = on;
++
++SET LOCAL default_tablespace = '';
++
++SET LOCAL default_table_access_method = heap;
+ 
+ --
+ -- Name: ai_credential_audit_log; Type: TABLE; Schema: public; Owner: -

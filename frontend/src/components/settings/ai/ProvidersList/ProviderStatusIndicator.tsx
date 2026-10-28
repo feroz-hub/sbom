@@ -6,19 +6,10 @@ interface ProviderStatusIndicatorProps {
   credential: AiCredential;
 }
 
-/**
- * Single source of truth for "what state is this provider in".
- *
- * Combines four signals into one badge:
- *   * disabled (toggle off)            → grey
- *   * never tested                     → amber (warns the admin to test)
- *   * tested + last_test_success=true  → green
- *   * tested + last_test_success=false → red
- *
- * Tooltip carries the last test timestamp + error so the operator can
- * spot stale state without opening the edit dialog.
- */
-export function ProviderStatusIndicator({ credential }: ProviderStatusIndicatorProps) {
+/** Connection result is independent of credential presence and enablement. */
+export function ProviderStatusIndicator({
+  credential,
+}: ProviderStatusIndicatorProps) {
   const { state, label, className, tooltip } = describeStatus(credential);
   return (
     <span
@@ -37,46 +28,47 @@ export function ProviderStatusIndicator({ credential }: ProviderStatusIndicatorP
   );
 }
 
-
 function describeStatus(c: AiCredential): {
-  state: 'disabled' | 'untested' | 'ok' | 'failing';
+  state: 'unknown' | 'untested' | 'ok' | 'failing';
   label: string;
   className: string;
   tooltip: string;
 } {
-  if (!c.enabled) {
-    return {
-      state: 'disabled',
-      label: 'Disabled',
-      className: 'bg-slate-100 text-slate-600',
-      tooltip: 'This credential is disabled and will not be used.',
-    };
-  }
   if (!c.last_test_at) {
     return {
       state: 'untested',
       label: 'Not tested',
-      className: 'bg-amber-50 text-amber-800 border border-amber-200',
+      className: 'bg-surface-muted text-hcl-muted border border-border',
       tooltip: 'Run "Test connection" to verify this credential works.',
     };
   }
-  if (c.last_test_success) {
+  if (c.last_test_success == null) {
+    return {
+      state: 'unknown',
+      label: 'Unknown',
+      className: 'bg-surface-muted text-hcl-muted border border-border',
+      tooltip: 'No connection result was reported for the last test.',
+    };
+  }
+  if (c.last_test_success === true) {
     return {
       state: 'ok',
-      label: 'OK',
-      className: 'bg-emerald-50 text-emerald-800 border border-emerald-200',
+      label: 'Verified',
+      className:
+        'bg-emerald-50 text-emerald-800 border border-emerald-200 dark:bg-emerald-950 dark:text-emerald-200 dark:border-emerald-800',
       tooltip: `Last test ${formatRelative(c.last_test_at)}`,
     };
   }
+  const invalid = c.verification_status === 'INVALID_CREDENTIALS';
   return {
     state: 'failing',
-    label: 'Failing',
-    className: 'bg-red-50 text-red-800 border border-red-200',
-    tooltip:
-      `Last test ${formatRelative(c.last_test_at)}: ${c.last_test_error ?? 'unknown error'}`,
+    label: invalid ? 'Authentication failed' : 'Failed',
+    className: invalid
+      ? 'bg-red-50 text-red-800 border border-red-200 dark:bg-red-950 dark:text-red-200 dark:border-red-800'
+      : 'bg-amber-50 text-amber-800 border border-amber-200 dark:bg-amber-950 dark:text-amber-200 dark:border-amber-800',
+    tooltip: `Last test ${formatRelative(c.last_test_at)}. ${invalid ? 'Correct credentials and test again before enabling.' : c.verification_status === 'TEMPORARILY_UNAVAILABLE' ? 'Provider temporarily unavailable. Test again later.' : 'Connection could not be verified. Test again later.'}`,
   };
 }
-
 
 export function formatRelative(iso: string | null): string {
   if (!iso) return 'never';

@@ -1,9 +1,10 @@
 'use client';
 
 import { useState } from 'react';
+import { recordIdLabel } from '@/lib/recordDisplay';
 import { useSearchParams } from 'next/navigation';
 import { useQuery } from '@tanstack/react-query';
-import { Button } from '@/components/ui/Button';
+import { PermissionButton as Button } from '@/components/ui/PermissionButton';
 import { Dialog, DialogBody, DialogFooter } from '@/components/ui/Dialog';
 import { DeleteConfirmDialog } from '@/components/ui/DeleteConfirmDialog';
 import { useToast } from '@/hooks/useToast';
@@ -25,15 +26,15 @@ function preferencesOnly(sub: ReportSubscription): ReportPreferences {
     suppress_when_unchanged: sub.suppress_when_unchanged, enabled: sub.enabled };
 }
 
-function TenantAnalysisSchedule({ tenantId }: { tenantId: number }) {
+function TenantAnalysisSchedule({ tenantId }: { tenantId: (string | number) }) {
   const [open, setOpen] = useState(false);
   const schedule = useQuery({ queryKey: ['schedule', 'TENANT', tenantId], queryFn: () => getTenantSchedule(tenantId) });
   return <div className="mt-4 border-t border-border-subtle pt-4"><p className="mb-2 text-sm text-hcl-muted">Tenant-wide analysis schedule: {schedule.data ? `${schedule.data.cadence} · ${schedule.data.enabled ? 'enabled' : 'paused'}` : 'not configured'}. Child schedules, including paused overrides, take priority.</p>
-    {schedule.isError ? <p role="alert">Tenant schedule could not be loaded.</p> : <Button size="sm" variant="secondary" onClick={() => setOpen(true)}>Configure tenant analysis schedule</Button>}
+    {schedule.isError ? <p role="alert">Tenant schedule could not be loaded.</p> : <Button size="sm" variant="secondary" permission={["schedule:write", "product:manage_schedule"]} onClick={() => setOpen(true)}>Configure tenant analysis schedule</Button>}
     <ScheduleEditor open={open} onClose={() => setOpen(false)} scope="TENANT" targetId={tenantId} existing={schedule.data} />
   </div>;
 }
-export function defaultReportPreferences(scope: ReportScope = 'PROJECT', target?: number): ReportPreferences {
+export function defaultReportPreferences(scope: ReportScope = 'PROJECT', target?: string | number): ReportPreferences {
   return { scope, project_id: scope === 'PROJECT' ? target ?? null : null, product_id: scope === 'PRODUCT' ? target ?? null : null,
     sbom_id: scope === 'SBOM' ? target ?? null : null, cadence: 'DAILY', parts: ['A', 'B'], formats: ['PDF', 'XLSX'],
     severity_floor: 'ALL', baseline_mode: 'FIRST_RUN_OF_SBOM', cross_version_target: 'PARENT', timezone: 'UTC', suppress_when_unchanged: false, enabled: true };
@@ -68,9 +69,9 @@ export function ReportPreferencesEditor({ initial, id, tenantScopeAllowed, onClo
             {(['TENANT', 'PROJECT', 'PRODUCT', 'SBOM'] as const).filter(s => s !== 'TENANT' || tenantScopeAllowed).map(s => <option key={s}>{s}</option>)}
           </select></label>
           {form.scope !== 'TENANT' && <div><label>Search scope<input className={fieldClass} value={search} onChange={e => setSearch(e.target.value)} placeholder="Filter by name (first 200 matches)" /></label>
-            <label>Target<select className={fieldClass} value={target ?? ''} onChange={e => patch({ project_id: form.scope === 'PROJECT' ? Number(e.target.value) || null : null, product_id: form.scope === 'PRODUCT' ? Number(e.target.value) || null : null, sbom_id: form.scope === 'SBOM' ? Number(e.target.value) || null : null })}>
-              <option value="">Choose a target</option>{target && !targets.data?.some(t => t.id === target) && <option value={target}>Selected #{target}</option>}
-              {targets.data?.map(t => <option value={t.id} key={t.id}>{t.label} · #{t.id}</option>)}
+            <label>Target<select className={fieldClass} value={target ?? ''} onChange={e => patch({ project_id: form.scope === 'PROJECT' ? e.target.value || null : null, product_id: form.scope === 'PRODUCT' ? e.target.value || null : null, sbom_id: form.scope === 'SBOM' ? e.target.value || null : null })}>
+              <option value="">Choose a target</option>{target && !targets.data?.some(t => t.id === target) && <option value={target}>Selected target</option>}
+              {targets.data?.map(t => <option value={t.id} key={t.id}>{t.label}{t.display_id ? ` · ${recordIdLabel('', t.display_id)}` : ''}</option>)}
             </select></label>{targets.isError && <p role="alert">Could not load targets.</p>}</div>}
           <label>Cadence<select className={fieldClass} value={form.cadence} onChange={e => patch({ cadence: e.target.value as ReportPreferences['cadence'] })}>{['ON_EVERY_RUN', 'DAILY', 'WEEKLY', 'MONTHLY'].map(c => <option key={c}>{c}</option>)}</select></label>
           <label>IANA timezone<input className={fieldClass} value={form.timezone} onChange={e => patch({ timezone: e.target.value })} placeholder="UTC" /></label>
@@ -95,7 +96,7 @@ export function ReportPreferencesEditor({ initial, id, tenantScopeAllowed, onClo
 export function ReportNotificationsPage() {
   const params = useSearchParams();
   const requestedScope = params.get('scope') as ReportScope;
-  const initial = defaultReportPreferences(['TENANT', 'PROJECT', 'PRODUCT', 'SBOM'].includes(requestedScope) ? requestedScope : 'PROJECT', Number(params.get('target')) || undefined);
+  const initial = defaultReportPreferences(['TENANT', 'PROJECT', 'PRODUCT', 'SBOM'].includes(requestedScope) ? requestedScope : 'PROJECT', params.get('target') || undefined);
   const [editing, setEditing] = useState<{ preferences: ReportPreferences; id?: number } | null>(params.has('scope') ? { preferences: initial } : null);
   const [remove, setRemove] = useState<ReportSubscription | null>(null);
   const [allTenant, setAllTenant] = useState(false);
@@ -133,7 +134,7 @@ export function ReportNotificationsPage() {
     <section className="rounded-xl border border-border-subtle bg-surface p-5"><h2 className="mb-4 text-lg font-semibold">Subscriptions</h2>
       {subscriptions.isError && <p role="alert">Subscriptions could not be loaded.</p>}
       {subscriptions.isLoading ? <p>Loading…</p> : !subscriptions.data?.length ? <p className="text-sm text-hcl-muted">No subscriptions yet. Add one or use “Notify me” on a project, product or SBOM.</p> : <div className="space-y-3">{subscriptions.data.map(sub => <div key={sub.id} className="flex flex-wrap items-center justify-between gap-3 rounded-lg border border-border-subtle p-3">
-        <div><strong>{sub.scope} {sub.project_id ?? sub.product_id ?? sub.sbom_id ?? ''}</strong><p className="text-sm text-hcl-muted">{sub.cadence} · Parts {sub.parts.join(', ')} · {sub.formats.join(', ') || 'Email only'} · {sub.enabled ? 'Enabled' : 'Paused'}{allTenant ? ` · User #${sub.iam_user_id}` : ''}</p></div>
+        <div><strong>{sub.scope} {sub.scope === 'TENANT' ? 'subscription' : recordIdLabel('', sub.scope === 'PROJECT' ? sub.project_display_id : sub.scope === 'PRODUCT' ? sub.product_display_id : sub.sbom_display_id)}</strong><p className="text-sm text-hcl-muted">{sub.cadence} · Parts {sub.parts.join(', ')} · {sub.formats.join(', ') || 'Email only'} · {sub.enabled ? 'Enabled' : 'Paused'}{allTenant ? ' · Tenant member' : ''}</p></div>
         <div className="flex flex-wrap gap-2">{!allTenant && <><Button size="sm" variant="secondary" onClick={() => setEditing({ id: sub.id, preferences: preferencesOnly(sub) })}>Edit / preview</Button><Button size="sm" variant="secondary" disabled={!sub.enabled || send.isPending} onClick={() => act(send.mutateAsync(sub.id), 'Report request saved. Check delivery history for its outcome.')}>Send now</Button></>}
           <Button size="sm" variant="secondary" disabled={pause.isPending || allTenant && !sub.enabled} onClick={() => act(pause.mutateAsync({ id: sub.id, enabled: !sub.enabled }), sub.enabled ? 'Subscription paused.' : 'Subscription resumed.')}>{sub.enabled ? 'Pause' : 'Resume'}</Button>
           {!allTenant && <Button size="sm" variant="secondary" onClick={() => setRemove(sub)}>Delete</Button>}

@@ -104,6 +104,15 @@ export function useAnalysisUrlState() {
     [replaceSearchParams],
   );
 
+  // Configuration selections cascade atomically; history filters stay independent.
+  const setScanScope = useCallback((project: string, product: string, sbom: string) => {
+    replaceSearchParams(p => {
+      for (const [key, value] of [['project', project], ['product', product], ['sbom', sbom]]) {
+        if (value) p.set(key, value); else p.delete(key);
+      }
+    });
+  }, [replaceSearchParams]);
+
   const clearFilters = useCallback(() => {
     replaceSearchParams((p) => {
       for (const k of KEYS) {
@@ -125,6 +134,7 @@ export function useAnalysisUrlState() {
     setSeverityFilter,
     setStatusFilter,
     setHubTab,
+    setScanScope,
     clearFilters,
   };
 }

@@ -35,10 +35,10 @@ def test_developer_cannot_manage_tenant_users():
     assert not has_permission(Role.DEVELOPER.value, "tenant:user:update")
 
 
-def test_platform_admin_has_all_permissions():
+def test_platform_admin_has_platform_scoped_permissions():
     perms = get_permissions_for_role(Role.PLATFORM_ADMIN.value)
     assert "platform:admin" in perms
-    assert "sbom:upload" in perms
+    assert "sbom:upload" not in perms
 
 
 def test_tenant_admin_has_no_platform_permissions():
@@ -50,7 +50,7 @@ def test_tenant_admin_has_no_platform_permissions():
 
 def test_high_value_permission_separation():
     expected = {
-        Role.PLATFORM_ADMIN: {"sbom:upload", "analysis:run", "tenant:user:update", "platform:admin"},
+        Role.PLATFORM_ADMIN: {"platform:tenant:read", "platform:administrator:read", "platform:admin"},
         Role.TENANT_ADMIN: {"sbom:upload", "analysis:run", "tenant:user:update"},
         Role.SECURITY_ANALYST: {"sbom:upload", "analysis:run", "vex:write", "remediation:write"},
         Role.DEVELOPER: {"sbom:read", "analysis:read", "remediation:write"},

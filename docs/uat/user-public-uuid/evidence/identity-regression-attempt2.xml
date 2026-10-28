@@ -1,0 +1,7 @@
+<?xml version="1.0" encoding="utf-8"?><testsuites name="pytest tests"><testsuite name="pytest" errors="1" failures="0" skipped="0" tests="1" time="8.049" timestamp="2026-10-21T12:11:33.135291+05:30" hostname="Ferozes-MacBook-Air.local"><testcase classname="" name="tests.test_platform_tenant_v2" time="0.000"><error message="collection failure">tests/test_platform_tenant_v2.py:82: in &lt;module&gt;
+    ("POST", "/api/tenants/1/users", {"user_id": user_uuid(1), "roles": ["VIEWER"]}),
+                                                 ^^^^^^^^^^^^
+tests/public_id_fixture.py:36: in user_uuid
+    assert user is not None
+           ^^^^^^^^^^^^^^^^
+E   AssertionError</error></testcase></testsuite></testsuites>

@@ -115,7 +115,7 @@ describe('SbomConversionCard', () => {
     fireEvent.click(screen.getByRole('button', { name: /Convert to CycloneDX/i }));
 
     await waitFor(() => {
-      expect(screen.getByRole('link', { name: '#100' })).toBeInTheDocument();
+      expect(screen.getByRole('link', { name: 'Converted SBOM' })).toBeInTheDocument();
       expect(screen.getByText(/running in background/i)).toBeInTheDocument();
       expect(screen.getByText(/Enrichment pending/i)).toBeInTheDocument();
     });
@@ -207,3 +207,5 @@ describe('SbomConversionCard', () => {
     });
   });
 });
+
+vi.mock('@/hooks/useAuth', async () => ({ useAuth: (await import('@/test/authorizedAuth')).authorizedAuth }));

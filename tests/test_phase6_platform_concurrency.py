@@ -25,18 +25,22 @@ def test_concurrent_grants_create_one_idempotent_effective_grant():
     def grant_once() -> str:
         with SessionLocal() as db:
             barrier.wait()
-            mutation = platform_service.grant_platform_administrator(
-                db,
-                user_id=target_id,
-                created_by_user_id=actor_id,
-            )
-            db.commit()
-            return mutation.action
+            try:
+                mutation = platform_service.grant_platform_administrator(
+                    db, user_id=target_id, created_by_user_id=actor_id,
+                )
+                db.commit()
+                return mutation.action
+            except HTTPException as exc:
+                db.rollback()
+                assert exc.status_code == 409
+                assert exc.detail["code"] == "IAM_PLATFORM_ADMIN_ALREADY_GRANTED"
+                return exc.detail["code"]
 
     with ThreadPoolExecutor(max_workers=2) as pool:
         actions = sorted(pool.map(lambda _index: grant_once(), range(2)))
 
-    assert actions == ["CREATED", "EXISTING"]
+    assert actions == ["CREATED", "IAM_PLATFORM_ADMIN_ALREADY_GRANTED"]
     with SessionLocal() as db:
         grants = list(
             db.scalars(
@@ -166,19 +170,24 @@ def test_concurrent_revoke_and_grant_leave_one_consistent_row():
     def grant() -> str:
         with SessionLocal() as db:
             barrier.wait()
-            mutation = platform_service.grant_platform_administrator(
-                db,
-                user_id=target_id,
-                created_by_user_id=actor_id,
-            )
-            db.commit()
-            return mutation.action
+            try:
+                mutation = platform_service.grant_platform_administrator(
+                    db, user_id=target_id, created_by_user_id=actor_id,
+                )
+                db.commit()
+                return mutation.action
+            except HTTPException as exc:
+                db.rollback()
+                assert exc.status_code == 409
+                assert exc.detail["code"] == "IAM_PLATFORM_ADMIN_ALREADY_GRANTED"
+                return exc.detail["code"]
 
     with ThreadPoolExecutor(max_workers=2) as pool:
         results = [pool.submit(revoke), pool.submit(grant)]
         actions = {future.result() for future in results}
 
-    assert actions <= {"REVOKED", "EXISTING", "REACTIVATED"}
+    assert "REVOKED" in actions
+    assert actions <= {"REVOKED", "IAM_PLATFORM_ADMIN_ALREADY_GRANTED", "REACTIVATED"}
     with SessionLocal() as db:
         assert db.scalar(
             select(func.count(PlatformUserRole.id)).where(

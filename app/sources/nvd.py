@@ -140,6 +140,18 @@ class NvdSource:
                 component for component in components if component.get("cpe") not in mirror_hit_cpes
             ]
 
+        # One mirror lookup can supply intelligence for several occurrences.
+        for representative in list(mirror_findings):
+            for component in components:
+                if component.get("cpe") != representative.get("cpe"):
+                    continue
+                candidate = _finding_from_applicable_nvd_raw(
+                    representative.get("provider_raw") or {}, component["cpe"], component, settings, rejection_tracker)
+                if candidate is not None and _nvd_finding_key(candidate) not in seen_findings:
+                    candidate["match_strategy"] = "cpe_name"
+                    seen_findings.add(_nvd_finding_key(candidate))
+                    mirror_findings.append(candidate)
+
         nvd_vulnerabilities = vulnerabilities
         if not collect_nvd_identifiers(remaining_components, []).trusted_cpes:
             nvd_vulnerabilities = []

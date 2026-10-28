@@ -1,0 +1,27 @@
+import { describe, expect, it } from 'vitest';
+import { applyServerDerivedTenantHeader } from './tenantHeader';
+
+describe('authenticated BFF tenant derivation', () => {
+  it.each(['2', 'all'])('omits inherited header and cookie for platform routes (%s)', tenant => {
+    const headers = new Headers({ 'X-Tenant-ID': tenant });
+    applyServerDerivedTenantHeader(headers, '00000000-0000-4000-8000-000000000011', '/api/platform/users');
+    expect(headers.has('X-Tenant-ID')).toBe(false);
+  });
+  it('adds a validated tenant id for native EventSource requests', () => {
+    const headers = new Headers({ Accept: 'text/event-stream' });
+    applyServerDerivedTenantHeader(headers, '00000000-0000-4000-8000-000000000011');
+    expect(headers.get('X-Tenant-ID')).toBe('00000000-0000-4000-8000-000000000011');
+  });
+
+  it('never accepts URL/token-like cookie content', () => {
+    const headers = new Headers();
+    applyServerDerivedTenantHeader(headers, '17?access_token=unsafe');
+    expect(headers.has('X-Tenant-ID')).toBe(false);
+  });
+
+  it('does not overwrite the normal request helper header', () => {
+    const headers = new Headers({ 'X-Tenant-ID': '00000000-0000-4000-8000-000000000005' });
+    applyServerDerivedTenantHeader(headers, '00000000-0000-4000-8000-000000000011');
+    expect(headers.get('X-Tenant-ID')).toBe('00000000-0000-4000-8000-000000000005');
+  });
+});

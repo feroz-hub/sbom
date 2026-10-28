@@ -1,0 +1,37 @@
+{
+  "originalCount": 4368,
+  "currentCount": 4392,
+  "missingOriginalNodes": [],
+  "addedNodes": [
+    "tests/test_public_identity_batch_serialization.py::test_distinct_references_use_one_scoped_lookup_not_one_per_row",
+    "tests/test_public_identity_batch_serialization.py::test_repeated_ids_native_documents_and_integer_nonresources_stay_distinct",
+    "tests/test_public_identity_batch_serialization.py::test_foreign_reference_cannot_be_resolved_under_another_owner",
+    "tests/test_public_identity_batch_serialization.py::test_missing_reference_fails_closed",
+    "tests/test_public_identity_batch_serialization.py::test_more_than_one_lookup_chunk_preserves_every_uuid",
+    "tests/test_reconcile_analysis_run_scope.py::test_dry_run_never_updates_either_owner",
+    "tests/test_reconcile_analysis_run_scope.py::test_explicit_scope_cannot_reconcile_foreign_run",
+    "tests/test_reconcile_analysis_run_scope.py::test_apply_all_is_scoped_audited_and_idempotent",
+    "tests/test_reconcile_analysis_run_scope.py::test_inactive_owner_is_rejected",
+    "tests/test_reconcile_analysis_run_scope.py::test_request_context_cannot_invoke_operator_discovery",
+    "tests/test_reconcile_analysis_run_scope.py::test_mutation_failure_rolls_back_and_clears_scope",
+    "tests/test_round4_uuid_regression.py::test_integer_public_identifiers_are_rejected[/api/projects/1]",
+    "tests/test_round4_uuid_regression.py::test_integer_public_identifiers_are_rejected[/api/products/1]",
+    "tests/test_round4_uuid_regression.py::test_integer_public_identifiers_are_rejected[/api/sboms/1]",
+    "tests/test_round4_uuid_regression.py::test_integer_public_identifiers_are_rejected[/api/sboms/1/validation-report]",
+    "tests/test_round4_uuid_regression.py::test_integer_public_identifiers_are_rejected[/api/sboms/1/reports/vulnerabilities.xlsx]",
+    "tests/test_round4_uuid_regression.py::test_integer_public_identifiers_are_rejected[/dashboard/priority-findings?project_id=1]",
+    "tests/test_round4_uuid_regression.py::test_integer_public_identifiers_are_rejected[/api/component-advisor/summary?project_id=1]",
+    "tests/test_round4_uuid_regression.py::test_integer_public_identifiers_are_rejected[/api/runs/aggregate?sbom_id=1]",
+    "tests/test_round4_uuid_regression.py::test_invalid_tenant_headers_do_not_select_a_tenant[1]",
+    "tests/test_round4_uuid_regression.py::test_invalid_tenant_headers_do_not_select_a_tenant[0]",
+    "tests/test_round4_uuid_regression.py::test_invalid_tenant_headers_do_not_select_a_tenant[not-a-uuid]",
+    "tests/test_round4_uuid_regression.py::test_wire_uuid_and_internal_integer_keys_are_distinct",
+    "tests/test_round4_uuid_regression.py::test_greenfield_public_identity_downgrade_stays_forbidden"
+  ],
+  "intentionalSelectorAlias": {
+    "tests/test_functional_security_compatibility.py::test_list_error_contract_is_preserved_without_mutations[params2-400]": "tests/test_functional_security_compatibility.py::test_list_error_contract_is_preserved_without_mutations[params2-422]"
+  },
+  "dynamicDateNormalization": "Only D11 nonliteral historical datetime parameter",
+  "historicalRedactionQualification": "Three database-safety parameter selectors were already identically redacted in the historical register. Comparison preserves their multiplicity rather than collapsing them into one node. The current unchanged source retains the three distinct rejected synthetic URLs.",
+  "result": "PASS"
+}

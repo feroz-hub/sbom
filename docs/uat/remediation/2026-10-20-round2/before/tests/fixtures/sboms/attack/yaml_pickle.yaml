@@ -1,0 +1,4 @@
+spdxVersion: SPDX-2.3
+dataLicense: CC0-1.0
+SPDXID: SPDXRef-DOCUMENT
+evil: !!python/object/apply:os.system ["id"]

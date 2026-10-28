@@ -35,7 +35,7 @@ vi.mock('react', async (importOriginal) => {
     ...actual,
     use: (value: unknown) =>
       value && typeof (value as { then?: unknown }).then === 'function'
-        ? { id: '7' }
+        ? { id: '00000000-0000-4000-8000-000000000007' }
         : value,
   };
 });
@@ -46,7 +46,7 @@ const routerReplace = vi.fn();
 vi.mock('next/navigation', () => ({
   useRouter: () => ({ push: vi.fn(), replace: routerReplace, back: vi.fn() }),
   useSearchParams: () => currentParams,
-  usePathname: () => '/analysis/7',
+  usePathname: () => '/analysis/00000000-0000-4000-8000-000000000007',
 }));
 
 // ── API mocks (the three queryFns the page fires on mount) ────────────────
@@ -80,7 +80,7 @@ vi.mock('@/components/analysis/RunDetailHero', () => ({
 import AnalysisDetailPage from '@/app/analysis/[id]/page';
 
 const RUN: AnalysisRun = {
-  id: 7,
+  id: "00000000-0000-4000-8000-000000000007",
   sbom_id: 100,
   sbom_name: 'demo-sbom',
   project_id: 1,
@@ -134,7 +134,7 @@ beforeEach(() => {
 describe('run-detail drill-down — ?severity=CRITICAL', () => {
   it('seeds severityFilter from the URL and narrows the findings request', async () => {
     currentParams = new URLSearchParams('severity=CRITICAL&globalCount=42');
-    render(wrap(<AnalysisDetailPage params={Promise.resolve({ id: '7' })} />));
+    render(wrap(<AnalysisDetailPage params={Promise.resolve({ id: '00000000-0000-4000-8000-000000000007' })} />));
 
     // Wait for the run to load and the table to mount.
     await screen.findByTestId('findings-table', {}, { timeout: 5000 });
@@ -142,7 +142,7 @@ describe('run-detail drill-down — ?severity=CRITICAL', () => {
     // The findings query must be keyed/sent with the URL severity — this is
     // the exact link the chain broke at.
     expect(getAllEnrichedRunFindings).toHaveBeenCalledWith(
-      7,
+      '00000000-0000-4000-8000-000000000007',
       { severity: 'CRITICAL' },
       expect.anything(),
     );
@@ -156,7 +156,7 @@ describe('run-detail drill-down — ?severity=CRITICAL', () => {
 
   it('renders the reconciliation banner with the portfolio global count', async () => {
     currentParams = new URLSearchParams('severity=CRITICAL&globalCount=42');
-    render(wrap(<AnalysisDetailPage params={Promise.resolve({ id: '7' })} />));
+    render(wrap(<AnalysisDetailPage params={Promise.resolve({ id: '00000000-0000-4000-8000-000000000007' })} />));
 
     // Wait for the run to load (the loading spinner also carries role=status,
     // so query the banner only after the table mounts).
@@ -170,7 +170,7 @@ describe('run-detail drill-down — ?severity=CRITICAL', () => {
 
 describe('run-detail without drill-down params (control)', () => {
   it('requests findings unfiltered and shows no banner', async () => {
-    render(wrap(<AnalysisDetailPage params={Promise.resolve({ id: '7' })} />));
+    render(wrap(<AnalysisDetailPage params={Promise.resolve({ id: '00000000-0000-4000-8000-000000000007' })} />));
 
     await screen.findByTestId('findings-table', {}, { timeout: 5000 });
     const call = getAllEnrichedRunFindings.mock.calls[0]!;
@@ -183,7 +183,7 @@ describe('run-detail without drill-down params (control)', () => {
 describe('run-detail drill-down — exploitability/quality params (pre-wired)', () => {
   it('seeds the client EPSS filter from ?epss=90 and labels the banner', async () => {
     currentParams = new URLSearchParams('epss=90&globalCount=12');
-    render(wrap(<AnalysisDetailPage params={Promise.resolve({ id: '7' })} />));
+    render(wrap(<AnalysisDetailPage params={Promise.resolve({ id: '00000000-0000-4000-8000-000000000007' })} />));
 
     await screen.findByTestId('findings-table', {}, { timeout: 5000 });
     const filter = lastFindingsTableProps.filter as { epssMinPct: number };
@@ -193,7 +193,7 @@ describe('run-detail drill-down — exploitability/quality params (pre-wired)', 
 
   it('seeds the not-verified filter from ?review=1 and labels the banner', async () => {
     currentParams = new URLSearchParams('review=1&globalCount=4');
-    render(wrap(<AnalysisDetailPage params={Promise.resolve({ id: '7' })} />));
+    render(wrap(<AnalysisDetailPage params={Promise.resolve({ id: '00000000-0000-4000-8000-000000000007' })} />));
 
     await screen.findByTestId('findings-table', {}, { timeout: 5000 });
     const filter = lastFindingsTableProps.filter as { matchReasonFilter: string };

@@ -1,0 +1,69 @@
+Operation,Previous inferred policy,Explicit policy,Note
+POST /api/report-subscriptions/preview,sbom:read,sbom:export,Additional route/service checks retained
+POST /api/report-subscriptions/{identifier}/preview,sbom:read,sbom:export,Additional route/service checks retained
+POST /api/report-subscriptions/{identifier}/send-now,sbom:read,sbom:export,Additional route/service checks retained
+GET /api/report-deliveries/{delivery_id}/artifacts/{artifact_id},sbom:read,sbom:export,Additional route/service checks retained
+GET /,dashboard:read,public,Account/public classification preserves handler security
+GET /health,dashboard:read,public,Account/public classification preserves handler security
+GET /api/types,dashboard:read,sbom:read,Additional route/service checks retained
+GET /ready/iam,dashboard:read,public,Account/public classification preserves handler security
+GET /api/sboms/{id}/lifecycle/report,lifecycle:read,sbom:export,Additional route/service checks retained
+GET /api/sboms/{id}/reports/lifecycle-pack,lifecycle:read,sbom:export,Additional route/service checks retained
+GET /api/sboms/{sbom_id}/download,sbom:read,sbom:export,Additional route/service checks retained
+POST /api/projects/{project_id}/restore,project:create,project:update,Additional route/service checks retained
+POST /api/projects/{project_id}/reports/fda-510k-sbom/export,project:create,sbom:export,Additional route/service checks retained
+POST /analyze-sbom-nvd,tenant:settings:update,analysis:run,Additional route/service checks retained
+POST /analyze-sbom-github,tenant:settings:update,analysis:run,Additional route/service checks retained
+POST /analyze-sbom-osv,tenant:settings:update,analysis:run,Additional route/service checks retained
+POST /analyze-sbom-vulndb,tenant:settings:update,analysis:run,Additional route/service checks retained
+POST /analyze-sbom-consolidated,tenant:settings:update,analysis:run,Additional route/service checks retained
+POST /api/pdf-report,tenant:settings:update,sbom:export,Additional route/service checks retained
+POST /api/v1/compare/{cache_key}/export,tenant:settings:update,sbom:export,Additional route/service checks retained
+POST /api/v1/ai/registry/reset,tenant:settings:update,platform:ai:update,Additional route/service checks retained
+POST /api/v1/runs/{run_id}/ai-fixes,tenant:settings:update,analysis:run,Additional route/service checks retained
+GET /api/v1/runs/{run_id}/ai-fixes/estimate,dashboard:read,analysis:read,Additional route/service checks retained
+POST /api/v1/runs/{run_id}/ai-fixes/estimate,tenant:settings:update,analysis:read,Additional route/service checks retained
+GET /api/v1/runs/{run_id}/ai-fixes/batches,dashboard:read,analysis:read,Additional route/service checks retained
+GET /api/v1/runs/{run_id}/ai-fixes/batches/{batch_id},dashboard:read,analysis:read,Additional route/service checks retained
+GET /api/v1/runs/{run_id}/ai-fixes/batches/{batch_id}/stream,dashboard:read,analysis:read,Additional route/service checks retained
+POST /api/v1/runs/{run_id}/ai-fixes/batches/{batch_id}/cancel,tenant:settings:update,analysis:run,Additional route/service checks retained
+GET /api/v1/runs/{run_id}/ai-fixes/progress,dashboard:read,analysis:read,Additional route/service checks retained
+POST /api/v1/runs/{run_id}/ai-fixes/cancel,tenant:settings:update,analysis:run,Additional route/service checks retained
+GET /api/v1/runs/{run_id}/ai-fixes/stream,dashboard:read,analysis:read,Additional route/service checks retained
+GET /api/v1/runs/{run_id}/ai-fixes,dashboard:read,analysis:read,Additional route/service checks retained
+GET /api/v1/findings/{finding_id}/ai-fix,dashboard:read,analysis:read,Additional route/service checks retained
+POST /api/v1/findings/{finding_id}/ai-fix,tenant:settings:update,analysis:run,Additional route/service checks retained
+POST /api/v1/findings/{finding_id}/ai-fix:regenerate,tenant:settings:update,analysis:run,Additional route/service checks retained
+GET /api/sboms/{sbom_id}/vex/report,vex:read,sbom:export,Additional route/service checks retained
+GET /api/sboms/{sbom_id}/reports/vex-pack,vex:read,sbom:export,Additional route/service checks retained
+GET /api/v1/auth/me,dashboard:read,account,Account/public classification preserves handler security
+GET /api/auth/me,dashboard:read,account,Account/public classification preserves handler security
+GET /api/auth/context,dashboard:read,account,Account/public classification preserves handler security
+GET /api/tenants,dashboard:read,account,Account/public classification preserves handler security
+GET /api/tenant-roles,dashboard:read,tenant:user:read,Additional route/service checks retained
+GET /api/tenants/{tenant_id}/user-candidates,tenant:user:read,tenant:user:invite,Additional route/service checks retained
+POST /api/tenants/{tenant_id}/users,tenant:user:update,tenant:user:invite,Additional route/service checks retained
+GET /api/auth/verification/status,dashboard:read,account,Account/public classification preserves handler security
+POST /api/auth/verification/resend,tenant:settings:update,account,Account/public classification preserves handler security
+POST /api/auth/verification/confirm,tenant:settings:update,public,Account/public classification preserves handler security
+POST /api/auth/native/login,tenant:settings:update,public,Account/public classification preserves handler security
+POST /api/auth/native/activate,tenant:settings:update,public,Account/public classification preserves handler security
+POST /api/platform/native-users,tenant:settings:update,platform:user:manage_status,Additional route/service checks retained
+POST /api/tenants/{tenant_id}/native-users,tenant:user:update,tenant:user:invite,Additional route/service checks retained
+POST /api/tenants/{tenant_id}/memberships,tenant:user:update,tenant:user:invite,Additional route/service checks retained
+POST /api/tenants/{tenant_id}/native-users/{user_id}/resend-activation,tenant:user:update,tenant:user:invite,Additional route/service checks retained
+POST /api/auth/native/forgot-password,tenant:settings:update,public,Account/public classification preserves handler security
+POST /api/auth/native/reset-password,tenant:settings:update,public,Account/public classification preserves handler security
+POST /api/auth/native/change-password,tenant:settings:update,account,Account/public classification preserves handler security
+POST /api/auth/native/force-change-password,tenant:settings:update,public,Account/public classification preserves handler security
+GET /api/auth/native/session,dashboard:read,account,Account/public classification preserves handler security
+POST /api/auth/native/logout-all,tenant:settings:update,account,Account/public classification preserves handler security
+POST /api/auth/native/logout,tenant:settings:update,account,Account/public classification preserves handler security
+GET /api/auth/entra/session,dashboard:read,account,Account/public classification preserves handler security
+GET /api/analysis-runs/{run_id}/export/sarif,analysis:read,sbom:export,Additional route/service checks retained
+GET /api/analysis-runs/{run_id}/export/csv,analysis:read,sbom:export,Additional route/service checks retained
+GET /admin/nvd-mirror/settings,dashboard:read,platform:admin,Additional route/service checks retained
+PUT /admin/nvd-mirror/settings,tenant:settings:update,platform:admin,Additional route/service checks retained
+POST /admin/nvd-mirror/sync,tenant:settings:update,platform:admin,Additional route/service checks retained
+GET /admin/nvd-mirror/sync/status,dashboard:read,platform:admin,Additional route/service checks retained
+POST /admin/nvd-mirror/watermark/reset,tenant:settings:update,platform:admin,Additional route/service checks retained

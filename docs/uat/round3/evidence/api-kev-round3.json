@@ -1,0 +1,139 @@
+[
+  {
+    "id": "UAT-KEV-SYNC-admin",
+    "module": "KEV authorization",
+    "role": "admin",
+    "preconditions": "Live Greenfield; no-prune future cutoff",
+    "steps": "UAT-KEV-SYNC-admin",
+    "expected": "Platform 200 zero writes; every tenant role 403",
+    "actual": {
+      "status": 403,
+      "data": {
+        "detail": {
+          "code": "IAM_TENANT_SELECTION_REQUIRED",
+          "message": "Select an authorized tenant before accessing SBOM Analyzer."
+        }
+      },
+      "request_id": "152da1ad5591"
+    },
+    "result": "PASS"
+  },
+  {
+    "id": "UAT-KEV-SYNC-analyst",
+    "module": "KEV authorization",
+    "role": "analyst",
+    "preconditions": "Live Greenfield; no-prune future cutoff",
+    "steps": "UAT-KEV-SYNC-analyst",
+    "expected": "Platform 200 zero writes; every tenant role 403",
+    "actual": {
+      "status": 403,
+      "data": {
+        "detail": {
+          "code": "IAM_PLATFORM_PERMISSION_DENIED",
+          "message": "Platform permission is required for this action."
+        }
+      },
+      "request_id": "3d14bdf4b4f4"
+    },
+    "result": "PASS"
+  },
+  {
+    "id": "UAT-KEV-SYNC-developer",
+    "module": "KEV authorization",
+    "role": "developer",
+    "preconditions": "Live Greenfield; no-prune future cutoff",
+    "steps": "UAT-KEV-SYNC-developer",
+    "expected": "Platform 200 zero writes; every tenant role 403",
+    "actual": {
+      "status": 403,
+      "data": {
+        "detail": {
+          "code": "IAM_PLATFORM_PERMISSION_DENIED",
+          "message": "Platform permission is required for this action."
+        }
+      },
+      "request_id": "760522c54efb"
+    },
+    "result": "PASS"
+  },
+  {
+    "id": "UAT-KEV-SYNC-viewer",
+    "module": "KEV authorization",
+    "role": "viewer",
+    "preconditions": "Live Greenfield; no-prune future cutoff",
+    "steps": "UAT-KEV-SYNC-viewer",
+    "expected": "Platform 200 zero writes; every tenant role 403",
+    "actual": {
+      "status": 403,
+      "data": {
+        "detail": {
+          "code": "IAM_PLATFORM_PERMISSION_DENIED",
+          "message": "Platform permission is required for this action."
+        }
+      },
+      "request_id": "83b2ba381712"
+    },
+    "result": "PASS"
+  },
+  {
+    "id": "UAT-KEV-SYNC-foreign",
+    "module": "KEV authorization",
+    "role": "foreign",
+    "preconditions": "Live Greenfield; no-prune future cutoff",
+    "steps": "UAT-KEV-SYNC-foreign",
+    "expected": "Platform 200 zero writes; every tenant role 403",
+    "actual": {
+      "status": 403,
+      "data": {
+        "detail": {
+          "code": "IAM_PLATFORM_PERMISSION_DENIED",
+          "message": "Platform permission is required for this action."
+        }
+      },
+      "request_id": "76c62a9cc1af"
+    },
+    "result": "PASS"
+  },
+  {
+    "id": "UAT-KEV-SYNC-platform",
+    "module": "KEV authorization",
+    "role": "platform",
+    "preconditions": "Live Greenfield; no-prune future cutoff",
+    "steps": "UAT-KEV-SYNC-platform",
+    "expected": "Platform 200 zero writes; every tenant role 403",
+    "actual": {
+      "status": 200,
+      "data": {
+        "ok": true,
+        "catalog_version": "2026.10.16",
+        "catalog_date_released": "2026-10-16T17:15:48.875200+00:00",
+        "total_in_feed": 1748,
+        "filtered_since": "2099-01-01",
+        "matched_after_filter": 0,
+        "upserted": 0,
+        "duration_seconds": 0.988
+      },
+      "request_id": "ffca479af35c"
+    },
+    "result": "PASS"
+  },
+  {
+    "id": "R2-KEV-CATALOG-UNCHANGED",
+    "module": "KEV authorization",
+    "role": "platform",
+    "preconditions": "Live Greenfield; no-prune future cutoff",
+    "steps": "R2-KEV-CATALOG-UNCHANGED",
+    "expected": "Exact catalog row digest unchanged",
+    "actual": {
+      "before": {
+        "count": 1748,
+        "sha256": "aee4bcc395ab5a06143573b1235730ae66641f6377cca1e103ec14a208b0b2db"
+      },
+      "after": {
+        "count": 1748,
+        "sha256": "aee4bcc395ab5a06143573b1235730ae66641f6377cca1e103ec14a208b0b2db"
+      }
+    },
+    "result": "PASS"
+  }
+]

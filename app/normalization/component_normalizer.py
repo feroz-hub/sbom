@@ -55,8 +55,8 @@ class NormalizedComponentResult:
 
 
 def normalize_component(component: dict[str, Any], *, index: int = 0) -> NormalizedComponentResult:
-    raw_name = _clean(component.get("name"))
-    raw_version = _clean(component.get("version"))
+    raw_name = _clean(component.get("original_name") or component.get("name"))
+    raw_version = _clean(component.get("original_version") or component.get("version"))
     raw_supplier = _clean(component.get("supplier"))
     raw_type = _clean(component.get("type") or component.get("component_type"))
     raw_group = _clean(component.get("group") or component.get("component_group"))
@@ -86,6 +86,15 @@ def normalize_component(component: dict[str, Any], *, index: int = 0) -> Normali
         normalized_version=version_result.normalized_version,
         supplier=supplier,
     )
+    conflicts = []
+    if raw_version and purl_result.version and (normalize_version(raw_version, ecosystem=ecosystem).normalized_version if ecosystem == "npm" else raw_version) != purl_result.version:
+        conflicts.append("purl_component_version_conflict")
+    cpe_ver = cpe_version(cpe_result.primary_cpe) if cpe_result.primary_cpe else None
+    if cpe_ver and purl_result.version and cpe_ver != purl_result.version:
+        conflicts.append("purl_cpe_version_conflict")
+    if conflicts:
+        confidence, reason = "Low", "conflicting_identity"
+        notes.extend(conflicts)
     canonical_id = hashlib.sha256(identity_key.encode("utf-8")).hexdigest() if identity_key else None
     package_key = _package_key(ecosystem, normalized_name, supplier)
 
@@ -176,14 +185,15 @@ def build_identity_key(
     normalized_version: str | None,
     supplier: str | None,
 ) -> tuple[str | None, str, str | None]:
-    if normalized_purl and "@" in normalized_purl:
+    purl_version = normalize_purl(normalized_purl).version if normalized_purl else None
+    if normalized_purl and purl_version and purl_version.lower() not in {"*", "unknown", "unspecified", "n/a", "latest"}:
         return f"purl:{normalized_purl}", "High", "same_normalized_purl"
     if primary_cpe and cpe_version(primary_cpe):
-        return f"cpe:{primary_cpe}", "High", "same_normalized_cpe"
+        return f"cpe:{primary_cpe}", "Low", "unresolved_cpe_candidate"
     if ecosystem and normalized_name and normalized_version and supplier:
-        return f"name:{ecosystem}:{normalized_name}:{normalized_version}:{supplier}", "Medium", "same_ecosystem_name_version_supplier"
+        return f"name:{ecosystem}:{normalized_name}:{normalized_version}:{supplier}", "Low", "candidate_ecosystem_name_version_supplier"
     if ecosystem and normalized_name and normalized_version and ecosystem != "generic":
-        return f"name:{ecosystem}:{normalized_name}:{normalized_version}", "Medium", "same_ecosystem_name_version"
+        return f"name:{ecosystem}:{normalized_name}:{normalized_version}", "Low", "candidate_ecosystem_name_version"
     return None, "Low", "insufficient_identity"
 
 

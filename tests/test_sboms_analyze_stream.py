@@ -23,10 +23,14 @@ from __future__ import annotations
 import json
 import re
 from datetime import UTC, datetime, timedelta
+from uuid import UUID
 
 import pytest
 from app.models import AnalysisRun, SBOMComponent, SBOMSource
-from sqlalchemy import text
+from sqlalchemy import literal, select
+
+from tests.public_id_fixture import public_row
+from tests.tenant_fixture_scope import verified_fixture_tenant
 
 
 def _parse_sse_events(body: str) -> list[dict]:
@@ -60,7 +64,8 @@ def db(client):
 
     session = SessionLocal()
     try:
-        yield session
+        with verified_fixture_tenant(session, 1):
+            yield session
     finally:
         session.rollback()
         session.close()
@@ -71,7 +76,7 @@ def test_analyze_stream_uses_registry_emits_progress_and_persists_run(client, se
     sbom_id = seeded_sbom["id"]
     before_ids = {
         row.id
-        for row in db.query(AnalysisRun).filter(AnalysisRun.sbom_id == sbom_id).all()
+        for row in db.query(AnalysisRun).filter(AnalysisRun.sbom_id == public_row(db, SBOMSource, sbom_id).id).all()
     }
 
     resp = client.post(
@@ -119,14 +124,14 @@ def test_analyze_stream_uses_registry_emits_progress_and_persists_run(client, se
     assert final["critical"] >= 1
     assert final["high"] >= 1
     assert final["status"] == "FINDINGS"  # ADR-0001 (was FAIL)
-    assert isinstance(final["runId"], int)
+    assert UUID(final["runId"]).version == 4
     assert final["errors"] == 0
 
     db.expire_all()
-    persisted = db.get(AnalysisRun, final["runId"])
+    persisted = public_row(db, AnalysisRun, final["runId"])
     assert persisted is not None
     assert persisted.id not in before_ids
-    assert persisted.sbom_id == sbom_id
+    assert persisted.sbom_id == public_row(db, SBOMSource, sbom_id).id
     assert persisted.run_status == "FINDINGS"
     assert persisted.started_on
     assert persisted.completed_on
@@ -135,9 +140,12 @@ def test_analyze_stream_uses_registry_emits_progress_and_persists_run(client, se
     assert persisted.critical_count == final["critical"]
     assert persisted.high_count == final["high"]
 
-    list_body = client.get(f"/api/sboms?user_id={seeded_sbom['created_by']}&page_size=500").json()
+    listed = client.get("/api/sboms", params={"page_size": 500})
+    assert listed.status_code == 200, listed.text
+    list_body = listed.json()
+    assert isinstance(list_body, list)
     row = next(item for item in list_body if item["id"] == sbom_id)
-    assert row["latest_analysis"]["run_id"] == persisted.id
+    assert row["latest_analysis"]["run_id"] == str(persisted.public_id)
     assert row["latest_analysis"]["status"] == "completed"
     assert row["latest_analysis"]["result"] == "findings"
     assert row["latest_analysis"]["finding_count"] == persisted.total_findings
@@ -145,7 +153,7 @@ def test_analyze_stream_uses_registry_emits_progress_and_persists_run(client, se
     assert row["latest_analysis"]["high_count"] == persisted.high_count
 
     detail = client.get(f"/api/sboms/{sbom_id}").json()
-    assert detail["latest_analysis"]["run_id"] == persisted.id
+    assert detail["latest_analysis"]["run_id"] == str(persisted.public_id)
 
 
 def test_analyze_stream_parse_failure_persists_failed_run(client, db):
@@ -160,7 +168,7 @@ def test_analyze_stream_parse_failure_persists_failed_run(client, db):
     db.refresh(sbom)
 
     resp = client.post(
-        f"/api/sboms/{sbom.id}/analyze/stream",
+        f"/api/sboms/{sbom.public_id}/analyze/stream",
         json={"sources": ["NVD"]},
     )
 
@@ -174,7 +182,7 @@ def test_analyze_stream_parse_failure_persists_failed_run(client, db):
     assert "SBOM parse failed" in terminal["message"]
 
     db.expire_all()
-    run = db.get(AnalysisRun, terminal["runId"])
+    run = public_row(db, AnalysisRun, terminal["runId"])
     assert run is not None
     assert run.sbom_id == sbom.id
     assert run.run_status == "ERROR"
@@ -182,8 +190,8 @@ def test_analyze_stream_parse_failure_persists_failed_run(client, db):
     assert run.completed_on
     assert "SBOM parse failed" in (run.raw_report or "")
 
-    detail = client.get(f"/api/sboms/{sbom.id}").json()
-    assert detail["latest_analysis"]["run_id"] == run.id
+    detail = client.get(f"/api/sboms/{sbom.public_id}").json()
+    assert detail["latest_analysis"]["run_id"] == str(run.public_id)
     assert detail["latest_analysis"]["status"] == "failed"
     assert detail["latest_analysis"]["result"] == "failed"
     assert "SBOM parse failed" in detail["latest_analysis"]["error_message"]
@@ -191,7 +199,7 @@ def test_analyze_stream_parse_failure_persists_failed_run(client, db):
 
 def test_analyze_stream_zero_persisted_components_marks_run_failed(client, seeded_sbom, db, monkeypatch):
     sbom_id = seeded_sbom["id"]
-    db.query(SBOMComponent).filter(SBOMComponent.sbom_id == sbom_id).delete()
+    db.query(SBOMComponent).filter(SBOMComponent.sbom_id == public_row(db, SBOMSource, sbom_id).id).delete()
     db.commit()
 
     def fake_sync_components(_db, _sbom):
@@ -214,7 +222,7 @@ def test_analyze_stream_zero_persisted_components_marks_run_failed(client, seede
     assert "No components were available for analysis" in terminal["message"]
 
     db.expire_all()
-    run = db.get(AnalysisRun, terminal["runId"])
+    run = public_row(db, AnalysisRun, terminal["runId"])
     assert run is not None
     assert run.run_status == "ERROR"
     assert run.total_components == 0
@@ -226,7 +234,7 @@ def test_startup_reconciliation_interrupts_stale_running_run(db, seeded_sbom):
 
     started = (datetime.now(UTC) - timedelta(minutes=10)).replace(microsecond=0).isoformat()
     active = AnalysisRun(
-        sbom_id=seeded_sbom["id"],
+        sbom_id=public_row(db, SBOMSource, seeded_sbom["id"]).id,
         run_status="RUNNING",
         sbom_name=seeded_sbom["sbom_name"],
         source="NVD,OSV,GITHUB",
@@ -255,7 +263,7 @@ def test_startup_reconciliation_preserves_recent_running_run(db, seeded_sbom):
 
     started = datetime.now(UTC).replace(microsecond=0).isoformat()
     active = AnalysisRun(
-        sbom_id=seeded_sbom["id"],
+        sbom_id=public_row(db, SBOMSource, seeded_sbom["id"]).id,
         run_status="RUNNING",
         sbom_name=seeded_sbom["sbom_name"],
         source="NVD,OSV,GITHUB",
@@ -282,7 +290,7 @@ def test_startup_reconciliation_preserves_recent_running_run(db, seeded_sbom):
 
 def test_analyze_stream_returns_existing_active_run_without_duplicate(client, seeded_sbom, db):
     active = AnalysisRun(
-        sbom_id=seeded_sbom["id"],
+        sbom_id=public_row(db, SBOMSource, seeded_sbom["id"]).id,
         run_status="RUNNING",
         sbom_name=seeded_sbom["sbom_name"],
         source="NVD,OSV,GITHUB",
@@ -294,7 +302,9 @@ def test_analyze_stream_returns_existing_active_run_without_duplicate(client, se
     db.add(active)
     db.commit()
     db.refresh(active)
-    before_count = db.query(AnalysisRun).filter(AnalysisRun.sbom_id == seeded_sbom["id"]).count()
+    before_count = (
+        db.query(AnalysisRun).filter(AnalysisRun.sbom_id == public_row(db, SBOMSource, seeded_sbom["id"]).id).count()
+    )
 
     resp = client.post(
         f"/api/sboms/{seeded_sbom['id']}/analyze/stream",
@@ -307,11 +317,13 @@ def test_analyze_stream_returns_existing_active_run_without_duplicate(client, se
     assert completes
     final = completes[-1]["data"]
     assert final["status"] == "already_running"
-    assert final["runId"] == active.id
+    assert final["runId"] == str(active.public_id)
     assert final["already_running"] is True
 
     db.expire_all()
-    after_count = db.query(AnalysisRun).filter(AnalysisRun.sbom_id == seeded_sbom["id"]).count()
+    after_count = (
+        db.query(AnalysisRun).filter(AnalysisRun.sbom_id == public_row(db, SBOMSource, seeded_sbom["id"]).id).count()
+    )
     assert after_count == before_count
     db.query(AnalysisRun).filter(AnalysisRun.id == active.id).delete()
     db.commit()
@@ -342,7 +354,8 @@ def test_analyze_stream_data_error_rolls_back_and_marks_failed_with_clean_sessio
             session.close()
 
     def fail_with_aborted_transaction(*, db, **kwargs):
-        db.execute(text("SELECT 1 / 0"))
+        # Produce a real PostgreSQL DataError without escaping the SQL guard.
+        db.execute(select(literal(1).op("/")(literal(0))))
 
     client.app.dependency_overrides[get_db] = override_get_db
     monkeypatch.setattr("app.services.analysis_orchestrator.persist_analysis_run", fail_with_aborted_transaction)
@@ -371,7 +384,7 @@ def test_analyze_stream_data_error_rolls_back_and_marks_failed_with_clean_sessio
     assert "SELECT 1 / 0" not in terminal["message"]
 
     db.expire_all()
-    run = db.get(AnalysisRun, terminal["runId"])
+    run = public_row(db, AnalysisRun, terminal["runId"])
     assert run is not None
     assert run.run_status == "ERROR"
     assert "database rejected" in (run.raw_report or "")
@@ -405,7 +418,7 @@ def test_analyze_stream_still_ends_cleanly_when_failed_status_cannot_be_persiste
             raise RuntimeError("forced failed-status commit failure")
 
     def fail_with_aborted_transaction(*, db, **kwargs):
-        db.execute(text("SELECT 1 / 0"))
+        db.execute(select(literal(1).op("/")(literal(0))))
 
     caplog.set_level("ERROR", logger="app.routers.sboms_crud")
     monkeypatch.setattr("app.services.analysis_orchestrator.persist_analysis_run", fail_with_aborted_transaction)

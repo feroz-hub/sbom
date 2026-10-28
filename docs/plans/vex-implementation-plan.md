@@ -435,12 +435,21 @@ endpoint that carries `row_version`.
 **Q4 (PR-5).** §27 requires a Reviewer/Owner column, but `assigned_to`/`reviewed_by` only arrive in
 PR-6. Render them read-only/empty in PR-5 and wire the assignment action in PR-6.
 
+**Q5 (lifecycle audit, 2026-10-08).** Which SBOM is "current" for posture: the lineage HEAD
+(what every dashboard uses today) or `Product.current_sbom_id` (the designated current, which no
+dashboard reads)? Blocks B6 and the version-scope selector (M2). See
+[`docs/vex/lifecycle-audit-2026-10-08.md`](../vex/lifecycle-audit-2026-10-08.md).
+
+**Q6 (lifecycle audit).** Approve the additive API proposals M1 (version comparison via Compare
+v2), M2 (`version_scope=current|all`) and M3 (prior decisions as read-only evidence)?
+
 ---
 
 ## 14. Session log
 
 | Date | Session | Outcome |
 |---|---|---|
+| 2026-10-08 | Lifecycle audit | Fixed B1 (queue ignored eligible-SBOM scope: superseded and inactive versions leaked into the queue), B2 (VEX run selection ignored `AnalysisRun.is_current`), B3 (GHSA-alias severity lost), B4 (new filtered `GET /api/vex/investigations/summary` + Current view / Tenant overview UI). No migration. Report: `docs/vex/lifecycle-audit-2026-10-08.md`; tests: `tests/test_vex_version_lifecycle.py`. Open: Q5, Q6. |
 | 2026-09-24 | PR-5 | Portfolio investigation UI, `d96a4e7`. Architectural test caught invalidation living outside the useMutation block. |
 | 2026-09-24 | PR-4 | Portfolio API, `cef1380`. Severity sort refused rather than faked; severity filter implemented via EXISTS in the metric layer. |
 | 2026-09-24 | PR-3 | Dashboard over contexts, `f3294b6`. Fixed two PR-2 defects: the non-rollback trigger guard and unvalidated `normalized_status`. |
@@ -448,3 +457,33 @@ PR-6. Render them read-only/empty in PR-5 and wire the assignment action in PR-6
 | 2026-09-24 | PR-1 | Data foundation, `5a12d0e`. D1 corrected (see above); `resolve()` turned out not to prefer CVE. |
 | 2026-09-24 | PR-0 | `app/metrics/vex.py` added; `vex_provider.py` off direct finding queries. Corrected a Session-0 error: only one architectural test was failing, not two. |
 | 2026-09-24 | Session 0 | Discovery + this plan. Spec vendored to `docs/requirements/`, CLAUDE.md addendum appended. Decided: synchronous reconciliation, plan-only session. Found two pre-existing red architectural tests → added PR-0. |
+
+## 2026-10-09 — Version lifecycle completion
+
+B5/B6 shared posture resolution, pending-upload last-known evidence, M1 Compare v2 adapter, M2 historical browsing, M3 read-only prior decisions and investigation page batching are implemented. Existing designation is honored; manual Current SBOM selection remains the established contract. No assignment/decision inheritance, new statuses, migration or deployment. See [completion and verification](../vex/lifecycle-completion-2026-10-09.md).
+
+## 2026-10-09 — Complete lifecycle selection and historical run evidence
+
+The earlier manual-only selection decision is superseded by the requested persisted AUTO/MANUAL_PIN policy. Migration 077 preserves legacy pins and adds immutable run-context snapshots. Successful eligible analysis promotes only within an unambiguous selected lineage; uploads do not promote. Current/list/summary and historical authorization share obsolete-evidence checks. Product policy controls, historical-run browsing and prior assertion evidence are implemented, with batched list enrichment preserved. See [the final report](../vex/lifecycle-implementation-2026-10-09.md) for requirement mapping, migration rollback, executed checks and limitations.
+
+
+## UAT remediation Round 1 — 20 October 2026
+
+SBO-70 / UAT-DEF-003: normalize the stored numeric analyzer confidence to the existing nullable-text investigation DTO at serialization. No public schema, authorization, evidence precedence, audit or transaction policy changes. Regression coverage exercises null/zero/fraction/unit confidence, successful responses, stale 409 responses, one persisted statement/context audit, validation rejection and the existing live membership authorization matrix (VEX-UI-003, VEX-AUD-001/002, VEX-VAL-001, VEX-SEC-001/002). See docs/uat/remediation/2026-10-20-round1/ for before/after evidence and exact check results. The original 485-case baseline and full-UAT sign-off remain separate.
+
+### UAT remediation Round 2 — 20 October 2026
+
+SBO-54: reproduced the original 13 UUID-boundary fixture failures (55 passed/13 failed), corrected only public HTTP resource identifiers and corresponding wire expectations, and retained integer DB/audit keys. The original suite now passes 69 tests including explicit integer-ID rejection with unchanged row_version. Expanded VEX fixtures were reconciled against the same UUID contract. Final expanded VEX/policy/dashboard/version regressions passed 320 tests plus 8 subtests; Native/IAM/KEV/RBAC regressions passed 287 tests, with no failures or skips. The broader run also exposed source-native CSAF product identifiers being passed through application Product resolution; `app/public_api.py` now preserves the VEX import document body after the addressed SBOM's existing UUID/auth/tenant resolution. Regression controls cover source-document preservation, invalid internal IDs and foreign targets. No VEX precedence, severity, assignment, concurrency or audit policy changed. Final checks and remaining limits are recorded in `docs/uat/remediation/2026-10-20-round2/RESULTS.md`; the original 485-case baseline remains historical.
+
+### Shared version evidence UI — 23 October 2026
+
+VEX-UI-001/002/003, VEX-INV-002 and VEX-DASH-004/005: audited every shared
+version-evidence renderer. Replaced the unbounded paragraph feed centrally
+with collapsed, searchable, paginated provenance; preserved visible missing,
+last-known and incomplete-coverage notices. Moved optional history/comparison
+after the operational queue and constrained selected-SBOM provenance. The same
+correction applies to product/SBOM details. No backend, schema, authorization,
+decision, severity or evidence-calculation changes. See
+[`shared-version-evidence-ui.md`](../engineering/shared-version-evidence-ui.md)
+for affected and unaffected routes, executed checks, the known remote inventory
+test failure, and remaining payload/deployment limitations.

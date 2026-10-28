@@ -2,18 +2,23 @@
 
 from __future__ import annotations
 
+from tests.historical_migration_fixture import historical_database as _historical_database
+
+historical_database = _historical_database
+
 import os
 
 import pytest
 import sqlalchemy as sa
 from alembic import command
 from alembic.config import Config
+from alembic.script import ScriptDirectory
 from sqlalchemy.engine import make_url
 
 pytestmark = pytest.mark.postgres
 
 REVISION = "047_email_verification_tokens"
-CURRENT_HEAD = "055_ai_model_registry"
+CURRENT_HEAD = ScriptDirectory.from_config(Config("alembic.ini")).get_current_head()
 PREVIOUS_REVISION = "046_external_identity_and_verification_fields"
 
 
@@ -88,7 +93,7 @@ def test_head_contains_token_table_constraints_indexes_and_foreign_key():
         engine.dispose()
 
 
-def test_upgrade_preserves_users_memberships_grants_and_verification_state():
+def test_upgrade_preserves_users_memberships_grants_and_verification_state(historical_database):
     engine = sa.create_engine(_database_url())
     command.downgrade(_config(), PREVIOUS_REVISION)
     try:
@@ -217,7 +222,7 @@ def test_hash_uniqueness_active_token_policy_and_cascade_delete():
         engine.dispose()
 
 
-def test_downgrade_and_reupgrade_are_safe():
+def test_downgrade_and_reupgrade_are_safe(historical_database):
     engine = sa.create_engine(_database_url())
     try:
         command.downgrade(_config(), PREVIOUS_REVISION)

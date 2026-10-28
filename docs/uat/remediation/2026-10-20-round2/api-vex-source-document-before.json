@@ -1,0 +1,13 @@
+{
+  "id": "R2-VEX-CSAF-PRODUCT-IDENTITY",
+  "preconditions": "Only retained UAT fixture SBOM; one deliberate import request",
+  "expected": "Source-native CSAF IDs are not application Product UUIDs",
+  "actual": {
+    "status": 422,
+    "data": {
+      "detail": "Resource identifier must be a UUIDv4"
+    },
+    "request_id": "364b2b344698"
+  },
+  "replayed": false
+}

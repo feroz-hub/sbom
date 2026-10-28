@@ -52,3 +52,5 @@ it('offers a separate manual vulnerability action and scoped full history', asyn
   await waitFor(() => expect(screen.getByText(/under_investigation · Vendor/)).toBeInTheDocument());
   expect(screen.queryByText('CVE-2026-0002')).not.toBeInTheDocument();
 });
+
+vi.mock('@/hooks/useAuth', async () => ({ useAuth: (await import('@/test/authorizedAuth')).authorizedAuth }));

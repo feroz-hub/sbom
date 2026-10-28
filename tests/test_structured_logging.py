@@ -205,6 +205,26 @@ def make_app():
     return app
 
 
+def test_platform_failure_logs_scope_actor_and_category_without_secrets(log_file):
+    from fastapi import HTTPException, Request
+
+    app = make_app()
+
+    @app.get("/api/platform/users")
+    async def directory(request: Request):
+        request.state.current_context = SimpleNamespace(user_id=42, tenant_id=None)
+        raise HTTPException(422, "Invalid filter")
+
+    response = TestClient(app).get("/api/platform/users", headers={"Authorization": "Bearer private-token"})
+    event = next(row for row in entries(log_file) if row.get("event") == "http_request_completed")
+    assert event["request_id"] == response.headers["X-Request-ID"]
+    assert event["user_id"] == 42
+    assert event["request_scope"] == "platform"
+    assert event["exception_category"] == "HTTPError"
+    assert event["status_code"] == 422
+    assert "private-token" not in log_file.read_text()
+
+
 @pytest.mark.parametrize("headers", [{}, {"X-Request-ID": "client-request-42"}, {"X-Correlation-ID": "legacy-id"}])
 def test_http_request_id_and_secrets(log_file, headers):
     response = TestClient(make_app()).get(
@@ -249,15 +269,23 @@ def test_stream_and_background_failure_emit_once(log_file):
     assert "BACKGROUND-SECRET" not in log_file.read_text()
 
 
-def test_early_body_rejection_logged(log_file):
+def test_early_body_rejection_logged(log_file, monkeypatch):
     from app.middleware.max_body import MaxBodySizeMiddleware
 
     app = make_app()
     app.add_middleware(MaxBodySizeMiddleware, max_bytes=1)
     app.add_middleware(RequestLoggingMiddleware)
+    # Transport diagnostics may follow the application completion event.
+    # Keep them enabled rather than relying on global logger ordering.
+    monkeypatch.setattr(logging.getLogger("httpx2"), "level", logging.INFO)
     response = TestClient(app).post("/ok", content=b"too large")
     assert response.status_code == 413 and response.headers["X-Request-ID"]
-    assert entries(log_file)[-1]["status_code"] == 413
+    events = [row for row in entries(log_file) if row.get("event") == "http_request_completed"]
+    assert len(events) == 1
+    assert {key: events[0][key] for key in ("method", "path", "status_code", "exception_category")} == {
+        "method": "POST", "path": "/ok", "status_code": 413, "exception_category": "HTTPError",
+    }
+    assert events[0]["request_id"] == response.headers["X-Request-ID"] == response.headers["X-Correlation-ID"]
 
 
 def _write_child(path, worker):

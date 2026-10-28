@@ -1,0 +1,381 @@
+<?xml version="1.0" encoding="utf-8"?><testsuites name="pytest tests"><testsuite name="pytest" errors="10" failures="0" skipped="0" tests="13" time="38.262" timestamp="2026-10-20T20:20:22.210768+05:30" hostname="Ferozes-MacBook-Air.local"><testcase classname="tests.test_entra_migration" name="test_upgrade_preserves_existing_providers_and_downgrade_protects_entra" time="6.207"><error message="failed on setup with &quot;sqlalchemy.exc.ProgrammingError: (psycopg.errors.UndefinedTable) relation &quot;tenants&quot; does not exist&#10;LINE 1: INSERT INTO tenants(id,name,slug,external_iam_tenant_id,stat...&#10;                    ^&#10;[SQL: INSERT INTO tenants(id,name,slug,external_iam_tenant_id,status,created_at,updated_at) VALUES(1,'Historical fixture','legacy-fixture','legacy-fixture','ACTIVE',now(),now())]&#10;(Background on this error at: https://sqlalche.me/e/20/f405)&quot;">.venv/lib/python3.12/site-packages/sqlalchemy/engine/base.py:1969: in _exec_single_context
+    self.dialect.do_execute(
+.venv/lib/python3.12/site-packages/sqlalchemy/engine/default.py:952: in do_execute
+    cursor.execute(statement, parameters)
+.venv/lib/python3.12/site-packages/psycopg/cursor.py:117: in execute
+    raise ex.with_traceback(None)
+E   psycopg.errors.UndefinedTable: relation "tenants" does not exist
+E   LINE 1: INSERT INTO tenants(id,name,slug,external_iam_tenant_id,stat...
+E                       ^
+
+The above exception was the direct cause of the following exception:
+.venv/lib/python3.12/site-packages/pytest_asyncio/plugin.py:924: in pytest_fixture_setup
+    return (yield)
+            ^^^^^
+tests/historical_migration_fixture.py:66: in historical_database
+    connection.execute(text("INSERT INTO tenants(id,name,slug,external_iam_tenant_id,status,created_at,updated_at) VALUES(1,'Historical fixture','legacy-fixture','legacy-fixture','ACTIVE',now(),now())"))
+.venv/lib/python3.12/site-packages/sqlalchemy/engine/base.py:1421: in execute
+    return meth(
+.venv/lib/python3.12/site-packages/sqlalchemy/sql/elements.py:526: in _execute_on_connection
+    return connection._execute_clauseelement(
+.venv/lib/python3.12/site-packages/sqlalchemy/engine/base.py:1643: in _execute_clauseelement
+    ret = self._execute_context(
+.venv/lib/python3.12/site-packages/sqlalchemy/engine/base.py:1848: in _execute_context
+    return self._exec_single_context(
+.venv/lib/python3.12/site-packages/sqlalchemy/engine/base.py:1988: in _exec_single_context
+    self._handle_dbapi_exception(
+.venv/lib/python3.12/site-packages/sqlalchemy/engine/base.py:2365: in _handle_dbapi_exception
+    raise sqlalchemy_exception.with_traceback(exc_info[2]) from e
+.venv/lib/python3.12/site-packages/sqlalchemy/engine/base.py:1969: in _exec_single_context
+    self.dialect.do_execute(
+.venv/lib/python3.12/site-packages/sqlalchemy/engine/default.py:952: in do_execute
+    cursor.execute(statement, parameters)
+.venv/lib/python3.12/site-packages/psycopg/cursor.py:117: in execute
+    raise ex.with_traceback(None)
+E   sqlalchemy.exc.ProgrammingError: (psycopg.errors.UndefinedTable) relation "tenants" does not exist
+E   LINE 1: INSERT INTO tenants(id,name,slug,external_iam_tenant_id,stat...
+E                       ^
+E   [SQL: INSERT INTO tenants(id,name,slug,external_iam_tenant_id,status,created_at,updated_at) VALUES(1,'Historical fixture','legacy-fixture','legacy-fixture','ACTIVE',now(),now())]
+E   (Background on this error at: https://sqlalche.me/e/20/f405)</error></testcase><testcase classname="tests.test_entra_migration" name="test_downgrade_preserves_suspended_accounts" time="3.127"><error message="failed on setup with &quot;sqlalchemy.exc.ProgrammingError: (psycopg.errors.UndefinedTable) relation &quot;tenants&quot; does not exist&#10;LINE 1: INSERT INTO tenants(id,name,slug,external_iam_tenant_id,stat...&#10;                    ^&#10;[SQL: INSERT INTO tenants(id,name,slug,external_iam_tenant_id,status,created_at,updated_at) VALUES(1,'Historical fixture','legacy-fixture','legacy-fixture','ACTIVE',now(),now())]&#10;(Background on this error at: https://sqlalche.me/e/20/f405)&quot;">.venv/lib/python3.12/site-packages/sqlalchemy/engine/base.py:1969: in _exec_single_context
+    self.dialect.do_execute(
+.venv/lib/python3.12/site-packages/sqlalchemy/engine/default.py:952: in do_execute
+    cursor.execute(statement, parameters)
+.venv/lib/python3.12/site-packages/psycopg/cursor.py:117: in execute
+    raise ex.with_traceback(None)
+E   psycopg.errors.UndefinedTable: relation "tenants" does not exist
+E   LINE 1: INSERT INTO tenants(id,name,slug,external_iam_tenant_id,stat...
+E                       ^
+
+The above exception was the direct cause of the following exception:
+.venv/lib/python3.12/site-packages/pytest_asyncio/plugin.py:924: in pytest_fixture_setup
+    return (yield)
+            ^^^^^
+tests/historical_migration_fixture.py:66: in historical_database
+    connection.execute(text("INSERT INTO tenants(id,name,slug,external_iam_tenant_id,status,created_at,updated_at) VALUES(1,'Historical fixture','legacy-fixture','legacy-fixture','ACTIVE',now(),now())"))
+.venv/lib/python3.12/site-packages/sqlalchemy/engine/base.py:1421: in execute
+    return meth(
+.venv/lib/python3.12/site-packages/sqlalchemy/sql/elements.py:526: in _execute_on_connection
+    return connection._execute_clauseelement(
+.venv/lib/python3.12/site-packages/sqlalchemy/engine/base.py:1643: in _execute_clauseelement
+    ret = self._execute_context(
+.venv/lib/python3.12/site-packages/sqlalchemy/engine/base.py:1848: in _execute_context
+    return self._exec_single_context(
+.venv/lib/python3.12/site-packages/sqlalchemy/engine/base.py:1988: in _exec_single_context
+    self._handle_dbapi_exception(
+.venv/lib/python3.12/site-packages/sqlalchemy/engine/base.py:2365: in _handle_dbapi_exception
+    raise sqlalchemy_exception.with_traceback(exc_info[2]) from e
+.venv/lib/python3.12/site-packages/sqlalchemy/engine/base.py:1969: in _exec_single_context
+    self.dialect.do_execute(
+.venv/lib/python3.12/site-packages/sqlalchemy/engine/default.py:952: in do_execute
+    cursor.execute(statement, parameters)
+.venv/lib/python3.12/site-packages/psycopg/cursor.py:117: in execute
+    raise ex.with_traceback(None)
+E   sqlalchemy.exc.ProgrammingError: (psycopg.errors.UndefinedTable) relation "tenants" does not exist
+E   LINE 1: INSERT INTO tenants(id,name,slug,external_iam_tenant_id,stat...
+E                       ^
+E   [SQL: INSERT INTO tenants(id,name,slug,external_iam_tenant_id,status,created_at,updated_at) VALUES(1,'Historical fixture','legacy-fixture','legacy-fixture','ACTIVE',now(),now())]
+E   (Background on this error at: https://sqlalche.me/e/20/f405)</error></testcase><testcase classname="tests.test_native_identity_migration" name="test_compatibility_migration_preserves_duplicates_pending_and_membership" time="3.496"><error message="failed on setup with &quot;sqlalchemy.exc.ProgrammingError: (psycopg.errors.UndefinedTable) relation &quot;tenants&quot; does not exist&#10;LINE 1: INSERT INTO tenants(id,name,slug,external_iam_tenant_id,stat...&#10;                    ^&#10;[SQL: INSERT INTO tenants(id,name,slug,external_iam_tenant_id,status,created_at,updated_at) VALUES(1,'Historical fixture','legacy-fixture','legacy-fixture','ACTIVE',now(),now())]&#10;(Background on this error at: https://sqlalche.me/e/20/f405)&quot;">.venv/lib/python3.12/site-packages/sqlalchemy/engine/base.py:1969: in _exec_single_context
+    self.dialect.do_execute(
+.venv/lib/python3.12/site-packages/sqlalchemy/engine/default.py:952: in do_execute
+    cursor.execute(statement, parameters)
+.venv/lib/python3.12/site-packages/psycopg/cursor.py:117: in execute
+    raise ex.with_traceback(None)
+E   psycopg.errors.UndefinedTable: relation "tenants" does not exist
+E   LINE 1: INSERT INTO tenants(id,name,slug,external_iam_tenant_id,stat...
+E                       ^
+
+The above exception was the direct cause of the following exception:
+.venv/lib/python3.12/site-packages/pytest_asyncio/plugin.py:924: in pytest_fixture_setup
+    return (yield)
+            ^^^^^
+tests/historical_migration_fixture.py:66: in historical_database
+    connection.execute(text("INSERT INTO tenants(id,name,slug,external_iam_tenant_id,status,created_at,updated_at) VALUES(1,'Historical fixture','legacy-fixture','legacy-fixture','ACTIVE',now(),now())"))
+.venv/lib/python3.12/site-packages/sqlalchemy/engine/base.py:1421: in execute
+    return meth(
+.venv/lib/python3.12/site-packages/sqlalchemy/sql/elements.py:526: in _execute_on_connection
+    return connection._execute_clauseelement(
+.venv/lib/python3.12/site-packages/sqlalchemy/engine/base.py:1643: in _execute_clauseelement
+    ret = self._execute_context(
+.venv/lib/python3.12/site-packages/sqlalchemy/engine/base.py:1848: in _execute_context
+    return self._exec_single_context(
+.venv/lib/python3.12/site-packages/sqlalchemy/engine/base.py:1988: in _exec_single_context
+    self._handle_dbapi_exception(
+.venv/lib/python3.12/site-packages/sqlalchemy/engine/base.py:2365: in _handle_dbapi_exception
+    raise sqlalchemy_exception.with_traceback(exc_info[2]) from e
+.venv/lib/python3.12/site-packages/sqlalchemy/engine/base.py:1969: in _exec_single_context
+    self.dialect.do_execute(
+.venv/lib/python3.12/site-packages/sqlalchemy/engine/default.py:952: in do_execute
+    cursor.execute(statement, parameters)
+.venv/lib/python3.12/site-packages/psycopg/cursor.py:117: in execute
+    raise ex.with_traceback(None)
+E   sqlalchemy.exc.ProgrammingError: (psycopg.errors.UndefinedTable) relation "tenants" does not exist
+E   LINE 1: INSERT INTO tenants(id,name,slug,external_iam_tenant_id,stat...
+E                       ^
+E   [SQL: INSERT INTO tenants(id,name,slug,external_iam_tenant_id,status,created_at,updated_at) VALUES(1,'Historical fixture','legacy-fixture','legacy-fixture','ACTIVE',now(),now())]
+E   (Background on this error at: https://sqlalche.me/e/20/f405)</error></testcase><testcase classname="tests.test_native_identity_migration" name="test_downgrade_refuses_native_records_without_deleting_anything" time="2.907"><error message="failed on setup with &quot;sqlalchemy.exc.ProgrammingError: (psycopg.errors.UndefinedTable) relation &quot;tenants&quot; does not exist&#10;LINE 1: INSERT INTO tenants(id,name,slug,external_iam_tenant_id,stat...&#10;                    ^&#10;[SQL: INSERT INTO tenants(id,name,slug,external_iam_tenant_id,status,created_at,updated_at) VALUES(1,'Historical fixture','legacy-fixture','legacy-fixture','ACTIVE',now(),now())]&#10;(Background on this error at: https://sqlalche.me/e/20/f405)&quot;">.venv/lib/python3.12/site-packages/sqlalchemy/engine/base.py:1969: in _exec_single_context
+    self.dialect.do_execute(
+.venv/lib/python3.12/site-packages/sqlalchemy/engine/default.py:952: in do_execute
+    cursor.execute(statement, parameters)
+.venv/lib/python3.12/site-packages/psycopg/cursor.py:117: in execute
+    raise ex.with_traceback(None)
+E   psycopg.errors.UndefinedTable: relation "tenants" does not exist
+E   LINE 1: INSERT INTO tenants(id,name,slug,external_iam_tenant_id,stat...
+E                       ^
+
+The above exception was the direct cause of the following exception:
+.venv/lib/python3.12/site-packages/pytest_asyncio/plugin.py:924: in pytest_fixture_setup
+    return (yield)
+            ^^^^^
+tests/historical_migration_fixture.py:66: in historical_database
+    connection.execute(text("INSERT INTO tenants(id,name,slug,external_iam_tenant_id,status,created_at,updated_at) VALUES(1,'Historical fixture','legacy-fixture','legacy-fixture','ACTIVE',now(),now())"))
+.venv/lib/python3.12/site-packages/sqlalchemy/engine/base.py:1421: in execute
+    return meth(
+.venv/lib/python3.12/site-packages/sqlalchemy/sql/elements.py:526: in _execute_on_connection
+    return connection._execute_clauseelement(
+.venv/lib/python3.12/site-packages/sqlalchemy/engine/base.py:1643: in _execute_clauseelement
+    ret = self._execute_context(
+.venv/lib/python3.12/site-packages/sqlalchemy/engine/base.py:1848: in _execute_context
+    return self._exec_single_context(
+.venv/lib/python3.12/site-packages/sqlalchemy/engine/base.py:1988: in _exec_single_context
+    self._handle_dbapi_exception(
+.venv/lib/python3.12/site-packages/sqlalchemy/engine/base.py:2365: in _handle_dbapi_exception
+    raise sqlalchemy_exception.with_traceback(exc_info[2]) from e
+.venv/lib/python3.12/site-packages/sqlalchemy/engine/base.py:1969: in _exec_single_context
+    self.dialect.do_execute(
+.venv/lib/python3.12/site-packages/sqlalchemy/engine/default.py:952: in do_execute
+    cursor.execute(statement, parameters)
+.venv/lib/python3.12/site-packages/psycopg/cursor.py:117: in execute
+    raise ex.with_traceback(None)
+E   sqlalchemy.exc.ProgrammingError: (psycopg.errors.UndefinedTable) relation "tenants" does not exist
+E   LINE 1: INSERT INTO tenants(id,name,slug,external_iam_tenant_id,stat...
+E                       ^
+E   [SQL: INSERT INTO tenants(id,name,slug,external_iam_tenant_id,status,created_at,updated_at) VALUES(1,'Historical fixture','legacy-fixture','legacy-fixture','ACTIVE',now(),now())]
+E   (Background on this error at: https://sqlalche.me/e/20/f405)</error></testcase><testcase classname="tests.test_phase3_identity_migration" name="test_fresh_head_has_phase3_columns_indexes_and_unique_constraint" time="1.472" /><testcase classname="tests.test_phase3_identity_migration" name="test_upgrade_from_045_preserves_ids_access_and_audit_references" time="2.509"><error message="failed on setup with &quot;sqlalchemy.exc.ProgrammingError: (psycopg.errors.UndefinedTable) relation &quot;tenants&quot; does not exist&#10;LINE 1: INSERT INTO tenants(id,name,slug,external_iam_tenant_id,stat...&#10;                    ^&#10;[SQL: INSERT INTO tenants(id,name,slug,external_iam_tenant_id,status,created_at,updated_at) VALUES(1,'Historical fixture','legacy-fixture','legacy-fixture','ACTIVE',now(),now())]&#10;(Background on this error at: https://sqlalche.me/e/20/f405)&quot;">.venv/lib/python3.12/site-packages/sqlalchemy/engine/base.py:1969: in _exec_single_context
+    self.dialect.do_execute(
+.venv/lib/python3.12/site-packages/sqlalchemy/engine/default.py:952: in do_execute
+    cursor.execute(statement, parameters)
+.venv/lib/python3.12/site-packages/psycopg/cursor.py:117: in execute
+    raise ex.with_traceback(None)
+E   psycopg.errors.UndefinedTable: relation "tenants" does not exist
+E   LINE 1: INSERT INTO tenants(id,name,slug,external_iam_tenant_id,stat...
+E                       ^
+
+The above exception was the direct cause of the following exception:
+.venv/lib/python3.12/site-packages/pytest_asyncio/plugin.py:924: in pytest_fixture_setup
+    return (yield)
+            ^^^^^
+tests/historical_migration_fixture.py:66: in historical_database
+    connection.execute(text("INSERT INTO tenants(id,name,slug,external_iam_tenant_id,status,created_at,updated_at) VALUES(1,'Historical fixture','legacy-fixture','legacy-fixture','ACTIVE',now(),now())"))
+.venv/lib/python3.12/site-packages/sqlalchemy/engine/base.py:1421: in execute
+    return meth(
+.venv/lib/python3.12/site-packages/sqlalchemy/sql/elements.py:526: in _execute_on_connection
+    return connection._execute_clauseelement(
+.venv/lib/python3.12/site-packages/sqlalchemy/engine/base.py:1643: in _execute_clauseelement
+    ret = self._execute_context(
+.venv/lib/python3.12/site-packages/sqlalchemy/engine/base.py:1848: in _execute_context
+    return self._exec_single_context(
+.venv/lib/python3.12/site-packages/sqlalchemy/engine/base.py:1988: in _exec_single_context
+    self._handle_dbapi_exception(
+.venv/lib/python3.12/site-packages/sqlalchemy/engine/base.py:2365: in _handle_dbapi_exception
+    raise sqlalchemy_exception.with_traceback(exc_info[2]) from e
+.venv/lib/python3.12/site-packages/sqlalchemy/engine/base.py:1969: in _exec_single_context
+    self.dialect.do_execute(
+.venv/lib/python3.12/site-packages/sqlalchemy/engine/default.py:952: in do_execute
+    cursor.execute(statement, parameters)
+.venv/lib/python3.12/site-packages/psycopg/cursor.py:117: in execute
+    raise ex.with_traceback(None)
+E   sqlalchemy.exc.ProgrammingError: (psycopg.errors.UndefinedTable) relation "tenants" does not exist
+E   LINE 1: INSERT INTO tenants(id,name,slug,external_iam_tenant_id,stat...
+E                       ^
+E   [SQL: INSERT INTO tenants(id,name,slug,external_iam_tenant_id,status,created_at,updated_at) VALUES(1,'Historical fixture','legacy-fixture','legacy-fixture','ACTIVE',now(),now())]
+E   (Background on this error at: https://sqlalche.me/e/20/f405)</error></testcase><testcase classname="tests.test_phase3_identity_migration" name="test_missing_issuer_fails_without_fabricating_identity" time="2.665"><error message="failed on setup with &quot;sqlalchemy.exc.ProgrammingError: (psycopg.errors.UndefinedTable) relation &quot;tenants&quot; does not exist&#10;LINE 1: INSERT INTO tenants(id,name,slug,external_iam_tenant_id,stat...&#10;                    ^&#10;[SQL: INSERT INTO tenants(id,name,slug,external_iam_tenant_id,status,created_at,updated_at) VALUES(1,'Historical fixture','legacy-fixture','legacy-fixture','ACTIVE',now(),now())]&#10;(Background on this error at: https://sqlalche.me/e/20/f405)&quot;">.venv/lib/python3.12/site-packages/sqlalchemy/engine/base.py:1969: in _exec_single_context
+    self.dialect.do_execute(
+.venv/lib/python3.12/site-packages/sqlalchemy/engine/default.py:952: in do_execute
+    cursor.execute(statement, parameters)
+.venv/lib/python3.12/site-packages/psycopg/cursor.py:117: in execute
+    raise ex.with_traceback(None)
+E   psycopg.errors.UndefinedTable: relation "tenants" does not exist
+E   LINE 1: INSERT INTO tenants(id,name,slug,external_iam_tenant_id,stat...
+E                       ^
+
+The above exception was the direct cause of the following exception:
+.venv/lib/python3.12/site-packages/pytest_asyncio/plugin.py:924: in pytest_fixture_setup
+    return (yield)
+            ^^^^^
+tests/historical_migration_fixture.py:66: in historical_database
+    connection.execute(text("INSERT INTO tenants(id,name,slug,external_iam_tenant_id,status,created_at,updated_at) VALUES(1,'Historical fixture','legacy-fixture','legacy-fixture','ACTIVE',now(),now())"))
+.venv/lib/python3.12/site-packages/sqlalchemy/engine/base.py:1421: in execute
+    return meth(
+.venv/lib/python3.12/site-packages/sqlalchemy/sql/elements.py:526: in _execute_on_connection
+    return connection._execute_clauseelement(
+.venv/lib/python3.12/site-packages/sqlalchemy/engine/base.py:1643: in _execute_clauseelement
+    ret = self._execute_context(
+.venv/lib/python3.12/site-packages/sqlalchemy/engine/base.py:1848: in _execute_context
+    return self._exec_single_context(
+.venv/lib/python3.12/site-packages/sqlalchemy/engine/base.py:1988: in _exec_single_context
+    self._handle_dbapi_exception(
+.venv/lib/python3.12/site-packages/sqlalchemy/engine/base.py:2365: in _handle_dbapi_exception
+    raise sqlalchemy_exception.with_traceback(exc_info[2]) from e
+.venv/lib/python3.12/site-packages/sqlalchemy/engine/base.py:1969: in _exec_single_context
+    self.dialect.do_execute(
+.venv/lib/python3.12/site-packages/sqlalchemy/engine/default.py:952: in do_execute
+    cursor.execute(statement, parameters)
+.venv/lib/python3.12/site-packages/psycopg/cursor.py:117: in execute
+    raise ex.with_traceback(None)
+E   sqlalchemy.exc.ProgrammingError: (psycopg.errors.UndefinedTable) relation "tenants" does not exist
+E   LINE 1: INSERT INTO tenants(id,name,slug,external_iam_tenant_id,stat...
+E                       ^
+E   [SQL: INSERT INTO tenants(id,name,slug,external_iam_tenant_id,status,created_at,updated_at) VALUES(1,'Historical fixture','legacy-fixture','legacy-fixture','ACTIVE',now(),now())]
+E   (Background on this error at: https://sqlalche.me/e/20/f405)</error></testcase><testcase classname="tests.test_phase3_identity_migration" name="test_duplicate_legacy_identity_aborts_without_merging" time="2.478"><error message="failed on setup with &quot;sqlalchemy.exc.ProgrammingError: (psycopg.errors.UndefinedTable) relation &quot;tenants&quot; does not exist&#10;LINE 1: INSERT INTO tenants(id,name,slug,external_iam_tenant_id,stat...&#10;                    ^&#10;[SQL: INSERT INTO tenants(id,name,slug,external_iam_tenant_id,status,created_at,updated_at) VALUES(1,'Historical fixture','legacy-fixture','legacy-fixture','ACTIVE',now(),now())]&#10;(Background on this error at: https://sqlalche.me/e/20/f405)&quot;">.venv/lib/python3.12/site-packages/sqlalchemy/engine/base.py:1969: in _exec_single_context
+    self.dialect.do_execute(
+.venv/lib/python3.12/site-packages/sqlalchemy/engine/default.py:952: in do_execute
+    cursor.execute(statement, parameters)
+.venv/lib/python3.12/site-packages/psycopg/cursor.py:117: in execute
+    raise ex.with_traceback(None)
+E   psycopg.errors.UndefinedTable: relation "tenants" does not exist
+E   LINE 1: INSERT INTO tenants(id,name,slug,external_iam_tenant_id,stat...
+E                       ^
+
+The above exception was the direct cause of the following exception:
+.venv/lib/python3.12/site-packages/pytest_asyncio/plugin.py:924: in pytest_fixture_setup
+    return (yield)
+            ^^^^^
+tests/historical_migration_fixture.py:66: in historical_database
+    connection.execute(text("INSERT INTO tenants(id,name,slug,external_iam_tenant_id,status,created_at,updated_at) VALUES(1,'Historical fixture','legacy-fixture','legacy-fixture','ACTIVE',now(),now())"))
+.venv/lib/python3.12/site-packages/sqlalchemy/engine/base.py:1421: in execute
+    return meth(
+.venv/lib/python3.12/site-packages/sqlalchemy/sql/elements.py:526: in _execute_on_connection
+    return connection._execute_clauseelement(
+.venv/lib/python3.12/site-packages/sqlalchemy/engine/base.py:1643: in _execute_clauseelement
+    ret = self._execute_context(
+.venv/lib/python3.12/site-packages/sqlalchemy/engine/base.py:1848: in _execute_context
+    return self._exec_single_context(
+.venv/lib/python3.12/site-packages/sqlalchemy/engine/base.py:1988: in _exec_single_context
+    self._handle_dbapi_exception(
+.venv/lib/python3.12/site-packages/sqlalchemy/engine/base.py:2365: in _handle_dbapi_exception
+    raise sqlalchemy_exception.with_traceback(exc_info[2]) from e
+.venv/lib/python3.12/site-packages/sqlalchemy/engine/base.py:1969: in _exec_single_context
+    self.dialect.do_execute(
+.venv/lib/python3.12/site-packages/sqlalchemy/engine/default.py:952: in do_execute
+    cursor.execute(statement, parameters)
+.venv/lib/python3.12/site-packages/psycopg/cursor.py:117: in execute
+    raise ex.with_traceback(None)
+E   sqlalchemy.exc.ProgrammingError: (psycopg.errors.UndefinedTable) relation "tenants" does not exist
+E   LINE 1: INSERT INTO tenants(id,name,slug,external_iam_tenant_id,stat...
+E                       ^
+E   [SQL: INSERT INTO tenants(id,name,slug,external_iam_tenant_id,status,created_at,updated_at) VALUES(1,'Historical fixture','legacy-fixture','legacy-fixture','ACTIVE',now(),now())]
+E   (Background on this error at: https://sqlalche.me/e/20/f405)</error></testcase><testcase classname="tests.test_phase5_identity_migration" name="test_head_contains_token_table_constraints_indexes_and_foreign_key" time="1.038" /><testcase classname="tests.test_phase5_identity_migration" name="test_upgrade_preserves_users_memberships_grants_and_verification_state" time="2.623"><error message="failed on setup with &quot;sqlalchemy.exc.ProgrammingError: (psycopg.errors.UndefinedTable) relation &quot;tenants&quot; does not exist&#10;LINE 1: INSERT INTO tenants(id,name,slug,external_iam_tenant_id,stat...&#10;                    ^&#10;[SQL: INSERT INTO tenants(id,name,slug,external_iam_tenant_id,status,created_at,updated_at) VALUES(1,'Historical fixture','legacy-fixture','legacy-fixture','ACTIVE',now(),now())]&#10;(Background on this error at: https://sqlalche.me/e/20/f405)&quot;">.venv/lib/python3.12/site-packages/sqlalchemy/engine/base.py:1969: in _exec_single_context
+    self.dialect.do_execute(
+.venv/lib/python3.12/site-packages/sqlalchemy/engine/default.py:952: in do_execute
+    cursor.execute(statement, parameters)
+.venv/lib/python3.12/site-packages/psycopg/cursor.py:117: in execute
+    raise ex.with_traceback(None)
+E   psycopg.errors.UndefinedTable: relation "tenants" does not exist
+E   LINE 1: INSERT INTO tenants(id,name,slug,external_iam_tenant_id,stat...
+E                       ^
+
+The above exception was the direct cause of the following exception:
+.venv/lib/python3.12/site-packages/pytest_asyncio/plugin.py:924: in pytest_fixture_setup
+    return (yield)
+            ^^^^^
+tests/historical_migration_fixture.py:66: in historical_database
+    connection.execute(text("INSERT INTO tenants(id,name,slug,external_iam_tenant_id,status,created_at,updated_at) VALUES(1,'Historical fixture','legacy-fixture','legacy-fixture','ACTIVE',now(),now())"))
+.venv/lib/python3.12/site-packages/sqlalchemy/engine/base.py:1421: in execute
+    return meth(
+.venv/lib/python3.12/site-packages/sqlalchemy/sql/elements.py:526: in _execute_on_connection
+    return connection._execute_clauseelement(
+.venv/lib/python3.12/site-packages/sqlalchemy/engine/base.py:1643: in _execute_clauseelement
+    ret = self._execute_context(
+.venv/lib/python3.12/site-packages/sqlalchemy/engine/base.py:1848: in _execute_context
+    return self._exec_single_context(
+.venv/lib/python3.12/site-packages/sqlalchemy/engine/base.py:1988: in _exec_single_context
+    self._handle_dbapi_exception(
+.venv/lib/python3.12/site-packages/sqlalchemy/engine/base.py:2365: in _handle_dbapi_exception
+    raise sqlalchemy_exception.with_traceback(exc_info[2]) from e
+.venv/lib/python3.12/site-packages/sqlalchemy/engine/base.py:1969: in _exec_single_context
+    self.dialect.do_execute(
+.venv/lib/python3.12/site-packages/sqlalchemy/engine/default.py:952: in do_execute
+    cursor.execute(statement, parameters)
+.venv/lib/python3.12/site-packages/psycopg/cursor.py:117: in execute
+    raise ex.with_traceback(None)
+E   sqlalchemy.exc.ProgrammingError: (psycopg.errors.UndefinedTable) relation "tenants" does not exist
+E   LINE 1: INSERT INTO tenants(id,name,slug,external_iam_tenant_id,stat...
+E                       ^
+E   [SQL: INSERT INTO tenants(id,name,slug,external_iam_tenant_id,status,created_at,updated_at) VALUES(1,'Historical fixture','legacy-fixture','legacy-fixture','ACTIVE',now(),now())]
+E   (Background on this error at: https://sqlalche.me/e/20/f405)</error></testcase><testcase classname="tests.test_phase5_identity_migration" name="test_hash_uniqueness_active_token_policy_and_cascade_delete" time="0.994" /><testcase classname="tests.test_phase5_identity_migration" name="test_downgrade_and_reupgrade_are_safe" time="2.852"><error message="failed on setup with &quot;sqlalchemy.exc.ProgrammingError: (psycopg.errors.UndefinedTable) relation &quot;tenants&quot; does not exist&#10;LINE 1: INSERT INTO tenants(id,name,slug,external_iam_tenant_id,stat...&#10;                    ^&#10;[SQL: INSERT INTO tenants(id,name,slug,external_iam_tenant_id,status,created_at,updated_at) VALUES(1,'Historical fixture','legacy-fixture','legacy-fixture','ACTIVE',now(),now())]&#10;(Background on this error at: https://sqlalche.me/e/20/f405)&quot;">.venv/lib/python3.12/site-packages/sqlalchemy/engine/base.py:1969: in _exec_single_context
+    self.dialect.do_execute(
+.venv/lib/python3.12/site-packages/sqlalchemy/engine/default.py:952: in do_execute
+    cursor.execute(statement, parameters)
+.venv/lib/python3.12/site-packages/psycopg/cursor.py:117: in execute
+    raise ex.with_traceback(None)
+E   psycopg.errors.UndefinedTable: relation "tenants" does not exist
+E   LINE 1: INSERT INTO tenants(id,name,slug,external_iam_tenant_id,stat...
+E                       ^
+
+The above exception was the direct cause of the following exception:
+.venv/lib/python3.12/site-packages/pytest_asyncio/plugin.py:924: in pytest_fixture_setup
+    return (yield)
+            ^^^^^
+tests/historical_migration_fixture.py:66: in historical_database
+    connection.execute(text("INSERT INTO tenants(id,name,slug,external_iam_tenant_id,status,created_at,updated_at) VALUES(1,'Historical fixture','legacy-fixture','legacy-fixture','ACTIVE',now(),now())"))
+.venv/lib/python3.12/site-packages/sqlalchemy/engine/base.py:1421: in execute
+    return meth(
+.venv/lib/python3.12/site-packages/sqlalchemy/sql/elements.py:526: in _execute_on_connection
+    return connection._execute_clauseelement(
+.venv/lib/python3.12/site-packages/sqlalchemy/engine/base.py:1643: in _execute_clauseelement
+    ret = self._execute_context(
+.venv/lib/python3.12/site-packages/sqlalchemy/engine/base.py:1848: in _execute_context
+    return self._exec_single_context(
+.venv/lib/python3.12/site-packages/sqlalchemy/engine/base.py:1988: in _exec_single_context
+    self._handle_dbapi_exception(
+.venv/lib/python3.12/site-packages/sqlalchemy/engine/base.py:2365: in _handle_dbapi_exception
+    raise sqlalchemy_exception.with_traceback(exc_info[2]) from e
+.venv/lib/python3.12/site-packages/sqlalchemy/engine/base.py:1969: in _exec_single_context
+    self.dialect.do_execute(
+.venv/lib/python3.12/site-packages/sqlalchemy/engine/default.py:952: in do_execute
+    cursor.execute(statement, parameters)
+.venv/lib/python3.12/site-packages/psycopg/cursor.py:117: in execute
+    raise ex.with_traceback(None)
+E   sqlalchemy.exc.ProgrammingError: (psycopg.errors.UndefinedTable) relation "tenants" does not exist
+E   LINE 1: INSERT INTO tenants(id,name,slug,external_iam_tenant_id,stat...
+E                       ^
+E   [SQL: INSERT INTO tenants(id,name,slug,external_iam_tenant_id,status,created_at,updated_at) VALUES(1,'Historical fixture','legacy-fixture','legacy-fixture','ACTIVE',now(),now())]
+E   (Background on this error at: https://sqlalche.me/e/20/f405)</error></testcase><testcase classname="tests.test_report_migrations" name="test_report_migrations_round_trip_preserves_inventory" time="2.684"><error message="failed on setup with &quot;sqlalchemy.exc.ProgrammingError: (psycopg.errors.UndefinedTable) relation &quot;tenants&quot; does not exist&#10;LINE 1: INSERT INTO tenants(id,name,slug,external_iam_tenant_id,stat...&#10;                    ^&#10;[SQL: INSERT INTO tenants(id,name,slug,external_iam_tenant_id,status,created_at,updated_at) VALUES(1,'Historical fixture','legacy-fixture','legacy-fixture','ACTIVE',now(),now())]&#10;(Background on this error at: https://sqlalche.me/e/20/f405)&quot;">.venv/lib/python3.12/site-packages/sqlalchemy/engine/base.py:1969: in _exec_single_context
+    self.dialect.do_execute(
+.venv/lib/python3.12/site-packages/sqlalchemy/engine/default.py:952: in do_execute
+    cursor.execute(statement, parameters)
+.venv/lib/python3.12/site-packages/psycopg/cursor.py:117: in execute
+    raise ex.with_traceback(None)
+E   psycopg.errors.UndefinedTable: relation "tenants" does not exist
+E   LINE 1: INSERT INTO tenants(id,name,slug,external_iam_tenant_id,stat...
+E                       ^
+
+The above exception was the direct cause of the following exception:
+.venv/lib/python3.12/site-packages/pytest_asyncio/plugin.py:924: in pytest_fixture_setup
+    return (yield)
+            ^^^^^
+tests/historical_migration_fixture.py:66: in historical_database
+    connection.execute(text("INSERT INTO tenants(id,name,slug,external_iam_tenant_id,status,created_at,updated_at) VALUES(1,'Historical fixture','legacy-fixture','legacy-fixture','ACTIVE',now(),now())"))
+.venv/lib/python3.12/site-packages/sqlalchemy/engine/base.py:1421: in execute
+    return meth(
+.venv/lib/python3.12/site-packages/sqlalchemy/sql/elements.py:526: in _execute_on_connection
+    return connection._execute_clauseelement(
+.venv/lib/python3.12/site-packages/sqlalchemy/engine/base.py:1643: in _execute_clauseelement
+    ret = self._execute_context(
+.venv/lib/python3.12/site-packages/sqlalchemy/engine/base.py:1848: in _execute_context
+    return self._exec_single_context(
+.venv/lib/python3.12/site-packages/sqlalchemy/engine/base.py:1988: in _exec_single_context
+    self._handle_dbapi_exception(
+.venv/lib/python3.12/site-packages/sqlalchemy/engine/base.py:2365: in _handle_dbapi_exception
+    raise sqlalchemy_exception.with_traceback(exc_info[2]) from e
+.venv/lib/python3.12/site-packages/sqlalchemy/engine/base.py:1969: in _exec_single_context
+    self.dialect.do_execute(
+.venv/lib/python3.12/site-packages/sqlalchemy/engine/default.py:952: in do_execute
+    cursor.execute(statement, parameters)
+.venv/lib/python3.12/site-packages/psycopg/cursor.py:117: in execute
+    raise ex.with_traceback(None)
+E   sqlalchemy.exc.ProgrammingError: (psycopg.errors.UndefinedTable) relation "tenants" does not exist
+E   LINE 1: INSERT INTO tenants(id,name,slug,external_iam_tenant_id,stat...
+E                       ^
+E   [SQL: INSERT INTO tenants(id,name,slug,external_iam_tenant_id,status,created_at,updated_at) VALUES(1,'Historical fixture','legacy-fixture','legacy-fixture','ACTIVE',now(),now())]
+E   (Background on this error at: https://sqlalche.me/e/20/f405)</error></testcase></testsuite></testsuites>

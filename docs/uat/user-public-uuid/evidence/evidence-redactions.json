@@ -1,0 +1,19 @@
+{
+  "timestamp": "2026-10-21T07:28:45.213788+00:00",
+  "files": [
+    {
+      "file": "identity-regression-attempt1.xml",
+      "original_private_path": "/Users/ferozebasha/.sbom-iam-public-uuid/original-test-evidence/identity-regression-attempt1.xml",
+      "redaction": "synthetic password-hash placeholder only; failure messages retained",
+      "original_sha256": "48ab7dcb3d679ef552520692ec7c1c786e49dd938fde7f1045cf3487ca90f56e",
+      "sanitized_sha256": "51ce83abf5633a458940c4ccc2f61db61a9b1f245edb4d22ea25ebdf0a0ae927"
+    },
+    {
+      "file": "identity-regression-attempt1.log",
+      "original_private_path": "/Users/ferozebasha/.sbom-iam-public-uuid/original-test-evidence/identity-regression-attempt1.log",
+      "redaction": "synthetic password-hash placeholder only; failure messages retained",
+      "original_sha256": "bff2fc852fde454ff67929cd132b3b850a286ce54f51b511eece9a9c50f5674f",
+      "sanitized_sha256": "6f5877717fa35a8a566f5df4d3dbfe3f5d15849fa8cdb7b9a1b3bf230645e3f5"
+    }
+  ]
+}

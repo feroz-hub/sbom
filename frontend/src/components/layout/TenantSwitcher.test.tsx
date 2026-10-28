@@ -76,8 +76,31 @@ function renderSwitcher(children: ReactNode = <TenantSwitcher />) {
 describe('TenantSwitcher', () => {
   beforeEach(() => {
     vi.clearAllMocks();
+    mockSelectTenant.mockResolvedValue(undefined);
     mockListPlatformTenants.mockResolvedValue([]);
     mockAuthContext = authContext();
+  });
+
+  it('shows active workspace context and a compact accessible trigger', async () => {
+    const user = userEvent.setup(); renderSwitcher(<TenantSwitcher compact />);
+    const trigger = screen.getByRole('button', { name: 'Switch tenant' });
+    expect(trigger).toHaveAttribute('title', 'Switch tenant · Wellysis');
+    expect(screen.getByText('Active tenant')).toBeInTheDocument();
+    await user.click(trigger);
+    expect(trigger).toHaveAttribute('aria-controls', 'tenant-switcher-options');
+    expect(screen.getByRole('listbox')).toHaveClass('md:left-full');
+  });
+
+  it('supports arrow-key selection and returns focus on Escape', async () => {
+    const user = userEvent.setup(); renderSwitcher();
+    const trigger = screen.getByRole('button', { name: 'Switch tenant' });
+    await user.click(trigger); await user.keyboard('{ArrowDown}');
+    expect(screen.getByRole('option', { name: /Wellysis/ })).toHaveFocus();
+    await user.keyboard('{ArrowDown}');
+    expect(screen.getByRole('option', { name: /Acme Corp/ })).toHaveFocus();
+    await user.keyboard('{Escape}'); expect(trigger).toHaveFocus();
+    expect(screen.queryByRole('listbox')).not.toBeInTheDocument();
+    expect(mockSelectTenant).not.toHaveBeenCalled();
   });
 
   it('renders interactive button for a single available tenant', async () => {
@@ -168,13 +191,15 @@ describe('TenantSwitcher platform administrator', () => {
     mockAuthContext = authContext({ tenants: [], activeTenantId: null, user: platformAdmin });
   });
 
-  it('shows Platform as the current context with no memberships at all', () => {
+  it('has no normal tenant selector without explicit memberships', () => {
     renderSwitcher();
 
-    expect(screen.getByRole('button', { name: /switch tenant/i })).toHaveTextContent('Platform');
+    expect(screen.queryByRole('button', { name: /switch tenant/i })).not.toBeInTheDocument();
+    expect(mockListPlatformTenants).not.toHaveBeenCalled();
   });
 
-  it('offers Platform plus the searchable tenant list', async () => {
+  it('offers Platform plus explicit memberships only', async () => {
+    mockAuthContext = authContext({ tenants: sampleTenants, activeTenantId: null, user: platformAdmin });
     const user = userEvent.setup();
     renderSwitcher();
 
@@ -182,14 +207,16 @@ describe('TenantSwitcher platform administrator', () => {
 
     const platformOption = await screen.findByRole('option', { name: /Platform administration/ });
     expect(platformOption).toHaveAttribute('aria-selected', 'true');
-    expect(await screen.findByRole('option', { name: /Nova/ })).toBeInTheDocument();
+    expect(await screen.findByRole('option', { name: /Wellysis/ })).toBeInTheDocument();
 
-    await user.type(screen.getByRole('searchbox', { name: /search tenants/i }), 'orion');
+    await user.type(screen.getByRole('searchbox', { name: /search tenants/i }), 'acme');
     expect(screen.queryByRole('option', { name: /Nova/ })).not.toBeInTheDocument();
-    expect(screen.getByRole('option', { name: /Orion/ })).toBeInTheDocument();
+    expect(screen.getByRole('option', { name: /Acme/ })).toBeInTheDocument();
+    expect(mockListPlatformTenants).not.toHaveBeenCalled();
   });
 
   it('renders a capped list instead of every reachable tenant', async () => {
+    mockAuthContext = authContext({ tenants: Array.from({ length: 120 }, (_, index) => ({ ...sampleTenants[0], id: index + 1, name: `Tenant ${index + 1}` })), activeTenantId: null, user: platformAdmin });
     mockListPlatformTenants.mockResolvedValue(
       Array.from({ length: 120 }, (_, index) => ({
         id: index + 1,
@@ -209,7 +236,9 @@ describe('TenantSwitcher platform administrator', () => {
     expect(screen.getByText(/Showing 25 of 120 tenants/)).toBeInTheDocument();
   });
 
-  it('selects a tenant explicitly from the platform list', async () => {
+  it('selects an explicit membership, never the platform tenant list', async () => {
+    mockSelectTenant.mockResolvedValue(undefined);
+    mockAuthContext = authContext({ tenants: [{ ...sampleTenants[0], id: 42, name: 'Nova' }], activeTenantId: null, user: platformAdmin });
     const user = userEvent.setup();
     renderSwitcher();
 

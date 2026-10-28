@@ -1,0 +1,8 @@
+{
+  "result": "INTERRUPTED_NO_FINAL_OUTCOME",
+  "last_reported_progress_percent": 21,
+  "final_xml_present": false,
+  "no_current_pytest_process_observed": true,
+  "source_preserved": true,
+  "acceptance_claimed": false
+}

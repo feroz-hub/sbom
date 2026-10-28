@@ -1,0 +1,65 @@
+[
+  {
+    "nodeid": "tests/ai/test_progress.py::test_redis_round_trip_when_available",
+    "result": "SKIP",
+    "seconds": "0.000",
+    "diagnostic": "/Users/ferozebasha/sbom/tests/ai/test_progress.py:85: Redis integration test \u2014 set AI_TEST_REDIS_URL=[REDACTED_CONNECTION] to run",
+    "classification": null
+  },
+  {
+    "nodeid": "tests/ai/test_real_provider_smoke.py::test_real_gemini_free_tier_test_connection",
+    "result": "SKIP",
+    "seconds": "0.000",
+    "diagnostic": "/Users/ferozebasha/sbom/tests/ai/test_real_provider_smoke.py:25: GEMINI_API_KEY not set \u2014 skipping real-provider smoke",
+    "classification": null
+  },
+  {
+    "nodeid": "tests/ai/test_real_provider_smoke.py::test_real_grok_free_tier_test_connection",
+    "result": "SKIP",
+    "seconds": "0.000",
+    "diagnostic": "/Users/ferozebasha/sbom/tests/ai/test_real_provider_smoke.py:38: GROK_API_KEY not set \u2014 skipping real-provider smoke",
+    "classification": null
+  },
+  {
+    "nodeid": "tests/ai/test_real_provider_smoke.py::test_real_anthropic_test_connection",
+    "result": "SKIP",
+    "seconds": "0.000",
+    "diagnostic": "/Users/ferozebasha/sbom/tests/ai/test_real_provider_smoke.py:50: ANTHROPIC_API_KEY not set \u2014 skipping real-provider smoke",
+    "classification": null
+  },
+  {
+    "nodeid": "tests/ai/test_real_provider_smoke.py::test_real_openai_test_connection",
+    "result": "SKIP",
+    "seconds": "0.000",
+    "diagnostic": "/Users/ferozebasha/sbom/tests/ai/test_real_provider_smoke.py:61: OPENAI_API_KEY not set \u2014 skipping real-provider smoke",
+    "classification": null
+  },
+  {
+    "nodeid": "tests/test_native_backup_acceptance.py::test_backup_restore_preserves_iam_and_ciphertext",
+    "result": "SKIP",
+    "seconds": "0.000",
+    "diagnostic": "/Users/ferozebasha/sbom/tests/test_native_backup_acceptance.py:26: opt-in isolated backup/restore",
+    "classification": null
+  },
+  {
+    "nodeid": "tests/test_native_greenfield_empty.py::test_empty_database_to_native_population",
+    "result": "SKIP",
+    "seconds": "0.000",
+    "diagnostic": "/Users/ferozebasha/sbom/tests/test_native_greenfield_empty.py:20: explicit empty DB/Mailpit acceptance",
+    "classification": null
+  },
+  {
+    "nodeid": "tests/test_native_http_acceptance.py::test_two_actual_bffs_logout_recovery_and_security_revocation",
+    "result": "SKIP",
+    "seconds": "0.000",
+    "diagnostic": "/Users/ferozebasha/sbom/tests/test_native_http_acceptance.py:162: opt-in real HTTP acceptance",
+    "classification": null
+  },
+  {
+    "nodeid": "tests/test_native_http_acceptance.py::test_actual_http_expiry_denies_mutation",
+    "result": "SKIP",
+    "seconds": "0.000",
+    "diagnostic": "/Users/ferozebasha/sbom/tests/test_native_http_acceptance.py:234: opt-in real HTTP acceptance",
+    "classification": null
+  }
+]

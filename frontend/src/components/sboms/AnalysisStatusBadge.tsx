@@ -1,5 +1,6 @@
 'use client';
 
+import { recordIdLabel } from '@/components/ui/RecordIdDisplay';
 import Link from 'next/link';
 import { Loader2 } from 'lucide-react';
 import { formatDate } from '@/lib/utils';
@@ -7,7 +8,8 @@ import type { AnalysisStatus as OptimisticAnalysisStatus } from '@/hooks/useBack
 import type { LatestAnalysisSummary } from '@/types';
 
 interface AnalysisStatusBadgeProps {
-  sbomId: number;
+  sbomId: (string | number);
+  displayId?: number | null;
   analysis?: LatestAnalysisSummary | null;
   optimisticStatus?: OptimisticAnalysisStatus;
   optimisticFindings?: number;
@@ -21,7 +23,7 @@ type AnalysisBadgeView = {
   severitySummary?: string;
   tooltip: string;
   tone: BadgeTone;
-  runId?: number | string | null;
+  runId?: string | null;
   showSpinner?: boolean;
 };
 
@@ -189,7 +191,7 @@ function viewFromOptimisticStatus(
 }
 
 export function AnalysisStatusBadge({
-  sbomId,
+  displayId,
   analysis,
   optimisticStatus,
   optimisticFindings,
@@ -210,7 +212,7 @@ export function AnalysisStatusBadge({
         href={`/analysis/${view.runId}`}
         className={`${className} hover:underline`}
         title={view.tooltip}
-        aria-label={`SBOM ${sbomId}: ${view.tooltip}`}
+        aria-label={`${recordIdLabel('SBOM', displayId)}: ${view.tooltip}`}
       >
         {content}
       </Link>
@@ -221,7 +223,7 @@ export function AnalysisStatusBadge({
     <span
       className={className}
       title={view.tooltip}
-      aria-label={`SBOM ${sbomId}: ${view.tooltip}`}
+      aria-label={`${recordIdLabel('SBOM', displayId)}: ${view.tooltip}`}
     >
       {content}
     </span>

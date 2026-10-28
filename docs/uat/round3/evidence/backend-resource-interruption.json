@@ -1,0 +1,25 @@
+{
+  "time": "2026-10-20T10:40:32.838824+00:00",
+  "pid": 86996,
+  "parent": 86992,
+  "action": "SIGINT once; request pytest terminal partial summary and JUnit",
+  "reason": "Bounded resource stop after near2h full diagnostic; swap over9GB and dependent navigation timeout; preserve all executed failures and exact remaining NOT RUN nodes",
+  "lastProgress": "88%; authoritative counts from terminal JUnit",
+  "onlyTaskOwnedDiagnosticStopped": true,
+  "mainApiStopped": false,
+  "mainDatabaseReset": false,
+  "stopAcknowledged": true,
+  "observedAfterRequest": "Process remained active and continued progress; SIGINT was not acknowledged. No terminal JUnit or final count is claimed.",
+  "secondSIGINTRequestedAt": "2026-10-20T10:45:03.941070+00:00",
+  "note": "First interrupt did not produce terminal result; second cooperative interrupt only. No SIGTERM/KILL and no main-service signal.",
+  "terminalSummary": {
+    "PASS": 3645,
+    "FAIL": 244,
+    "SKIP": 9,
+    "DESELECTED": 19,
+    "subtestsPassed": 4,
+    "ERROR": 0,
+    "XFAIL": 0,
+    "durationSeconds": 7067.05
+  }
+}

@@ -1,0 +1,152 @@
+[
+  {
+    "log": "pytest-followup.log",
+    "summary": "1 failed, 55 passed, 57 warnings in 329.20s (0:05:29)",
+    "counts": {
+      "passed": 55,
+      "failed": 1,
+      "skipped": 0
+    },
+    "acceptance": false
+  },
+  {
+    "log": "pytest-native-before.log",
+    "summary": "28 failed, 259 passed, 39 warnings in 721.20s (0:12:01)",
+    "counts": {
+      "passed": 259,
+      "failed": 28,
+      "skipped": 0
+    },
+    "acceptance": false
+  },
+  {
+    "log": "pytest-native-final.log",
+    "summary": "287 passed, 39 warnings in 543.17s (0:09:03)",
+    "counts": {
+      "passed": 287,
+      "failed": 0,
+      "skipped": 0
+    },
+    "acceptance": true
+  },
+  {
+    "log": "pytest-native-followup.log",
+    "summary": "1 failed, 78 passed, 38 warnings in 318.66s (0:05:18)",
+    "counts": {
+      "passed": 78,
+      "failed": 1,
+      "skipped": 0
+    },
+    "acceptance": false
+  },
+  {
+    "log": "pytest-policy-after.log",
+    "summary": "10 failed, 29 passed, 39 warnings in 64.19s (0:01:04)",
+    "counts": {
+      "passed": 29,
+      "failed": 10,
+      "skipped": 0
+    },
+    "acceptance": false
+  },
+  {
+    "log": "pytest-policy-before.log",
+    "summary": "7 failed, 8 warnings in 11.67s",
+    "counts": {
+      "passed": 0,
+      "failed": 7,
+      "skipped": 0
+    },
+    "acceptance": false
+  },
+  {
+    "log": "pytest-policy-final.log",
+    "summary": "39 passed, 39 warnings in 69.18s (0:01:09)",
+    "counts": {
+      "passed": 39,
+      "failed": 0,
+      "skipped": 0
+    },
+    "acceptance": false
+  },
+  {
+    "log": "pytest-vex-after.log",
+    "summary": "69 passed, 62 warnings in 174.34s (0:02:54)",
+    "counts": {
+      "passed": 69,
+      "failed": 0,
+      "skipped": 0
+    },
+    "acceptance": false
+  },
+  {
+    "log": "pytest-vex-before.log",
+    "summary": "13 failed, 55 passed, 61 warnings in 136.02s (0:02:16)",
+    "counts": {
+      "passed": 55,
+      "failed": 13,
+      "skipped": 0
+    },
+    "acceptance": false
+  },
+  {
+    "log": "pytest-vex-broad.log",
+    "summary": "28 failed, 258 passed, 150 warnings, 8 subtests passed in 1128.82s (0:18:48)",
+    "counts": {
+      "passed": 258,
+      "failed": 28,
+      "skipped": 0
+    },
+    "acceptance": false
+  },
+  {
+    "log": "pytest-vex-final.log",
+    "summary": "320 passed, 183 warnings, 8 subtests passed in 713.77s (0:11:53)",
+    "counts": {
+      "passed": 320,
+      "failed": 0,
+      "skipped": 0
+    },
+    "acceptance": true
+  },
+  {
+    "log": "vitest-all-final.log",
+    "summary": "Tests  1800 passed (1800)",
+    "counts": {
+      "passed": 1800,
+      "failed": 0,
+      "skipped": 0
+    },
+    "acceptance": true
+  },
+  {
+    "log": "vitest-all.log",
+    "summary": "Tests  19 failed | 1781 passed (1800)",
+    "counts": {
+      "passed": 1781,
+      "failed": 19,
+      "skipped": 0
+    },
+    "acceptance": false
+  },
+  {
+    "log": "vitest-focused-final.log",
+    "summary": "Tests  59 passed (59)",
+    "counts": {
+      "passed": 59,
+      "failed": 0,
+      "skipped": 0
+    },
+    "acceptance": false
+  },
+  {
+    "log": "vitest-focused.log",
+    "summary": "Tests  1 failed | 55 passed (56)",
+    "counts": {
+      "passed": 55,
+      "failed": 1,
+      "skipped": 0
+    },
+    "acceptance": false
+  }
+]

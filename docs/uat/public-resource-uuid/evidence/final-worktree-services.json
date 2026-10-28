@@ -1,0 +1,32 @@
+{
+  "branch": "feat/native-user-management",
+  "head": "e0c454029dea624e16d7511a1de0499e53fce237",
+  "listeners": {
+    "13000": {
+      "ipv4": false,
+      "ipv6": false
+    },
+    "13400": {
+      "ipv4": false,
+      "ipv6": true
+    },
+    "18000": {
+      "ipv4": false,
+      "ipv6": false
+    },
+    "18400": {
+      "ipv4": true,
+      "ipv6": false
+    },
+    "56392": {
+      "ipv4": true,
+      "ipv6": false
+    },
+    "63392": {
+      "ipv4": false,
+      "ipv6": false
+    }
+  },
+  "original_api_frontend_restarted_by_task": false,
+  "staged_files": []
+}

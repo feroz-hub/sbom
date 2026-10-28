@@ -4,48 +4,69 @@ The existing VEX endpoints in ``app/routers/vex.py`` are SBOM- and
 component-scoped and stay exactly as they are; this router adds the
 cross-SBOM queue the investigation workflow needs.
 
-Authorization: ``app/core/security.py:permission_for_request`` maps any path
-containing ``/vex`` to ``vex:read`` for GET and ``vex:write`` otherwise, so
-these routes inherit the correct gate without per-route decoration. Every
+Authorization: decisions have an assigned-only Developer exception at the
+request gate; every mutation also uses the database-authoritative service guard. Every
 query is additionally tenant-scoped in code — the ambient
 ``TenantOwnedMixin`` criteria are defence in depth, not the contract.
 """
 
 from __future__ import annotations
 
-from typing import Any
+from dataclasses import dataclass
+from typing import Any, Literal
 
 from fastapi import APIRouter, Depends, HTTPException, Query, Response
-from sqlalchemy import func, or_, select
+from sqlalchemy import and_, false, func, or_, select
 from sqlalchemy.orm import Session
 from sqlalchemy.sql.elements import ColumnElement
 
 from ..core.security import CurrentContext, get_current_tenant_context
 from ..db import get_db
-from ..metrics.vex import vex_component_findings, vex_severity_filter_clause
+from ..metrics.vex import (
+    investigation_findings,
+    vex_context_counts_where,
+    vex_severity_filter_clause,
+)
 from ..models import (
+    IAMUser,
     Product,
-    VexOverrideAudit,
     Projects,
     SBOMComponent,
     SBOMSource,
+    TenantUser,
     VexInvestigation,
+    VexOverrideAudit,
     VexStatement,
 )
 from ..schemas_vex import (
     InvestigationAssignmentRequest,
     InvestigationDecisionRequest,
-    InvestigationMappingRequest,
     InvestigationDetail,
     InvestigationListResponse,
+    InvestigationMappingRequest,
     InvestigationSortField,
+    InvestigationSummaryResponse,
     SortOrder,
 )
+from ..services.dashboard_scope import DashboardScope
 from ..services.lifecycle.types import now_iso
+from ..services.sbom_posture import investigation_is_historical
 from ..services.vex.audit import (
     record_action,
     record_assignment,
     record_mapping_resolution,
+)
+from ..services.vex.authorization import (
+    active_roles,
+    actor_roles,
+    capabilities,
+    eligible_members_query,
+    membership,
+    membership_key,
+    owner,
+    page_owners,
+    require_assignment,
+    require_update,
 )
 from ..services.vex.enums import NEEDS_REVIEW_STATUSES
 from ..services.vex.identity import canonical_vulnerability, parse_alias_column
@@ -75,18 +96,17 @@ def _tenant_id(context: CurrentContext) -> int:
     return context.tenant_id
 
 
-def _investigation_or_404(db: Session, investigation_id: int, tenant_id: int) -> VexInvestigation:
+def _investigation_or_404(db: Session, investigation_id: int, tenant_id: int, *, lock: bool = False) -> VexInvestigation:
     """Load one context, or 404.
 
     A cross-tenant id returns 404 rather than 403 on purpose: 403 would
     confirm the row exists in someone else's tenant (VEX-SEC-002).
     """
-    row = db.scalar(
-        select(VexInvestigation).where(
-            VexInvestigation.id == investigation_id,
-            VexInvestigation.tenant_id == tenant_id,
-        )
-    )
+    query = select(VexInvestigation).where(
+        VexInvestigation.id == investigation_id,
+        VexInvestigation.tenant_id == tenant_id,
+    ).execution_options(populate_existing=True, include_deleted=True)
+    row = db.scalar(query.with_for_update() if lock else query)
     if row is None:
         raise HTTPException(status_code=404, detail="Investigation not found")
     return row
@@ -123,16 +143,20 @@ def _statements_for(db: Session, investigation: VexInvestigation) -> list[VexSta
 
 
 def _severity_for(db: Session, investigation: VexInvestigation) -> str | None:
-    """Severity comes from the vulnerability, never from VEX (VEX-DATA-005)."""
+    """Severity comes from the vulnerability, never from VEX (VEX-DATA-005).
+
+    The finding may be reported under an alias of the canonical id — a GHSA
+    for a context keyed on its CVE (VEX-CTX-002) — so aliases match too, in
+    step with :func:`app.metrics.vex.vex_severity_filter_clause`.
+    """
     if investigation.component_id is None:
         return None
-    for finding in vex_component_findings(
-        db,
-        tenant_id=investigation.tenant_id,
-        sbom_id=investigation.sbom_id,
-        component_id=investigation.component_id,
-    ):
-        if (finding.vuln_id or "").strip().upper() == investigation.canonical_vulnerability_id:
+    ids = {
+        investigation.canonical_vulnerability_id,
+        *(alias.upper() for alias in parse_alias_column(investigation.aliases_json)),
+    }
+    for finding in investigation_findings(db, tenant_id=investigation.tenant_id, investigations=[investigation]):
+        if (finding.vuln_id or "").strip().upper() in ids:
             return finding.severity
     return None
 
@@ -145,16 +169,19 @@ def _row_payload(
     sbom: SBOMSource | None,
     project: Projects | None,
     product: Product | None,
+    context: CurrentContext | None = None,
+    prefetched: dict | None = None,
 ) -> dict[str, Any]:
-    statements = _statements_for(db, investigation)
+    statements = prefetched['statements'].get(investigation.id, []) if prefetched else _statements_for(db, investigation)
     effective = next(
         (s for s in statements if s.id == investigation.effective_vex_statement_id), None
     )
+    assigned = prefetched["owners"][investigation.id] if prefetched else owner(db, investigation, context)
     return {
         "id": investigation.id,
         "canonical_vulnerability_id": investigation.canonical_vulnerability_id,
         "aliases": parse_alias_column(investigation.aliases_json),
-        "severity": _severity_for(db, investigation),
+        "severity": prefetched["severity"].get(investigation.id) if prefetched else _severity_for(db, investigation),
         "component_id": investigation.component_id,
         "component_name": getattr(component, "name", None),
         "component_version": getattr(component, "version", None),
@@ -164,6 +191,9 @@ def _row_payload(
         "product_name": getattr(product, "name", None),
         "sbom_id": investigation.sbom_id,
         "sbom_name": getattr(sbom, "sbom_name", None),
+        "sbom_version": getattr(sbom, "sbom_version", None) or getattr(sbom, "productver", None),
+        "analysis_run_id": investigation.last_analysis_run_id,
+        "historical": investigation.id in prefetched['historical'] if prefetched else investigation_is_historical(db, investigation),
         "analyzer_detection_state": investigation.analyzer_detection_state,
         "analyzer_sources": parse_alias_column(investigation.analyzer_sources_json),
         "vex_source": getattr(effective, "source_name", None),
@@ -172,6 +202,9 @@ def _row_payload(
         "reconciliation_status": investigation.reconciliation_status,
         "justification": getattr(effective, "justification", None),
         "assigned_to": investigation.assigned_to,
+        "assigned_to_label": assigned["label"],
+        "assigned_to_is_self": assigned["is_self"],
+        "assigned_to_active": assigned["active"],
         "reviewed_by": investigation.reviewed_by,
         "last_seen_at": investigation.last_seen_at,
         "updated_at": investigation.updated_at,
@@ -180,8 +213,65 @@ def _row_payload(
     }
 
 
-@router.get("/api/vex/investigations", response_model=InvestigationListResponse)
-def list_investigations(
+def _page_evidence(db, rows, context):
+    tenant_id = _tenant_id(context)
+    statements = db.scalars(select(VexStatement).where(
+        VexStatement.tenant_id == tenant_id,
+        VexStatement.sbom_id.in_({row.sbom_id for row in rows} or {0}),
+        or_(VexStatement.component_id.in_({row.component_id for row in rows if row.component_id} or {0}),
+            VexStatement.component_id.is_(None)),
+    ).order_by(VexStatement.id)).all()
+    statement_index, finding_index = {}, {}
+    for statement in statements:
+        statement_index.setdefault((statement.sbom_id, statement.component_id), []).append(statement)
+    for finding in investigation_findings(db, tenant_id=tenant_id, investigations=rows):
+        finding_index.setdefault((finding.analysis_run_id, finding.component_id), []).append(finding)
+    matching, severity = {}, {}
+    for row in rows:
+        ids = {row.canonical_vulnerability_id, *(a.upper() for a in parse_alias_column(row.aliases_json))}
+        matching[row.id] = [v for v in statement_index.get((row.sbom_id, row.component_id), [])
+                            if (v.vulnerability_id or '').upper() in ids or (v.cve_id or '').upper() in ids]
+        severity[row.id] = next((f.severity for f in finding_index.get((row.last_analysis_run_id, row.component_id), [])
+                                 if (f.vuln_id or '').upper() in ids), None)
+    current = set(db.scalars(DashboardScope(tenant_id).eligible_sbom_ids()).all())
+    from ..metrics.vex import current_investigation_evidence_clause
+    obsolete = set(db.scalars(select(VexInvestigation.id).where(
+        VexInvestigation.tenant_id == tenant_id, VexInvestigation.id.in_({row.id for row in rows} or {0}),
+        ~current_investigation_evidence_clause(),
+    )).all())
+    return {'statements': matching, 'severity': severity, 'owners': page_owners(db, tenant_id, rows, context),
+            'historical': obsolete | {row.id for row in rows if not row.is_current or row.sbom_id not in current}}
+
+
+def _previous_decisions(db, investigation, sbom, component):
+    if not sbom or not component:
+        return []
+    from ..services.vex.version_evidence import previous_decisions
+    return previous_decisions(db, investigation, sbom, component)
+
+
+@dataclass(frozen=True)
+class QueueFilters:
+    """Every filter the queue accepts — shared by the rows and their metrics."""
+
+    project_id: int | None
+    product_id: int | None
+    sbom_id: int | None
+    effective_status: str | None
+    reconciliation_status: str | None
+    severity: str | None
+    component: str | None
+    q: str | None
+    vex_source: str | None
+    analyzer_source: str | None
+    needs_review: bool | None
+    my_work: str
+    assignee: str | None
+    unresolved_component: bool
+    version_scope: str = "current"
+
+
+def queue_filters(
     project_id: int | None = Query(default=None, ge=1),
     product_id: int | None = Query(default=None, ge=1),
     sbom_id: int | None = Query(default=None, ge=1),
@@ -193,6 +283,144 @@ def list_investigations(
     vex_source: str | None = Query(default=None, max_length=255),
     analyzer_source: str | None = Query(default=None, max_length=64),
     needs_review: bool | None = Query(default=None),
+    my_work: Literal["all", "me", "unassigned", "assigned", "attention"] = Query(default="all"),
+    assignee: str | None = Query(default=None, max_length=64),
+    unresolved_component: bool = Query(default=False),
+    version_scope: Literal["current", "all", "historical"] = Query(default="current"),
+) -> QueueFilters:
+    return QueueFilters(
+        project_id, product_id, sbom_id, effective_status, reconciliation_status, severity,
+        component, q, vex_source, analyzer_source, needs_review, my_work, assignee,
+        unresolved_component, version_scope,
+    )
+
+
+def _queue_from_clause():
+    """The joins every queue predicate is written against."""
+    return (
+        VexInvestigation.__table__
+        .outerjoin(SBOMComponent.__table__, SBOMComponent.id == VexInvestigation.component_id)
+        .outerjoin(SBOMSource.__table__, SBOMSource.id == VexInvestigation.sbom_id)
+        .outerjoin(
+            VexStatement.__table__, VexStatement.id == VexInvestigation.effective_vex_statement_id
+        )
+    )
+
+
+def _queue_conditions(db: Session, context: CurrentContext, f: QueueFilters) -> list[ColumnElement[bool]]:
+    """Build the queue predicate once, for rows, the total and metrics alike.
+
+    Scope is the dashboard's eligible-SBOM set — active tenant, project,
+    application and SBOM, designated/fallback posture versions (VEX-DASH-004/005, VEX-INV-002).
+    Without it a superseded version's contexts stayed in the queue beside its
+    successor's, and an inactive SBOM's contexts stayed visible, while the
+    tiles (which always used this scope) excluded both. The project /
+    application / SBOM filters narrow that same set and cannot widen it.
+    """
+    tenant_id = _tenant_id(context)
+    scope = DashboardScope(tenant_id, f.project_id, f.product_id, f.sbom_id)
+
+    eligible = DashboardScope(tenant_id, f.project_id, f.product_id).eligible_sbom_ids()
+    if f.sbom_id is not None and f.version_scope != 'current':
+        valid = select(SBOMSource.id).where(SBOMSource.id == f.sbom_id, SBOMSource.tenant_id == tenant_id)
+        if f.product_id is not None:
+            valid = valid.where(SBOMSource.product_id == f.product_id)
+        if f.project_id is not None:
+            valid = valid.where(SBOMSource.projectid == f.project_id)
+        if db.scalar(valid.execution_options(include_deleted=True)) is None:
+            raise HTTPException(404, 'SBOM version not found in this scope')
+    conditions: list[ColumnElement[bool]] = [VexInvestigation.tenant_id == tenant_id, SBOMSource.tenant_id == tenant_id]
+    if f.version_scope == 'current':
+        from ..metrics.vex import current_investigation_evidence_clause
+        conditions.append(current_investigation_evidence_clause())
+        conditions.extend([VexInvestigation.is_current.is_(True), VexInvestigation.sbom_id.in_(scope.eligible_sbom_ids())])
+    elif f.version_scope == 'historical':
+        from ..metrics.vex import current_investigation_evidence_clause
+        conditions.append(or_(VexInvestigation.is_current.is_(False), VexInvestigation.sbom_id.notin_(eligible),
+                              ~current_investigation_evidence_clause()))
+    for value, column in [(f.project_id, SBOMSource.projectid), (f.product_id, SBOMSource.product_id), (f.sbom_id if f.version_scope != 'current' else None, SBOMSource.id)]:
+        if value is not None:
+            conditions.append(column == value)
+    own_member = membership(db, tenant_id, user_id=context.user_id)
+    own_key = membership_key(own_member) if own_member else None
+    mine = VexInvestigation.assigned_to == own_key if own_key else false()
+    unassigned = or_(VexInvestigation.assigned_to.is_(None), VexInvestigation.assigned_to == "")
+    if f.my_work == "me":
+        conditions.append(mine)
+    elif f.my_work == "unassigned":
+        conditions.append(unassigned)
+    elif f.my_work == "assigned":
+        active_keys = eligible_members_query(tenant_id).with_only_columns(
+            func.concat("membership:", TenantUser.id)
+        )
+        conditions.append(VexInvestigation.assigned_to.in_(active_keys))
+    elif f.my_work == "attention":
+        roles = actor_roles(db, context)
+        pending = or_(
+            VexInvestigation.effective_status == "UNDER_INVESTIGATION",
+            VexInvestigation.reconciliation_status.in_(_NEEDS_REVIEW_VALUES),
+            VexInvestigation.reconciliation_status == "UNRESOLVED_MAPPING",
+        )
+        # Broad investigators triage the pending queue plus their own affected
+        # cases. Developers have work authority only on their live assignment.
+        own_affected = and_(mine, VexInvestigation.effective_status == "AFFECTED")
+        if roles & {"TENANT_ADMIN", "SECURITY_ANALYST"} and context.has_permission("vex:write"):
+            conditions.append(or_(pending, own_affected))
+        elif "DEVELOPER" in roles:
+            conditions.append(and_(mine, or_(pending, VexInvestigation.effective_status == "AFFECTED")))
+        else:
+            raise HTTPException(403, "Personal work queue is unavailable for this role.")
+    if f.assignee:
+        if f.assignee == "me":
+            conditions.append(mine)
+        elif f.assignee == "unassigned":
+            conditions.append(unassigned)
+        else:
+            target = membership(db, tenant_id, key=f.assignee)
+            if target is None:
+                raise HTTPException(404, "Assignee not found in this tenant.")
+            # Historical inactive/invalid owners remain discoverable by their
+            # tenant membership key; this never authorizes reassignment.
+            conditions.append(VexInvestigation.assigned_to == membership_key(target))
+    if f.unresolved_component:
+        conditions.append(VexInvestigation.component_id.is_(None))
+    if f.effective_status:
+        conditions.append(VexInvestigation.effective_status == f.effective_status.strip().upper())
+    if f.reconciliation_status:
+        conditions.append(
+            VexInvestigation.reconciliation_status == f.reconciliation_status.strip().upper()
+        )
+    if f.severity and f.severity.strip():
+        conditions.append(vex_severity_filter_clause(f.severity))
+    if f.component and f.component.strip():
+        conditions.append(func.concat(SBOMComponent.name, " ", SBOMComponent.version).ilike(f"%{f.component.strip()}%"))
+    if f.q and f.q.strip():
+        term = f"%{f.q.strip().upper()}%"
+        # Alias search matters: a context canonicalised to its CVE must still
+        # be findable by the GHSA the scanner reported (VEX-CTX-002).
+        conditions.append(
+            or_(
+                VexInvestigation.canonical_vulnerability_id.ilike(term),
+                func.upper(VexInvestigation.aliases_json).ilike(term),
+            )
+        )
+    if f.vex_source and f.vex_source.strip():
+        conditions.append(VexStatement.source_name.ilike(f"%{f.vex_source.strip()}%"))
+    if f.analyzer_source and f.analyzer_source.strip():
+        conditions.append(
+            VexInvestigation.analyzer_detection_state == f.analyzer_source.strip().upper()
+        )
+    if f.needs_review is True:
+        conditions.append(VexInvestigation.reconciliation_status.in_(_NEEDS_REVIEW_VALUES))
+    elif f.needs_review is False:
+        conditions.append(VexInvestigation.reconciliation_status.notin_(_NEEDS_REVIEW_VALUES))
+
+    return conditions
+
+
+@router.get("/api/vex/investigations", response_model=InvestigationListResponse)
+def list_investigations(
+    filters: QueueFilters = Depends(queue_filters),
     sort_by: InvestigationSortField = Query(default="last_seen_at"),
     sort_order: SortOrder = Query(default="desc"),
     limit: int = Query(default=50, ge=1, le=500),
@@ -214,66 +442,11 @@ def list_investigations(
                 "from analyser findings and has no column on the investigation"
             ),
         )
-    tenant_id = _tenant_id(context)
-
-    conditions: list[ColumnElement[bool]] = [
-        VexInvestigation.tenant_id == tenant_id,
-        VexInvestigation.is_current.is_(True),
-    ]
-    if sbom_id is not None:
-        conditions.append(VexInvestigation.sbom_id == sbom_id)
-    if project_id is not None:
-        conditions.append(SBOMSource.projectid == project_id)
-    if product_id is not None:
-        conditions.append(SBOMSource.product_id == product_id)
-    if effective_status:
-        conditions.append(VexInvestigation.effective_status == effective_status.strip().upper())
-    if reconciliation_status:
-        conditions.append(
-            VexInvestigation.reconciliation_status == reconciliation_status.strip().upper()
-        )
-    if severity and severity.strip():
-        conditions.append(vex_severity_filter_clause(severity))
-    if component and component.strip():
-        conditions.append(SBOMComponent.name.ilike(f"%{component.strip()}%"))
-    if q and q.strip():
-        term = f"%{q.strip().upper()}%"
-        # Alias search matters: a context canonicalised to its CVE must still
-        # be findable by the GHSA the scanner reported (VEX-CTX-002).
-        conditions.append(
-            or_(
-                VexInvestigation.canonical_vulnerability_id.ilike(term),
-                func.upper(VexInvestigation.aliases_json).ilike(term),
-            )
-        )
-    if vex_source and vex_source.strip():
-        conditions.append(VexStatement.source_name.ilike(f"%{vex_source.strip()}%"))
-    if analyzer_source and analyzer_source.strip():
-        conditions.append(
-            VexInvestigation.analyzer_detection_state == analyzer_source.strip().upper()
-        )
-    if needs_review is True:
-        conditions.append(VexInvestigation.reconciliation_status.in_(_NEEDS_REVIEW_VALUES))
-    elif needs_review is False:
-        conditions.append(VexInvestigation.reconciliation_status.notin_(_NEEDS_REVIEW_VALUES))
-
-    base = (
-        select(VexInvestigation)
-        .outerjoin(SBOMComponent, SBOMComponent.id == VexInvestigation.component_id)
-        .outerjoin(SBOMSource, SBOMSource.id == VexInvestigation.sbom_id)
-    )
-    if vex_source and vex_source.strip():
-        base = base.outerjoin(
-            VexStatement, VexStatement.id == VexInvestigation.effective_vex_statement_id
-        )
+    conditions = _queue_conditions(db, context, filters)
+    from_clause = _queue_from_clause()
 
     total = db.scalar(
-        select(func.count())
-        .select_from(VexInvestigation)
-        .outerjoin(SBOMComponent, SBOMComponent.id == VexInvestigation.component_id)
-        .outerjoin(SBOMSource, SBOMSource.id == VexInvestigation.sbom_id)
-        .outerjoin(VexStatement, VexStatement.id == VexInvestigation.effective_vex_statement_id)
-        .where(*conditions)
+        select(func.count(VexInvestigation.id)).select_from(from_clause).where(*conditions)
     ) or 0
 
     sort_column = SORT_COLUMNS[sort_by]
@@ -282,23 +455,24 @@ def list_investigations(
     # and a row is silently skipped or repeated while paging.
     rows = list(
         db.scalars(
-            base.where(*conditions)
+            select(VexInvestigation).execution_options(include_deleted=filters.version_scope != "current")
+            .select_from(from_clause)
+            .where(*conditions)
             .order_by(primary, VexInvestigation.id.asc())
             .offset(offset)
             .limit(limit)
         ).all()
     )
-
     sboms = {
         s.id: s
         for s in db.scalars(
-            select(SBOMSource).where(SBOMSource.id.in_({r.sbom_id for r in rows} or {0}))
+            select(SBOMSource).execution_options(include_deleted=True).where(SBOMSource.tenant_id == _tenant_id(context), SBOMSource.id.in_({r.sbom_id for r in rows} or {0}))
         ).all()
     }
     components = {
         c.id: c
         for c in db.scalars(
-            select(SBOMComponent).where(
+            select(SBOMComponent).execution_options(include_deleted=True).where(SBOMComponent.tenant_id == _tenant_id(context),
                 SBOMComponent.id.in_({r.component_id for r in rows if r.component_id} or {0})
             )
         ).all()
@@ -306,7 +480,7 @@ def list_investigations(
     projects = {
         p.id: p
         for p in db.scalars(
-            select(Projects).where(
+            select(Projects).execution_options(include_deleted=True).where(Projects.tenant_id == _tenant_id(context),
                 Projects.id.in_({s.projectid for s in sboms.values() if s.projectid} or {0})
             )
         ).all()
@@ -314,12 +488,13 @@ def list_investigations(
     products = {
         p.id: p
         for p in db.scalars(
-            select(Product).where(
+            select(Product).execution_options(include_deleted=True).where(Product.tenant_id == _tenant_id(context),
                 Product.id.in_({s.product_id for s in sboms.values() if s.product_id} or {0})
             )
         ).all()
     }
 
+    prefetched = _page_evidence(db, rows, context)
     items = []
     for row in rows:
         sbom = sboms.get(row.sbom_id)
@@ -331,10 +506,145 @@ def list_investigations(
                 sbom=sbom,
                 project=projects.get(getattr(sbom, "projectid", None)),
                 product=products.get(getattr(sbom, "product_id", None)),
+                context=context, prefetched=prefetched,
             )
         )
 
-    return {"total": int(total), "limit": limit, "offset": offset, "items": items}
+    from ..services.sbom_posture import posture_metadata
+    return {"total": int(total), "limit": limit, "offset": offset, "items": items,
+            "version_scope": filters.version_scope, "posture": posture_metadata(db, _tenant_id(context), filters.project_id, filters.product_id)}
+
+
+@router.get("/api/vex/investigations/summary", response_model=InvestigationSummaryResponse)
+def investigation_summary(
+    filters: QueueFilters = Depends(queue_filters),
+    db: Session = Depends(get_db),
+    context: CurrentContext = Depends(get_current_tenant_context),
+) -> dict[str, Any]:
+    """Metric cards for the current filtered view (VEX-DASH-004).
+
+    Accepts exactly the list endpoint's filters and evaluates the same
+    predicate in SQL over every match, so the cards, "N matching
+    investigations" and the table cannot disagree, and paging never moves a
+    total. The tenant-wide overview stays at ``GET /dashboard/vex``.
+
+    Declared before ``/{investigation_id}`` so "summary" is not captured as an
+    id by the path converter.
+    """
+    conditions = _queue_conditions(db, context, filters)
+    from_clause = _queue_from_clause()
+    counts = vex_context_counts_where(db, from_clause=from_clause, conditions=conditions)
+    total = db.scalar(
+        select(func.count(VexInvestigation.id)).select_from(from_clause).where(*conditions)
+    ) or 0
+    return {
+        "scope": "filtered",
+        "version_scope": filters.version_scope,
+        "total": int(total),
+        "mapped_total": counts["total_contexts"],
+        **{key: counts[key] for key in (
+            "affected_count", "not_affected_count", "fixed_count", "under_investigation_count",
+            "needs_review_count", "unresolved_mapping_count", "matched_count",
+            "analyzer_only_count", "vex_only_count", "conflict_review_count",
+            "revalidation_required_count",
+        )},
+    }
+
+
+@router.get('/api/vex/investigations/versions')
+def investigation_versions(project_id: int | None = None, product_id: int | None = None,
+                           db: Session = Depends(get_db), context: CurrentContext = Depends(get_current_tenant_context)):
+    tenant_id = _tenant_id(context)
+    query = select(SBOMSource).where(SBOMSource.tenant_id == tenant_id)
+    if project_id is not None:
+        query = query.where(SBOMSource.projectid == project_id)
+    if product_id is not None:
+        query = query.where(SBOMSource.product_id == product_id)
+    rows = db.scalars(query.execution_options(include_deleted=True).order_by(SBOMSource.id.desc())).all()
+    current = set(db.scalars(DashboardScope(tenant_id).eligible_sbom_ids()).all())
+    return {'items': [{'id': row.id, 'name': row.sbom_name, 'version': row.sbom_version or row.productver,
+                       'historical': row.id not in current, 'active': row.is_active and row.lifecycle_status == 'ACTIVE'} for row in rows]}
+
+
+@router.get('/api/vex/investigations/analysis-runs')
+def investigation_analysis_runs(sbom_id: int = Query(ge=1), db: Session = Depends(get_db),
+                                context: CurrentContext = Depends(get_current_tenant_context)):
+    from ..metrics.vex import historical_analysis_runs
+    if db.scalar(select(SBOMSource.id).where(SBOMSource.id == sbom_id, SBOMSource.tenant_id == _tenant_id(context))
+                 .execution_options(include_deleted=True)) is None:
+        raise HTTPException(404, 'SBOM not found')
+    return {'items': historical_analysis_runs(db, _tenant_id(context), sbom_id)}
+
+
+@router.get('/api/vex/investigations/run-snapshot')
+def investigation_run_snapshot(sbom_id: int = Query(ge=1), analysis_run_id: int = Query(ge=1),
+                               limit: int = Query(50, ge=1, le=200), offset: int = Query(0, ge=0),
+                               db: Session = Depends(get_db), context: CurrentContext = Depends(get_current_tenant_context)):
+    from ..metrics.vex import historical_run_snapshot
+    if db.scalar(select(SBOMSource.id).where(SBOMSource.id == sbom_id, SBOMSource.tenant_id == _tenant_id(context))
+                 .execution_options(include_deleted=True)) is None:
+        raise HTTPException(404, 'SBOM not found')
+    result = historical_run_snapshot(db, _tenant_id(context), sbom_id, analysis_run_id, limit, offset)
+    if result is None:
+        raise HTTPException(404, 'Analysis run not found for this SBOM')
+    return result
+
+
+@router.get('/api/vex/investigations/comparison')
+def investigation_comparison(sbom_id: int = Query(ge=1), previous_sbom_id: int | None = Query(None, ge=1),
+                             db: Session = Depends(get_db), context: CurrentContext = Depends(get_current_tenant_context)):
+    from ..metrics.vex import latest_successful_run_id_for_sbom
+    from ..services.compare_service import CompareError, CompareService
+    from ..services.vex.version_evidence import ancestors
+    tenant_id = _tenant_id(context)
+    sbom = db.scalar(select(SBOMSource).where(SBOMSource.id == sbom_id, SBOMSource.tenant_id == tenant_id))
+    if sbom is None:
+        raise HTTPException(404, 'SBOM not found')
+    candidates = ancestors(db, sbom)
+    previous = None
+    previous_run = None
+    for row in candidates:
+        if previous_sbom_id is not None and row['id'] != previous_sbom_id:
+            continue
+        if not row['is_active'] or row['lifecycle_status'] != 'ACTIVE':
+            continue
+        run = latest_successful_run_id_for_sbom(db, tenant_id=tenant_id, sbom_id=row['id'])
+        if run:
+            previous, previous_run = row, run
+            break
+    current_run = latest_successful_run_id_for_sbom(db, tenant_id=tenant_id, sbom_id=sbom.id)
+    if previous_sbom_id is not None and not any(row['id'] == previous_sbom_id for row in candidates):
+        raise HTTPException(404, 'Previous SBOM not found in this tenant/application lineage')
+    if not current_run or not previous_run:
+        raise HTTPException(409, 'Both versions require a non-obsolete successful analysis before comparison')
+    try:
+        result = CompareService(db).compare_vex_versions(tenant_id, previous_run, current_run)
+    except CompareError as exc:
+        raise HTTPException(exc.http_status, str(exc)) from exc
+    return {**result, 'previous_version': previous['sbom_version'] or previous['productver'],
+            'current_version': sbom.sbom_version or sbom.productver}
+
+
+@router.get("/api/vex/investigations/assignees")
+def investigation_assignees(
+    q: str = Query(default="", max_length=255),
+    limit: int = Query(default=50, ge=1, le=100),
+    offset: int = Query(default=0, ge=0),
+    db: Session = Depends(get_db),
+    context: CurrentContext = Depends(get_current_tenant_context),
+) -> dict[str, Any]:
+    """Paged tenant-only owner discovery, independent of delegation rights."""
+    query = eligible_members_query(_tenant_id(context))
+    if q.strip():
+        term = f"%{q.strip()}%"
+        query = query.where(or_(IAMUser.display_name.ilike(term), IAMUser.email.ilike(term)))
+    total = db.scalar(select(func.count()).select_from(query.subquery())) or 0
+    members = db.scalars(query.order_by(IAMUser.display_name, TenantUser.id).offset(offset).limit(limit)).all()
+    return {"total": total, "limit": limit, "offset": offset, "items": [
+        {"id": membership_key(member), "label": member.user.display_name or member.user.email or "Tenant user",
+         "email": member.user.email, "roles": sorted(active_roles(db, member))}
+        for member in members
+    ]}
 
 
 @router.get("/api/vex/investigations/resolve", response_model=InvestigationDetail)
@@ -391,7 +701,7 @@ def resolve_investigation(
 
     if row is None:
         raise HTTPException(status_code=404, detail="No investigation for this pair")
-    return _detail_payload(db, row)
+    return _detail_payload(db, row, context)
 
 
 @router.get("/api/vex/investigations/{investigation_id}", response_model=InvestigationDetail)
@@ -403,16 +713,16 @@ def get_investigation(
     """Full evidence for one context, in separate sections (VEX-UI-003)."""
     tenant_id = _tenant_id(context)
     investigation = _investigation_or_404(db, investigation_id, tenant_id)
-    return _detail_payload(db, investigation)
+    return _detail_payload(db, investigation, context)
 
 
-def _detail_payload(db: Session, investigation: VexInvestigation) -> dict[str, Any]:
+def _detail_payload(db: Session, investigation: VexInvestigation, context: CurrentContext | None = None) -> dict[str, Any]:
     component = (
-        db.get(SBOMComponent, investigation.component_id)
+        db.scalar(select(SBOMComponent).where(SBOMComponent.id == investigation.component_id, SBOMComponent.tenant_id == investigation.tenant_id).execution_options(include_deleted=True))
         if investigation.component_id
         else None
     )
-    sbom = db.get(SBOMSource, investigation.sbom_id)
+    sbom = db.scalar(select(SBOMSource).where(SBOMSource.id == investigation.sbom_id, SBOMSource.tenant_id == investigation.tenant_id).execution_options(include_deleted=True))
     project = db.get(Projects, sbom.projectid) if sbom and sbom.projectid else None
     product = db.get(Product, sbom.product_id) if sbom and sbom.product_id else None
 
@@ -422,13 +732,8 @@ def _detail_payload(db: Session, investigation: VexInvestigation) -> dict[str, A
 
     finding = None
     if investigation.component_id is not None:
-        for candidate in vex_component_findings(
-            db,
-            tenant_id=investigation.tenant_id,
-            sbom_id=investigation.sbom_id,
-            component_id=investigation.component_id,
-        ):
-            if (candidate.vuln_id or "").strip().upper() == investigation.canonical_vulnerability_id:
+        for candidate in investigation_findings(db, tenant_id=investigation.tenant_id, investigations=[investigation]):
+            if canonical_vulnerability(candidate.vuln_id, aliases=parse_alias_column(candidate.aliases)).canonical_id == investigation.canonical_vulnerability_id:
                 finding = candidate
                 break
 
@@ -466,10 +771,15 @@ def _detail_payload(db: Session, investigation: VexInvestigation) -> dict[str, A
         select(VexOverrideAudit)
         .where(
             VexOverrideAudit.tenant_id == investigation.tenant_id,
-            VexOverrideAudit.component_id == investigation.component_id,
+            or_(
+                VexOverrideAudit.investigation_id == investigation.id,
+                (VexOverrideAudit.investigation_id.is_(None)) &
+                (VexOverrideAudit.component_id == investigation.component_id) &
+                (VexOverrideAudit.vulnerability_id.in_([investigation.canonical_vulnerability_id, *parse_alias_column(investigation.aliases_json)])),
+            ),
         )
         .order_by(VexOverrideAudit.id)
-    ).all() if investigation.component_id else []
+    ).all()
 
     history = [
         {
@@ -488,11 +798,11 @@ def _detail_payload(db: Session, investigation: VexInvestigation) -> dict[str, A
         history.append(
             {
                 "at": audit.changed_at,
-                "kind": "decision",
+                "kind": "assignment" if audit.action == VexOverrideAudit.ACTION_ASSIGNMENT else "mapping" if audit.action == VexOverrideAudit.ACTION_MAPPING_RESOLUTION else "decision",
                 "actor": audit.changed_by,
-                "summary": f"manual decision on {audit.vulnerability_id}",
-                "previous_status": old.get("status"),
-                "new_status": new.get("status"),
+                "summary": audit.reason,
+                "previous_status": audit.previous_status or old.get("status"),
+                "new_status": audit.new_status or new.get("status"),
                 "reason": audit.reason,
             }
         )
@@ -537,12 +847,22 @@ def _detail_payload(db: Session, investigation: VexInvestigation) -> dict[str, A
             or [s for s in [getattr(finding, "source", None)] if s],
             "analysis_run_id": investigation.last_analysis_run_id,
             "match_strategy": getattr(finding, "match_strategy", None),
-            "match_confidence": getattr(finding, "match_confidence", None),
+            # VEX-UI-003: findings store a numeric score; this evidence DTO
+            # retains its existing nullable text contract (including zero).
+            "match_confidence": (
+                str(finding.match_confidence)
+                if finding is not None and finding.match_confidence is not None else None
+            ),
             "matched_range": getattr(finding, "matched_range", None),
             "first_seen_at": investigation.first_seen_at,
             "last_seen_at": investigation.last_seen_at,
         },
         "imported_vex": imported,
+        "capabilities": capabilities(db, context, investigation),
+        "sbom_version": getattr(sbom, 'sbom_version', None) or getattr(sbom, 'productver', None),
+        "previous_decisions": _previous_decisions(db, investigation, sbom, component),
+        "historical": investigation_is_historical(db, investigation),
+        "analysis_run_id": investigation.last_analysis_run_id,
         "internal_decision": {
             "effective_status": getattr(latest_manual, "normalized_status", None),
             "reviewer": investigation.reviewed_by,
@@ -551,6 +871,8 @@ def _detail_payload(db: Session, investigation: VexInvestigation) -> dict[str, A
             "justification": getattr(latest_manual, "justification", None),
             "impact_statement": getattr(latest_manual, "impact_statement", None),
             "action_statement": getattr(latest_manual, "action_statement", None),
+            "mitigation": getattr(latest_manual, "mitigation", None),
+            "fixed_version": getattr(latest_manual, "fixed_version", None),
             "evidence_url": manual_evidence.get("evidence_url"),
             "updated_at": investigation.updated_at,
         },
@@ -571,7 +893,7 @@ def set_investigation_decision(
 ) -> Any:
     """Record a manual determination (VEX-INV-003, VEX-AUD-001/002).
 
-    Requires ``vex:write`` via the path rule in ``permission_for_request``.
+    Requires tenant administrator/analyst write authority or live Developer ownership.
     Reuses the existing component-scoped override service so that the manual
     statement, its validation and its audit row stay in one place rather than
     being reimplemented here.
@@ -579,7 +901,8 @@ def set_investigation_decision(
     from ..services.lifecycle.vex_provider import apply_vex_override
 
     tenant_id = _tenant_id(context)
-    investigation = _investigation_or_404(db, investigation_id, tenant_id)
+    investigation = _investigation_or_404(db, investigation_id, tenant_id, lock=True)
+    require_update(db, context, investigation)
 
     if investigation.component_id is None:
         raise HTTPException(
@@ -593,7 +916,7 @@ def set_investigation_decision(
     # Optimistic concurrency before any write (VEX-AUD-002).
     if not _check_row_version(investigation, payload.row_version):
         response.status_code = 409
-        return _detail_payload(db, investigation)
+        return _detail_payload(db, investigation, context)
 
     previous_status = investigation.effective_status
     previous_reconciliation = investigation.reconciliation_status
@@ -617,6 +940,7 @@ def set_investigation_decision(
             "evidence_url": payload.evidence_url,
         },
         changed_by=context.actor_label() if hasattr(context, "actor_label") else None,
+        commit=False,
     )
 
     db.refresh(investigation)
@@ -643,7 +967,6 @@ def set_investigation_decision(
         },
     )
 
-    investigation.assigned_to = payload.assigned_to or investigation.assigned_to
     investigation.reviewed_by = _actor(context)
     investigation.reviewed_at = now_iso()
     investigation.updated_at = now_iso()
@@ -651,7 +974,7 @@ def set_investigation_decision(
     db.commit()
     db.refresh(investigation)
 
-    return _detail_payload(db, investigation)
+    return _detail_payload(db, investigation, context)
 
 
 @router.put(
@@ -667,13 +990,15 @@ def set_investigation_assignment(
 ) -> Any:
     """Assign or unassign a context. Requires ``vex:write``; audited."""
     tenant_id = _tenant_id(context)
-    investigation = _investigation_or_404(db, investigation_id, tenant_id)
+    investigation = _investigation_or_404(db, investigation_id, tenant_id, lock=True)
+    require_assignment(db, context, investigation, payload.assigned_to)
 
     if not _check_row_version(investigation, payload.row_version):
         response.status_code = 409
-        return _detail_payload(db, investigation)
+        return _detail_payload(db, investigation, context)
 
     previous = investigation.assigned_to
+    previous_label = owner(db, investigation)["label"]
     investigation.assigned_to = payload.assigned_to
     investigation.updated_at = now_iso()
     investigation.row_version = (investigation.row_version or 1) + 1
@@ -682,12 +1007,12 @@ def set_investigation_assignment(
         investigation,
         previous_assignee=previous,
         new_assignee=payload.assigned_to,
-        reason=payload.reason,
+        reason=f"{previous_label} → {owner(db, investigation)['label']}. {payload.reason}",
         changed_by=_actor(context),
     )
     db.commit()
     db.refresh(investigation)
-    return _detail_payload(db, investigation)
+    return _detail_payload(db, investigation, context)
 
 
 @router.put(
@@ -711,7 +1036,8 @@ def resolve_investigation_mapping(
     from ..services.vex.reconciliation import recompute_for_sbom
 
     tenant_id = _tenant_id(context)
-    investigation = _investigation_or_404(db, investigation_id, tenant_id)
+    investigation = _investigation_or_404(db, investigation_id, tenant_id, lock=True)
+    require_update(db, context, investigation, mapping=True)
 
     if investigation.reconciliation_status != "UNRESOLVED_MAPPING":
         raise HTTPException(
@@ -720,7 +1046,7 @@ def resolve_investigation_mapping(
         )
     if not _check_row_version(investigation, payload.row_version):
         response.status_code = 409
-        return _detail_payload(db, investigation)
+        return _detail_payload(db, investigation, context)
 
     component = db.scalar(
         select(SBOMComponent).where(
@@ -753,7 +1079,7 @@ def resolve_investigation_mapping(
     recompute_for_sbom(db, tenant_id=tenant_id, sbom_id=investigation.sbom_id)
     db.commit()
     db.refresh(investigation)
-    return _detail_payload(db, investigation)
+    return _detail_payload(db, investigation, context)
 
 
 __all__ = ["router"]

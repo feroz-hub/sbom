@@ -1,15 +1,15 @@
 'use client';
 
 import { Suspense, useState } from 'react';
-import { useQuery, useQueryClient } from '@tanstack/react-query';
+import { useQueryClient } from '@tanstack/react-query';
 import { useSearchParams } from 'next/navigation';
 import { Upload } from 'lucide-react';
 import { TopBar } from '@/components/layout/TopBar';
-import { Button } from '@/components/ui/Button';
+import { PermissionButton as Button } from '@/components/ui/PermissionButton';
 import { SbomsTable } from '@/components/sboms/SbomsTable';
 import { SbomUploadModal } from '@/components/sboms/SbomUploadModal';
 import { useSbomsList } from '@/hooks/useSbomsList';
-import { getSboms, type DashboardFilterScope } from '@/lib/api';
+import { type DashboardFilterScope } from '@/lib/api';
 import type { SBOMSource } from '@/types';
 
 export default function SbomsPage() {
@@ -20,20 +20,14 @@ function SbomsContent() {
   const [showUpload, setShowUpload] = useState(false);
   const queryClient = useQueryClient();
   const params = useSearchParams();
-  const projectId = Number(params?.get('project')) || null;
-  const applicationId = projectId ? Number(params?.get('product')) || null : null;
-  const sbomId = applicationId ? Number(params?.get('sbom')) || null : null;
+  const projectId = params?.get('project') || null;
+  const applicationId = projectId ? params?.get('product') || null : null;
+  const sbomId = applicationId ? params?.get('sbom') || null : null;
   const analysed = params?.get('analysed') === '1';
   const scope: DashboardFilterScope = { projectId, applicationId, sbomId };
   const isScoped = projectId != null || analysed;
 
-  const allSboms = useSbomsList({ enabled: !isScoped });
-  const scopedSboms = useQuery({
-    queryKey: ['sboms', 'dashboard-scope', projectId, applicationId, sbomId, analysed],
-    queryFn: ({ signal }) => getSboms(1, 500, signal, scope, analysed),
-    enabled: isScoped,
-  });
-  const { data: sboms, isLoading, error } = isScoped ? scopedSboms : allSboms;
+  const { data: sboms, isLoading, error } = useSbomsList({ scope: isScoped ? scope : undefined, analysed });
 
   /**
    * Called when the upload modal successfully creates an SBOM.
@@ -51,16 +45,17 @@ function SbomsContent() {
     <div className="flex flex-col flex-1">
       <TopBar
         title="SBOMs"
+        subtitle="Manage uploaded bills of materials, validate their contents and review security analysis."
         action={
-          <Button onClick={() => setShowUpload(true)}>
+          <Button permission={["sbom:upload", "product:assign_sbom"]} onClick={() => setShowUpload(true)}>
             <Upload className="h-4 w-4" />
             Upload SBOM
           </Button>
         }
       />
-      <div className="p-6">
+      <main className="min-w-0 p-4 md:p-6 lg:p-8">
         <SbomsTable sboms={sboms} isLoading={isLoading} error={error} />
-      </div>
+      </main>
 
       <SbomUploadModal
         open={showUpload}

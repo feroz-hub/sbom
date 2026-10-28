@@ -1,8 +1,9 @@
 'use client';
 
+import { recordIdLabel } from '@/components/ui/RecordIdDisplay';
 import Link from 'next/link';
 import { usePathname, useSearchParams } from 'next/navigation';
-import { useEffect, useRef, useState, type ReactNode } from 'react';
+import { Fragment, useEffect, useRef, useState, type ReactNode } from 'react';
 import { useQuery } from '@tanstack/react-query';
 import {
   ChevronDown,
@@ -17,9 +18,11 @@ import { useSidebar } from './SidebarContext';
 import { SidebarStatus } from './SidebarStatus';
 import { TenantSwitcher } from './TenantSwitcher';
 import { usePinned, unpin } from '@/lib/pinned';
+import { cachedRecordLabel } from '@/lib/recordDisplay';
 import { getRecentSboms, getRuns } from '@/lib/api';
+import { usePermissions } from '@/hooks/usePermission';
 import { useAuth } from '@/hooks/useAuth';
-import { navigationItems, type NavItem, type SubNavItem } from '@/lib/navigation';
+import { navigationItems, type NavItem } from '@/lib/navigation';
 
 function splitHref(href: string): { path: string; params: URLSearchParams } {
   const [path, query = ''] = href.split('?');
@@ -40,7 +43,9 @@ function isActiveHref(href: string, pathname: string, searchParams: URLSearchPar
 }
 
 function isActiveItem(item: NavItem, pathname: string): boolean {
+  if (item.section) return Boolean(item.children?.some(child => isActiveItem({ ...child, icon: item.icon }, pathname)));
   if (item.href === '/') return pathname === '/';
+  if (item.href === '/platform' || item.href === '/settings/platform') return pathname === item.href;
   if (item.href === '/analysis') {
     return pathname.startsWith('/analysis');
   }
@@ -56,12 +61,16 @@ export function Sidebar() {
   const pathname = usePathname();
   const searchParams = useSearchParams();
   const { collapsed, toggleCollapsed, mobileOpen, closeMobile } = useSidebar();
-  const { hasPermission } = useAuth();
+  const { can: hasPermission } = usePermissions();
+  const canSee = (item: { permission?: string; permissionsAny?: string[] }) =>
+    (!item.permission && !item.permissionsAny?.length)
+    || Boolean(item.permission && hasPermission(item.permission))
+    || Boolean(item.permissionsAny?.some(hasPermission));
   const navItems = navigationItems
-    .filter((item) => !item.permission || hasPermission(item.permission))
+    .filter(canSee)
     .map((item) => ({
       ...item,
-      children: item.children?.filter((child) => !child.permission || hasPermission(child.permission)),
+      children: item.children?.filter(canSee),
     }))
     .filter((item) => !item.children || item.children.length > 0);
 
@@ -84,7 +93,8 @@ export function Sidebar() {
       <aside
         aria-label="Primary navigation"
         className={cn(
-          'app-sidebar fixed left-0 top-0 z-40 flex h-screen flex-col sidebar-rail',
+          'app-sidebar fixed left-0 top-0 z-40 flex flex-col sidebar-rail',
+          navItems.some(item => item.group) && 'tenant-sidebar',
           'border-r border-white/10 shadow-[4px_0_24px_rgba(0,0,0,0.12)] dark:border-white/10 dark:shadow-[4px_0_32px_rgba(0,0,0,0.45)]',
           'transition-all duration-300 ease-in-out motion-reduce:transition-none',
           'md:translate-x-0',
@@ -95,7 +105,7 @@ export function Sidebar() {
       >
         {/* Brand bar — label slides + fades while the rail narrows; the logo
             block stays put so nothing jumps (px-4 ≈ centered in the 64px rail). */}
-        <div className="flex shrink-0 items-center gap-3 px-4 py-4 sidebar-brand-bar">
+        <div className="flex shrink-0 items-center gap-3 px-4 py-3 sidebar-brand-bar">
           <div className="flex h-9 w-9 shrink-0 items-center justify-center rounded-lg border border-white/20 bg-white/10 shadow-inner">
             <span className="text-xs font-bold leading-none tracking-tight text-white">HCL</span>
           </div>
@@ -125,18 +135,20 @@ export function Sidebar() {
         {/* Tenant switcher — collapses with the sidebar */}
         <div
           className={cn(
-            'shrink-0 px-2 pb-2',
+            'relative z-30 shrink-0 px-2 pb-3 pt-1',
             'transition-[max-height,opacity] duration-300 ease-in-out motion-reduce:transition-none',
-            collapsed ? 'max-h-0 opacity-0 md:max-h-0 md:opacity-0 overflow-hidden' : 'max-h-20 opacity-100',
+            'max-h-24 opacity-100',
           )}
         >
-          <TenantSwitcher />
+          <TenantSwitcher compact={collapsed} />
         </div>
 
         {/* Scrollable middle: nav + pinned + recent */}
-        <div className="flex-1 overflow-y-auto">
-          <nav className="space-y-2 px-2 py-3" aria-label="Main">
-            {navItems.map((item) => (
+        <div className="app-sidebar-scroll min-h-0 flex-1 overflow-y-auto overscroll-y-contain">
+          <nav className={cn('space-y-2 px-2 py-3', navItems.some(item => item.section) && 'platform-navigation')} aria-label="Main">
+            {navItems.map((item, index) => (
+              <Fragment key={`${item.href}-${item.label}`}>
+              {item.group && item.group !== navItems[index - 1]?.group && <h2 className={cn('px-3 pb-1 pt-3 text-[10px] font-semibold uppercase tracking-[0.13em] text-sidebar-muted', collapsed && 'md:hidden')}>{item.group}</h2>}
               <NavLink
                 key={`${item.href}-${item.label}`}
                 item={item}
@@ -144,6 +156,7 @@ export function Sidebar() {
                 searchParams={searchParams}
                 collapsed={collapsed}
               />
+              </Fragment>
             ))}
           </nav>
 
@@ -158,16 +171,22 @@ export function Sidebar() {
             )}
           >
             <div className="min-h-0 overflow-hidden">
-              <PinnedSection />
-              <RecentSection />
+              {(hasPermission('sbom:read') || hasPermission('analysis:read')) && <>
+                <PinnedSection />
+                <RecentSection />
+              </>}
             </div>
           </div>
         </div>
 
-        {/* Footer: status + collapse toggle */}
-        <div className="hidden shrink-0 border-t border-white/15 px-2 py-3 md:block space-y-2">
-          {!collapsed && <SidebarStatus />}
-          {collapsed && <SidebarStatus compact />}
+        {/* Footer: development status + collapse toggle */}
+        <div className="shrink-0 border-t border-white/10 bg-black/10 px-2 py-3 space-y-2">
+          {process.env.NODE_ENV === 'development' && (
+            <>
+              {!collapsed && <p className="px-3 text-[10px] font-semibold uppercase tracking-[0.13em] text-sidebar-muted">System Status</p>}
+              <SidebarStatus compact={collapsed} />
+            </>
+          )}
 
           <button
             type="button"
@@ -267,6 +286,16 @@ function NavLink({
     setFlyoutOpen((open) => !open);
   };
 
+  if (item.section && !collapsed) {
+    return <section aria-label={item.label} className="pt-3">
+      <h2 className="px-3 pb-2 text-[10px] font-semibold uppercase tracking-[0.14em] text-white/70">{item.label}</h2>
+      <div className="space-y-1">{item.children?.map(child => <NavLink
+        key={child.href} item={{ ...child, icon: child.icon ?? item.icon }}
+        pathname={pathname} searchParams={searchParams} collapsed={collapsed}
+      />)}</div>
+    </section>;
+  }
+
   if (item.children && item.children.length > 0) {
     return (
       <div className="relative">
@@ -288,7 +317,7 @@ function NavLink({
           }}
           aria-expanded={collapsed ? flyoutOpen : expanded}
           aria-haspopup={collapsed ? 'menu' : undefined}
-          aria-controls={collapsed ? flyoutId : undefined}
+          aria-controls={collapsed ? flyoutId : `${flyoutId}-children`}
           aria-current={isActive && !expanded ? 'page' : undefined}
           aria-label={collapsed ? item.label : undefined}
           title={collapsed ? item.label : undefined}
@@ -334,6 +363,7 @@ function NavLink({
         {/* Sub-nav height animates via grid-rows so it folds with the rail
             instead of popping in and out. */}
         <div
+          id={`${flyoutId}-children`}
           className={cn(
             'grid transition-[grid-template-rows,opacity,visibility] duration-300 ease-in-out motion-reduce:transition-none',
             // `visibility` flips at the transition's end, so hidden links also
@@ -346,7 +376,7 @@ function NavLink({
               'visible grid-rows-[1fr] opacity-100 md:invisible md:grid-rows-[0fr] md:opacity-0',
           )}
         >
-          <ul className="mt-0.5 ml-3 min-h-0 space-y-1.5 overflow-hidden border-l border-white/15 pl-3">
+          <ul className="mt-1 ml-5 min-h-0 space-y-1 overflow-hidden border-l border-white/15 pl-2">
             {item.children.map((child) => {
               const childActive = isActiveHref(child.href, pathname, searchParams);
               return (
@@ -355,20 +385,20 @@ function NavLink({
                     href={child.href}
                     aria-current={childActive ? 'page' : undefined}
                     className={cn(
-                      'group flex items-center gap-2 rounded-lg px-3 py-2 text-[13px] font-medium transition-colors duration-150',
+                      'group flex min-h-10 items-center gap-2 rounded-lg px-3 py-2 text-[12px] font-medium transition-colors duration-150',
                       'focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-hcl-cyan',
                       childActive
-                        ? 'bg-sidebar-hover text-sidebar-foreground font-semibold'
+                        ? 'bg-white/20 text-sidebar-foreground font-semibold shadow-inner'
                         : 'text-sidebar-muted hover:bg-sidebar-hover hover:text-sidebar-foreground',
                     )}
                   >
-                    <span
+                    {child.icon ? <child.icon className="h-3.5 w-3.5 shrink-0" aria-hidden /> : <span
                       aria-hidden
                       className={cn(
                         'inline-block h-1 w-1 shrink-0 rounded-full',
                         childActive ? 'bg-sidebar-accent' : 'bg-sidebar-muted',
                       )}
-                    />
+                    />}
                     {child.label}
                   </Link>
                 </li>
@@ -385,6 +415,7 @@ function NavLink({
       href={item.href}
       aria-current={isActive ? 'page' : undefined}
       aria-label={collapsed ? item.label : undefined}
+      title={collapsed ? item.label : undefined}
       className={cn(
         'sidebar-menu-item',
         isActive && 'active',
@@ -471,11 +502,12 @@ function CollapsedNavFlyout({
 }
 
 function PinnedSection() {
+  const { can: hasPermission } = usePermissions();
   const sboms = usePinned('sbom');
   const runs = usePinned('run');
   const all = [
-    ...sboms.items.map((i) => ({ ...i, kind: 'sbom' as const })),
-    ...runs.items.map((i) => ({ ...i, kind: 'run' as const })),
+    ...(hasPermission('sbom:read') ? sboms.items : []).map((i) => ({ ...i, kind: 'sbom' as const })),
+    ...(hasPermission('analysis:read') ? runs.items : []).map((i) => ({ ...i, kind: 'run' as const })),
   ].sort((a, b) => b.pinnedAt - a.pinnedAt);
 
   if (all.length === 0) return null;
@@ -486,7 +518,7 @@ function PinnedSection() {
         <SidebarRow
           key={`${item.kind}-${item.id}`}
           href={item.href}
-          label={item.label}
+          label={cachedRecordLabel(item.label, item.id, item.kind === 'sbom' ? 'SBOM' : 'Run')}
           subtitle={item.kind === 'sbom' ? 'SBOM' : 'Run'}
           onUnpin={() => unpin(item.kind, item.id)}
         />
@@ -498,20 +530,26 @@ function PinnedSection() {
 // ─── Section: Recent ─────────────────────────────────────────────────────────
 
 function RecentSection() {
+  const { activeTenantId } = useAuth();
+  const { can: hasPermission } = usePermissions();
+  const canSboms = hasPermission('sbom:read');
+  const canRuns = hasPermission('analysis:read');
   const sbomsQuery = useQuery({
-    queryKey: ['sidebar-recent-sboms'],
+    queryKey: ['sidebar-recent-sboms', activeTenantId],
     queryFn: ({ signal }) => getRecentSboms(3, signal),
     staleTime: 60_000,
+    enabled: canSboms && Boolean(activeTenantId),
   });
 
   const runsQuery = useQuery({
-    queryKey: ['sidebar-recent-runs'],
+    queryKey: ['sidebar-recent-runs', activeTenantId],
     queryFn: ({ signal }) => getRuns({ page: 1, page_size: 3 }, signal),
     staleTime: 60_000,
+    enabled: canRuns && Boolean(activeTenantId),
   });
 
-  const sboms = sbomsQuery.data ?? [];
-  const runs = runsQuery.data ?? [];
+  const sboms = canSboms ? sbomsQuery.data ?? [] : [];
+  const runs = canRuns ? runsQuery.data ?? [] : [];
 
   if (sboms.length === 0 && runs.length === 0) return null;
 
@@ -529,7 +567,7 @@ function RecentSection() {
         <SidebarRow
           key={`run-${r.id}`}
           href={`/analysis/${r.id}`}
-          label={r.sbom_name ? `${r.sbom_name} · #${r.id}` : `Run #${r.id}`}
+          label={r.sbom_name ? `${r.sbom_name} · ${recordIdLabel('Run', r.display_id)}` : recordIdLabel('Run', r.display_id)}
           subtitle={`Run · ${r.run_status}`}
         />
       ))}

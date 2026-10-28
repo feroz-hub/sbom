@@ -1,0 +1,19 @@
+{
+  "status": 200,
+  "target": "http://127.0.0.1:18000/openapi.json",
+  "purpose": "Read-only confirmation of published UUID versus internal run identity contract",
+  "ProjectOut.id": {
+    "title": "Id",
+    "type": "string",
+    "format": "uuid"
+  },
+  "AnalysisRunOut.id": {
+    "type": "integer",
+    "title": "Id"
+  },
+  "AnalysisRunOut.sbom_id": {
+    "title": "Sbom Id",
+    "type": "string",
+    "format": "uuid"
+  }
+}

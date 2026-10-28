@@ -18,6 +18,8 @@
 import { useEffect, useMemo, useState } from 'react';
 import { useMutation, useQueryClient } from '@tanstack/react-query';
 import { Alert } from '@/components/ui/Alert';
+import { usePermission } from '@/hooks/usePermission';
+import { PermissionFields } from '@/components/ui/PermissionGate';
 import { Button } from '@/components/ui/Button';
 import { Input, Textarea } from '@/components/ui/Input';
 import { Select } from '@/components/ui/Select';
@@ -46,8 +48,8 @@ const STATUS_OPTIONS: Array<{ value: VexEffectiveStatus; label: string }> = [
 ];
 
 export interface VexDecisionEditorProps {
-  sbomId: number;
-  componentId: number;
+  sbomId: (string | number);
+  componentId: (string | number);
   componentLabel?: string;
   vulnerabilityId: string;
   /** Present when a reconciled context exists: unlocks evidence and row_version. */
@@ -72,8 +74,8 @@ function draftFromInvestigation(
     justification: decision.justification ?? '',
     impactStatement: decision.impact_statement ?? '',
     actionStatement: decision.action_statement ?? '',
-    mitigation: '',
-    fixedVersion: '',
+    mitigation: decision.mitigation ?? '',
+    fixedVersion: decision.fixed_version ?? '',
     evidenceUrl: decision.evidence_url ?? '',
   };
 }
@@ -91,6 +93,7 @@ export function VexDecisionEditor({
   onCancel,
 }: VexDecisionEditorProps) {
   const queryClient = useQueryClient();
+  const canLegacyWrite = usePermission("vex:write");
   const [draft, setDraft] = useState<VexDecisionDraft>(() => draftFromInvestigation(investigation));
   const [errors, setErrors] = useState<VexDecisionErrors>({});
   const [submitError, setSubmitError] = useState<string | null>(null);
@@ -156,9 +159,9 @@ export function VexDecisionEditor({
         sbomId,
       );
     },
-    onSuccess: () => {
+    onSuccess: async () => {
       setSubmitError(null);
-      invalidateVexSurfaces(queryClient, sbomId);
+      await invalidateVexSurfaces(queryClient, sbomId, { investigationId: investigation?.id });
       onSaved?.();
     },
     onError: (error: unknown) => {
@@ -179,22 +182,26 @@ export function VexDecisionEditor({
     save.mutate();
   }
 
-  if (!canWrite) {
+  if (investigation && (investigation.component.component_id == null || investigation.reconciliation_status === 'UNRESOLVED_MAPPING')) {
+    return <p className="text-sm text-hcl-muted">A component must be mapped before a VEX decision can be saved. Ask a Tenant Administrator or Security Analyst to resolve the mapping.</p>;
+  }
+
+  if (!(investigation ? investigation.capabilities?.can_update ?? false : canWrite && canLegacyWrite)) {
     return (
       <p className="text-xs text-hcl-muted">
-        Read-only: recording a decision requires the vex:write permission.
+        {investigation?.capabilities?.read_only_reason ?? 'Read-only: you do not have permission to update this investigation.'}
       </p>
     );
   }
 
   return (
-    <form onSubmit={submit} noValidate className="space-y-3">
+    <PermissionFields resourceAllowed={investigation ? investigation.capabilities?.can_update ?? false : canWrite && canLegacyWrite} reason={investigation?.capabilities?.read_only_reason ?? undefined}><form onSubmit={submit} noValidate className="space-y-3">
       {/* Read-only context: what this decision is about, never re-pickable. */}
       <div className="rounded-lg bg-hcl-light/60 p-3 text-xs dark:bg-gray-900/40">
         <div className="flex flex-wrap gap-x-6 gap-y-1">
           <span>
             <span className="text-hcl-muted">Component: </span>
-            <span className="font-medium">{componentLabel ?? `#${componentId}`}</span>
+            <span className="font-medium">{componentLabel ?? 'Selected component'}</span>
           </span>
           <span>
             <span className="text-hcl-muted">Vulnerability: </span>
@@ -289,6 +296,6 @@ export function VexDecisionEditor({
           {save.isPending ? 'Saving...' : 'Save decision'}
         </Button>
       </div>
-    </form>
+    </form></PermissionFields>
   );
 }

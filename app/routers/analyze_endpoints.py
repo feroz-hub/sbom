@@ -31,14 +31,16 @@ import logging
 
 from fastapi import APIRouter, Body, Depends, Header, HTTPException, Request, Response
 from pydantic import BaseModel
+from sqlalchemy import select
 from sqlalchemy.orm import Session
 
 from ..db import get_db
 from ..deprecation import LEGACY_ANALYSIS_SUNSET, mark_deprecated
 from ..idempotency import normalize_idempotency_key, run_idempotent
-from ..models import AnalysisRun
+from ..models import AnalysisRun, SBOMSource
 from ..rate_limit import analyze_route_limit
 from ..services.analysis_orchestrator import AnalysisOrchestrator
+from ..services.sbom_lifecycle import require_processing
 from ..settings import get_settings
 
 DEFAULT_RESULTS_PER_PAGE = get_settings().DEFAULT_RESULTS_PER_PAGE
@@ -198,7 +200,7 @@ async def _run_legacy_analysis(
 # ---- NVD ------------------------------------------------------------------
 
 
-@router.post("/analyze-sbom-nvd", deprecated=True)
+@router.post("/analyze-sbom-nvd", deprecated=True, include_in_schema=False)
 @analyze_route_limit
 async def analyze_sbom_nvd(
     request: Request,
@@ -228,6 +230,9 @@ async def analyze_sbom_nvd(
         )
         return result
 
+    target = db.get(SBOMSource, payload.sbom_id) if payload.sbom_id is not None else db.scalar(
+        select(SBOMSource).where(SBOMSource.sbom_name == payload.sbom_name.strip()).limit(1))
+    require_processing(target)
     key = normalize_idempotency_key(idempotency_key)
     scope = f"legacy_nvd:{payload.sbom_id}:{payload.sbom_name or ''}"
     if key:
@@ -238,7 +243,7 @@ async def analyze_sbom_nvd(
 # ---- GitHub Advisories ----------------------------------------------------
 
 
-@router.post("/analyze-sbom-github", deprecated=True)
+@router.post("/analyze-sbom-github", deprecated=True, include_in_schema=False)
 @analyze_route_limit
 async def analyze_sbom_github(
     request: Request,
@@ -267,6 +272,9 @@ async def analyze_sbom_github(
         )
         return result
 
+    target = db.get(SBOMSource, payload.sbom_id) if payload.sbom_id is not None else db.scalar(
+        select(SBOMSource).where(SBOMSource.sbom_name == payload.sbom_name.strip()).limit(1))
+    require_processing(target)
     key = normalize_idempotency_key(idempotency_key)
     scope = f"legacy_github:{payload.sbom_id}:{payload.sbom_name or ''}"
     if key:
@@ -277,7 +285,7 @@ async def analyze_sbom_github(
 # ---- OSV ------------------------------------------------------------------
 
 
-@router.post("/analyze-sbom-osv", deprecated=True)
+@router.post("/analyze-sbom-osv", deprecated=True, include_in_schema=False)
 @analyze_route_limit
 async def analyze_sbom_osv(
     request: Request,
@@ -306,6 +314,9 @@ async def analyze_sbom_osv(
         )
         return result
 
+    target = db.get(SBOMSource, payload.sbom_id) if payload.sbom_id is not None else db.scalar(
+        select(SBOMSource).where(SBOMSource.sbom_name == payload.sbom_name.strip()).limit(1))
+    require_processing(target)
     key = normalize_idempotency_key(idempotency_key)
     scope = f"legacy_osv:{payload.sbom_id}:{payload.sbom_name or ''}"
     if key:
@@ -316,7 +327,7 @@ async def analyze_sbom_osv(
 # ---- VulDB / VulnDB --------------------------------------------------------
 
 
-@router.post("/analyze-sbom-vulndb", deprecated=True)
+@router.post("/analyze-sbom-vulndb", deprecated=True, include_in_schema=False)
 @analyze_route_limit
 async def analyze_sbom_vulndb(
     request: Request,
@@ -328,8 +339,6 @@ async def analyze_sbom_vulndb(
     """Run VulDB / VulnDB analysis on an SBOM (by id or name)."""
     if payload.sbom_id is None and not (payload.sbom_name and payload.sbom_name.strip()):
         raise HTTPException(status_code=422, detail="Provide 'sbom_id' or 'sbom_name' in request body")
-    if not get_settings().vulndb_configured:
-        raise HTTPException(status_code=400, detail="VULNDB_API_KEY is required for VulDB-only analysis.")
     log.info("VulDB analysis started: sbom_id=%s sbom_name=%s", payload.sbom_id, payload.sbom_name)
 
     async def _inner() -> dict:
@@ -347,6 +356,11 @@ async def analyze_sbom_vulndb(
         )
         return result
 
+    target = db.get(SBOMSource, payload.sbom_id) if payload.sbom_id is not None else db.scalar(
+        select(SBOMSource).where(SBOMSource.sbom_name == payload.sbom_name.strip()).limit(1))
+    require_processing(target)
+    if not get_settings().vulndb_configured:
+        raise HTTPException(status_code=400, detail="VULNDB_API_KEY is required for VulDB-only analysis.")
     key = normalize_idempotency_key(idempotency_key)
     scope = f"legacy_vulndb:{payload.sbom_id}:{payload.sbom_name or ''}"
     if key:
@@ -357,7 +371,7 @@ async def analyze_sbom_vulndb(
 # ---- Consolidated (NVD + GHSA + OSV + VulDB) -------------------------------
 
 
-@router.post("/analyze-sbom-consolidated", deprecated=True)
+@router.post("/analyze-sbom-consolidated", deprecated=True, include_in_schema=False)
 @analyze_route_limit
 async def analyze_sbom_consolidated(
     request: Request,
@@ -390,6 +404,9 @@ async def analyze_sbom_consolidated(
         )
         return result
 
+    target = db.get(SBOMSource, payload.sbom_id) if payload.sbom_id is not None else db.scalar(
+        select(SBOMSource).where(SBOMSource.sbom_name == payload.sbom_name.strip()).limit(1))
+    require_processing(target)
     key = normalize_idempotency_key(idempotency_key)
     scope = f"legacy_consolidated:{payload.sbom_id}:{payload.sbom_name or ''}"
     if key:

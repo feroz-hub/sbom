@@ -1,0 +1,35 @@
+Grounded vulnerability context (use ONLY this data; never invent
+versions, citations, or exploitation claims):
+
+{grounding_json}
+
+Schema for your JSON response:
+
+{schema_json}
+
+Constraints once more, summarised:
+
+- "actively_exploited" requires kev_listed=true.
+- target_version MUST appear in the fix_versions array, OR be "n/a"
+  when fix_versions is empty.
+- tested_against_data is true only when target_version is in fix_versions.
+- citations MUST be a subset of {allowed_sources}.
+- overall_confidence ("high"/"medium"/"low") rates the WHOLE response, not
+  any single section. Reserve "high" for a grounded fix version plus an
+  unambiguous exploitation picture; use "low" when fix_versions is empty or
+  the data is sparse or conflicting.
+- All enum values lowercase, snake_case (no spaces, no hyphens, no
+  CamelCase).
+
+Required output:
+
+A single JSON object. Nothing else.
+
+  - First character: `{`
+  - Last character:  `}`
+  - No markdown code fences (no ```json, no ```).
+  - No preamble text ("Sure, here's…", "Here is the JSON…").
+  - No trailing commentary ("Hope this helps", "Let me know if…").
+  - No comments inside the JSON.
+
+If you find yourself writing anything before `{` or after `}`, delete it.

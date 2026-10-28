@@ -20,7 +20,7 @@ const mockReloadAuth = vi.fn();
 const mockRefreshSession = vi.fn();
 
 let mockActiveTenant: { membershipStatus?: string } | null = null;
-const mockUser: { email?: string; userId?: number } | null = { email: 'user@hcltech.com', userId: 10 };
+const mockUser: { email?: string; userId?: string } | null = { email: 'user@hcltech.com', userId: '00000000-0000-4000-8000-00000000000a' };
 
 vi.mock('@/hooks/useAuth', () => ({
   useAuth: () => ({
@@ -50,7 +50,7 @@ describe('User State Pages & Copy Contracts', () => {
     expect(screen.getByText('Access assignment required')).toBeInTheDocument();
     expect(
       screen.getByText(
-        'Your HCL.CS identity is verified, but you have not been assigned a platform role or active tenant membership.',
+        'Your identity is authenticated, but you have not been assigned a platform role or active tenant membership.',
       ),
     ).toBeInTheDocument();
   });
@@ -62,7 +62,7 @@ describe('User State Pages & Copy Contracts', () => {
     expect(screen.getByText('Tenant access disabled')).toBeInTheDocument();
     expect(
       screen.getByText(
-        'Your HCL.CS sign-in is valid, but your membership in this tenant is currently disabled.',
+        'Your sign-in is valid, but your membership in this tenant is currently disabled.',
       ),
     ).toBeInTheDocument();
   });
@@ -71,10 +71,10 @@ describe('User State Pages & Copy Contracts', () => {
     mockActiveTenant = null;
     render(<AccessDeniedPage />);
 
-    expect(screen.getByText('SBOM account disabled')).toBeInTheDocument();
+    expect(screen.getByText('SBOM access denied')).toBeInTheDocument();
     expect(
       screen.getByText(
-        'Your HCL.CS identity is valid, but your SBOM account has been disabled.',
+        'Your identity is authenticated, but your SBOM account is disabled or suspended.',
       ),
     ).toBeInTheDocument();
   });

@@ -28,6 +28,7 @@ def _runs(db, sbom_id, tenant_id, as_of):
         AnalysisRun.sbom_id == sbom_id,
         AnalysisRun.tenant_id == tenant_id,
         AnalysisRun.run_status.in_(COMPLETED_RUN_STATUSES),
+        AnalysisRun.is_current.is_(True),
         AnalysisRun.completed_on <= as_of,
     )
 
@@ -74,12 +75,13 @@ def latest_snapshots(db, *, sbom_ids, tenant_id, as_of):
             AnalysisRun.sbom_id.in_(sbom_ids),
             AnalysisRun.completed_on <= as_of,
             AnalysisRun.run_status.in_(COMPLETED_RUN_STATUSES),
+        AnalysisRun.is_current.is_(True),
         )
         .group_by(AnalysisRun.sbom_id)
     )
     latest_any = (
         select(func.max(AnalysisRun.id))
-        .where(AnalysisRun.tenant_id == tenant_id, AnalysisRun.sbom_id.in_(sbom_ids), AnalysisRun.completed_on <= as_of)
+        .where(AnalysisRun.tenant_id == tenant_id, AnalysisRun.sbom_id.in_(sbom_ids), AnalysisRun.completed_on <= as_of, AnalysisRun.is_current.is_(True))
         .group_by(AnalysisRun.sbom_id)
     )
     runs = list(

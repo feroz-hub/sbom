@@ -6,10 +6,13 @@ import json
 import uuid
 from pathlib import Path
 
-from app.models import SBOMComponent
+from app.models import SBOMComponent, SBOMSource
 from app.services.sbom_conversion_service import convert_spdx_to_cyclonedx
 from app.validation import run as run_validation
 from sqlalchemy import select
+
+from tests.public_id_fixture import public_row
+from tests.tenant_fixture_scope import verified_fixture_tenant
 
 FIXTURES = Path(__file__).resolve().parent / "fixtures" / "sboms" / "valid"
 
@@ -116,10 +119,20 @@ class TestSpdxToCyclonedxConversionService:
     def test_generated_cyclonedx_has_no_dangling_dependency_refs(self):
         result = convert_spdx_to_cyclonedx(_load_spdx("spdx_2_3_realistic.json"))
         refs = {c.get("bom-ref") for c in result.cyclonedx_bom.get("components") or []}
+        refs.add(result.cyclonedx_bom["metadata"]["component"]["bom-ref"])
         for dep in result.cyclonedx_bom.get("dependencies") or []:
             assert dep.get("ref") in refs
             for target in dep.get("dependsOn") or []:
                 assert target in refs
+
+    def test_document_reference_is_unique_and_dependency_target_is_preserved(self):
+        result = convert_spdx_to_cyclonedx(_load_spdx())
+        assert not result.conversion_errors
+        root = result.cyclonedx_bom["metadata"]["component"]["bom-ref"]
+        assert root not in {component["bom-ref"] for component in result.cyclonedx_bom["components"]}
+        root_dependency = next(dependency for dependency in result.cyclonedx_bom["dependencies"] if dependency["ref"] == root)
+        assert "SPDXRef-Package-foo" in root_dependency["dependsOn"]
+        assert not run_validation(json.dumps(result.cyclonedx_bom).encode()).has_errors()
 
     def test_duplicate_spdxid_handled_safely(self):
         spdx = _load_spdx()
@@ -222,18 +235,19 @@ class TestSpdxToCyclonedxConversionApi:
 
         db = SessionLocal()
         try:
-            component = db.execute(
-                select(SBOMComponent).where(
-                    SBOMComponent.sbom_id == converted_id,
-                    SBOMComponent.name == "foo",
-                )
-            ).scalar_one_or_none()
-            if component:
-                component.lifecycle_status = "EOL"
-                component.eol_date = "2025-01-01"
-                component.lifecycle_confidence = "HIGH"
-                component.lifecycle_checked_at = "2026-06-17T00:00:00Z"
-                db.commit()
+            with verified_fixture_tenant(db, 1):
+                component = db.execute(
+                    select(SBOMComponent).where(
+                        SBOMComponent.sbom_id == public_row(db, SBOMSource, converted_id).id,
+                        SBOMComponent.name == "foo",
+                    )
+                ).scalar_one_or_none()
+                if component:
+                    component.lifecycle_status = "EOL"
+                    component.eol_date = "2025-01-01"
+                    component.lifecycle_confidence = "HIGH"
+                    component.lifecycle_checked_at = "2026-06-17T00:00:00Z"
+                    db.commit()
         finally:
             db.close()
 
@@ -274,22 +288,23 @@ class TestSpdxConversionPerformance:
         spdx_data = json.dumps(_load_spdx())
         db = SessionLocal()
         try:
-            source = SBOMSource(
-                sbom_name="perf-test-spdx",
-                sbom_data=spdx_data,
-                status="validated",
-                original_format="spdx",
-                current_format="spdx",
-            )
-            db.add(source)
-            db.commit()
-            db.refresh(source)
+            with verified_fixture_tenant(db, 1):
+                source = SBOMSource(
+                    sbom_name="perf-test-spdx",
+                    sbom_data=spdx_data,
+                    status="validated",
+                    original_format="spdx",
+                    current_format="spdx",
+                )
+                db.add(source)
+                db.commit()
+                db.refresh(source)
 
-            convert_and_persist_spdx_to_cyclonedx(db, source)
+                convert_and_persist_spdx_to_cyclonedx(db, source)
 
-            assert lifecycle_calls == []
-            db.refresh(source)
-            assert source.enrichment_status == "pending"
+                assert lifecycle_calls == []
+                db.refresh(source)
+                assert source.enrichment_status == "pending"
         finally:
             db.rollback()
             db.close()
@@ -317,24 +332,25 @@ class TestSpdxConversionPerformance:
 
         db = SessionLocal()
         try:
-            source = SBOMSource(
-                sbom_name="bg-enrich-spdx",
-                sbom_data=json.dumps(_load_spdx()),
-                status="validated",
-                original_format="spdx",
-                current_format="spdx",
-            )
-            db.add(source)
-            db.commit()
-            db.refresh(source)
+            with verified_fixture_tenant(db, 1):
+                source = SBOMSource(
+                    sbom_name="bg-enrich-spdx",
+                    sbom_data=json.dumps(_load_spdx()),
+                    status="validated",
+                    original_format="spdx",
+                    current_format="spdx",
+                )
+                db.add(source)
+                db.commit()
+                db.refresh(source)
 
-            converted, _, _ = convert_and_persist_spdx_to_cyclonedx(db, source)
-            run_post_conversion_enrichment(converted.id, source.id)
+                converted, _, _ = convert_and_persist_spdx_to_cyclonedx(db, source)
+                run_post_conversion_enrichment(converted.id, source.id)
 
-            db.refresh(converted)
-            db.refresh(source)
-            assert converted.enrichment_status == "completed"
-            assert source.enrichment_status == "completed"
+                db.refresh(converted)
+                db.refresh(source)
+                assert converted.enrichment_status == "completed"
+                assert source.enrichment_status == "completed"
         finally:
             db.rollback()
             db.close()
@@ -342,7 +358,8 @@ class TestSpdxConversionPerformance:
     def test_convert_api_returns_before_enrichment_finishes(self, client, monkeypatch):
         import time
 
-        def slow_background(converted_sbom_id: int, source_sbom_id: int | None = None) -> None:
+        def slow_background(converted_sbom_id: int, source_sbom_id: int | None = None, tenant_id: int | None = None) -> None:
+            assert tenant_id == 1  # Verified owner of this test dataset.
             time.sleep(2)
 
         monkeypatch.setattr(

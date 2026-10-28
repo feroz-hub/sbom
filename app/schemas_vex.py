@@ -14,7 +14,7 @@ from __future__ import annotations
 
 from typing import Literal
 
-from pydantic import BaseModel, Field
+from pydantic import BaseModel, ConfigDict, Field
 
 SortOrder = Literal["asc", "desc"]
 
@@ -50,6 +50,9 @@ class InvestigationRow(BaseModel):
     product_name: str | None = None
     sbom_id: int
     sbom_name: str | None = None
+    sbom_version: str | None = None
+    historical: bool = False
+    analysis_run_id: int | None = None
 
     analyzer_detection_state: str | None = None
     analyzer_sources: list[str] = Field(default_factory=list)
@@ -61,6 +64,9 @@ class InvestigationRow(BaseModel):
     justification: str | None = None
 
     assigned_to: str | None = None
+    assigned_to_label: str | None = None
+    assigned_to_is_self: bool = False
+    assigned_to_active: bool = False
     reviewed_by: str | None = None
     last_seen_at: str | None = None
     updated_at: str | None = None
@@ -75,6 +81,34 @@ class InvestigationListResponse(BaseModel):
     limit: int
     offset: int
     items: list[InvestigationRow] = Field(default_factory=list)
+    version_scope: str = "current"
+    posture: list[dict] = Field(default_factory=list)
+
+
+class InvestigationSummaryResponse(BaseModel):
+    """Metrics for exactly the contexts the queue matches (VEX-DASH-004).
+
+    ``total`` equals the list endpoint's ``total`` for the same filters.
+    ``mapped_total`` excludes unresolved mappings and always equals
+    ``affected + not_affected + fixed + under_investigation`` (VEX-DASH-002);
+    ``unresolved_mapping_count`` reports the rest separately.
+    """
+
+    scope: Literal["filtered"] = "filtered"
+    version_scope: str = "current"
+    total: int
+    mapped_total: int
+    affected_count: int
+    not_affected_count: int
+    fixed_count: int
+    under_investigation_count: int
+    needs_review_count: int
+    unresolved_mapping_count: int
+    matched_count: int
+    analyzer_only_count: int
+    vex_only_count: int
+    conflict_review_count: int
+    revalidation_required_count: int
 
 
 class VulnerabilitySection(BaseModel):
@@ -144,13 +178,15 @@ class InternalDecisionSection(BaseModel):
     justification: str | None = None
     impact_statement: str | None = None
     action_statement: str | None = None
+    mitigation: str | None = None
+    fixed_version: str | None = None
     evidence_url: str | None = None
     updated_at: str | None = None
 
 
 class HistoryEntry(BaseModel):
     at: str | None = None
-    kind: Literal["import", "decision"]
+    kind: Literal["import", "decision", "assignment", "mapping"]
     actor: str | None = None
     summary: str | None = None
     previous_status: str | None = None
@@ -166,6 +202,9 @@ class InvestigationDetail(BaseModel):
     project_name: str | None = None
     product_name: str | None = None
     sbom_name: str | None = None
+    sbom_version: str | None = None
+    historical: bool = False
+    analysis_run_id: int | None = None
 
     vulnerability: VulnerabilitySection
     component: ComponentSection
@@ -175,6 +214,8 @@ class InvestigationDetail(BaseModel):
     reconciliation_status: str
     effective_status: str
     history: list[HistoryEntry] = Field(default_factory=list)
+    capabilities: dict = Field(default_factory=dict)
+    previous_decisions: list[dict] = Field(default_factory=list)
     row_version: int = 1
 
 
@@ -198,7 +239,7 @@ class InvestigationDecisionRequest(BaseModel):
     mitigation: str | None = Field(default=None, max_length=2000)
     fixed_version: str | None = Field(default=None, max_length=255)
     evidence_url: str | None = Field(default=None, max_length=2000)
-    assigned_to: str | None = Field(default=None, max_length=255)
+    model_config = ConfigDict(extra="forbid")
 
 
 class InvestigationAssignmentRequest(BaseModel):
@@ -207,7 +248,7 @@ class InvestigationAssignmentRequest(BaseModel):
     row_version: int = Field(ge=1)
     reason: str = Field(min_length=1, max_length=2000)
     #: ``None`` unassigns. Distinct from omitting the field, which is invalid.
-    assigned_to: str | None = Field(default=None, max_length=255)
+    assigned_to: str | None = Field(..., max_length=255)
 
 
 class InvestigationMappingRequest(BaseModel):

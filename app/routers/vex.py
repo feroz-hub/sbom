@@ -9,13 +9,13 @@ from typing import Any
 
 from fastapi import APIRouter, Depends, HTTPException, Query
 from fastapi.responses import Response
-from sqlalchemy import func
+from sqlalchemy import func, or_, select
 from sqlalchemy.orm import Session
 
 from ..core.context import CurrentContext
 from ..core.security import get_current_tenant_context
 from ..db import get_db
-from ..models import VexOverrideAudit
+from ..models import SBOMSource, VexInvestigation, VexOverrideAudit
 from ..services.lifecycle.vex_discovery import discover_and_import_vex_documents
 from ..services.lifecycle.vex_provider import (
     apply_vex_override,
@@ -56,7 +56,7 @@ def upload_vex_document(
         source_name=str(payload.get("source_name") or "Uploaded VEX"),
         source_url=payload.get("source_url"),
         author=payload.get("author"),
-        uploaded_by=payload.get("uploaded_by") or context.actor_label(),
+        uploaded_by=context.actor_label(),
     )
 
 
@@ -85,6 +85,10 @@ def get_vex_report(
     """Return detailed VEX statement evidence for export/UI reports."""
 
     _require_sbom(db, sbom_id, context.tenant_id)
+    if format != "json":
+        from ..models import SBOMSource
+        from ..services.sbom_lifecycle import require_processing
+        require_processing(db.get(SBOMSource, sbom_id), operation="Report generation")
     status_filter = _report_status_filter(report_type)
     if format == "csv":
         content = vex_report_csv(db, sbom_id, status_filter=status_filter)
@@ -107,6 +111,9 @@ def get_vex_report_pack(
     """Download a ZIP pack of VEX JSON and focused CSV reports."""
 
     _require_sbom(db, sbom_id, context.tenant_id)
+    from ..models import SBOMSource
+    from ..services.sbom_lifecycle import require_processing
+    require_processing(db.get(SBOMSource, sbom_id), operation="Report generation")
     buffer = BytesIO()
     with zipfile.ZipFile(buffer, mode="w", compression=zipfile.ZIP_DEFLATED) as zf:
         zf.writestr("vex.json", json.dumps(vex_report(db, sbom_id), indent=2))
@@ -162,6 +169,20 @@ def patch_vex_override(
     component = get_component_for_tenant(db, component_id, context.tenant_id)
     if component is None or (sbom_id is not None and component.sbom_id != sbom_id):
         raise HTTPException(status_code=404, detail="Component not found")
+    from ..services.dashboard_scope import DashboardScope
+    if db.scalar(select(SBOMSource.id).where(SBOMSource.id == component.sbom_id,
+                                           SBOMSource.tenant_id == context.tenant_id,
+                                           SBOMSource.id.in_(DashboardScope(context.tenant_id).eligible_sbom_ids()))) is None:
+        raise HTTPException(403, 'Historical investigation evidence is read-only.')
+    from ..services.vex.identity import canonical_vulnerability
+    previous_context = db.scalar(select(VexInvestigation).where(
+        VexInvestigation.tenant_id == context.tenant_id, VexInvestigation.sbom_id == component.sbom_id,
+        VexInvestigation.component_id == component.id,
+        or_(VexInvestigation.canonical_vulnerability_id == canonical_vulnerability(vulnerability_id).canonical_id,
+            func.upper(func.coalesce(VexInvestigation.aliases_json, '')).contains('"' + vulnerability_id.strip().upper() + '"')),
+    ))
+    if previous_context is not None and not previous_context.is_current:
+        raise HTTPException(403, 'Historical investigation evidence is read-only.')
     statement = apply_vex_override(
         db,
         component_id,

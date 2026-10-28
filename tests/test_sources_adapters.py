@@ -258,8 +258,9 @@ def test_osv_fallback_query_endpoint_used_when_batch_empty(monkeypatch):
                         "database_specific": {"severity": "HIGH", "cwe_ids": ["CWE-79"]},
                         "affected": [
                             {
+                                "package": {"name": "lodash", "ecosystem": "npm"},
                                 "ranges": [
-                                    {"events": [{"introduced": "0"}, {"fixed": "1.2.3"}]},
+                                    {"events": [{"introduced": "0"}, {"fixed": "4.17.21"}]},
                                 ]
                             }
                         ],

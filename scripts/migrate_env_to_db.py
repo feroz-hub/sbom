@@ -116,7 +116,12 @@ def main() -> int:
 
     with SessionLocal() as db:
         # Existing rows, by (provider, label).
-        existing = {(r.provider_name, r.label): r for r in db.query(AiProviderCredential).all()}
+        # Environment migration establishes platform defaults only. Even --force
+        # must never replace a tenant-owned credential with the same provider.
+        existing = {
+            (r.provider_name, r.label): r
+            for r in db.query(AiProviderCredential).filter(AiProviderCredential.tenant_id.is_(None)).all()
+        }
         any_default = any(r.is_default for r in existing.values())
 
         for cfg in enabled_env:

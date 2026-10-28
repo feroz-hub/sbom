@@ -28,6 +28,7 @@ const getAiUsageSummary = vi.fn();
 
 vi.mock('@/lib/api', () => ({
   listAiCredentials: () => listAiCredentials(),
+  listAiProviderModels: () => Promise.resolve([]),
   listAiProviderCatalog: () => listAiProviderCatalog(),
   getAiCredentialSettings: () => getAiCredentialSettings(),
   listAiProviders: () => listAiProviders(),
@@ -59,9 +60,11 @@ describe('AiSettingsPage accessibility', () => {
   it('has zero axe violations on the cached-render state', async () => {
     const { container } = renderWithProviders(<AiSettingsPage />);
     await waitFor(() =>
-      expect(screen.getByRole('heading', { name: /AI Configuration/i })).toBeInTheDocument(),
+      expect(screen.getByRole('heading', { name: /Providers and models/i })).toBeInTheDocument(),
     );
     const results = await axe(container);
     expect(results.violations).toEqual([]);
   });
 });
+
+vi.mock('@/hooks/usePermission', () => ({ usePermission: () => true }));

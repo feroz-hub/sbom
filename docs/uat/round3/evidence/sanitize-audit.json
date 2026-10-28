@@ -1,0 +1,61 @@
+{
+  "filesSanitized": [
+    {
+      "file": "pytest-collection-corrected.log",
+      "beforeSha256": "7df46b86803326c5dcbb8b3da738f9adfad6bea892d6a521ff2c6c8fd0f4c89f",
+      "afterSha256": "caf0270f9f41077587ffd959a613f81968b881180c186ae964f13f91cec8d1ae"
+    },
+    {
+      "file": "backend-partial-nodes.json",
+      "beforeSha256": "b7d9253a90ce7b546386bc15ae1f6ff2934764b0a877fb0f174a35ba7b1bcd5a",
+      "afterSha256": "ebda770cbf9ad40ad8da63737ec2d18b13f7dc2790e46e02881aaafe8a10a48c"
+    },
+    {
+      "file": "pytest-inventory-current.log",
+      "beforeSha256": "0cc4610abbed34ba9125292c54a725d7742f078ce437cc86a4de9b7f75c88ae6",
+      "afterSha256": "882d1a57f526562da52f05863e8e0c7cb6a32362d95f099c53786b7d51246088"
+    },
+    {
+      "file": "pytest-collection-full.log",
+      "beforeSha256": "15800f97a73672077a12a974ce599c9a89902f7b97ec11389ee0e77e2826143d",
+      "afterSha256": "65335ac748f9657523338955cdc135d6314b9c3cbb1288a766267a142add35cf"
+    },
+    {
+      "file": "pytest-inventory-final.log",
+      "beforeSha256": "6ae93d197a1b9977c9d25d73d9e05240c9ca7f276e12f950f156e27010951e8b",
+      "afterSha256": "f2df2ea332a0fa1e569fc2e3d5c36c8d597e674347c0085f70cc1ddcb44254df"
+    },
+    {
+      "file": "pytest-inventory.json",
+      "beforeSha256": "e1bcd1983abae582513b40641a69bb7edc4efed4dce25a889a00923e74430002",
+      "afterSha256": "cd8495604e75e84519802a8f223e16d817ee526882c79e31627baee4e3570e1f"
+    },
+    {
+      "file": "backend-execution-inventory.json",
+      "beforeSha256": "46cf95d13f8cb20196e1bb3981f62e9b2973a57d1fdb10e3cd98bf08eda298f2",
+      "afterSha256": "a3f36437ebde94ffb54b27edcb204375afa7d9a03ee70c5062a383c03975b9af"
+    },
+    {
+      "file": "pytest-full-baseline.log",
+      "beforeSha256": "54f9195c42ef23af900b5916d0e13b8fa5a86143a8c2a9a7867185c828bcbd76",
+      "afterSha256": "ae4268a4193d7601b5373fc1e7e5d552671796a4f486e776c00e3660423bc8c6"
+    },
+    {
+      "file": "pytest-inventory.log",
+      "beforeSha256": "688586551272b3942b7d831ab1bbfd4ada33b7aaecea69b1635d8ada0a3b9d87",
+      "afterSha256": "c94a3cdc1eaf2d2c319bd3fb3df672ba231a167751008ac118efbea0e8c9e451"
+    },
+    {
+      "file": "pytest-full-baseline.xml",
+      "beforeSha256": "ba28933a5132942e5801de41b78e192d9d2567c8ec8c02be91dd60ec2db18996",
+      "afterSha256": "303ee45e90b7906646ea5595df14a9c02206a5d65f6cd3f45b370f17a38ef9b8"
+    },
+    {
+      "file": "pytest-inventory-with-legacy.log",
+      "beforeSha256": "897f7e3f49ec623f04e89369f82660e6fc00c0f19800ef06215b97676e48fb81",
+      "afterSha256": "4f9607e4305db2d1259e6a9519abf07e252df85990cd11e681d2e52cc1ea7e37"
+    }
+  ],
+  "scope": "Only Round3 generated logs/XML/metadata; original evidence and implementation source untouched",
+  "secretsExported": false
+}

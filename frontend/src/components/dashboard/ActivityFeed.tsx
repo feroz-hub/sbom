@@ -1,5 +1,7 @@
 'use client';
 
+import { recordIdLabel } from '@/components/ui/RecordIdDisplay';
+import { PermissionLink } from '@/components/ui/PermissionLink';
 import Link from 'next/link';
 import { useMemo } from 'react';
 import { useQuery } from '@tanstack/react-query';
@@ -25,7 +27,7 @@ import type { AnalysisRun, RecentSbom } from '@/types';
 type FeedItem =
   | {
       kind: 'run';
-      id: number;
+      id: string;
       timestamp: string;
       run: AnalysisRun;
     }
@@ -136,12 +138,12 @@ export function ActivityFeed({ scope, tenantId }: { scope?: DashboardFilterScope
             title="No activity yet"
             description="Uploaded SBOMs and analysis runs will appear here."
             action={
-              <Link
+              <PermissionLink permission="sbom:upload"
                 href={dashboardDrilldownUrl('/sboms', scope)}
                 className="inline-flex items-center gap-1.5 rounded-md bg-primary px-3 py-1.5 text-xs font-medium text-white transition-all duration-base ease-spring hover:-translate-y-px hover:bg-hcl-dark hover:shadow-glow-primary focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-hcl-blue/40"
               >
                 Upload SBOM
-              </Link>
+              </PermissionLink>
             }
             compact
           />
@@ -228,7 +230,7 @@ function FeedRow({ item }: { item: FeedItem }) {
             <span className="font-medium">{status.label}</span>
             <span className="text-hcl-muted"> · </span>
             <span className="text-hcl-muted group-hover:text-primary">
-              {run.sbom_name ?? `Run #${run.id}`}
+              {run.sbom_name ?? recordIdLabel('Run', run.display_id)}
             </span>
           </p>
           <div className="flex flex-wrap items-center gap-x-2 gap-y-0.5 text-[11px] text-hcl-muted">

@@ -1,0 +1,139 @@
+{
+  "readOnly": true,
+  "issues": [
+    {
+      "id": "SBO-54",
+      "title": "Run full backend/frontend regression against latest source and classify baseline failures",
+      "status": "In Progress",
+      "labels": [
+        "Release Blocker",
+        "QA Pending"
+      ],
+      "url": "https://linear.app/sbom-analyzer/issue/SBO-54/run-full-backendfrontend-regression-against-latest-source-and-classify",
+      "updatedAt": "2026-10-20T06:36:05.892Z",
+      "acceptance": "## Acceptance / outcome\n\nRun current FastAPI/Pytest, Vitest, TS, lint, migrations and production build on clean isolated test env. Preserve exact passed/failed/skipped counts, link logs; compare historical 58 baseline failures and discover new regressions. Do not claim green from overlapping focused selections.\n\n## Evidence reference\n\n[https://github.com/feroz-hub/sbom/blob/feat/native-user-management/docs/sbom-auto-repair-phase3-release-validation.md](<https://github.com/feroz-hub/sbom/blob/feat/native-user-management/docs/sbom-auto-repair-phase3-release-validation.md>)\n\nRecord commit/version, date, environment, verification commands and independently reproducible output. Do not alter a production database solely to close this issue.\n\n"
+    },
+    {
+      "id": "SBO-55",
+      "title": "Build and execute full browser E2E acceptance on isolated Ubuntu test tenant",
+      "status": "In Progress",
+      "labels": [
+        "Release Blocker",
+        "QA Pending"
+      ],
+      "url": "https://linear.app/sbom-analyzer/issue/SBO-55/build-and-execute-full-browser-e2e-acceptance-on-isolated-ubuntu-test",
+      "updatedAt": "2026-10-20T06:35:46.127Z",
+      "acceptance": "## Acceptance / outcome\n\nPlaywright real Next.js/FastAPI/PostgreSQL/Redis and Celery flows. Execute scenarios A–I: onboarding, tenant roles, dashboard, inventories, analysis/VEX, AI/jobs, reports, cross-tenant isolation. Attach artifacts/logs and coverage matrix. Avoid modifying live customer records.\n\n## Evidence reference\n\n[https://github.com/feroz-hub/sbom/blob/feat/native-user-management/docs/engineering/phase1-ui-sync-acceptance.md](<https://github.com/feroz-hub/sbom/blob/feat/native-user-management/docs/engineering/phase1-ui-sync-acceptance.md>)\n\nRecord commit/version, date, environment, verification commands and independently reproducible output. Do not alter a production database solely to close this issue.\n\n"
+    },
+    {
+      "id": "SBO-59",
+      "title": "Obtain scope/quality/security sign-off and define SaaS production release criteria",
+      "status": "Todo",
+      "labels": [
+        "Release Blocker",
+        "Decision Needed"
+      ],
+      "url": "https://linear.app/sbom-analyzer/issue/SBO-59/obtain-scopequalitysecurity-sign-off-and-define-saas-production",
+      "updatedAt": "2026-10-20T06:36:10.159Z",
+      "acceptance": "## Acceptance / outcome\n\nConfirm current release features vs deferred recommendations/Graph integration, owner and acceptance criteria, performance/security gates, evidence ledger, decision record, production change window and rollback operator. Release Done only when signed.\n\n## Evidence reference\n\n[https://github.com/feroz-hub/sbom](<https://github.com/feroz-hub/sbom>)\n\nRecord commit/version, date, environment, verification commands and independently reproducible output. Do not alter a production database solely to close this issue.\n\n"
+    },
+    {
+      "id": "SBO-69",
+      "title": "Execute manual Users & Access UAT across six seeded roles and tenant boundaries",
+      "status": "In Progress",
+      "labels": [
+        "QA Pending"
+      ],
+      "url": "https://linear.app/sbom-analyzer/issue/SBO-69/execute-manual-users-and-access-uat-across-six-seeded-roles-and-tenant",
+      "updatedAt": "2026-10-20T06:35:56.386Z",
+      "acceptance": "## Scope / observation (2026-10-19)\n\nUser manually reached `/settings/users` as Olympus Tenant Admin. Screenshot shows Olympus ACTIVE, current membership ACTIVE, four Olympus member entries, verified state, Tenant Admin/Security Analyst/Developer/Viewer role badges, member search, Add Existing Member, Invite New User and audit panels. **Visual display is not proof that controls work.**\n\n## Acceptance / test matrix\n\n* Use six separate synthetic local identities (Admin, Analyst, Developer, Viewer, foreign tenant, Platform) via private `~/.sbom-greenfield-uuid/users.json`. Never put passwords into Linear or logs.\n* Validate directory search, existing member addition, invitation via Mailpit, duplicate detection, role changes, membership/account state, audit, validation/error handling.\n* Confirm UI visibility AND server-side 401/403/404 for prohibited actions, revoked permissions, foreign-tenant isolation and tenant context switching.\n* Preserve four seeded Olympus accounts and foreign/platform accounts; mutation tests use disposable records.\n* Record test IDs, expected/actual, sanitized screenshots/API status and reproducible failures; keep manual UAT pending until human verification, despite reported 13 browser auth regressions.\n* Expand overall UAT via <issue id=\"a0d63c40-cd1a-4cd1-8e70-9aa8ee93226b\" href=\"https://linear.app/sbom-analyzer/issue/SBO-55/build-and-execute-full-browser-e2e-acceptance-on-isolated-ubuntu-test\">SBO-55</issue>, not duplicate every module requirement.\n\n"
+    },
+    {
+      "id": "SBO-70",
+      "title": "UAT-DEF-003: VEX investigation detail/decision response 500 after persisted mutation",
+      "status": "In Review",
+      "labels": [
+        "Release Blocker",
+        "QA Pending",
+        "Bug"
+      ],
+      "url": "https://linear.app/sbom-analyzer/issue/SBO-70/uat-def-003-vex-investigation-detaildecision-response-500-after",
+      "updatedAt": "2026-10-20T04:34:33.056Z",
+      "acceptance": "## Confirmed High-severity UAT defect (2026-10-19)\n\nLocal evidence only: `docs/uat/SBOM_ANALYZER_FULL_UAT_REPORT.md` (2026-10-19, 485 cases, UAT sign-off WITHHELD). Relative evidence paths below are in `docs/uat/evidence/2026-10-19/` in user's Mac checkout; no committed remote artifact verified. No fixes applied by QA. Preserve seeded identities; use disposable fixtures. \n**Reproduce:** Olympus Admin uploads known CycloneDX fixture, runs OSV, GET `/api/vex/investigations/42`: list 200, detail 500. Versioned decision mutation persists (version moves 1→3) but API returns 500; retry with original version also 500 instead of expected 409. Log `ResponseValidationError`.\n**Root cause diagnosed read-only:** `analyzer_evidence.match_confidence` is a float, while `AnalyzerEvidenceSection.match_confidence` requires `str | None`. Reused detail serializer breaks GET, mutation success payload, conflict response. Treat as **one root defect** not three issues.\n**Evidence IDs:** UAT-VEX-DETAIL, UAT-VEX-DECISION, UAT-VEX-STALE; request IDs `96f44f3529bf`, `c6605cd1fc81`; `vex-detail-validation.json`, `diagnose-vex-detail.py`.\n**Fix/acceptance:** define type-correct API contract; stop 5xx serialization, including conflicts; verify state once per mutation, no duplicate effects or unintended retries, exact 200/409/403/404 behavior, concurrent/versioned decisions, assignment and browser details; rerun impacted BLOCKED UAT-VEX-DECISION-UI and assigned Developer cases. **Never auto-retry an HTTP 500 mutation without checking persisted state.** Do not consider production acceptable until fixed/retested.\n\n"
+    },
+    {
+      "id": "SBO-71",
+      "title": "UAT-DEF-006: Dashboard hierarchy UUID selection silently resets to all projects",
+      "status": "In Review",
+      "labels": [
+        "Release Blocker",
+        "QA Pending",
+        "Bug"
+      ],
+      "url": "https://linear.app/sbom-analyzer/issue/SBO-71/uat-def-006-dashboard-hierarchy-uuid-selection-silently-resets-to-all",
+      "updatedAt": "2026-10-20T04:35:04.242Z",
+      "acceptance": "## Confirmed High-severity UUID migration regression (2026-10-19)\n\nLocal evidence only: `docs/uat/SBOM_ANALYZER_FULL_UAT_REPORT.md` (2026-10-19, 485 cases, UAT sign-off WITHHELD). Relative evidence paths below are in `docs/uat/evidence/2026-10-19/` in user's Mac checkout; no committed remote artifact verified. No fixes applied by QA. Preserve seeded identities; use disposable fixtures. \n**Reproduce:** Olympus Admin Dashboard → Project filter → UAT project with UUID. URL changes to `?project=d4828e7c-e71c-40f7-bb6c-dde0f4d48d09` but selection reverts to All projects; scoped summary request never fires and reload loses selection. Direct backend `project_id=<UUID>` returns correctly scoped metrics.\n**Root cause:** `frontend/src/lib/dashboardScopeUrl.ts::positiveId` calls `Number(raw)`, only accepts positive integers. `parseDashboardScope` drops UUID/project then dependent Application/SBOM scope. It risks presenting tenant-wide counts as selected-project counts.\n**Evidence:** UAT-DASHBOARD-FILTER-UI, UAT-DASHBOARD-FILTER-REFRESH, `UAT-dashboard-filter-incomplete.png`.\n**Fix/acceptance:** UUIDv4 public-ID parser throughout URL serialization/state and dependent hierarchy; update obsolete integer-only tests; exercise all Project→Application→SBOM filters, deep-link, reload, tenant switch, invalid/stale UUID, unauthorized scope, actual backend requests and metric totals. Unblock UAT-DASHBOARD-DEPENDENT-FILTERS and <issue id=\"d177a7d2-a799-4582-83c7-a2041760ba56\" href=\"https://linear.app/sbom-analyzer/issue/SBO-26/reconcile-tenant-project-product-sbom-filters-severity-and-drilldowns\">SBO-26</issue> acceptance.\n\n"
+    },
+    {
+      "id": "SBO-72",
+      "title": "UAT-DEF-001: Add Existing Member candidate popup intercepts Cancel button",
+      "status": "In Review",
+      "labels": [
+        "QA Pending",
+        "Bug"
+      ],
+      "url": "https://linear.app/sbom-analyzer/issue/SBO-72/uat-def-001-add-existing-member-candidate-popup-intercepts-cancel",
+      "updatedAt": "2026-10-20T06:34:19.272Z",
+      "acceptance": "## Confirmed Medium UAT UI defect (2026-10-19)\n\nLocal evidence only: `docs/uat/SBOM_ANALYZER_FULL_UAT_REPORT.md` (2026-10-19, 485 cases, UAT sign-off WITHHELD). Relative evidence paths below are in `docs/uat/evidence/2026-10-19/` in user's Mac checkout; no committed remote artifact verified. No fixes applied by QA. Preserve seeded identities; use disposable fixtures. \n**Reproduce:** Olympus Admin → Users & Access → Add Existing Member → search already-present admin → 'No eligible users found for this tenant' → click Cancel. Popup overlays Cancel; Playwright click times out with pointer interception. Escape can dismiss. Candidate backend returns correct 200/empty data.\n**Root cause:** `UserSearchCombobox.tsx` results absolute `top-full z-50` overlaps footer in `TenantUsersAccess.tsx`; popup lacks collision/reserved-space handling.\n**Evidence:** UAT-USER-014, `UAT-USER-014-cancel-overlap.png`, pointer diagnostics.\n**Acceptance:** Cancel remains clickable with empty/populated/error candidates at desktop/mobile; keyboard/Escape focus, dialog behavior and no candidate lookup regression; attach retest evidence.\n\n"
+    },
+    {
+      "id": "SBO-73",
+      "title": "UAT-DEF-002: Decide global IAM account search privacy vs cross-tenant no-enumeration",
+      "status": "Todo",
+      "labels": [
+        "Decision Needed",
+        "Needs Reconciliation",
+        "QA Pending"
+      ],
+      "url": "https://linear.app/sbom-analyzer/issue/SBO-73/uat-def-002-decide-global-iam-account-search-privacy-vs-cross-tenant",
+      "updatedAt": "2026-10-20T06:35:41.594Z",
+      "acceptance": "## Medium security/product acceptance-policy gap (2026-10-19)\n\nLocal evidence only: `docs/uat/SBOM_ANALYZER_FULL_UAT_REPORT.md` (2026-10-19, 485 cases, UAT sign-off WITHHELD). Relative evidence paths below are in `docs/uat/evidence/2026-10-19/` in user's Mac checkout; no committed remote artifact verified. No fixes applied by QA. Preserve seeded identities; use disposable fixtures. \n**Observed:** Isolation Control Tenant Admin (no Olympus membership) uses own-tenant `/api/tenants/{tenant_uuid}/user-candidates?q=olympus`. HTTP 200 returns five global eligible IAM accounts (four Olympus and Platform), including email/display name/account status. Implemented `tenant:user:invite` permission intentionally allows global candidate discovery; Olympus member-directory and business-resource isolation remain enforced. **Do not label this confirmed cross-tenant business-data breach.**\n**Evidence:** UAT-ISOLATION-GLOBAL-CANDIDATES, `app/routers/tenants.py::search_tenant_user_candidates`, `direct-api-cases.json`.\n**Decision required:** Product + security owner explicitly choose (a) accept documented global directory discovery with exposure/consent/audit/rate controls, or (b) exact-email/minimal-fields or scoped invitation flow. Define acceptance criteria before any code change.\n**Acceptance:** written approved policy, threat-model/privacy review, tenant enumeration/rate limits, safe error responses, client UX, direct API tests; update UAT-DEF-002 disposition. No approval implied by issue creation.\n\n"
+    },
+    {
+      "id": "SBO-74",
+      "title": "UAT-DEF-005: Tenant Admin sees KEV catalog sync but API requires Platform Admin",
+      "status": "In Review",
+      "labels": [
+        "QA Pending",
+        "Bug"
+      ],
+      "url": "https://linear.app/sbom-analyzer/issue/SBO-74/uat-def-005-tenant-admin-sees-kev-catalog-sync-but-api-requires",
+      "updatedAt": "2026-10-20T06:34:13.924Z",
+      "acceptance": "## Confirmed Medium permission/UI mismatch (2026-10-19)\n\nLocal evidence only: `docs/uat/SBOM_ANALYZER_FULL_UAT_REPORT.md` (2026-10-19, 485 cases, UAT sign-off WITHHELD). Relative evidence paths below are in `docs/uat/evidence/2026-10-19/` in user's Mac checkout; no committed remote artifact verified. No fixes applied by QA. Preserve seeded identities; use disposable fixtures. \n**Reproduce:** Olympus Tenant Admin opens CISA KEV → Sync KEV Catalog enabled → click → HTTP 403 (`IAM_TENANT_SELECTION_REQUIRED`). Frontend uses `tenant:settings:update` gate; route and service require Platform authority. Valid tenant header still denied. Server correctly prevented tenant from updating global catalog.\n**Evidence:** UAT-KEV-SYNC-UI, request ID `7511a11888d2`, `UAT-kev-admin-sync-denied.png`. Platform Admin dry-ish sync with `prune_stale=false` fetched real 1748 catalog entries, upserted 0.\n**Acceptance:** gate control using matching platform permission, locate in Platform controls or explain unavailable state; retain global server enforcement; direct API tenant 403, Platform allowed, Viewer denied; verify UI disabled/hidden behavior and proper errors.\n\n**Module placement:** CISA KEV is global vulnerability intelligence and belongs in <project id=\"46a321c4-7f3a-47c9-8c53-53f98a41eb28\" href=\"https://linear.app/sbom-analyzer/project/sbom-analyzer-vulnerability-analysis-and-vex-3b1abb71901d\">SBOM Analyzer — Vulnerability Analysis &amp; VEX</project>; Dashboard/UI synchronization and IAM authorization remain related acceptance contexts. Existing global API policy must not be weakened to match the mistaken UI gate.\n\n"
+    },
+    {
+      "id": "SBO-75",
+      "title": "UAT-DEF-004: Native membership confirmation incorrectly references HCL.CS identity",
+      "status": "In Review",
+      "labels": [
+        "QA Pending",
+        "Bug"
+      ],
+      "url": "https://linear.app/sbom-analyzer/issue/SBO-75/uat-def-004-native-membership-confirmation-incorrectly-references",
+      "updatedAt": "2026-10-20T06:34:24.244Z",
+      "acceptance": "## Confirmed Low UX defect (2026-10-19)\n\nLocal evidence only: `docs/uat/SBOM_ANALYZER_FULL_UAT_REPORT.md` (2026-10-19, 485 cases, UAT sign-off WITHHELD). Relative evidence paths below are in `docs/uat/evidence/2026-10-19/` in user's Mac checkout; no committed remote artifact verified. No fixes applied by QA. Preserve seeded identities; use disposable fixtures. \n**Reproduce:** Admin → Users & Access → disposable Native account → Disable membership. Confirmation says 'Their HCL.CS identity ... will remain unchanged' even though Native login enabled and HCL.CS disabled; remove-member dialog shares string. Actual membership mutation passed and did not change global account state/roles.\n**Root source:** `frontend/src/components/admin/MembershipConfirmDialogs.tsx`. Evidence UAT-MEMBERSHIP-PROVIDER-COPY and `UAT-native-membership-confirmation.png`.\n**Acceptance:** provider-neutral identity wording; verify Native/HCL.CS/Entra variants plus existing disable/remove protection and tests. No auth policy change.\n\n"
+    },
+    {
+      "id": "SBO-76",
+      "title": "UAT-DEF-007: Advisor policy version-history serialization incorrectly resolves SBOM source IDs",
+      "status": "In Review",
+      "labels": [
+        "QA Pending",
+        "Bug"
+      ],
+      "url": "https://linear.app/sbom-analyzer/issue/SBO-76/uat-def-007-advisor-policy-version-history-serialization-incorrectly",
+      "updatedAt": "2026-10-20T06:34:08.389Z",
+      "acceptance": "## Confirmed Medium UAT defect (2026-10-19)\n\nLocal evidence only: `docs/uat/SBOM_ANALYZER_FULL_UAT_REPORT.md` (2026-10-19, 485 cases, UAT sign-off WITHHELD). Relative evidence paths below are in `docs/uat/evidence/2026-10-19/` in user's Mac checkout; no committed remote artifact verified. No fixes applied by QA. Preserve seeded identities; use disposable fixtures. \n**Reproduce:** disposable tenant Admin publishes DISABLED trust/accepted-risk/scoring policy (201), then GET `/api/component-advisor/policies/{kind}/versions`; nonempty history HTTP 500 `Unresolvable public resource reference`. Stale policy publish correctly produces 409.\n**Root diagnosis:** `app/public_api.py` globally interprets any path segment `versions` as `sbom_source`, then tries to rewrite policy-specific integer version IDs as SBOM public IDs. No same-tenant SBOM collision existed in test. **Potential incorrect-ID collision is UNTESTED, not confirmed disclosure.**\n**Evidence:** UAT-POLICY-HISTORY-trust, -accepted-risk, -scoring, `policy-history-correlated-log.txt`, `policy-history-diagnosis.json`.\n**Acceptance:** typed, explicit policy version identity contract and route-specific converter; cover empty/nonempty histories, all three policy kinds, platform/tenant scope, version collision, role and isolation, no 500 and correct returned IDs; keep release-scope decision separate (<issue id=\"fccc91ae-2e0d-4921-812f-05871a4f26cb\" href=\"https://linear.app/sbom-analyzer/issue/SBO-40/reconcile-sbo-519-recommendation-stories-to-fr-sca-001024\">SBO-40</issue>/41).\n\n"
+    }
+  ]
+}

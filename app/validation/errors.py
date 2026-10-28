@@ -73,6 +73,8 @@ E045_CREATED_TIMESTAMP_INVALID = "SBOM_VAL_E045_CREATED_TIMESTAMP_INVALID"
 E046_DESCRIBES_RELATIONSHIP_MISSING = "SBOM_VAL_E046_DESCRIBES_RELATIONSHIP_MISSING"
 E047_SPDX_VERSION_FIELD_INCONSISTENT = "SBOM_VAL_E047_SPDX_VERSION_FIELD_INCONSISTENT"
 
+E048_SPDXID_DUPLICATE = "SBOM_VAL_E048_SPDXID_DUPLICATE"
+
 # Stage 4 — Semantic, CycloneDX ---------------------------------------------
 E050_SERIAL_NUMBER_INVALID = "SBOM_VAL_E050_SERIAL_NUMBER_INVALID"
 E051_BOM_REF_DUPLICATE = "SBOM_VAL_E051_BOM_REF_DUPLICATE"
@@ -167,6 +169,7 @@ _CODE_TABLE: dict[str, tuple[int, Severity]] = {
     E045_CREATED_TIMESTAMP_INVALID: (422, Severity.ERROR),
     E046_DESCRIBES_RELATIONSHIP_MISSING: (422, Severity.ERROR),
     E047_SPDX_VERSION_FIELD_INCONSISTENT: (422, Severity.ERROR),
+    E048_SPDXID_DUPLICATE: (422, Severity.ERROR),
     # Stage 4 — CycloneDX
     E050_SERIAL_NUMBER_INVALID: (422, Severity.ERROR),
     E051_BOM_REF_DUPLICATE: (422, Severity.ERROR),
@@ -255,7 +258,8 @@ class ErrorReport(BaseModel):
     Mutated only by the orchestrator and stages — never by callers. The
     orchestrator passes ``self`` into each stage's ``run()`` method which may
     append entries via :meth:`add`. Once ``MAX_ENTRIES`` is reached, further
-    ``add`` calls flip ``truncated=True`` and silently drop the entry.
+    ``add`` calls flip ``truncated=True``. Higher-severity entries replace
+    lower-severity entries so response truncation cannot hide validation failure.
     """
 
     model_config = ConfigDict(arbitrary_types_allowed=True)
@@ -275,10 +279,20 @@ class ErrorReport(BaseModel):
         severity: Severity | None = None,
     ) -> None:
         """Append a new entry. Honours ``MAX_ENTRIES`` truncation."""
+        sev = severity if severity is not None else default_severity_for(code)
         if len(self.entries) >= MAX_ENTRIES:
             self.truncated = True
-            return
-        sev = severity if severity is not None else default_severity_for(code)
+            # Informational/warning noise must never suppress a later blocking
+            # error or turn a failed validation into a success. Retain the
+            # highest severity/status while keeping the response cap unchanged.
+            ranks = {Severity.INFO: 0, Severity.WARNING: 1, Severity.ERROR: 2}
+            incoming = (ranks[sev], _STATUS_PRIORITY.get(status_for(code), 0))
+            victim = next((i for i in range(len(self.entries) - 1, -1, -1)
+                           if (ranks[self.entries[i].severity],
+                               _STATUS_PRIORITY.get(status_for(self.entries[i].code), 0)) < incoming), None)
+            if victim is None:
+                return
+            self.entries.pop(victim)
         self.entries.append(
             ValidationError(
                 code=code,

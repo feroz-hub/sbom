@@ -1,0 +1,1789 @@
+[
+  {
+    "id": "UAT-AUTH-admin",
+    "module": "Authentication",
+    "role": "admin",
+    "preconditions": "Fresh isolated Chrome context; Native Login; TLS validation enabled; greenfield development stack",
+    "steps": "Fresh browser context; sign in; choose authorized tenant if prompted; GET auth/me; inspect cookie flags without values",
+    "expected": "Native Login succeeds with expected role and tenant/platform scope; protected session cookie",
+    "actual": {
+      "status": 200,
+      "me": {
+        "user_id": 1,
+        "email": "admin@olympus.example.test",
+        "roles": [
+          "TENANT_ADMIN"
+        ],
+        "tenant_id": "3a900179-36bf-4b5f-b2e1-2a4a9d06e6af",
+        "is_platform_admin": false,
+        "permissions": [
+          "analysis:read",
+          "analysis:run",
+          "component:read",
+          "component:update",
+          "component_advisor:audit:read",
+          "component_advisor:read",
+          "component_advisor:recommendation:accept",
+          "component_advisor:recommendation:create",
+          "component_advisor:recommendation:review",
+          "dashboard:read",
+          "lifecycle:override",
+          "lifecycle:read",
+          "lifecycle:vendor-record:delete",
+          "lifecycle:vendor-record:read",
+          "lifecycle:vendor-record:write",
+          "product:assign_sbom",
+          "product:create",
+          "product:delete",
+          "product:manage_schedule",
+          "product:read",
+          "product:update",
+          "project:create",
+          "project:delete",
+          "project:read",
+          "project:update",
+          "remediation:close",
+          "remediation:read",
+          "remediation:write",
+          "sbom:delete",
+          "sbom:export",
+          "sbom:read",
+          "sbom:repair:download",
+          "sbom:repair:read",
+          "sbom:repair:revalidate",
+          "sbom:repair:search",
+          "sbom:repair:update",
+          "sbom:update",
+          "sbom:upload",
+          "schedule:read",
+          "schedule:write",
+          "tenant:advisor-policy:read",
+          "tenant:advisor-policy:update",
+          "tenant:ai:read",
+          "tenant:ai:test",
+          "tenant:ai:update",
+          "tenant:lifecycle-provider:read",
+          "tenant:lifecycle-provider:sync",
+          "tenant:lifecycle-provider:test",
+          "tenant:lifecycle-provider:update",
+          "tenant:settings:update",
+          "tenant:user:invite",
+          "tenant:user:read",
+          "tenant:user:update",
+          "vex:read",
+          "vex:write"
+        ]
+      },
+      "cookie": {
+        "present": true,
+        "secure": true,
+        "httpOnly": true,
+        "sameSite": "Lax",
+        "path": "/"
+      }
+    },
+    "api": 200,
+    "status": "PASS",
+    "defect": null,
+    "time": "2026-10-19T15:38:23.032Z"
+  },
+  {
+    "id": "UAT-BUSINESS-SETUP",
+    "module": "Projects and Products",
+    "role": "admin",
+    "preconditions": "Fresh isolated Chrome context; Native Login; TLS validation enabled; greenfield development stack",
+    "steps": "POST uniquely named project and product; no seeded business records modified",
+    "expected": "Create isolated UAT project and product with UUIDs",
+    "actual": {
+      "project": {
+        "status": 201,
+        "id": "d4828e7c-e71c-40f7-bb6c-dde0f4d48d09"
+      },
+      "product": {
+        "status": 201,
+        "id": "60de2b20-c45c-4a49-9b36-e0af7b5790fc"
+      }
+    },
+    "api": 201,
+    "status": "PASS",
+    "defect": null,
+    "time": "2026-10-19T15:37:23.819Z"
+  },
+  {
+    "id": "UAT-PRODUCT-DUPLICATE",
+    "module": "Products",
+    "role": "admin",
+    "preconditions": "Fresh isolated Chrome context; Native Login; TLS validation enabled; greenfield development stack",
+    "steps": "Repeat product creation in disposable project",
+    "expected": "Duplicate product in project receives 409",
+    "actual": {
+      "status": 409,
+      "data": {
+        "detail": "Product name already exists in this project"
+      },
+      "requestId": "558198f09075"
+    },
+    "api": 409,
+    "status": "PASS",
+    "defect": null,
+    "time": "2026-10-19T15:38:23.567Z"
+  },
+  {
+    "id": "UAT-PRODUCT-UPDATE",
+    "module": "Products",
+    "role": "admin",
+    "preconditions": "Fresh isolated Chrome context; Native Login; TLS validation enabled; greenfield development stack",
+    "steps": "PATCH product description; inspect response",
+    "expected": "Product update persists on disposable record",
+    "actual": {
+      "status": 200,
+      "description": "UAT updated product description"
+    },
+    "api": 200,
+    "status": "PASS",
+    "defect": null,
+    "time": "2026-10-19T15:38:23.645Z"
+  },
+  {
+    "id": "UAT-PRODUCT-UI",
+    "module": "Products",
+    "role": "admin",
+    "preconditions": "Fresh isolated Chrome context; Native Login; TLS validation enabled; greenfield development stack",
+    "steps": "Navigate actual product UUID deep link and inspect application",
+    "expected": "Product UUID deep link renders the correct product heading and basic controls; loading posture is not full version-posture acceptance",
+    "actual": {
+      "heading": "UAT Gateway 1792424242404",
+      "text": "SBOM Analyzer\nSearch\nSO\nSynthetic Olympus admin\nProjects\nUAT Gateway 1792424242404\nUpload SBOM\n\nLoading version posture\u2026\n\nNotify me\nPeriodic analysis\n\nLoading\u2026\n\nCurrent SBOM\nCurrent SBOM selection policy\nAUTO\nMANUAL_PIN\n\nAUTO promotes eligible successful analyses in the selected lineage. MANUAL_PIN retains your selected version.\n\nUpload an SBOM before selecting the current version.\n\nApplication Details\nPROJECT\nProject #d4828e7c-e71c-40f7-bb6c-dde0f4d48d09\nSBOMS\n0\nPRODUCT VERSION\n\u2014\nSTATUS\nactive\nDESCRIPTION\nUAT updated product description\nSBOMs\nApplication SBOMs\nID\n\tNAME\n\tLATEST SBOM VERSION\n\tVERSIONS\n\tANALYSIS\n\tCREATED BY\n\tCREATED ON\n\tACTIONS\n\n\n\nNo SBOMs are linked to this application yet.\n\nPrevious\nPage 1\nNext"
+    },
+    "api": null,
+    "status": "PASS",
+    "defect": null,
+    "time": "2026-10-19T15:38:25.925Z"
+  },
+  {
+    "id": "UAT-SBOM-UPLOAD-UI",
+    "module": "SBOM upload and validation",
+    "role": "admin",
+    "preconditions": "Fresh isolated Chrome context; Native Login; TLS validation enabled; greenfield development stack",
+    "steps": "Upload SBOM modal; choose UAT project/application; set name/version; choose actual CycloneDX file; submit",
+    "expected": "Browser file upload accepts valid CycloneDX into disposable application",
+    "actual": {
+      "status": 202,
+      "sbomId": "729992e8-b107-4d3d-96a9-5cac4bcf5f8d",
+      "validationStatus": "valid"
+    },
+    "api": 202,
+    "status": "PASS",
+    "defect": null,
+    "time": "2026-10-19T15:38:28.783Z"
+  },
+  {
+    "id": "UAT-SBOM-COMPONENTS",
+    "module": "SBOM components",
+    "role": "admin",
+    "preconditions": "Fresh isolated Chrome context; Native Login; TLS validation enabled; greenfield development stack",
+    "steps": "Read uploaded SBOM and its components",
+    "expected": "Two uploaded components persist with public UUIDs and correct SBOM scope",
+    "actual": {
+      "sbomStatus": 200,
+      "logicalId": "726c1fa0-74ca-4daa-bb8a-4c7dd5ef55eb",
+      "components": [
+        {
+          "id": "ef09b91c-f21d-420a-9a6c-9b8f43427502",
+          "sbom_id": "729992e8-b107-4d3d-96a9-5cac4bcf5f8d",
+          "bom_ref": "uat-lodash",
+          "component_type": "library",
+          "component_group": null,
+          "name": "lodash",
+          "version": "4.17.20",
+          "purl": "pkg:npm/lodash@4.17.20",
+          "cpe": null,
+          "supplier": "UAT",
+          "scope": null,
+          "created_on": "2026-10-19T15:38:28+00:00",
+          "ecosystem": "npm",
+          "original_name": "lodash",
+          "normalized_name": "lodash",
+          "original_version": "4.17.20",
+          "normalized_version": "4.17.20",
+          "normalized_ecosystem": "npm",
+          "original_purl": "pkg:npm/lodash@4.17.20",
+          "normalized_purl": "pkg:npm/lodash@4.17.20",
+          "purl_type": "npm",
+          "purl_namespace": null,
+          "purl_name": "lodash",
+          "purl_version": "4.17.20",
+          "purl_qualifiers_json": {},
+          "purl_subpath": null,
+          "normalized_cpes": [],
+          "primary_cpe": null,
+          "cpe_evidence_json": {
+            "entries": [],
+            "duplicates_removed": 0
+          },
+          "normalized_supplier": "uat",
+          "normalized_package_key": "npm:lodash:uat",
+          "canonical_identity_confidence": "High",
+          "license": null,
+          "hashes": null,
+          "lifecycle_status": "Unknown",
+          "eos_date": null,
+          "eol_date": null,
+          "eof_date": null,
+          "is_deprecated": false,
+          "deprecated": false,
+          "unsupported": false,
+          "maintenance_status": null,
+          "latest_version": "4.18.1",
+          "latest_supported_version": null,
+          "recommended_version": "4.18.1",
+          "lifecycle_recommendation": "Review upgrade to latest registry version 4.18.1.",
+          "lifecycle_source": "npm registry",
+          "lifecycle_provider": "npm registry",
+          "lifecycle_source_url": "https://www.npmjs.com/package/lodash",
+          "lifecycle_confidence": "Low",
+          "lifecycle_checked_at": "2026-10-19T13:00:01+00:00",
+          "lifecycle_evidence_json": {
+            "dist_tags": {
+              "latest": "4.18.1"
+            },
+            "repository_url": "https://github.com/lodash/lodash",
+            "provider_key": "package_registry",
+            "cache_policy": {
+              "known_days": 14,
+              "unknown_hours": 24,
+              "failure_minutes": 30,
+              "deprecated_days": 7
+            },
+            "deps.dev": {
+              "package": {},
+              "version": {
+                "versionKey": {
+                  "system": "NPM",
+                  "name": "lodash",
+                  "version": "4.17.20"
+                },
+                "isDefault": false,
+                "licenses": [
+                  "MIT"
+                ],
+                "links": [
+                  {
+                    "label": "HOMEPAGE",
+                    "url": "https://lodash.com/"
+                  },
+                  {
+                    "label": "ISSUE_TRACKER",
+                    "url": "https://github.com/lodash/lodash/issues"
+                  },
+                  {
+                    "label": "ORIGIN",
+                    "url": "https://registry.npmjs.org/lodash/4.17.20"
+                  },
+                  {
+                    "label": "SOURCE_REPO",
+                    "url": "git+https://github.com/lodash/lodash.git"
+                  }
+                ],
+                "publishedAt": "2020-08-13T16:53:54Z"
+              },
+              "advisory_count": 5,
+              "advisories": [
+                {
+                  "id": "GHSA-29mw-wpgm-hmr9"
+                },
+                {
+                  "id": "GHSA-35jh-r3h4-6jhm"
+                },
+                {
+                  "id": "GHSA-f23m-r3pf-42rh"
+                },
+                {
+                  "id": "GHSA-r5fr-rjxr-66jc"
+                },
+                {
+                  "id": "GHSA-xxjr-mmjv-4gpg"
+                }
+              ],
+              "provider_key": "deps_dev",
+              "cache_policy": {
+                "known_days": null,
+                "unknown_hours": null,
+                "failure_minutes": null,
+                "deprecated_days": null
+              }
+            },
+            "OSV": {
+              "vulnerability_count": 5,
+              "fixed_versions": [
+                "4.17.21",
+                "4.18.0",
+                "4.17.23"
+              ],
+              "vuln_ids": [
+                "GHSA-29mw-wpgm-hmr9",
+                "GHSA-35jh-r3h4-6jhm",
+                "GHSA-f23m-r3pf-42rh",
+                "GHSA-r5fr-rjxr-66jc",
+                "GHSA-xxjr-mmjv-4gpg"
+              ],
+              "provider_key": "osv",
+              "cache_policy": {
+                "known_days": null,
+                "unknown_hours": null,
+                "failure_minutes": null,
+                "deprecated_days": null
+              }
+            },
+            "provider_outcomes": [
+              {
+                "provider": "npm registry",
+                "provider_key": "package_registry",
+                "status": "Unknown",
+                "error": null,
+                "checked_at": "2026-10-19T13:00:01+00:00"
+              },
+              {
+                "provider": "deps.dev",
+                "provider_key": "deps_dev",
+                "status": "Unknown",
+                "error": null,
+                "checked_at": "2026-10-19T13:00:02+00:00"
+              },
+              {
+                "provider": "OSV",
+                "provider_key": "osv",
+                "status": "Unknown",
+                "error": null,
+                "checked_at": "2026-10-19T13:00:03+00:00"
+              }
+            ],
+            "cache_hit": true,
+            "stale_cache": false,
+            "cache_expires_at": "2026-10-20T13:00:03+00:00",
+            "risk_level": "UNKNOWN"
+          },
+          "lifecycle_is_stale": false,
+          "lifecycle_manual_override": false,
+          "normalized_component_key": "purl:pkg:npm/lodash@4.17.20",
+          "dedupe_canonical_id": "6a93b26b0cb10087f2398a0b111ffb00182be5a47336302f26e22b00bf8899d9",
+          "dedupe_group_id": "6a93b26b0cb10087f2398a0b111ffb00182be5a47336302f26e22b00bf8899d9",
+          "is_duplicate": false,
+          "duplicate_of_component_id": null,
+          "dedupe_reason": "same_normalized_purl",
+          "dedupe_confidence": "High",
+          "normalization_notes_json": [],
+          "dedupe_evidence_json": {
+            "group_key": "purl:pkg:npm/lodash@4.17.20:context:{\"parents\": [\"uat-app\"]}",
+            "canonical_ref": "uat-lodash",
+            "component_refs": [
+              "uat-lodash"
+            ],
+            "identity_confidence": "High"
+          },
+          "canonical_component_name": null,
+          "canonical_component_version": null,
+          "duplicate_reason": null,
+          "eol_eos_date": null,
+          "eol_eos_status": "unknown",
+          "eol_eos_status_label": "Unknown / Not Available"
+        },
+        {
+          "id": "d5760dd9-e307-4238-8ba9-f9ef3b5d5926",
+          "sbom_id": "729992e8-b107-4d3d-96a9-5cac4bcf5f8d",
+          "bom_ref": "uat-app",
+          "component_type": "application",
+          "component_group": null,
+          "name": "uat-gateway",
+          "version": "1.0.0",
+          "purl": "pkg:generic/uat-gateway@1.0.0",
+          "cpe": null,
+          "supplier": "UAT",
+          "scope": null,
+          "created_on": "2026-10-19T15:38:28+00:00",
+          "ecosystem": "generic",
+          "original_name": "uat-gateway",
+          "normalized_name": "uat-gateway",
+          "original_version": "1.0.0",
+          "normalized_version": "1.0.0",
+          "normalized_ecosystem": "generic",
+          "original_purl": "pkg:generic/uat-gateway@1.0.0",
+          "normalized_purl": "pkg:generic/uat-gateway@1.0.0",
+          "purl_type": "generic",
+          "purl_namespace": null,
+          "purl_name": "uat-gateway",
+          "purl_version": "1.0.0",
+          "purl_qualifiers_json": {},
+          "purl_subpath": null,
+          "normalized_cpes": [],
+          "primary_cpe": null,
+          "cpe_evidence_json": {
+            "entries": [],
+            "duplicates_removed": 0
+          },
+          "normalized_supplier": "uat",
+          "normalized_package_key": "generic:uat-gateway:uat",
+          "canonical_identity_confidence": "High",
+          "license": null,
+          "hashes": null,
+          "lifecycle_status": "Unknown",
+          "eos_date": null,
+          "eol_date": null,
+          "eof_date": null,
+          "is_deprecated": false,
+          "deprecated": false,
+          "unsupported": false,
+          "maintenance_status": null,
+          "latest_version": null,
+          "latest_supported_version": null,
+          "recommended_version": null,
+          "lifecycle_recommendation": null,
+          "lifecycle_source": null,
+          "lifecycle_provider": null,
+          "lifecycle_source_url": null,
+          "lifecycle_confidence": "Unknown",
+          "lifecycle_checked_at": "2026-10-19T15:38:28+00:00",
+          "lifecycle_evidence_json": {
+            "provider_outcomes": [],
+            "risk_level": "UNKNOWN"
+          },
+          "lifecycle_is_stale": false,
+          "lifecycle_manual_override": false,
+          "normalized_component_key": "purl:pkg:generic/uat-gateway@1.0.0",
+          "dedupe_canonical_id": "3db58ba5404582f0504b7503a8790ba6ba8fbe26b9d48016b7527a052a6bb8ff",
+          "dedupe_group_id": "3db58ba5404582f0504b7503a8790ba6ba8fbe26b9d48016b7527a052a6bb8ff",
+          "is_duplicate": false,
+          "duplicate_of_component_id": null,
+          "dedupe_reason": "same_normalized_purl",
+          "dedupe_confidence": "High",
+          "normalization_notes_json": [],
+          "dedupe_evidence_json": {
+            "group_key": "purl:pkg:generic/uat-gateway@1.0.0:context:{}",
+            "canonical_ref": "uat-app",
+            "component_refs": [
+              "uat-app"
+            ],
+            "identity_confidence": "High"
+          },
+          "canonical_component_name": null,
+          "canonical_component_version": null,
+          "duplicate_reason": null,
+          "eol_eos_date": null,
+          "eol_eos_status": "unknown",
+          "eol_eos_status_label": "Unknown / Not Available"
+        }
+      ]
+    },
+    "api": 200,
+    "status": "PASS",
+    "defect": null,
+    "time": "2026-10-19T15:38:29.500Z"
+  },
+  {
+    "id": "UAT-SBOM-validation",
+    "module": "SBOM validation and versioning",
+    "role": "admin",
+    "preconditions": "Fresh isolated Chrome context; Native Login; TLS validation enabled; greenfield development stack",
+    "steps": "GET /api/sboms/729992e8-b107-4d3d-96a9-5cac4bcf5f8d/validation-report",
+    "expected": "Uploaded valid SBOM has readable validation result",
+    "actual": {
+      "status": 200,
+      "count": 0,
+      "keys": [
+        "sbom_id",
+        "filename",
+        "status",
+        "failed_stage",
+        "error_count",
+        "warning_count",
+        "info_count",
+        "entries",
+        "validated_at",
+        "spec_detected",
+        "spec_version_detected",
+        "severity_summary",
+        "stage_summary",
+        "truncated",
+        "session_id",
+        "workspace_id",
+        "validation_session_id",
+        "repair_workspace_url",
+        "validation_status",
+        "can_edit"
+      ],
+      "requestId": "821bca4455ac",
+      "data": {
+        "sbom_id": "729992e8-b107-4d3d-96a9-5cac4bcf5f8d",
+        "filename": "UAT SBOM 1792424303035",
+        "status": "validated",
+        "failed_stage": null,
+        "error_count": 0,
+        "warning_count": 0,
+        "info_count": 0,
+        "entries": [],
+        "validated_at": "2026-10-19T15:38:28+00:00",
+        "spec_detected": "cyclonedx",
+        "spec_version_detected": "1.6",
+        "severity_summary": {},
+        "stage_summary": {},
+        "truncated": false,
+        "session_id": "871974c6-fc9b-4d25-8091-5f75d144d13e",
+        "workspace_id": "871974c6-fc9b-4d25-8091-5f75d144d13e",
+        "validation_session_id": "871974c6-fc9b-4d25-8091-5f75d144d13e",
+        "repair_workspace_url": "/repair/871974c6-fc9b-4d25-8091-5f75d144d13e",
+        "validation_status": "valid",
+        "can_edit": true
+      }
+    },
+    "api": 200,
+    "status": "PASS",
+    "defect": null,
+    "time": "2026-10-19T15:38:29.889Z"
+  },
+  {
+    "id": "UAT-SBOM-quality",
+    "module": "SBOM validation and versioning",
+    "role": "admin",
+    "preconditions": "Fresh isolated Chrome context; Native Login; TLS validation enabled; greenfield development stack",
+    "steps": "GET /api/sboms/729992e8-b107-4d3d-96a9-5cac4bcf5f8d/quality",
+    "expected": "Uploaded valid SBOM has readable quality result",
+    "actual": {
+      "status": 200,
+      "count": 0,
+      "keys": [
+        "enabled",
+        "assessment"
+      ],
+      "requestId": "b0a00bbf6abb",
+      "data": {
+        "enabled": true,
+        "assessment": {
+          "overall_score": 79.9,
+          "grade": "FAIR",
+          "dimensions": [
+            {
+              "code": "QD-01",
+              "name": "Schema Compliance",
+              "score": 100,
+              "weight": 20,
+              "finding_count": 0,
+              "metrics": {}
+            },
+            {
+              "code": "QD-02",
+              "name": "Identifier Integrity",
+              "score": 100,
+              "weight": 15,
+              "finding_count": 0,
+              "metrics": {}
+            },
+            {
+              "code": "QD-03",
+              "name": "Dependency Integrity",
+              "score": 100,
+              "weight": 15,
+              "finding_count": 0,
+              "metrics": {
+                "nodes": 1,
+                "edges": 1,
+                "graph_declared": true
+              }
+            },
+            {
+              "code": "QD-04",
+              "name": "Component Completeness",
+              "score": 100,
+              "weight": 15,
+              "finding_count": 0,
+              "metrics": {}
+            },
+            {
+              "code": "QD-05",
+              "name": "PURL Coverage",
+              "score": 100,
+              "weight": 10,
+              "finding_count": 0,
+              "metrics": {
+                "components_total": 2,
+                "eligible": 2,
+                "valid": 2,
+                "coverage_percentage": 100,
+                "missing": 0,
+                "invalid": 0,
+                "not_applicable": 0
+              }
+            },
+            {
+              "code": "QD-06",
+              "name": "CPE Coverage",
+              "score": 0,
+              "weight": 5,
+              "finding_count": 1,
+              "metrics": {
+                "components_total": 2,
+                "not_applicable": 1,
+                "eligible": 1,
+                "missing": 1,
+                "coverage_percentage": 0,
+                "valid": 0,
+                "invalid": 0
+              }
+            },
+            {
+              "code": "QD-07",
+              "name": "License Completeness",
+              "score": 0,
+              "weight": 7.5,
+              "finding_count": 2,
+              "metrics": {
+                "components_total": 2,
+                "eligible": 2,
+                "missing": 2,
+                "coverage_percentage": 0,
+                "valid": 0,
+                "invalid": 0,
+                "not_applicable": 0
+              }
+            },
+            {
+              "code": "QD-08",
+              "name": "Hash Coverage",
+              "score": 0,
+              "weight": 5,
+              "finding_count": 2,
+              "metrics": {
+                "components_total": 2,
+                "eligible": 2,
+                "components_without_hashes": 2,
+                "missing": 2,
+                "coverage_percentage": 0,
+                "components_with_hashes": 0,
+                "invalid_hash_values": 0,
+                "unsupported_algorithms": 0,
+                "valid": 0,
+                "invalid": 0,
+                "not_applicable": 0
+              }
+            },
+            {
+              "code": "QD-09",
+              "name": "Metadata Completeness",
+              "score": 65,
+              "weight": 7.5,
+              "finding_count": 2,
+              "metrics": {}
+            }
+          ],
+          "findings": [
+            {
+              "code": "QUALITY_LICENSES_MISSING",
+              "dimension": "QD-07",
+              "severity": "MINOR",
+              "path": "/components/1/licenses",
+              "message": "Eligible component has missing licenses.",
+              "remediation": "Provide verified metadata from the producer; unknown values cannot be invented.",
+              "repairable": false,
+              "repairability_assessed": true,
+              "repair_classification": "MANUAL_ONLY",
+              "quality_impact": 50
+            },
+            {
+              "code": "QUALITY_HASHES_MISSING",
+              "dimension": "QD-08",
+              "severity": "MINOR",
+              "path": "/components/1/hashes",
+              "message": "Eligible component has missing hashes.",
+              "remediation": "Provide verified metadata from the producer; unknown values cannot be invented.",
+              "repairable": false,
+              "repairability_assessed": true,
+              "repair_classification": "MANUAL_ONLY",
+              "quality_impact": 50
+            },
+            {
+              "code": "QUALITY_CPE_MISSING",
+              "dimension": "QD-06",
+              "severity": "MINOR",
+              "path": "/components/0/cpe",
+              "message": "Eligible component has missing cpe.",
+              "remediation": "Provide verified metadata from the producer; unknown values cannot be invented.",
+              "repairable": false,
+              "repairability_assessed": true,
+              "repair_classification": "MANUAL_ONLY",
+              "quality_impact": 100
+            },
+            {
+              "code": "QUALITY_LICENSES_MISSING",
+              "dimension": "QD-07",
+              "severity": "MINOR",
+              "path": "/components/0/licenses",
+              "message": "Eligible component has missing licenses.",
+              "remediation": "Provide verified metadata from the producer; unknown values cannot be invented.",
+              "repairable": false,
+              "repairability_assessed": true,
+              "repair_classification": "MANUAL_ONLY",
+              "quality_impact": 50
+            },
+            {
+              "code": "QUALITY_HASHES_MISSING",
+              "dimension": "QD-08",
+              "severity": "MINOR",
+              "path": "/components/0/hashes",
+              "message": "Eligible component has missing hashes.",
+              "remediation": "Provide verified metadata from the producer; unknown values cannot be invented.",
+              "repairable": false,
+              "repairability_assessed": true,
+              "repair_classification": "MANUAL_ONLY",
+              "quality_impact": 50
+            },
+            {
+              "code": "QUALITY_METADATA_COMPONENT_MISSING",
+              "dimension": "QD-09",
+              "severity": "MINOR",
+              "path": "/metadata/component",
+              "message": "Optional useful component metadata is missing or invalid.",
+              "remediation": "Provide it when known and meaningful to the document context.",
+              "repairable": false,
+              "repairability_assessed": true,
+              "repair_classification": "MANUAL_ONLY",
+              "quality_impact": 25
+            },
+            {
+              "code": "QUALITY_METADATA_PRODUCER_MISSING",
+              "dimension": "QD-09",
+              "severity": "MINOR",
+              "path": "/metadata/producer",
+              "message": "Optional useful producer metadata is missing or invalid.",
+              "remediation": "Provide it when known and meaningful to the document context.",
+              "repairable": false,
+              "repairability_assessed": true,
+              "repair_classification": "MANUAL_ONLY",
+              "quality_impact": 10
+            }
+          ],
+          "calculated_at": "2026-10-19T15:38:29.956374Z",
+          "engine_version": "2.0.0",
+          "artifact_hash": "63f25f2db907112bd3a7464358e6ce698590278ae694c720172176bbad3b2918",
+          "configuration_hash": "7ad61f12cc0c0aa29171a51c117fba3862c072c4d92ce37866cca4254caa8491",
+          "configuration": {
+            "weights": {
+              "QD-01": 20,
+              "QD-02": 15,
+              "QD-03": 15,
+              "QD-04": 15,
+              "QD-05": 10,
+              "QD-06": 5,
+              "QD-07": 7.5,
+              "QD-08": 5,
+              "QD-09": 7.5
+            },
+            "thresholds": {
+              "EXCELLENT": 90,
+              "GOOD": 80,
+              "FAIR": 70,
+              "POOR": 50,
+              "CRITICAL_QUALITY": 0
+            },
+            "max_bytes": 52428800,
+            "max_findings": 500,
+            "repair_enabled": true
+          },
+          "format": "CYCLONEDX_JSON",
+          "spec_version": "1.6",
+          "validation_status": "PASSED",
+          "validation_report_truncated": false,
+          "supported": true,
+          "reason": null,
+          "findings_truncated": false
+        }
+      }
+    },
+    "api": 200,
+    "status": "PASS",
+    "defect": null,
+    "time": "2026-10-19T15:38:29.991Z"
+  },
+  {
+    "id": "UAT-SBOM-lifecycle",
+    "module": "Lifecycle",
+    "role": "admin",
+    "preconditions": "Fresh isolated Chrome context; Native Login; TLS validation enabled; greenfield development stack",
+    "steps": "GET /api/sboms/729992e8-b107-4d3d-96a9-5cac4bcf5f8d/lifecycle",
+    "expected": "Uploaded valid SBOM has readable lifecycle result",
+    "actual": {
+      "status": 200,
+      "count": 2,
+      "total": 2,
+      "keys": [
+        "sbom_id",
+        "page",
+        "page_size",
+        "total",
+        "items"
+      ],
+      "requestId": "99baa911eb99"
+    },
+    "api": 200,
+    "status": "PASS",
+    "defect": null,
+    "time": "2026-10-19T15:38:30.061Z"
+  },
+  {
+    "id": "UAT-SBOM-logical",
+    "module": "SBOM validation and versioning",
+    "role": "admin",
+    "preconditions": "Fresh isolated Chrome context; Native Login; TLS validation enabled; greenfield development stack",
+    "steps": "GET /api/logical-sboms/726c1fa0-74ca-4daa-bb8a-4c7dd5ef55eb",
+    "expected": "Uploaded valid SBOM has readable logical result",
+    "actual": {
+      "status": 200,
+      "count": 0,
+      "keys": [
+        "id",
+        "tenant_id",
+        "product_id",
+        "name",
+        "description",
+        "created_by",
+        "created_at",
+        "updated_at",
+        "version_count",
+        "latest_version",
+        "version_ordering"
+      ],
+      "requestId": "4fc603e6d627"
+    },
+    "api": 200,
+    "status": "PASS",
+    "defect": null,
+    "time": "2026-10-19T15:38:30.162Z"
+  },
+  {
+    "id": "UAT-OSV-ANALYSIS",
+    "module": "Vulnerability analysis and OSV",
+    "role": "admin",
+    "preconditions": "Fresh isolated Chrome context; Native Login; TLS validation enabled; greenfield development stack",
+    "steps": "POST real analyze/stream for UAT SBOM; consume complete event; use configured OSV integration",
+    "expected": "Real OSV analysis completes with OK/FINDINGS and zero source errors",
+    "actual": {
+      "status": 200,
+      "complete": [
+        {
+          "runId": 21,
+          "status": "FINDINGS",
+          "total": 5,
+          "critical": 0,
+          "high": 2,
+          "medium": 3,
+          "low": 0,
+          "unknown": 0,
+          "errors": 0,
+          "duration_ms": 1265,
+          "provider_status": []
+        }
+      ],
+      "eventTypes": [
+        "event: progress",
+        "event: complete"
+      ],
+      "scope_note": "Real application run with OSV selected. Persisted source=OSV confirmed separately. Outbound TLS exchange vs provider cache was not separately traced."
+    },
+    "api": 200,
+    "status": "PASS",
+    "defect": null,
+    "time": "2026-10-19T15:38:32.131Z"
+  },
+  {
+    "id": "UAT-ANALYSIS-PERSISTENCE",
+    "module": "Vulnerability analysis and OSV",
+    "role": "admin",
+    "preconditions": "Fresh isolated Chrome context; Native Login; TLS validation enabled; greenfield development stack",
+    "steps": "Read persisted analysis runs after completion",
+    "expected": "Completed analysis persists against UAT SBOM UUID",
+    "actual": {
+      "status": 200,
+      "count": 1,
+      "requestId": "b0707ba1e0ae",
+      "runs": [
+        {
+          "id": 21,
+          "sbom_id": "729992e8-b107-4d3d-96a9-5cac4bcf5f8d",
+          "total_findings": 5
+        }
+      ]
+    },
+    "api": 200,
+    "status": "PASS",
+    "defect": null,
+    "time": "2026-10-19T15:38:32.340Z"
+  },
+  {
+    "id": "UAT-VEX-CONTEXT",
+    "module": "VEX Investigation",
+    "role": "admin",
+    "preconditions": "Fresh isolated Chrome context; Native Login; TLS validation enabled; greenfield development stack",
+    "steps": "Read investigations scoped to UAT SBOM",
+    "expected": "Analyzed vulnerable UAT component creates contextual investigations",
+    "actual": {
+      "status": 200,
+      "count": 5,
+      "total": 5,
+      "keys": [
+        "total",
+        "limit",
+        "offset",
+        "items",
+        "version_scope",
+        "posture"
+      ],
+      "requestId": "16891de4698a",
+      "contexts": [
+        {
+          "id": 42,
+          "canonical_vulnerability_id": "CVE-2020-28500",
+          "effective_status": "UNDER_INVESTIGATION",
+          "row_version": 1
+        },
+        {
+          "id": 43,
+          "canonical_vulnerability_id": "CVE-2021-23337",
+          "effective_status": "UNDER_INVESTIGATION",
+          "row_version": 1
+        },
+        {
+          "id": 44,
+          "canonical_vulnerability_id": "CVE-2025-13465",
+          "effective_status": "UNDER_INVESTIGATION",
+          "row_version": 1
+        },
+        {
+          "id": 45,
+          "canonical_vulnerability_id": "CVE-2026-2950",
+          "effective_status": "UNDER_INVESTIGATION",
+          "row_version": 1
+        },
+        {
+          "id": 46,
+          "canonical_vulnerability_id": "CVE-2026-4800",
+          "effective_status": "UNDER_INVESTIGATION",
+          "row_version": 1
+        }
+      ]
+    },
+    "api": 200,
+    "status": "PASS",
+    "defect": null,
+    "time": "2026-10-19T15:38:32.971Z"
+  },
+  {
+    "id": "UAT-VEX-DECISION",
+    "module": "VEX Investigation",
+    "role": "admin",
+    "preconditions": "Fresh isolated Chrome context; Native Login; TLS validation enabled; greenfield development stack",
+    "steps": "Record decision only on UAT-generated investigation",
+    "expected": "Authorized decision persists with optimistic concurrency and audit",
+    "actual": {
+      "status": 422,
+      "count": 0,
+      "keys": [
+        "detail"
+      ],
+      "error": {
+        "detail": [
+          {
+            "type": "missing",
+            "loc": [
+              "body",
+              "row_version"
+            ],
+            "msg": "Field required",
+            "input": {
+              "status": "UNDER_INVESTIGATION",
+              "reason": "UAT disposable investigation review"
+            }
+          }
+        ]
+      },
+      "requestId": "622b48c3204d"
+    },
+    "api": 422,
+    "status": "FAIL",
+    "defect": null,
+    "time": "2026-10-19T15:38:34.080Z"
+  },
+  {
+    "id": "UAT-VEX-STALE",
+    "module": "VEX Investigation",
+    "role": "admin",
+    "preconditions": "Fresh isolated Chrome context; Native Login; TLS validation enabled; greenfield development stack",
+    "steps": "Retry same UAT context with previous row_version",
+    "expected": "Stale decision returns 409 without overwriting latest determination",
+    "actual": {
+      "status": 422,
+      "count": 0,
+      "keys": [
+        "detail"
+      ],
+      "error": {
+        "detail": [
+          {
+            "type": "missing",
+            "loc": [
+              "body",
+              "row_version"
+            ],
+            "msg": "Field required",
+            "input": {
+              "status": "AFFECTED",
+              "reason": "UAT deliberately stale decision"
+            }
+          }
+        ]
+      },
+      "requestId": "85f06e2d8e54"
+    },
+    "api": 422,
+    "status": "FAIL",
+    "defect": null,
+    "time": "2026-10-19T15:38:34.127Z"
+  },
+  {
+    "id": "UAT-VEX-VALIDATION",
+    "module": "VEX Investigation",
+    "role": "admin",
+    "preconditions": "Fresh isolated Chrome context; Native Login; TLS validation enabled; greenfield development stack",
+    "steps": "Submit unsupported NOT_AFFECTED determination on disposable context",
+    "expected": "NOT_AFFECTED without required justification/impact is rejected",
+    "actual": {
+      "status": 422,
+      "count": 0,
+      "keys": [
+        "detail"
+      ],
+      "error": {
+        "detail": [
+          {
+            "type": "missing",
+            "loc": [
+              "body",
+              "row_version"
+            ],
+            "msg": "Field required",
+            "input": {
+              "status": "NOT_AFFECTED",
+              "reason": "UAT missing justification"
+            }
+          }
+        ]
+      },
+      "requestId": "8904493c6f72"
+    },
+    "api": 422,
+    "status": "PASS",
+    "defect": null,
+    "time": "2026-10-19T15:38:34.966Z"
+  },
+  {
+    "id": "UAT-REPORT-PREVIEW",
+    "module": "Reports and notifications",
+    "role": "admin",
+    "preconditions": "Fresh isolated Chrome context; Native Login; TLS validation enabled; greenfield development stack",
+    "steps": "Preview report for disposable SBOM",
+    "expected": "Report preview resolves only UAT SBOM scope",
+    "actual": {
+      "status": 200,
+      "count": 0,
+      "keys": [
+        "subject",
+        "text_body",
+        "html_body",
+        "report"
+      ],
+      "requestId": "c8733513f8e1",
+      "data": {
+        "subject": "SBOM security digest \u00b7 SBOM \u00b7 2026-10-19",
+        "text_body": "SBOM security digest \u00b7 SBOM \u00b7 2026-10-19\n\nReporting window\nField | Value\ntenant_id | 3a900179-36bf-4b5f-b2e1-2a4a9d06e6af\nschema_version | 1\ncycle_start | 2026-10-19T15:38:35.079171+00:00\ncycle_end | 2026-10-19T15:38:35.079171+00:00\ngenerated_at | 2026-10-19T15:38:35.166096+00:00\ntimezone | UTC\nscope | SBOM\nruns_considered | 1\nseverity_floor | ALL\n\nPortfolio summary \u00b7 Convention A\nMetric | Value\ntotal_sboms | 1\nsuccessful_sboms | 1\ntotal_components | 2\ntotal_findings | 5\nseverity | {\"CRITICAL\": 0, \"HIGH\": 2, \"LOW\": 0, \"MEDIUM\": 3, \"UNKNOWN\": 0}\nkev_findings | 0\nkev_distinct_cves | 0\nfix_available_count | 5\nfix_available_pct | 100.0\nvex_reduced_count | 0\nlifecycle | {\"deprecated_count\": 0, \"eof_count\": 0, \"eol_count\": 0, \"eol_soon_count\": 0, \"eos_count\": 0, \"possibly_unmaintained_count\": 0, \"stale_lifecycle_count\": 0, \"supported_count\": 0, \"unknown_count\": 2, \"unsupported_count\": 0}\nepss_outlook | {\"assumption\": \"independent\", \"coverage\": 0.0, \"distinct_cves\": 5, \"probability_30d\": 0.0, \"scored_cves\": 0}\n\nCoverage\nResolved SBOMs | Included in detail | Omitted by cap\n1 | 1 | 0\n\nSBOM results\nSBOM | Version | Run ID | Successful status | Latest attempt | Findings\nUAT SBOM 1792424303035 | 1.0.0 | 21 | FINDINGS | FINDINGS | 5\n\nTop risks \u00b7 KEV \u2192 EPSS \u2192 CVSS\nSBOM | Vulnerability | Component | Severity | KEV | EPSS | CVSS\nUAT SBOM 1792424303035 | CVE-2026-4800 | lodash | HIGH | False | \u2014 | 8.1\nUAT SBOM 1792424303035 | CVE-2021-23337 | lodash | HIGH | False | \u2014 | 7.2\nUAT SBOM 1792424303035 | CVE-2026-2950 | lodash | MEDIUM | False | \u2014 | 6.5\nUAT SBOM 1792424303035 | CVE-2025-13465 | lodash | MEDIUM | False | \u2014 | 6.5\nUAT SBOM 1792424303035 | CVE-2020-28500 | lodash | MEDIUM | False | \u2014 | 5.3\n\nInterpretation and limitations\nNote\nPart A: canonical component-vulnerability findings in the latest successful run per active SBOM head (Convention A).\nParts B/C/D: distinct canonical vulnerability, component name and version (Convention B); not raw provider observations.\nKEV and EPSS are current local enrichment, not historical scan snapshots. Newly KEV since baseline is unavailable.\nEPSS outlook assumes independent exploitation probabilities; missing scores are not evidence of no risk. Review coverage.\nVEX not_affected/fixed reduce actionable exposure separately; they do not mean a vulnerability was not found.\nSeverity floor filters finding detail only. Headline counts and comparison totals are unfiltered.\nThe executive PDF/email contain headlines; full finding and component detail is in the Excel and JSON artifacts. All timestamps are UTC (offset +00:00).",
+        "html_body": "<html><body style='margin:0; padding:0; background-color:#eef1f4; font-family:\"Segoe UI\", Arial, sans-serif;'><table role='presentation' width='100%' cellpadding='0' cellspacing='0' style='background-color:#eef1f4; padding:32px 0;'><tr><td align='center'><table role='presentation' width='680' cellpadding='0' cellspacing='0' style='background-color:#ffffff; border-radius:8px; overflow:hidden;'><tr><td style='background-color:#0f2a3d; padding:28px 36px;'><table role='presentation' width='100%' cellpadding='0' cellspacing='0'><tr><td style='color:#ffffff; font-size:13px; letter-spacing:0.3px; font-weight:600;'>SBOM ANALYSIS REPORT</td><td align='right' style='color:#9fb8c8; font-size:12px;'>Generated 2026-10-19 \u00b7 15:38 UTC</td></tr></table><div style='color:#ffffff; font-size:22px; font-weight:600; margin-top:10px;'>SBOM scope &nbsp;&mdash;&nbsp; security posture</div><div style='color:#9fb8c8; font-size:13px; margin-top:4px;'>Cycle 2026-10-19 &rarr; 2026-10-19 &middot; 1 runs considered &middot; severity floor ALL</div></td></tr><tr><td style='padding:16px 36px 0 36px;'><table role='presentation' width='100%' cellpadding='0' cellspacing='0' style='font-size:12.5px; background-color:#eef4fb; border-radius:6px;'><tr><td style='padding:10px 14px; color:#1e4d78;'>No earlier successful run is available to compare against, so this digest shows the complete security baseline instead of a delta.</td></tr></table></td></tr><tr><td style='padding:22px 36px 8px 36px;'><table role='presentation' width='100%' cellpadding='0' cellspacing='0'><tr><td align='center' style='padding:14px 4px; border-right:1px solid #eceff1;'><div style='font-size:22px; font-weight:700; color:#0f2a3d;'>1</div><div style='font-size:10.5px; color:#64748b; margin-top:2px;'>SBOMS IN SCOPE</div></td><td align='center' style='padding:14px 4px; border-right:1px solid #eceff1;'><div style='font-size:22px; font-weight:700; color:#0f2a3d;'>5</div><div style='font-size:10.5px; color:#64748b; margin-top:2px;'>TOTAL FINDINGS</div></td><td align='center' style='padding:14px 4px; border-right:1px solid #eceff1;'><div style='font-size:22px; font-weight:700; color:#0f2a3d;'>2</div><div style='font-size:10.5px; color:#64748b; margin-top:2px;'>TOTAL COMPONENTS</div></td><td align='center' style='padding:14px 4px; border-right:1px solid #eceff1;'><div style='font-size:22px; font-weight:700; color:#c0392b;'>2</div><div style='font-size:10.5px; color:#64748b; margin-top:2px;'>CRITICAL/HIGH</div></td><td align='center' style='padding:14px 4px; border-right:1px solid #eceff1;'><div style='font-size:22px; font-weight:700; color:#0f2a3d;'>0</div><div style='font-size:10.5px; color:#64748b; margin-top:2px;'>KEV FINDINGS</div></td></tr></table></td></tr><tr><td style='padding:8px 36px;'><hr style='border:none; border-top:1px solid #eceff1;'></td></tr><tr><td style='padding:20px 36px 4px 36px;'><div style='font-size:15px; font-weight:600; color:#1a1a1a; margin:0 0 10px 0;'>Top risks \u00b7 KEV \u2192 EPSS \u2192 CVSS</div><table role='presentation' width='100%' cellpadding='0' cellspacing='0' style='font-size:12.5px; border-collapse:collapse;'><tr style='background-color:#f8f9fb;'><td style='padding:8px 8px; color:#64748b; font-weight:600; border-bottom:1px solid #eceff1;'>SBOM</td><td style='padding:8px 8px; color:#64748b; font-weight:600; border-bottom:1px solid #eceff1;'>Vulnerability</td><td style='padding:8px 8px; color:#64748b; font-weight:600; border-bottom:1px solid #eceff1;'>Component</td><td style='padding:8px 8px; color:#64748b; font-weight:600; border-bottom:1px solid #eceff1;'>CVSS</td><td style='padding:8px 8px; color:#64748b; font-weight:600; border-bottom:1px solid #eceff1;'>Exploit status</td><td style='padding:8px 8px; color:#64748b; font-weight:600; border-bottom:1px solid #eceff1;'>EPSS</td><td style='padding:8px 8px; color:#64748b; font-weight:600; border-bottom:1px solid #eceff1;'>Fix available</td></tr><tr><td style='padding:9px 8px; border-bottom:1px solid #f1f3f5; color:#334155; vertical-align:top;'>UAT SBOM 1792424303035</td><td style='padding:9px 8px; border-bottom:1px solid #f1f3f5; color:#334155; vertical-align:top;'>CVE-2026-4800</td><td style='padding:9px 8px; border-bottom:1px solid #f1f3f5; color:#334155; vertical-align:top;'>lodash</td><td style='padding:9px 8px; border-bottom:1px solid #f1f3f5; color:#334155; vertical-align:top;'><span style='background-color:#fdf3e3; color:#b7791f; padding:2px 7px; border-radius:10px; font-weight:600; white-space:nowrap;'>8.1 HIGH</span></td><td style='padding:9px 8px; border-bottom:1px solid #f1f3f5; color:#334155; vertical-align:top;'>\u2014</td><td style='padding:9px 8px; border-bottom:1px solid #f1f3f5; color:#334155; vertical-align:top;'>\u2014</td><td style='padding:9px 8px; border-bottom:1px solid #f1f3f5; color:#334155; vertical-align:top;'>True</td></tr><tr><td style='padding:9px 8px; border-bottom:1px solid #f1f3f5; color:#334155; vertical-align:top;'>UAT SBOM 1792424303035</td><td style='padding:9px 8px; border-bottom:1px solid #f1f3f5; color:#334155; vertical-align:top;'>CVE-2021-23337</td><td style='padding:9px 8px; border-bottom:1px solid #f1f3f5; color:#334155; vertical-align:top;'>lodash</td><td style='padding:9px 8px; border-bottom:1px solid #f1f3f5; color:#334155; vertical-align:top;'><span style='background-color:#fdf3e3; color:#b7791f; padding:2px 7px; border-radius:10px; font-weight:600; white-space:nowrap;'>7.2 HIGH</span></td><td style='padding:9px 8px; border-bottom:1px solid #f1f3f5; color:#334155; vertical-align:top;'>\u2014</td><td style='padding:9px 8px; border-bottom:1px solid #f1f3f5; color:#334155; vertical-align:top;'>\u2014</td><td style='padding:9px 8px; border-bottom:1px solid #f1f3f5; color:#334155; vertical-align:top;'>True</td></tr><tr><td style='padding:9px 8px; border-bottom:1px solid #f1f3f5; color:#334155; vertical-align:top;'>UAT SBOM 1792424303035</td><td style='padding:9px 8px; border-bottom:1px solid #f1f3f5; color:#334155; vertical-align:top;'>CVE-2026-2950</td><td style='padding:9px 8px; border-bottom:1px solid #f1f3f5; color:#334155; vertical-align:top;'>lodash</td><td style='padding:9px 8px; border-bottom:1px solid #f1f3f5; color:#334155; vertical-align:top;'><span style='background-color:#fdf3e3; color:#b7791f; padding:2px 7px; border-radius:10px; font-weight:600; white-space:nowrap;'>6.5 MED</span></td><td style='padding:9px 8px; border-bottom:1px solid #f1f3f5; color:#334155; vertical-align:top;'>\u2014</td><td style='padding:9px 8px; border-bottom:1px solid #f1f3f5; color:#334155; vertical-align:top;'>\u2014</td><td style='padding:9px 8px; border-bottom:1px solid #f1f3f5; color:#334155; vertical-align:top;'>True</td></tr><tr><td style='padding:9px 8px; border-bottom:1px solid #f1f3f5; color:#334155; vertical-align:top;'>UAT SBOM 1792424303035</td><td style='padding:9px 8px; border-bottom:1px solid #f1f3f5; color:#334155; vertical-align:top;'>CVE-2025-13465</td><td style='padding:9px 8px; border-bottom:1px solid #f1f3f5; color:#334155; vertical-align:top;'>lodash</td><td style='padding:9px 8px; border-bottom:1px solid #f1f3f5; color:#334155; vertical-align:top;'><span style='background-color:#fdf3e3; color:#b7791f; padding:2px 7px; border-radius:10px; font-weight:600; white-space:nowrap;'>6.5 MED</span></td><td style='padding:9px 8px; border-bottom:1px solid #f1f3f5; color:#334155; vertical-align:top;'>\u2014</td><td style='padding:9px 8px; border-bottom:1px solid #f1f3f5; color:#334155; vertical-align:top;'>\u2014</td><td style='padding:9px 8px; border-bottom:1px solid #f1f3f5; color:#334155; vertical-align:top;'>True</td></tr><tr><td style='padding:9px 8px; border-bottom:1px solid #f1f3f5; color:#334155; vertical-align:top;'>UAT SBOM 1792424303035</td><td style='padding:9px 8px; border-bottom:1px solid #f1f3f5; color:#334155; vertical-align:top;'>CVE-2020-28500</td><td style='padding:9px 8px; border-bottom:1px solid #f1f3f5; color:#334155; vertical-align:top;'>lodash</td><td style='padding:9px 8px; border-bottom:1px solid #f1f3f5; color:#334155; vertical-align:top;'><span style='background-color:#fdf3e3; color:#b7791f; padding:2px 7px; border-radius:10px; font-weight:600; white-space:nowrap;'>5.3 MED</span></td><td style='padding:9px 8px; border-bottom:1px solid #f1f3f5; color:#334155; vertical-align:top;'>\u2014</td><td style='padding:9px 8px; border-bottom:1px solid #f1f3f5; color:#334155; vertical-align:top;'>\u2014</td><td style='padding:9px 8px; border-bottom:1px solid #f1f3f5; color:#334155; vertical-align:top;'>True</td></tr></table></td></tr><tr><td style='padding:20px 36px 4px 36px;'><div style='font-size:15px; font-weight:600; color:#1a1a1a; margin:0 0 10px 0;'>SBOM results (1 of 1 in scope)</div><table role='presentation' width='100%' cellpadding='0' cellspacing='0' style='font-size:12.5px; border-collapse:collapse;'><tr style='background-color:#f8f9fb;'><td style='padding:8px 8px; color:#64748b; font-weight:600; border-bottom:1px solid #eceff1;'>SBOM</td><td style='padding:8px 8px; color:#64748b; font-weight:600; border-bottom:1px solid #eceff1;'>Version</td><td style='padding:8px 8px; color:#64748b; font-weight:600; border-bottom:1px solid #eceff1;'>Run</td><td style='padding:8px 8px; color:#64748b; font-weight:600; border-bottom:1px solid #eceff1;'>Status</td><td style='padding:8px 8px; color:#64748b; font-weight:600; border-bottom:1px solid #eceff1;'>Findings</td></tr><tr><td style='padding:9px 8px; border-bottom:1px solid #f1f3f5; color:#334155; vertical-align:top;'><strong>UAT SBOM 1792424303035</strong></td><td style='padding:9px 8px; border-bottom:1px solid #f1f3f5; color:#334155; vertical-align:top;'>1.0.0</td><td style='padding:9px 8px; border-bottom:1px solid #f1f3f5; color:#334155; vertical-align:top;'>21</td><td style='padding:9px 8px; border-bottom:1px solid #f1f3f5; color:#334155; vertical-align:top;'>FINDINGS</td><td style='padding:9px 8px; border-bottom:1px solid #f1f3f5; color:#334155; vertical-align:top;'>5</td></tr></table></td></tr><tr><td style='padding:18px 36px; background-color:#f8f9fb; border-top:1px solid #eceff1;'><div style='font-size:11px; color:#94a3b8; line-height:1.6;'>Part A: canonical component-vulnerability findings in the latest successful run per active SBOM head (Convention A).<br>Parts B/C/D: distinct canonical vulnerability, component name and version (Convention B); not raw provider observations.<br>KEV and EPSS are current local enrichment, not historical scan snapshots. Newly KEV since baseline is unavailable.<br>EPSS outlook assumes independent exploitation probabilities; missing scores are not evidence of no risk. Review coverage.<br>VEX not_affected/fixed reduce actionable exposure separately; they do not mean a vulnerability was not found.<br>Severity floor filters finding detail only. Headline counts and comparison totals are unfiltered.<br>The executive PDF/email contain headlines; full finding and component detail is in the Excel and JSON artifacts. All timestamps are UTC (offset +00:00).<br><br>SBOM Analyzer &middot; tenant 3a900179-36bf-4b5f-b2e1-2a4a9d06e6af &middot; SBOM scope &middot; cycle 2026-10-19 &rarr; 2026-10-19</div></td></tr></table></td></tr></table></body></html>",
+        "report": {
+          "schema_version": 1,
+          "tenant_id": "3a900179-36bf-4b5f-b2e1-2a4a9d06e6af",
+          "scope": "SBOM",
+          "generated_at": "2026-10-19T15:38:35.166096+00:00",
+          "cycle_start": "2026-10-19T15:38:35.079171+00:00",
+          "cycle_end": "2026-10-19T15:38:35.079171+00:00",
+          "timezone": "UTC",
+          "parts": [
+            "A"
+          ],
+          "severity_floor": "ALL",
+          "summary": {
+            "total_sboms": 1,
+            "successful_sboms": 1,
+            "total_components": 2,
+            "total_findings": 5,
+            "severity": {
+              "CRITICAL": 0,
+              "HIGH": 2,
+              "MEDIUM": 3,
+              "LOW": 0,
+              "UNKNOWN": 0
+            },
+            "kev_findings": 0,
+            "kev_distinct_cves": 0,
+            "fix_available_count": 5,
+            "fix_available_pct": 100,
+            "vex_reduced_count": 0,
+            "lifecycle": {
+              "supported_count": 0,
+              "eol_count": 0,
+              "eos_count": 0,
+              "eof_count": 0,
+              "deprecated_count": 0,
+              "unsupported_count": 0,
+              "unknown_count": 2,
+              "eol_soon_count": 0,
+              "possibly_unmaintained_count": 0,
+              "stale_lifecycle_count": 0
+            },
+            "epss_outlook": {
+              "probability_30d": 0,
+              "scored_cves": 0,
+              "distinct_cves": 5,
+              "coverage": 0,
+              "assumption": "independent"
+            }
+          },
+          "sboms": [
+            {
+              "id": "729992e8-b107-4d3d-96a9-5cac4bcf5f8d",
+              "name": "UAT SBOM 1792424303035",
+              "version": "1.0.0",
+              "project_id": "d4828e7c-e71c-40f7-bb6c-dde0f4d48d09",
+              "product_id": "60de2b20-c45c-4a49-9b36-e0af7b5790fc",
+              "A": {
+                "run_id": 21,
+                "completed_on": "2026-10-19T15:38:31+00:00",
+                "run_status": "FINDINGS",
+                "latest_attempt_status": "FINDINGS",
+                "total_components": 2,
+                "total_findings": 5,
+                "severity": {
+                  "CRITICAL": 0,
+                  "HIGH": 2,
+                  "MEDIUM": 3,
+                  "LOW": 0,
+                  "UNKNOWN": 0
+                },
+                "kev_findings": 0,
+                "kev_cves": [],
+                "fix_available_count": 5,
+                "vex_reduced_count": 0,
+                "epss_scores": {},
+                "distinct_cves": [
+                  "CVE-2020-28500",
+                  "CVE-2021-23337",
+                  "CVE-2025-13465",
+                  "CVE-2026-2950",
+                  "CVE-2026-4800"
+                ],
+                "lifecycle": {
+                  "total_components": 2,
+                  "supported_count": 0,
+                  "eol_count": 0,
+                  "eos_count": 0,
+                  "eof_count": 0,
+                  "deprecated_count": 0,
+                  "unsupported_count": 0,
+                  "unknown_count": 2,
+                  "eol_soon_count": 0,
+                  "possibly_unmaintained_count": 0,
+                  "stale_lifecycle_count": 0,
+                  "top_risky_components": [],
+                  "recommended_upgrades": [
+                    {
+                      "id": 42,
+                      "name": "lodash",
+                      "version": "4.17.20",
+                      "ecosystem": "npm",
+                      "purl": "pkg:npm/lodash@4.17.20",
+                      "cpe": null,
+                      "supplier": "UAT",
+                      "license": null,
+                      "lifecycle_status": "Unknown",
+                      "eos_date": null,
+                      "eol_date": null,
+                      "eof_date": null,
+                      "deprecated": false,
+                      "unsupported": false,
+                      "maintenance_status": null,
+                      "latest_version": "4.18.1",
+                      "latest_supported_version": null,
+                      "recommended_version": "4.18.1",
+                      "recommendation": "Review upgrade to latest registry version 4.18.1.",
+                      "source_name": "npm registry",
+                      "source_url": "https://www.npmjs.com/package/lodash",
+                      "confidence": "Low",
+                      "checked_at": "2026-10-19T13:00:01+00:00",
+                      "evidence": {
+                        "dist_tags": {
+                          "latest": "4.18.1"
+                        },
+                        "repository_url": "https://github.com/lodash/lodash",
+                        "provider_key": "package_registry",
+                        "cache_policy": {
+                          "known_days": 14,
+                          "unknown_hours": 24,
+                          "failure_minutes": 30,
+                          "deprecated_days": 7
+                        },
+                        "deps.dev": {
+                          "package": {},
+                          "version": {
+                            "versionKey": {
+                              "system": "NPM",
+                              "name": "lodash",
+                              "version": "4.17.20"
+                            },
+                            "isDefault": false,
+                            "licenses": [
+                              "MIT"
+                            ],
+                            "links": [
+                              {
+                                "label": "HOMEPAGE",
+                                "url": "https://lodash.com/"
+                              },
+                              {
+                                "label": "ISSUE_TRACKER",
+                                "url": "https://github.com/lodash/lodash/issues"
+                              },
+                              {
+                                "label": "ORIGIN",
+                                "url": "https://registry.npmjs.org/lodash/4.17.20"
+                              },
+                              {
+                                "label": "SOURCE_REPO",
+                                "url": "git+https://github.com/lodash/lodash.git"
+                              }
+                            ],
+                            "publishedAt": "2020-08-13T16:53:54Z"
+                          },
+                          "advisory_count": 5,
+                          "advisories": [
+                            {
+                              "id": "GHSA-29mw-wpgm-hmr9"
+                            },
+                            {
+                              "id": "GHSA-35jh-r3h4-6jhm"
+                            },
+                            {
+                              "id": "GHSA-f23m-r3pf-42rh"
+                            },
+                            {
+                              "id": "GHSA-r5fr-rjxr-66jc"
+                            },
+                            {
+                              "id": "GHSA-xxjr-mmjv-4gpg"
+                            }
+                          ],
+                          "provider_key": "deps_dev",
+                          "cache_policy": {
+                            "known_days": null,
+                            "unknown_hours": null,
+                            "failure_minutes": null,
+                            "deprecated_days": null
+                          }
+                        },
+                        "OSV": {
+                          "vulnerability_count": 5,
+                          "fixed_versions": [
+                            "4.17.21",
+                            "4.18.0",
+                            "4.17.23"
+                          ],
+                          "vuln_ids": [
+                            "GHSA-29mw-wpgm-hmr9",
+                            "GHSA-35jh-r3h4-6jhm",
+                            "GHSA-f23m-r3pf-42rh",
+                            "GHSA-r5fr-rjxr-66jc",
+                            "GHSA-xxjr-mmjv-4gpg"
+                          ],
+                          "provider_key": "osv",
+                          "cache_policy": {
+                            "known_days": null,
+                            "unknown_hours": null,
+                            "failure_minutes": null,
+                            "deprecated_days": null
+                          }
+                        },
+                        "provider_outcomes": [
+                          {
+                            "provider": "npm registry",
+                            "provider_key": "package_registry",
+                            "status": "Unknown",
+                            "error": null,
+                            "checked_at": "2026-10-19T13:00:01+00:00"
+                          },
+                          {
+                            "provider": "deps.dev",
+                            "provider_key": "deps_dev",
+                            "status": "Unknown",
+                            "error": null,
+                            "checked_at": "2026-10-19T13:00:02+00:00"
+                          },
+                          {
+                            "provider": "OSV",
+                            "provider_key": "osv",
+                            "status": "Unknown",
+                            "error": null,
+                            "checked_at": "2026-10-19T13:00:03+00:00"
+                          }
+                        ],
+                        "cache_hit": true,
+                        "stale_cache": false,
+                        "cache_expires_at": "2026-10-20T13:00:03+00:00",
+                        "risk_level": "UNKNOWN"
+                      },
+                      "risk_level": "UNKNOWN",
+                      "is_stale": false,
+                      "manual_override": false
+                    }
+                  ]
+                },
+                "findings": [
+                  {
+                    "vuln_id": "CVE-2026-4800",
+                    "component_name": "lodash",
+                    "component_version": "4.17.20",
+                    "severity": "HIGH",
+                    "cvss": 8.1,
+                    "kev_current": false,
+                    "epss_current": null,
+                    "fix_available": true,
+                    "vex_status": null
+                  },
+                  {
+                    "vuln_id": "CVE-2021-23337",
+                    "component_name": "lodash",
+                    "component_version": "4.17.20",
+                    "severity": "HIGH",
+                    "cvss": 7.2,
+                    "kev_current": false,
+                    "epss_current": null,
+                    "fix_available": true,
+                    "vex_status": null
+                  },
+                  {
+                    "vuln_id": "CVE-2026-2950",
+                    "component_name": "lodash",
+                    "component_version": "4.17.20",
+                    "severity": "MEDIUM",
+                    "cvss": 6.5,
+                    "kev_current": false,
+                    "epss_current": null,
+                    "fix_available": true,
+                    "vex_status": null
+                  },
+                  {
+                    "vuln_id": "CVE-2025-13465",
+                    "component_name": "lodash",
+                    "component_version": "4.17.20",
+                    "severity": "MEDIUM",
+                    "cvss": 6.5,
+                    "kev_current": false,
+                    "epss_current": null,
+                    "fix_available": true,
+                    "vex_status": null
+                  },
+                  {
+                    "vuln_id": "CVE-2020-28500",
+                    "component_name": "lodash",
+                    "component_version": "4.17.20",
+                    "severity": "MEDIUM",
+                    "cvss": 5.3,
+                    "kev_current": false,
+                    "epss_current": null,
+                    "fix_available": true,
+                    "vex_status": null
+                  }
+                ]
+              },
+              "comparisons": {}
+            }
+          ],
+          "total_sboms": 1,
+          "included_sboms": 1,
+          "truncated_sboms": 0,
+          "caveats": [
+            "Part A: canonical component-vulnerability findings in the latest successful run per active SBOM head (Convention A).",
+            "Parts B/C/D: distinct canonical vulnerability, component name and version (Convention B); not raw provider observations.",
+            "KEV and EPSS are current local enrichment, not historical scan snapshots. Newly KEV since baseline is unavailable.",
+            "EPSS outlook assumes independent exploitation probabilities; missing scores are not evidence of no risk. Review coverage.",
+            "VEX not_affected/fixed reduce actionable exposure separately; they do not mean a vulnerability was not found.",
+            "Severity floor filters finding detail only. Headline counts and comparison totals are unfiltered.",
+            "The executive PDF/email contain headlines; full finding and component detail is in the Excel and JSON artifacts. All timestamps are UTC (offset +00:00)."
+          ],
+          "unchanged": false,
+          "runs_considered": 1,
+          "comparison_summary": {},
+          "top_risks": [
+            {
+              "vuln_id": "CVE-2026-4800",
+              "component_name": "lodash",
+              "component_version": "4.17.20",
+              "severity": "HIGH",
+              "cvss": 8.1,
+              "kev_current": false,
+              "epss_current": null,
+              "fix_available": true,
+              "vex_status": null,
+              "sbom_id": "729992e8-b107-4d3d-96a9-5cac4bcf5f8d",
+              "sbom_name": "UAT SBOM 1792424303035"
+            },
+            {
+              "vuln_id": "CVE-2021-23337",
+              "component_name": "lodash",
+              "component_version": "4.17.20",
+              "severity": "HIGH",
+              "cvss": 7.2,
+              "kev_current": false,
+              "epss_current": null,
+              "fix_available": true,
+              "vex_status": null,
+              "sbom_id": "729992e8-b107-4d3d-96a9-5cac4bcf5f8d",
+              "sbom_name": "UAT SBOM 1792424303035"
+            },
+            {
+              "vuln_id": "CVE-2026-2950",
+              "component_name": "lodash",
+              "component_version": "4.17.20",
+              "severity": "MEDIUM",
+              "cvss": 6.5,
+              "kev_current": false,
+              "epss_current": null,
+              "fix_available": true,
+              "vex_status": null,
+              "sbom_id": "729992e8-b107-4d3d-96a9-5cac4bcf5f8d",
+              "sbom_name": "UAT SBOM 1792424303035"
+            },
+            {
+              "vuln_id": "CVE-2025-13465",
+              "component_name": "lodash",
+              "component_version": "4.17.20",
+              "severity": "MEDIUM",
+              "cvss": 6.5,
+              "kev_current": false,
+              "epss_current": null,
+              "fix_available": true,
+              "vex_status": null,
+              "sbom_id": "729992e8-b107-4d3d-96a9-5cac4bcf5f8d",
+              "sbom_name": "UAT SBOM 1792424303035"
+            },
+            {
+              "vuln_id": "CVE-2020-28500",
+              "component_name": "lodash",
+              "component_version": "4.17.20",
+              "severity": "MEDIUM",
+              "cvss": 5.3,
+              "kev_current": false,
+              "epss_current": null,
+              "fix_available": true,
+              "vex_status": null,
+              "sbom_id": "729992e8-b107-4d3d-96a9-5cac4bcf5f8d",
+              "sbom_name": "UAT SBOM 1792424303035"
+            }
+          ]
+        }
+      }
+    },
+    "api": 200,
+    "status": "PASS",
+    "defect": null,
+    "time": "2026-10-19T15:38:35.346Z"
+  },
+  {
+    "id": "UAT-REPORT-SUBSCRIBE",
+    "module": "Reports and notifications",
+    "role": "admin",
+    "preconditions": "Fresh isolated Chrome context; Native Login; TLS validation enabled; greenfield development stack",
+    "steps": "Create temporary report subscription for own verified seeded Admin email via local Mailpit",
+    "expected": "Own report subscription can be created",
+    "actual": {
+      "status": 201,
+      "count": 0,
+      "keys": [
+        "scope",
+        "project_id",
+        "product_id",
+        "sbom_id",
+        "cadence",
+        "parts",
+        "formats",
+        "severity_floor",
+        "baseline_mode",
+        "cross_version_target",
+        "timezone",
+        "suppress_when_unchanged",
+        "enabled",
+        "id",
+        "tenant_id",
+        "iam_user_id",
+        "created_on",
+        "modified_on",
+        "last_delivered_at"
+      ],
+      "requestId": "332e377a7077",
+      "id": 8,
+      "sbom_id": "729992e8-b107-4d3d-96a9-5cac4bcf5f8d"
+    },
+    "api": 201,
+    "status": "PASS",
+    "defect": null,
+    "time": "2026-10-19T15:38:35.491Z"
+  },
+  {
+    "id": "UAT-REPORT-DELIVERY",
+    "module": "Reports and notifications",
+    "role": "admin",
+    "preconditions": "Fresh isolated Chrome context; Native Login; TLS validation enabled; greenfield development stack",
+    "steps": "Send newly created UAT subscription now; poll real worker result; SMTP was verified local",
+    "expected": "Real local report worker creates and sends report through Mailpit",
+    "actual": {
+      "enqueue": {
+        "status": 202,
+        "count": 0,
+        "keys": [
+          "id",
+          "status"
+        ],
+        "requestId": "1daee4b0368b"
+      },
+      "delivery": {
+        "id": 6,
+        "status": "SENT",
+        "error_code": null,
+        "artifact_count": 2
+      }
+    },
+    "api": 202,
+    "status": "PASS",
+    "defect": null,
+    "time": "2026-10-19T15:38:37.975Z"
+  },
+  {
+    "id": "UAT-REPORT-CLEANUP",
+    "module": "Reports and notifications",
+    "role": "admin",
+    "preconditions": "Fresh isolated Chrome context; Native Login; TLS validation enabled; greenfield development stack",
+    "steps": "Delete temporary subscription after delivery probe",
+    "expected": "Remove only UAT-created subscription",
+    "actual": {
+      "status": 204,
+      "count": 0,
+      "requestId": "d91f17af6963"
+    },
+    "api": 204,
+    "status": "PASS",
+    "defect": null,
+    "time": "2026-10-19T15:38:38.040Z"
+  },
+  {
+    "id": "UAT-CONFIG-AI-credentials",
+    "module": "Integration configuration",
+    "role": "admin",
+    "preconditions": "Fresh isolated Chrome context; Native Login; TLS validation enabled; greenfield development stack",
+    "steps": "Read /api/v1/ai/credentials; retain only configuration metadata; secret fields withheld",
+    "expected": "Configuration is readable without exposing credentials",
+    "actual": {
+      "status": 200,
+      "count": 0,
+      "requestId": "6c784f46712f",
+      "providers": []
+    },
+    "api": 200,
+    "status": "PASS",
+    "defect": null,
+    "time": "2026-10-19T15:38:38.086Z"
+  },
+  {
+    "id": "UAT-AI-LIVE-PROVIDER",
+    "module": "AI configuration and providers",
+    "role": "admin",
+    "preconditions": "Fresh isolated Chrome context; Native Login; TLS validation enabled; greenfield development stack",
+    "steps": "Inspected live credential metadata; live AI completion requires configured provider",
+    "expected": "Configured real AI provider can be called",
+    "actual": "No AI credentials configured; no credential fabricated or borrowed",
+    "api": null,
+    "status": "BLOCKED",
+    "defect": null,
+    "time": "2026-10-19T15:38:38.087Z"
+  },
+  {
+    "id": "UAT-CONFIG-AI-effective-configuration",
+    "module": "Integration configuration",
+    "role": "admin",
+    "preconditions": "Fresh isolated Chrome context; Native Login; TLS validation enabled; greenfield development stack",
+    "steps": "Read /api/v1/ai/effective-config; retain only configuration metadata; secret fields withheld",
+    "expected": "Configuration is readable without exposing credentials",
+    "actual": {
+      "status": 200,
+      "count": 0,
+      "keys": [
+        "source",
+        "override_enabled",
+        "feature_enabled",
+        "kill_switch_active",
+        "settings_source",
+        "ai_ui_config_enabled",
+        "budget_caps_usd",
+        "configured_providers",
+        "default_selection_key",
+        "fallback_selection_key",
+        "registry_config_version",
+        "encryption_config_available",
+        "encryption_config_status"
+      ],
+      "requestId": "39639f17ba19",
+      "providers": []
+    },
+    "api": 200,
+    "status": "PASS",
+    "defect": null,
+    "time": "2026-10-19T15:38:38.152Z"
+  },
+  {
+    "id": "UAT-CONFIG-Lifecycle-providers",
+    "module": "Integration configuration",
+    "role": "admin",
+    "preconditions": "Fresh isolated Chrome context; Native Login; TLS validation enabled; greenfield development stack",
+    "steps": "Read /api/admin/lifecycle-providers; retain only configuration metadata; secret fields withheld",
+    "expected": "Configuration is readable without exposing credentials",
+    "actual": {
+      "status": 200,
+      "count": 11,
+      "requestId": "046a92ac9159",
+      "providers": [
+        {
+          "provider": "custom_vendor_records",
+          "enabled": false
+        },
+        {
+          "provider": "official_vendor_lifecycle",
+          "enabled": true
+        },
+        {
+          "provider": "redhat_lifecycle",
+          "enabled": true
+        },
+        {
+          "provider": "openeox",
+          "enabled": false
+        },
+        {
+          "provider": "endoflife_date",
+          "enabled": true
+        },
+        {
+          "provider": "xeol_db",
+          "enabled": false
+        },
+        {
+          "provider": "xeol_api",
+          "enabled": false
+        },
+        {
+          "provider": "package_registry",
+          "enabled": true
+        },
+        {
+          "provider": "deps_dev",
+          "enabled": true
+        },
+        {
+          "provider": "osv",
+          "enabled": true
+        },
+        {
+          "provider": "repository_health",
+          "enabled": true
+        }
+      ]
+    },
+    "api": 200,
+    "status": "PASS",
+    "defect": null,
+    "time": "2026-10-19T15:38:38.260Z"
+  },
+  {
+    "id": "UAT-CONFIG-Analysis-configuration",
+    "module": "Integration configuration",
+    "role": "admin",
+    "preconditions": "Fresh isolated Chrome context; Native Login; TLS validation enabled; greenfield development stack",
+    "steps": "Read /api/analysis/config; retain only configuration metadata; secret fields withheld",
+    "expected": "Configuration is readable without exposing credentials",
+    "actual": {
+      "status": 200,
+      "count": 0,
+      "keys": [
+        "ai_status",
+        "source_name",
+        "http_user_agent",
+        "nvd_api_base_url",
+        "nvd_detail_base_url",
+        "nvd_api_key_env",
+        "nvd_results_per_page",
+        "nvd_request_timeout_seconds",
+        "nvd_max_retries",
+        "nvd_retry_backoff_seconds",
+        "nvd_request_delay_with_key_seconds",
+        "nvd_request_delay_without_key_seconds",
+        "cvss_critical_threshold",
+        "cvss_high_threshold",
+        "cvss_medium_threshold",
+        "analysis_max_findings_per_cpe",
+        "analysis_max_findings_total",
+        "osv_api_base_url",
+        "osv_results_per_batch",
+        "gh_graphql_url"
+      ],
+      "requestId": "b386129de854",
+      "providers": []
+    },
+    "api": 200,
+    "status": "PASS",
+    "defect": null,
+    "time": "2026-10-19T15:38:38.319Z"
+  },
+  {
+    "id": "UAT-DASHBOARD-FILTER",
+    "module": "Dashboard",
+    "role": "admin",
+    "preconditions": "Fresh isolated Chrome context; Native Login; TLS validation enabled; greenfield development stack",
+    "steps": "Read dashboard filter options and project-scoped stats; compare scoped inventory",
+    "expected": "Project/product UUID filter is accepted and SBOM results remain scoped",
+    "actual": {
+      "options": {
+        "status": 200,
+        "count": 8,
+        "keys": [
+          "items"
+        ],
+        "requestId": "591c85f3997e"
+      },
+      "stats": {
+        "total_active_projects": 1,
+        "total_sboms": 1,
+        "total_findings": 5,
+        "total_distinct_vulnerabilities": 5,
+        "total_projects": 1,
+        "total_vulnerabilities": 5
+      },
+      "scopedSbomIds": [
+        "729992e8-b107-4d3d-96a9-5cac4bcf5f8d"
+      ]
+    },
+    "api": 200,
+    "status": "PASS",
+    "defect": null,
+    "time": "2026-10-19T15:38:39.336Z"
+  }
+]

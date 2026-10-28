@@ -6,7 +6,7 @@ import { cn } from '@/lib/utils';
 
 interface PinButtonProps {
   kind: PinnedKind;
-  id: number;
+  id: string | number;
   label: string;
   href: string;
   /** Compact mode for tight table rows — smaller hit target. */

@@ -118,7 +118,7 @@ export const SAMPLE_FIX_ENVELOPE_BUDGET_ERROR: AiFindingFixEnvelope = {
 
 export function makeBatchProgress(overrides: Partial<AiBatchProgress> = {}): AiBatchProgress {
   return {
-    run_id: 42,
+    run_id: "00000000-0000-4000-8000-00000000002a",
     status: 'in_progress',
     total: 1000,
     from_cache: 781,

@@ -1,5 +1,7 @@
 'use client';
 
+import { PermissionButton } from '@/components/ui/PermissionButton';
+
 import { Sparkles } from 'lucide-react';
 import type { AiFixMetadata as AiFixMetadataType } from '@/types/ai';
 
@@ -40,14 +42,14 @@ export function AiFixMetadata({ metadata, onRegenerate, regenerating }: AiFixMet
         </span>
       </div>
       {onRegenerate ? (
-        <button
+        <PermissionButton size="sm" variant="ghost" permission={"tenant:settings:update"}
           type="button"
           onClick={onRegenerate}
           disabled={regenerating}
           className="rounded-md border border-border-subtle bg-surface px-2 py-1 text-[11px] font-medium text-hcl-navy hover:bg-surface-muted disabled:cursor-progress disabled:opacity-60"
         >
           {regenerating ? 'Regenerating…' : 'Regenerate'}
-        </button>
+        </PermissionButton>
       ) : null}
     </div>
   );

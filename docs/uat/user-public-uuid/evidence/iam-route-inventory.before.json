@@ -1,0 +1,422 @@
+[
+  {
+    "file": "app/routers/component_advisor.py",
+    "line": 789,
+    "method": "get",
+    "path": "/audit/events",
+    "function": "get_audit_events"
+  },
+  {
+    "file": "app/routers/native_auth.py",
+    "line": 48,
+    "method": "post",
+    "path": "/auth/native/login",
+    "function": "login"
+  },
+  {
+    "file": "app/routers/native_auth.py",
+    "line": 79,
+    "method": "post",
+    "path": "/auth/native/activate",
+    "function": "activate"
+  },
+  {
+    "file": "app/routers/native_auth.py",
+    "line": 119,
+    "method": "post",
+    "path": "/platform/native-users",
+    "function": "platform_create"
+  },
+  {
+    "file": "app/routers/native_auth.py",
+    "line": 128,
+    "method": "post",
+    "path": "/tenants/{tenant_id}/native-users",
+    "function": "tenant_create"
+  },
+  {
+    "file": "app/routers/native_auth.py",
+    "line": 140,
+    "method": "post",
+    "path": "/tenants/{tenant_id}/memberships",
+    "function": "add_existing"
+  },
+  {
+    "file": "app/routers/native_auth.py",
+    "line": 156,
+    "method": "post",
+    "path": "/tenants/{tenant_id}/native-users/{user_id}/resend-activation",
+    "function": "resend"
+  },
+  {
+    "file": "app/routers/native_auth.py",
+    "line": 174,
+    "method": "post",
+    "path": "/platform/tenants/{tenant_id}/native-users/{user_id}/resend-activation",
+    "function": "resend_initial_administrator"
+  },
+  {
+    "file": "app/routers/native_auth.py",
+    "line": 225,
+    "method": "post",
+    "path": "/auth/native/forgot-password",
+    "function": "forgot_password"
+  },
+  {
+    "file": "app/routers/native_auth.py",
+    "line": 239,
+    "method": "post",
+    "path": "/auth/native/reset-password",
+    "function": "reset_password"
+  },
+  {
+    "file": "app/routers/native_auth.py",
+    "line": 253,
+    "method": "post",
+    "path": "/auth/native/change-password",
+    "function": "change_password"
+  },
+  {
+    "file": "app/routers/native_auth.py",
+    "line": 267,
+    "method": "post",
+    "path": "/auth/native/force-change-password",
+    "function": "force_change_password"
+  },
+  {
+    "file": "app/routers/native_auth.py",
+    "line": 279,
+    "method": "get",
+    "path": "/auth/native/session",
+    "function": "native_session"
+  },
+  {
+    "file": "app/routers/native_auth.py",
+    "line": 285,
+    "method": "post",
+    "path": "/auth/native/logout-all",
+    "function": "logout_all"
+  },
+  {
+    "file": "app/routers/native_auth.py",
+    "line": 297,
+    "method": "post",
+    "path": "/auth/native/logout",
+    "function": "record_logout"
+  },
+  {
+    "file": "app/routers/platform.py",
+    "line": 230,
+    "method": "get",
+    "path": "/tenant-admin-candidates",
+    "function": "tenant_admin_candidates"
+  },
+  {
+    "file": "app/routers/platform.py",
+    "line": 258,
+    "method": "post",
+    "path": "/tenants/{tenant_id}/recover-admin",
+    "function": "recover_tenant_admin"
+  },
+  {
+    "file": "app/routers/platform.py",
+    "line": 294,
+    "method": "get",
+    "path": "/users/search",
+    "function": "search_platform_users"
+  },
+  {
+    "file": "app/routers/platform.py",
+    "line": 390,
+    "method": "get",
+    "path": "/users",
+    "function": "list_platform_users"
+  },
+  {
+    "file": "app/routers/platform.py",
+    "line": 478,
+    "method": "get",
+    "path": "/users/{user_id}",
+    "function": "get_platform_user"
+  },
+  {
+    "file": "app/routers/platform.py",
+    "line": 511,
+    "method": "get",
+    "path": "/administrators",
+    "function": "list_platform_administrators"
+  },
+  {
+    "file": "app/routers/platform.py",
+    "line": 549,
+    "method": "post",
+    "path": "/administrators",
+    "function": "grant_platform_administrator"
+  },
+  {
+    "file": "app/routers/platform.py",
+    "line": 600,
+    "method": "delete",
+    "path": "/administrators/{grant_id}",
+    "function": "revoke_platform_administrator"
+  },
+  {
+    "file": "app/routers/platform.py",
+    "line": 746,
+    "method": "patch",
+    "path": "/users/{user_id}/status",
+    "function": "update_iam_user_status"
+  },
+  {
+    "file": "app/routers/platform.py",
+    "line": 764,
+    "method": "patch",
+    "path": "/users/{user_id}",
+    "function": "update_iam_user_status_compatibility"
+  },
+  {
+    "file": "app/routers/platform.py",
+    "line": 778,
+    "method": "get",
+    "path": "/tenants",
+    "function": "list_platform_tenants"
+  },
+  {
+    "file": "app/routers/platform.py",
+    "line": 799,
+    "method": "get",
+    "path": "/tenants/{tenant_id}",
+    "function": "get_platform_tenant"
+  },
+  {
+    "file": "app/routers/platform.py",
+    "line": 811,
+    "method": "patch",
+    "path": "/tenants/{tenant_id}",
+    "function": "update_tenant_status"
+  },
+  {
+    "file": "app/routers/platform.py",
+    "line": 850,
+    "method": "patch",
+    "path": "/users/{user_id}/profile",
+    "function": "edit_user_profile"
+  },
+  {
+    "file": "app/routers/platform.py",
+    "line": 859,
+    "method": "get",
+    "path": "/users/{user_id}/audit",
+    "function": "user_audit"
+  },
+  {
+    "file": "app/routers/platform.py",
+    "line": 867,
+    "method": "post",
+    "path": "/users/{user_id}/unlock",
+    "function": "unlock_user"
+  },
+  {
+    "file": "app/routers/platform.py",
+    "line": 874,
+    "method": "post",
+    "path": "/users/{user_id}/force-password-change",
+    "function": "force_password_change"
+  },
+  {
+    "file": "app/routers/platform.py",
+    "line": 913,
+    "method": "post",
+    "path": "/users/{user_id}/logout-all",
+    "function": "revoke_native_sessions"
+  },
+  {
+    "file": "app/routers/report_notifications.py",
+    "line": 144,
+    "method": "get",
+    "path": "/tenants/{tenant_id}/report-subscriptions",
+    "function": "tenant_subscriptions"
+  },
+  {
+    "file": "app/routers/tenants.py",
+    "line": 226,
+    "method": "get",
+    "path": "/auth/me",
+    "function": "auth_me"
+  },
+  {
+    "file": "app/routers/tenants.py",
+    "line": 226,
+    "method": "get",
+    "path": "/v1/auth/me",
+    "function": "auth_me"
+  },
+  {
+    "file": "app/routers/tenants.py",
+    "line": 295,
+    "method": "get",
+    "path": "/auth/context",
+    "function": "auth_context"
+  },
+  {
+    "file": "app/routers/tenants.py",
+    "line": 321,
+    "method": "get",
+    "path": "/tenants",
+    "function": "list_my_tenants"
+  },
+  {
+    "file": "app/routers/tenants.py",
+    "line": 351,
+    "method": "post",
+    "path": "/tenants",
+    "function": "create_tenant"
+  },
+  {
+    "file": "app/routers/tenants.py",
+    "line": 434,
+    "method": "get",
+    "path": "/tenant-roles",
+    "function": "list_assignable_tenant_roles"
+  },
+  {
+    "file": "app/routers/tenants.py",
+    "line": 453,
+    "method": "get",
+    "path": "/tenants/{tenant_id}/users/{user_id}/roles",
+    "function": "list_tenant_user_roles"
+  },
+  {
+    "file": "app/routers/tenants.py",
+    "line": 467,
+    "method": "post",
+    "path": "/tenants/{tenant_id}/users/{user_id}/roles",
+    "function": "grant_tenant_user_role"
+  },
+  {
+    "file": "app/routers/tenants.py",
+    "line": 505,
+    "method": "put",
+    "path": "/tenants/{tenant_id}/users/{user_id}/roles",
+    "function": "replace_tenant_user_roles"
+  },
+  {
+    "file": "app/routers/tenants.py",
+    "line": 543,
+    "method": "delete",
+    "path": "/tenants/{tenant_id}/users/{user_id}/roles/{role_code}",
+    "function": "revoke_tenant_user_role"
+  },
+  {
+    "file": "app/routers/tenants.py",
+    "line": 582,
+    "method": "get",
+    "path": "/tenants/{tenant_id}/users/{user_id}/roles/history",
+    "function": "tenant_user_role_history"
+  },
+  {
+    "file": "app/routers/tenants.py",
+    "line": 638,
+    "method": "get",
+    "path": "/tenants/{tenant_id}/user-candidates",
+    "function": "search_tenant_user_candidates"
+  },
+  {
+    "file": "app/routers/tenants.py",
+    "line": 708,
+    "method": "get",
+    "path": "/tenants/{tenant_id}/users",
+    "function": "list_tenant_users"
+  },
+  {
+    "file": "app/routers/tenants.py",
+    "line": 729,
+    "method": "get",
+    "path": "/tenants/{tenant_id}/audit-history",
+    "function": "tenant_audit_history"
+  },
+  {
+    "file": "app/routers/tenants.py",
+    "line": 755,
+    "method": "get",
+    "path": "/tenants/{tenant_id}/users/{membership_id}",
+    "function": "get_tenant_user"
+  },
+  {
+    "file": "app/routers/tenants.py",
+    "line": 769,
+    "method": "post",
+    "path": "/tenants/{tenant_id}/users",
+    "function": "add_tenant_user"
+  },
+  {
+    "file": "app/routers/tenants.py",
+    "line": 883,
+    "method": "patch",
+    "path": "/tenants/{tenant_id}/users/{membership_id}",
+    "function": "update_tenant_user"
+  },
+  {
+    "file": "app/routers/tenants.py",
+    "line": 1086,
+    "method": "post",
+    "path": "/tenants/{tenant_id}/users/{membership_id}/activate",
+    "function": "activate_tenant_user"
+  },
+  {
+    "file": "app/routers/tenants.py",
+    "line": 1097,
+    "method": "post",
+    "path": "/tenants/{tenant_id}/users/{membership_id}/deactivate",
+    "function": "deactivate_tenant_user"
+  },
+  {
+    "file": "app/routers/tenants.py",
+    "line": 1108,
+    "method": "delete",
+    "path": "/tenants/{tenant_id}/users/{membership_id}",
+    "function": "delete_tenant_user"
+  },
+  {
+    "file": "app/routers/tenants.py",
+    "line": 1163,
+    "method": "patch",
+    "path": "/tenants/{tenant_id}/users/{membership_id}/profile",
+    "function": "edit_tenant_profile"
+  },
+  {
+    "file": "app/routers/tenants.py",
+    "line": 1175,
+    "method": "get",
+    "path": "/tenants/{tenant_id}/users/{membership_id}/audit",
+    "function": "tenant_user_audit"
+  },
+  {
+    "file": "app/routers/schedules.py",
+    "line": 71,
+    "method": "get",
+    "path": "/tenants/{tenant_id}/schedule",
+    "function": "get_tenant_schedule"
+  },
+  {
+    "file": "app/routers/schedules.py",
+    "line": 78,
+    "method": "post",
+    "path": "/tenants/{tenant_id}/schedule",
+    "function": "upsert_tenant_schedule"
+  },
+  {
+    "file": "app/routers/schedules.py",
+    "line": 78,
+    "method": "patch",
+    "path": "/tenants/{tenant_id}/schedule",
+    "function": "upsert_tenant_schedule"
+  },
+  {
+    "file": "app/routers/schedules.py",
+    "line": 95,
+    "method": "delete",
+    "path": "/tenants/{tenant_id}/schedule",
+    "function": "delete_tenant_schedule"
+  }
+]

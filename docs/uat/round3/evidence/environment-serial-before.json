@@ -1,0 +1,10 @@
+{
+  "time": "2026-10-20T10:50:56.890111+00:00",
+  "processes": "80916     1   1456   0.0 05:12:44 /Users/ferozebasha/.cache/codex-runtimes/codex-primary-runtime/dependencies/node/bin/node\n80918 80916  20976   0.0 05:12:43 next-server (v16.3.4)\n",
+  "vm_stat": "Mach Virtual Memory Statistics: (page size of 16384 bytes)\nPages free:                                     4262.\nPages active:                                  74498.\nPages inactive:                                71713.\nPages speculative:                              1654.\nPages throttled:                                   0.\nPages wired down:                             116033.\nPages purgeable:                                   2.\n\"Translation faults\":                     5115601692.\nPages copy-on-write:                        92001874.\nPages zero filled:                         994447917.\nPages reactivated:                        2181323099.\nPages purged:                               49619779.\nFile-backed pages:                             54779.\nAnonymous pages:                               93086.\nPages stored in compressor:                   461633.\nPages occupied by compressor:                 218622.\nDecompressions:                           2507310361.\nCompressions:                             2608564765.\nPageins:                                   198557068.\nPageouts:                                    2028521.\nSwapins:                                   117927617.\nSwapouts:                                  124538608.\n",
+  "swap": "vm.swapusage: total = 8192.00M  used = 7160.38M  free = 1031.62M  (encrypted)\n",
+  "frontendLogBytes": 53356,
+  "frontendMemoryRestartWarnings": 1,
+  "frontendEmptyResponseMentions": 0,
+  "note": "Process RSS in KiB; CPU instantaneous snapshot. Whole private logs are not exported. No OS memory settings changed."
+}

@@ -1,0 +1,153 @@
+{
+  "time": "2026-10-20T14:55:44.890951+00:00",
+  "checks": [
+    {
+      "id": "R4-LIVE-ADMIN",
+      "role": "admin",
+      "result": "PASS",
+      "login": 200,
+      "me": 200,
+      "context": 200,
+      "session": 200,
+      "tenant_id": "3a900179-36bf-4b5f-b2e1-2a4a9d06e6af",
+      "roles": [
+        "TENANT_ADMIN"
+      ],
+      "initialAuthorizationState": "TENANT_SELECTION_REQUIRED",
+      "authorizationState": "READY",
+      "provider": "NATIVE",
+      "logoutAuditStatus": 200
+    },
+    {
+      "id": "R4-LIVE-ANALYST",
+      "role": "analyst",
+      "result": "PASS",
+      "login": 200,
+      "me": 200,
+      "context": 200,
+      "session": 200,
+      "tenant_id": "3a900179-36bf-4b5f-b2e1-2a4a9d06e6af",
+      "roles": [
+        "SECURITY_ANALYST"
+      ],
+      "initialAuthorizationState": "READY",
+      "authorizationState": "READY",
+      "provider": "NATIVE",
+      "logoutAuditStatus": 200
+    },
+    {
+      "id": "R4-LIVE-DEVELOPER",
+      "role": "developer",
+      "result": "PASS",
+      "login": 200,
+      "me": 200,
+      "context": 200,
+      "session": 200,
+      "tenant_id": "3a900179-36bf-4b5f-b2e1-2a4a9d06e6af",
+      "roles": [
+        "DEVELOPER"
+      ],
+      "initialAuthorizationState": "READY",
+      "authorizationState": "READY",
+      "provider": "NATIVE",
+      "logoutAuditStatus": 200
+    },
+    {
+      "id": "R4-LIVE-VIEWER",
+      "role": "viewer",
+      "result": "PASS",
+      "login": 200,
+      "me": 200,
+      "context": 200,
+      "session": 200,
+      "tenant_id": "3a900179-36bf-4b5f-b2e1-2a4a9d06e6af",
+      "roles": [
+        "VIEWER"
+      ],
+      "initialAuthorizationState": "READY",
+      "authorizationState": "READY",
+      "provider": "NATIVE",
+      "logoutAuditStatus": 200
+    },
+    {
+      "id": "R4-LIVE-FOREIGN",
+      "role": "foreign",
+      "result": "PASS",
+      "login": 200,
+      "me": 200,
+      "context": 200,
+      "session": 200,
+      "tenant_id": "a803c17f-7e7d-439c-8664-c5406d391fd1",
+      "roles": [
+        "TENANT_ADMIN"
+      ],
+      "initialAuthorizationState": "READY",
+      "authorizationState": "READY",
+      "provider": "NATIVE",
+      "logoutAuditStatus": 200
+    },
+    {
+      "id": "R4-LIVE-PLATFORM",
+      "role": "platform",
+      "result": "PASS",
+      "login": 200,
+      "me": 200,
+      "context": 200,
+      "session": 200,
+      "tenant_id": null,
+      "roles": [
+        "PLATFORM_ADMIN"
+      ],
+      "initialAuthorizationState": "READY",
+      "authorizationState": "READY",
+      "provider": "NATIVE",
+      "logoutAuditStatus": 200
+    },
+    {
+      "id": "R4-LIVE-OLYMPUS-MEMBERS",
+      "result": "PASS",
+      "status": 200,
+      "memberCount": 4,
+      "members": [
+        {
+          "email": "admin@olympus.example.test",
+          "roles": [
+            "TENANT_ADMIN"
+          ],
+          "membershipStatus": "ACTIVE",
+          "accountStatus": "ACTIVE",
+          "verified": true
+        },
+        {
+          "email": "analyst@olympus.example.test",
+          "roles": [
+            "SECURITY_ANALYST"
+          ],
+          "membershipStatus": "ACTIVE",
+          "accountStatus": "ACTIVE",
+          "verified": true
+        },
+        {
+          "email": "developer@olympus.example.test",
+          "roles": [
+            "DEVELOPER"
+          ],
+          "membershipStatus": "ACTIVE",
+          "accountStatus": "ACTIVE",
+          "verified": true
+        },
+        {
+          "email": "viewer@olympus.example.test",
+          "roles": [
+            "VIEWER"
+          ],
+          "membershipStatus": "ACTIVE",
+          "accountStatus": "ACTIVE",
+          "verified": true
+        }
+      ]
+    }
+  ],
+  "secretsRecorded": false,
+  "seededCredentialsRolesMembershipsChanged": false
+}

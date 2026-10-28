@@ -242,7 +242,7 @@ const CustomFilterSelect = forwardRef<HTMLSelectElement, CustomFilterSelectProps
       : placeholder || (options.length > 0 ? options[0].label : 'ALL');
 
     return (
-      <div ref={containerRef} className="flex flex-col gap-1.5 relative">
+      <div ref={containerRef} className="flex min-w-0 flex-col gap-1.5 relative" title={props.disabled ? props.title : undefined}>
         {label && (
           <label htmlFor={inputId} className="text-sm font-medium text-hcl-navy">
             {label}
@@ -266,7 +266,8 @@ const CustomFilterSelect = forwardRef<HTMLSelectElement, CustomFilterSelectProps
             aria-haspopup="listbox"
             aria-expanded={isOpen}
             aria-controls={listboxId}
-            aria-label={props['aria-label']}
+            aria-label={props['aria-label'] ?? (label ? `${label}: ${displayLabel}` : undefined)}
+            aria-describedby={[describedBy, props['aria-describedby']].filter(Boolean).join(' ') || undefined}
             className={cn(
               'dashboard-filter-select-trigger flex h-10 w-full items-center justify-between gap-2 rounded-lg border px-3 text-sm text-left',
               'transition-colors duration-150 select-none',

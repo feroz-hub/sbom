@@ -1,0 +1,8 @@
+{
+  "time": "2026-10-20T15:04:57.073963+00:00",
+  "swap": "vm.swapusage: total = 10240.00M  used = 8759.12M  free = 1480.88M  (encrypted)",
+  "vmStat": "Mach Virtual Memory Statistics: (page size of 16384 bytes)\nPages free:                                     4174.\nPages active:                                  90705.\nPages inactive:                                89382.\nPages speculative:                               295.\nPages throttled:                                   0.\nPages wired down:                             127492.\nPages purgeable:                                  29.\n\"Translation faults\":                     5379295759.\nPages copy-on-write:                        93542419.\nPages zero filled:                        1026477673.\nPages reactivated:                        2296161236.\nPages purged:                               51218015.\nFile-backed pages:                             67913.\nAnonymous pages:                              112469.\nPages stored in compressor:                   435661.\nPages occupied by compressor:                 174734.\nDecompressions:                           2649775406.\nCompressions:                             2754688901.\nPageins:                                   208140852.\nPageouts:                                    2062986.\nSwapins:                                   124008070.\nSwapouts:                                  130907245.\n",
+  "platform": "Darwin arm64",
+  "python": "Python 3.12.7",
+  "note": "Read-only host measurements; no global OS or unrelated processes changed"
+}

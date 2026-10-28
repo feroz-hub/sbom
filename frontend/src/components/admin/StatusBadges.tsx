@@ -10,7 +10,7 @@ export const ROLE_DESCRIPTIONS: Record<string, string> = {
   VIEWER: 'Has read-only tenant access according to backend authorization policy.',
 };
 
-export function VerificationBadge({ verified }: { verified: boolean }) {
+export function VerificationBadge({ verified, required = true }: { verified: boolean; required?: boolean }) {
   if (verified) {
     return (
       <span className="inline-flex items-center gap-1 rounded-full bg-emerald-50 px-2.5 py-0.5 text-xs font-medium text-emerald-700 dark:bg-emerald-950/20 dark:text-emerald-400 border border-emerald-200 dark:border-emerald-800/50">
@@ -26,25 +26,23 @@ export function VerificationBadge({ verified }: { verified: boolean }) {
       <svg className="h-3 w-3" fill="none" viewBox="0 0 24 24" stroke="currentColor" strokeWidth={2}>
         <path strokeLinecap="round" strokeLinejoin="round" d="M12 9v3.75m0 3.75h.008v.008H12v-.008z" />
       </svg>
-      Verification: Verification required
+      {required ? 'Verification: Verification required' : 'Email: not mailbox-verified'}
     </span>
   );
 }
 
+export const ACCOUNT_STATUS_HELP: Record<string, string> = {
+  PENDING: 'Authentication succeeded. Awaiting Platform Administrator approval.',
+  SUSPENDED: 'Account suspended by an administrator. Access to all tenants is blocked.',
+  ACTIVE: 'Account is active. Tenant access depends on membership and roles.',
+  PENDING_EMAIL_VERIFICATION: 'User must verify their email and activate their account.',
+  LOCKED: 'Account temporarily locked after failed authentication attempts.',
+  DISABLED: 'Account disabled by an administrator.',
+  FORCE_PASSWORD_CHANGE: 'User must replace their native password before normal access resumes.',
+};
 export function UserStatusBadge({ status }: { status: string }) {
-  const isEnabled = status === 'ACTIVE';
-  return (
-    <span
-      className={cn(
-        'inline-flex items-center rounded-full px-2.5 py-0.5 text-xs font-medium border',
-        isEnabled
-          ? 'bg-blue-50 text-blue-700 border-blue-200 dark:bg-blue-950/20 dark:text-blue-400 dark:border-blue-800/50'
-          : 'bg-zinc-100 text-zinc-600 border-zinc-200 dark:bg-zinc-800 dark:text-zinc-400 dark:border-zinc-700',
-      )}
-    >
-      User account: {isEnabled ? 'Active' : 'Disabled'}
-    </span>
-  );
+  const label = (status || 'UNKNOWN').toLowerCase().replaceAll('_', ' ');
+  return <span title={ACCOUNT_STATUS_HELP[status] || 'Account awaiting administration.'} className={cn('inline-flex rounded-full border px-2.5 py-1 text-xs font-semibold', status === 'ACTIVE' ? 'bg-emerald-50 text-emerald-800 border-emerald-300' : ['LOCKED', 'SUSPENDED'].includes(status) ? 'bg-red-50 text-red-800 border-red-300' : ['DISABLED', 'INACTIVE'].includes(status) ? 'bg-zinc-100 text-zinc-700 border-zinc-300' : 'bg-amber-50 text-amber-900 border-amber-300')}>User account: {label.charAt(0).toUpperCase() + label.slice(1)}</span>;
 }
 
 export function TenantStatusBadge({ status }: { status: string }) {
@@ -55,10 +53,12 @@ export function TenantStatusBadge({ status }: { status: string }) {
         'inline-flex items-center rounded-full px-2.5 py-0.5 text-xs font-medium border',
         isActive
           ? 'bg-emerald-50 text-emerald-700 border-emerald-200 dark:bg-emerald-950/20 dark:text-emerald-400 dark:border-emerald-800/50'
-          : 'bg-zinc-100 text-zinc-600 border-zinc-200 dark:bg-zinc-800 dark:text-zinc-400 dark:border-zinc-700',
+          : status === 'PENDING'
+            ? 'bg-amber-50 text-amber-800 border-amber-200 dark:bg-amber-950/20 dark:text-amber-300 dark:border-amber-800/50'
+            : 'bg-zinc-100 text-zinc-600 border-zinc-200 dark:bg-zinc-800 dark:text-zinc-400 dark:border-zinc-700',
       )}
     >
-      Tenant status: {isActive ? 'Active' : 'Disabled'}
+      {isActive ? 'Active' : status === 'PENDING' ? 'Pending activation' : 'Disabled'}
     </span>
   );
 }

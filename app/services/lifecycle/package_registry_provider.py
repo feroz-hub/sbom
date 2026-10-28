@@ -15,6 +15,7 @@ from packaging.version import InvalidVersion, Version
 
 from .provider_base import LifecycleProvider
 from .provider_chain import PRIORITY_REGISTRY
+from .provider_http import request_json
 from .types import (
     DEPRECATED,
     LOW,
@@ -90,7 +91,7 @@ class PackageRegistryProvider(LifecycleProvider):
                 deprecated=True,
                 maintenance_status="Deprecated by npm registry",
                 latest_version=latest,
-                latest_supported_version=latest,
+                latest_supported_version=None,
                 recommended_version=latest if _is_newer(latest, component.normalized_version) else None,
                 recommendation=_registry_recommendation(latest, component.normalized_version, deprecated_message),
                 source_name="npm registry",
@@ -139,7 +140,7 @@ class PackageRegistryProvider(LifecycleProvider):
                 deprecated=True,
                 maintenance_status="Release yanked on PyPI",
                 latest_version=latest,
-                latest_supported_version=latest,
+                latest_supported_version=None,
                 recommended_version=latest if _is_newer(latest, component.normalized_version) else None,
                 recommendation=_registry_recommendation(
                     latest, component.normalized_version, "Release is yanked on PyPI."
@@ -183,7 +184,7 @@ class PackageRegistryProvider(LifecycleProvider):
                 deprecated=True,
                 maintenance_status="Deprecated by NuGet",
                 latest_version=latest,
-                latest_supported_version=latest,
+                latest_supported_version=None,
                 recommended_version=latest if _is_newer(latest, component.normalized_version) else None,
                 recommendation=_registry_recommendation(
                     latest, component.normalized_version, "Package version is deprecated."
@@ -250,12 +251,7 @@ class PackageRegistryProvider(LifecycleProvider):
     def _get_json(self, url: str) -> Any | None:
         if self._http_get is not None:
             return self._http_get(url)
-        with httpx.Client(timeout=self._timeout_seconds, follow_redirects=True) as client:
-            response = client.get(url)
-            if response.status_code == 404:
-                return None
-            response.raise_for_status()
-            return response.json()
+        return request_json("GET", url, timeout=self._timeout_seconds)
 
 
 def _unknown_with_latest(
@@ -275,7 +271,7 @@ def _unknown_with_latest(
         cpe=component.cpe,
         lifecycle_status=UNKNOWN,
         latest_version=latest,
-        latest_supported_version=latest,
+        latest_supported_version=None,
         recommended_version=recommended,
         recommendation=f"Review upgrade to latest registry version {latest}." if recommended else None,
         source_name=source_name,

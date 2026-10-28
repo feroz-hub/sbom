@@ -1,10 +1,11 @@
 from __future__ import annotations
 
+from datetime import datetime
 from typing import Literal
 
 from fastapi import APIRouter, Body, Depends, Header, HTTPException, Query, Request
 from pydantic import AliasChoices, BaseModel, Field, model_validator
-from sqlalchemy import or_
+from sqlalchemy import or_, select
 from sqlalchemy.orm import Session
 
 from ..core.context import CurrentContext
@@ -13,6 +14,7 @@ from ..core.identity_states import (
     IdentityErrorCode,
     identity_http_error,
 )
+from ..core.native_identity import AccountStatus
 from ..core.security import (
     _claim,
     _roles,
@@ -24,7 +26,6 @@ from ..core.security import (
 )
 from ..db import get_db
 from ..models import (
-    AuthorizationAuditLog,
     AuthorizationRole,
     IAMUser,
     Tenant,
@@ -32,8 +33,8 @@ from ..models import (
 )
 from ..schemas_identity import AuthContextResponse
 from ..schemas_platform import (
-    UserSearchResponse,
-    UserSearchResult,
+    TenantUserCandidate,
+    TenantUserCandidateResponse,
 )
 from ..schemas_tenants import (
     CreatedTenantResponse,
@@ -41,15 +42,17 @@ from ..schemas_tenants import (
     TenantCreateRequest,
     TenantCreationResponse,
 )
+from ..schemas_user_management import ProfileUpdate
 from ..services import audit_service
 from ..services import tenant_role_assignment_service as tras
 from ..services import tenant_service as ts
+from ..services import user_management_service as ums
 from ..services.auth_context_service import (
     build_auth_context_response,
     resolve_authorization_state,
 )
-from ..services.email_verification_service import ensure_initial_verification_delivery
-from ..services.identity_service import provision_local_identity
+from ..services.authenticated_principal_service import resolve_principal
+from ..services.identity_verification_policy import verification_complete_clause
 from ..settings import get_settings
 
 router = APIRouter(prefix="/api", tags=["identity"])
@@ -116,7 +119,7 @@ from ..services.identity_mapping_service import build_identity_mapping
 
 def _tenant_dict(tenant: Tenant, role: str | None = None) -> dict:
     return {
-        "id": tenant.id,
+        "id": str(tenant.public_id),
         "name": tenant.name,
         "slug": tenant.slug,
         "external_iam_tenant_id": tenant.external_iam_tenant_id,
@@ -227,13 +230,11 @@ def auth_me(
     db: Session = Depends(get_db),
 ) -> dict:
     try:
-        provisioned = provision_local_identity(db, claims, request=request)
-        db.commit()
-        ensure_initial_verification_delivery(db, provisioned.user, request=request)
-        db.refresh(provisioned.user)
+        provisioned = resolve_principal(db, claims, request=request)
         state = resolve_authorization_state(
             db,
             provisioned.user,
+            provider=provisioned.provider,
             selected_tenant=x_tenant_id,
             allow_platform_context=True,
             request=request,
@@ -256,7 +257,7 @@ def auth_me(
         if membership
         else set()
     )
-    if state.is_platform_admin:
+    if state.is_platform_admin and state.active_tenant is None:
         roles.add("PLATFORM_ADMIN")
     permissions = (
         auth_context.tenant_context.active_tenant.effective_permissions
@@ -268,12 +269,12 @@ def auth_me(
         "external_user_id": provisioned.user.external_iam_user_id,
         "email": provisioned.user.email,
         "display_name": provisioned.user.display_name,
-        "tenant_id": state.active_tenant.id if state.active_tenant else None,
+        "tenant_id": str(state.active_tenant.public_id) if state.active_tenant else None,
         "external_tenant_id": (
             state.active_tenant.external_iam_tenant_id if state.active_tenant else None
         ),
         "roles": sorted(roles),
-        "identity_roles": sorted(_roles(_claim(claims, get_settings().hcl_iam_role_claim))),
+        "identity_roles": sorted(_roles(_claim(claims, get_settings().hcl_iam_role_claim))) if provisioned.provider == "HCL_CS" else [],
         "permissions": permissions,
         "is_platform_admin": state.is_platform_admin,
         "authenticated": True,
@@ -298,13 +299,11 @@ def auth_context(
     db: Session = Depends(get_db),
 ) -> AuthContextResponse:
     try:
-        provisioned = provision_local_identity(db, claims, request=request)
-        db.commit()
-        ensure_initial_verification_delivery(db, provisioned.user, request=request)
-        db.refresh(provisioned.user)
+        provisioned = resolve_principal(db, claims, request=request)
         state = resolve_authorization_state(
             db,
             provisioned.user,
+            provider=provisioned.provider,
             selected_tenant=x_tenant_id,
             allow_platform_context=True,
             request=request,
@@ -343,7 +342,7 @@ def list_my_tenants(
             if membership is not None
             else []
         )
-        item["platform_context_available"] = bool(context.is_platform_admin)
+        item["platform_context_available"] = False
         result.append(item)
     return result
 
@@ -357,7 +356,11 @@ def create_tenant(
     ),
     db: Session = Depends(get_db),
 ) -> TenantCreationResponse:
-    if (
+    if not context.has_permission("platform:tenant:bootstrap_admin"):
+        raise HTTPException(403, "Initial administrator provisioning permission is required")
+    if payload.initial_admin_invitation is not None and payload.initial_admin_user_id is not None:
+        raise HTTPException(422, "Choose either an existing administrator or an invitation")
+    if payload.initial_admin_invitation is None and (
         payload.initial_admin_user_id is None
         or payload.initial_admin_user_id < 1
     ):
@@ -396,6 +399,7 @@ def create_tenant(
             slug=payload.slug,
             external_iam_tenant_id=payload.external_iam_tenant_id,
             initial_admin_user_id=payload.initial_admin_user_id,
+            initial_admin_invitation=payload.initial_admin_invitation,
             request=request,
         )
     except ts.TenantCreationError as exc:
@@ -440,6 +444,7 @@ def list_assignable_tenant_roles(
         "roles": [
             {"id": role.id, "code": role.code, "name": role.name}
             for role in roles
+            if _context.is_platform_admin or role.code != "TENANT_ADMIN"
         ]
     }
 
@@ -478,7 +483,7 @@ def grant_tenant_user_role(
             make_primary=payload.make_primary,
             reason=payload.reason,
             actor_user_id=context.user_id,
-            is_platform_admin=context.is_platform_admin,
+            is_platform_admin=False,
             request=request,
         )
         result = _role_state(db, tenant_id, user_id)
@@ -516,7 +521,7 @@ def replace_tenant_user_roles(
             expected_version=payload.expected_version,
             reason=payload.reason,
             actor_user_id=context.user_id,
-            is_platform_admin=context.is_platform_admin,
+            is_platform_admin=False,
             request=request,
         )
         result = _role_state(db, tenant_id, user_id)
@@ -555,7 +560,7 @@ def revoke_tenant_user_role(
             replacement_primary_role_code=payload.replacement_primary_role_code,
             reason=payload.reason,
             actor_user_id=context.user_id,
-            is_platform_admin=context.is_platform_admin,
+            is_platform_admin=False,
             request=request,
         )
         result = _role_state(db, tenant_id, user_id)
@@ -629,13 +634,15 @@ def tenant_user_role_history(
     }
 
 
-@router.get("/tenants/{tenant_id}/user-candidates", response_model=UserSearchResponse)
+@router.get("/tenants/{tenant_id}/user-candidates", response_model=TenantUserCandidateResponse)
 def search_tenant_user_candidates(
     tenant_id: int,
-    q: str = Query(..., min_length=1, max_length=200),
+    q: str = Query(..., min_length=2, max_length=200),
+    page: int = Query(default=1, ge=1),
+    page_size: int = Query(default=20, ge=1, le=50),
     context: CurrentContext = Depends(require_permission("tenant:user:invite")),
     db: Session = Depends(get_db),
-) -> UserSearchResponse:
+) -> TenantUserCandidateResponse:
     tenant = db.query(Tenant).filter(Tenant.id == tenant_id).one_or_none()
     if not tenant:
         raise HTTPException(status_code=404, detail="Tenant not found")
@@ -644,10 +651,10 @@ def search_tenant_user_candidates(
         raise HTTPException(status_code=403, detail="Cross-tenant request unauthorized")
 
     q_clean = q.strip()
-    if not q_clean:
-        raise HTTPException(status_code=422, detail="Query string cannot be empty or whitespace only")
+    if len(q_clean) < 2:
+        raise HTTPException(status_code=422, detail="Search by name or email using at least 2 characters")
 
-    from sqlalchemy import exists, not_
+    from sqlalchemy import exists
 
     from ..services.platform_service import _escape_search
 
@@ -662,13 +669,13 @@ def search_tenant_user_candidates(
         db.query(IAMUser)
         .filter(
             IAMUser.status == "ACTIVE",
-            IAMUser.email_verified.is_(True),
-            IAMUser.verification_required.is_(False),
-            not_(existing_membership),
+            verification_complete_clause(),
+            ~existing_membership,
             or_(
                 IAMUser.email.ilike(pattern, escape="\\"),
                 IAMUser.display_name.ilike(pattern, escape="\\"),
-                IAMUser.user_principal_name.ilike(pattern, escape="\\"),
+                IAMUser.first_name.ilike(pattern, escape="\\"),
+                IAMUser.last_name.ilike(pattern, escape="\\"),
             ),
         )
         .order_by(
@@ -676,42 +683,44 @@ def search_tenant_user_candidates(
             IAMUser.email.asc(),
             IAMUser.id.asc(),
         )
-        .limit(20)
+        .offset((page - 1) * page_size)
+        .limit(page_size)
         .all()
     )
 
     items = [
-        UserSearchResult(
+        TenantUserCandidate(
+            providers=ums.providers(db, user),
             id=user.id,
             email=user.email,
             display_name=user.display_name,
-            username=user.user_principal_name,
             status=user.status,
             email_verified=bool(user.email_verified),
             verification_required=bool(user.verification_required),
-            external_issuer=user.external_issuer,
-            external_subject=user.effective_external_subject,
-            tenant_membership=None,
         )
         for user in users
     ]
-    return UserSearchResponse(items=items)
+    return TenantUserCandidateResponse(items=items)
 
 
 
 @router.get("/tenants/{tenant_id}/users")
 def list_tenant_users(
     tenant_id: int,
+    page: int | None = Query(default=None, ge=1),
+    page_size: int = Query(default=50, ge=1, le=100),
+    search: str | None = Query(default=None, max_length=200),
+    account_status: AccountStatus | None = None,
+    role: str | None = Query(default=None, max_length=64),
     context: CurrentContext = Depends(require_permission("tenant:user:read")),
     db: Session = Depends(get_db),
-) -> list[dict]:
+) -> list[dict] | dict:
     _require_current_tenant(tenant_id, context)
+    if page is not None or search or account_status or role or page_size != 50:
+        return ums.tenant_page(db, tenant_id, page=page or 1, page_size=page_size, search=search,
+                               account_status=account_status, role=role)
     return [
-        _membership_dict(
-            membership,
-            user,
-            roles=sorted(tras.effective_role_codes(db, membership)),
-        )
+        _membership_dict(membership, user, roles=sorted(tras.effective_role_codes(db, membership)))
         for membership, user in ts.list_tenant_users(db, tenant_id)
     ]
 
@@ -719,57 +728,27 @@ def list_tenant_users(
 @router.get("/tenants/{tenant_id}/audit-history")
 def tenant_audit_history(
     tenant_id: int,
-    limit: int = Query(default=100, ge=1, le=500),
+    page: int = Query(default=1, ge=1),
+    page_size: int = Query(default=25, ge=1, le=100),
+    q: str | None = Query(default=None, max_length=200),
+    category: Literal["membership", "role", "invitation", "tenant"] | None = None,
+    outcome: Literal["SUCCESS", "DENIED", "FAILED"] | None = None,
+    from_time: datetime | None = None,
+    to_time: datetime | None = None,
+    administrative_only: bool = False,
     context: CurrentContext = Depends(require_permission("tenant:user:read")),
     db: Session = Depends(get_db),
 ) -> dict:
+    from ..services import tenant_audit_service
+
     _require_current_tenant(tenant_id, context)
-    rows = (
-        db.query(AuthorizationAuditLog)
-        .filter(AuthorizationAuditLog.tenant_id == tenant_id)
-        .order_by(
-            AuthorizationAuditLog.created_at.desc(),
-            AuthorizationAuditLog.id.desc(),
-        )
-        .limit(limit)
-        .all()
-    )
-    user_ids = {
-        user_id
-        for row in rows
-        for user_id in (row.actor_user_id, row.target_user_id)
-        if user_id is not None
-    }
-    users = {
-        user.id: user
-        for user in db.query(IAMUser).filter(IAMUser.id.in_(user_ids)).all()
-    } if user_ids else {}
-    return {
-        "items": [
-            {
-                "id": row.id,
-                "action": row.action,
-                "outcome": row.outcome,
-                "actor_user_id": row.actor_user_id,
-                "actor_email": (
-                    users[row.actor_user_id].email
-                    if row.actor_user_id in users
-                    else None
-                ),
-                "target_user_id": row.target_user_id,
-                "target_email": (
-                    users[row.target_user_id].email
-                    if row.target_user_id in users
-                    else None
-                ),
-                "old_state": row.old_value,
-                "new_state": row.new_value,
-                "correlation_id": row.correlation_id,
-                "timestamp": row.created_at,
-            }
-            for row in rows
-        ]
-    }
+    if (from_time and from_time.tzinfo is None) or (to_time and to_time.tzinfo is None):
+        raise HTTPException(422, "Audit dates must include a timezone")
+    if from_time and to_time and from_time > to_time:
+        raise HTTPException(422, "Date range is invalid")
+    return tenant_audit_service.page(db, tenant_id, page=page, page_size=page_size, q=q,
+        category=category, outcome=outcome, from_time=from_time, to_time=to_time,
+        administrative_only=administrative_only)
 
 
 @router.get("/tenants/{tenant_id}/users/{membership_id}")
@@ -781,11 +760,9 @@ def get_tenant_user(
 ) -> dict:
     _require_current_tenant(tenant_id, context)
     membership, user = ts.get_tenant_membership(db, tenant_id, membership_id)
-    return _membership_dict(
-        membership,
-        user,
-        roles=sorted(tras.effective_role_codes(db, membership)),
-    )
+    return (ums.profile(db, user) | ums.membership_summary(db, membership, db.get(Tenant, tenant_id))
+            | {"activity": ums.audit_history(db, user.id, tenant_id=tenant_id, page_size=50),
+               "user_status": user.status, "status": membership.status, "role": membership.role})
 
 
 @router.post("/tenants/{tenant_id}/users", status_code=201)
@@ -797,28 +774,38 @@ def add_tenant_user(
     db: Session = Depends(get_db),
 ) -> dict:
     _require_current_tenant(tenant_id, context)
-    ext_user_id = payload.external_user_id
-    if ext_user_id is None and payload.user_id is not None:
-        user_row = db.query(IAMUser).filter(IAMUser.id == payload.user_id).one_or_none()
-        if user_row:
-            ext_user_id = user_row.external_iam_user_id
-    if not ext_user_id:
+    if payload.user_id is None and not payload.external_user_id:
         raise HTTPException(status_code=422, detail="Provide user_id or external_user_id")
-
-    existing = None
-    previous_user_status = None
-    user_id = db.query(IAMUser.id).filter(IAMUser.external_iam_user_id == ext_user_id).scalar()
-    if user_id is not None:
-        previous_user_status = db.query(IAMUser.status).filter(IAMUser.id == user_id).scalar()
-        existing = db.query(TenantUser).filter(
-            TenantUser.tenant_id == tenant_id,
-            TenantUser.user_id == user_id,
-        ).one_or_none()
+    try:
+        tras.validate_role_delegation(payload.roles or [payload.role], is_platform_admin=context.is_platform_admin)
+    except tras.AssignmentProblem as exc:
+        raise _assignment_http_error(exc) from exc
+    # Resolve legacy requests once, but never require an external identity for
+    # an account selected by its canonical IAM user ID.
+    identity_filter = (
+        IAMUser.id == payload.user_id
+        if payload.user_id is not None
+        else IAMUser.external_iam_user_id == payload.external_user_id
+    )
+    # Serialize adds and governance operations using the same tenant lock.
+    db.scalar(select(Tenant).where(Tenant.id == tenant_id).with_for_update())
+    user_row = db.query(IAMUser).filter(identity_filter).with_for_update().one_or_none()
+    if user_row is None:
+        raise HTTPException(status_code=404, detail="IAM user not found")
+    if payload.external_user_id and user_row.external_iam_user_id != payload.external_user_id:
+        raise HTTPException(status_code=422, detail="User identity references do not match")
+    previous_user_status = user_row.status
+    existing = db.query(TenantUser).filter(
+        TenantUser.tenant_id == tenant_id,
+        TenantUser.user_id == user_row.id,
+    ).one_or_none()
+    if existing is not None:
+        raise HTTPException(409, detail={"code": "MEMBERSHIP_ALREADY_EXISTS", "message": "This account is already a member of the selected tenant."})
     try:
         membership, user = ts.add_user_to_tenant(
             db,
             tenant_id,
-            external_iam_user_id=ext_user_id,
+            user_id=user_row.id,
             role=payload.role,
             role_codes=payload.roles,
             status=payload.status,
@@ -902,7 +889,20 @@ def update_tenant_user(
     db: Session = Depends(get_db),
 ) -> dict:
     _require_current_tenant(tenant_id, context)
-    membership, user = ts.get_tenant_membership(db, tenant_id, membership_id)
+    membership, user = ts.lock_tenant_membership(db, tenant_id, membership_id)
+    # Reject before changing roles; the role service joins this route's
+    # transaction so a combined PATCH cannot partially commit.
+    if payload.role is not None or payload.status not in {None, "ACTIVE"}:
+        try:
+            ts.require_ordinary_membership_target(db, membership)
+        except HTTPException as exc:
+            audit_service.write_authorization_audit(
+                db, action="membership.update_denied", outcome="DENIED",
+                context=context, tenant_id=tenant_id, target_user_id=user.id,
+                target_membership_id=membership.id, request=request, detail=str(exc.detail),
+            )
+            db.commit()
+            raise
     compatibility_old = {"role": membership.role, "status": membership.status}
     compatibility_role_changed = False
     if payload.role is not None:
@@ -923,10 +923,12 @@ def update_tenant_user(
                 expected_version=membership.role_assignment_version,
                 reason="Legacy membership role update",
                 actor_user_id=context.user_id,
-                is_platform_admin=context.is_platform_admin,
+                is_platform_admin=False,
                 request=request,
+                caller_owns_transaction=True,
             )
         except tras.AssignmentProblem as exc:
+            db.rollback()
             audit_service.write_authorization_audit(
                 db,
                 action="membership.update_denied",
@@ -1022,7 +1024,9 @@ def _set_membership_status(
     db: Session,
 ) -> dict:
     _require_current_tenant(tenant_id, context)
-    membership, user = ts.get_tenant_membership(db, tenant_id, membership_id)
+    # Serialize lifecycle changes in the same tenant -> user -> membership order
+    # as role and global administrative changes, refreshing any cached rows.
+    membership, user = ts.lock_tenant_membership(db, tenant_id, membership_id)
     if (
         status_value == "ACTIVE"
         and tras.active_assignment_count(db, membership.id) == 0
@@ -1033,6 +1037,8 @@ def _set_membership_status(
             status_code=409,
         )
     try:
+        if status_value != "ACTIVE":
+            ts.require_ordinary_membership_target(db, membership)
         ts.ensure_not_last_active_tenant_admin(
             db,
             membership,
@@ -1121,8 +1127,9 @@ def delete_tenant_user(
     db: Session = Depends(get_db),
 ) -> None:
     _require_current_tenant(tenant_id, context)
-    membership, user = ts.get_tenant_membership(db, tenant_id, membership_id)
+    membership, user = ts.lock_tenant_membership(db, tenant_id, membership_id)
     try:
+        ts.require_ordinary_membership_target(db, membership)
         ts.ensure_not_last_active_tenant_admin(
             db,
             membership,
@@ -1165,3 +1172,25 @@ def delete_tenant_user(
     )
     db.commit()
     invalidate_user_contexts(user.id)
+
+
+@router.patch("/tenants/{tenant_id}/users/{membership_id}/profile")
+def edit_tenant_profile(tenant_id: int, membership_id: int, payload: ProfileUpdate,
+                        context: CurrentContext = Depends(require_permission("tenant:user:update")),
+                        db: Session = Depends(get_db)):
+    _require_current_tenant(tenant_id, context)
+    member, user = ts.get_tenant_membership(db, tenant_id, membership_id)
+    user = ums.update_profile(db, user.id, payload.model_dump(exclude_unset=True),
+                               actor_user_id=context.user_id, tenant_id=tenant_id)
+    db.commit()
+    return ums.profile(db, user)
+
+
+@router.get("/tenants/{tenant_id}/users/{membership_id}/audit")
+def tenant_user_audit(tenant_id: int, membership_id: int,
+                      page: int = Query(default=1, ge=1), page_size: int = Query(default=50, ge=1, le=100),
+                      context: CurrentContext = Depends(require_permission("tenant:user:read")),
+                      db: Session = Depends(get_db)):
+    _require_current_tenant(tenant_id, context)
+    member, user = ts.get_tenant_membership(db, tenant_id, membership_id)
+    return ums.audit_history(db, user.id, tenant_id=tenant_id, page=page, page_size=page_size)

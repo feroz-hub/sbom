@@ -1,0 +1,54 @@
+[
+  {
+    "id": "UAT-VEX-DECISION-UI-DETAIL",
+    "role": "admin",
+    "expected": "Real investigation dialog opens analyzer evidence without 500",
+    "actual": {
+      "text": "CVE-2020-28500\nCVE-2020-28500\nMEDIUM\n5.3\nV3.1\nEPSS\n94%\nALSO KNOWN AS\nGHSA-29mw-wpgm-hmr9\nSBOM\nUAT R1 1792465600082474000 SBOM\nComponent\nlodash 4.17.20\nProject\nUAT R1 1792465600082474000\nApplication\nUAT R1 1792465600082474000 Application\nAnalyzer finding\nDETECTED\nNative VEX\nNo VEX statement\nEffective status\nAFFECTED\nReconciliation\nMATCHED\nPURL\npkg:npm/lodash@4.17.20\nBOM reference\nuat-lodash\n\nThe analyzer and VEX evidence share this component context. An internal decision takes precedence over imported statements.\n\nVulnerability details and VEX investigation for the selected SBOM and component.\n\nVulnerability Details\nVEX Investigation\nANALYZER EVIDENCE\nDetection\nDETECTED\nSources\nOSV\nRun\n22\nMatch\npurl_direct\nFirst seen\n2026-10-20T03:06:44+00:00\nLast seen\n2026-10-20T03:08:46+00:00\nIMPORTED VEX\nManual VEX Override\nNative\nunder_investigation\nNormalized\nUNDER_INVESTIGATION\nFormat\nmanual\nJustification\n—\nImpact\n—\nAction\n—\nMitigation\n—\nFixed version\n—\nEvidence\n—\nAsserted\n2026-10-20T03:06:46+00:00\nDocument\n—\nDocument version\n—\nManual VEX Override\nNative\nunder_investigation\nNormalized\nUNDER_INVESTIGATION\nFormat\nmanual\nJustification\n—\nImpact\n—\nAction\n—\nMitigation\n—\nFixed version\n—\nEvidence\n—\nAsserted\n2026-10-20T03:08:43+00:00\nDocument\n—\nDocument version\n—\nPREVIOUS VERSION DECISIONS\n\nRead-only evidence. Previous conclusions require a new applicability review; nothing is automatically inherited.\n\nNo unambiguous previous-version decision evidence.\n\nINTERNAL DECISION\nStatus\nAFFECTED\nReviewer\n"
+    },
+    "result": "PASS",
+    "time": "2026-10-20T03:22:52.175Z"
+  },
+  {
+    "id": "UAT-VEX-DECISION-UI",
+    "role": "admin",
+    "expected": "Admin UI decision returns 200 and displays persisted state",
+    "actual": {
+      "status": 200,
+      "row_version": 11,
+      "statusValue": "UNDER_INVESTIGATION"
+    },
+    "result": "PASS",
+    "time": "2026-10-20T03:22:52.919Z"
+  },
+  {
+    "id": "R1-VEX-ASSIGN-UI",
+    "role": "admin",
+    "expected": "Admin UI can assign disposable context to authorized Developer",
+    "actual": {
+      "status": 409
+    },
+    "result": "FAIL",
+    "time": "2026-10-20T03:22:56.837Z"
+  },
+  {
+    "id": "R1-VEX-DEVELOPER-UI-ERROR",
+    "role": "admin",
+    "expected": "Open and use actual assigned Developer dialog",
+    "actual": {
+      "error": "locator.selectOption: Timeout 20000ms exceeded.\nCall log:\n\u001b[2m  - waiting for getByRole('dialog').getByLabel('Status')\u001b[22m\n"
+    },
+    "result": "FAIL",
+    "time": "2026-10-20T03:23:56.004Z"
+  },
+  {
+    "id": "R1-BROWSER-EXECUTION",
+    "role": "admin",
+    "expected": "Complete browser scenario",
+    "actual": {
+      "error": "locator.selectOption: Timeout 20000ms exceeded.\nCall log:\n\u001b[2m  - waiting for getByRole('dialog').getByLabel('Status')\u001b[22m\n"
+    },
+    "result": "FAIL",
+    "time": "2026-10-20T03:24:17.056Z"
+  }
+]

@@ -1,0 +1,4316 @@
+[
+  {
+    "originalId": "UAT-ACCOUNT-SUSPENDED",
+    "originalModule": "Authorization",
+    "originalRole": "platform/disposable user",
+    "originalTenant": "Platform context; disposable Olympus user7 (original target tenant UUID3a900179-36bf-4b5f-b2e1-2a4a9d06e6af)",
+    "originalExpectedResult": "Exercise SUSPENDED account behavior only after an authorized disposable-account state transition",
+    "originalStatus": "BLOCKED",
+    "originalBlocker": {
+      "change": {
+        "status": 403,
+        "count": 0,
+        "keys": [
+          "detail"
+        ],
+        "error": {
+          "detail": {
+            "code": "IAM_PLATFORM_PERMISSION_DENIED",
+            "message": "Platform permission is required for this action."
+          }
+        },
+        "requestId": "3b918df5b954"
+      },
+      "nativeLoginStatus": 200,
+      "blocker": "Live Platform Admin permission list lacks platform:user:manage_status. State change was correctly rejected with 403, so suspended/disabled behavior was not executed.",
+      "harness_note": "Initial expectation assumed a broader platform privilege. Corrected against the live authorization catalogue; no account status was changed."
+    },
+    "dependency": "Platform IAM capability catalogue and disposable eligible principal",
+    "currentImplementationState": "Current V5 catalogue intentionally excludes platform:user:manage_status. Direct status attempt on a task-owned principal returned 403. No legal positive transition or suspension/session/audit lifecycle executed; requires an approved supported capability, not a seeded-role grant.",
+    "round1Or2PrerequisiteResolution": "Not addressed in R1/R2; inspect current catalog and explicit status capability",
+    "executionTechnicallyPossible": "Policy-dependent; negative check possible",
+    "approvalNeeded": "Only if policy-authorized test administrator unavailable",
+    "plannedExecutionMethod": "Read catalogue/auth context; API 403; if explicitly authorized, isolated test-DB positive SUSPENDED transition, login/session denial and audit",
+    "status": "BLOCKED",
+    "executedSteps": [
+      {
+        "evidence": "governance-browser-accepted.json",
+        "checkId": "UAT-ACCOUNT-SUSPENDED-AUTHORIZATION",
+        "result": "PASS",
+        "steps": "Seeded platform requests status on newly activated disposable account"
+      },
+      {
+        "evidence": "governance-browser-accepted.json",
+        "checkId": "UAT-ACCOUNT-DISABLED-AUTHORIZATION",
+        "result": "PASS",
+        "steps": "Seeded platform requests status on newly activated disposable account"
+      },
+      {
+        "evidence": "governance-browser-accepted.json",
+        "checkId": "UAT-ACCOUNT-ACTIVE-AUTHORIZATION",
+        "result": "PASS",
+        "steps": "Seeded platform requests status on newly activated disposable account"
+      },
+      {
+        "evidence": "governance-browser-accepted.json",
+        "checkId": "R3-PLATFORM-NO-INHERITED-TENANT",
+        "result": "PASS",
+        "steps": "Read seeded platform auth context without header"
+      },
+      {
+        "evidence": "governance-browser-accepted.json",
+        "checkId": "R3-PLATFORM-FORGED-HEADER",
+        "result": "PASS",
+        "steps": "Seeded platform supplies Olympus UUID without membership"
+      },
+      {
+        "evidence": "governance-browser-accepted.json",
+        "checkId": "R3-DELEGATION-VIEWER-DENIED",
+        "result": "PASS",
+        "steps": "Viewer attempts platform grant on disposable user"
+      },
+      {
+        "evidence": "governance-browser-accepted.json",
+        "checkId": "R3-DELEGATION-BEFORE",
+        "result": "PASS",
+        "steps": "Disposable tenant admin calls platform directory before delegation"
+      },
+      {
+        "evidence": "governance-browser-accepted.json",
+        "checkId": "R3-DELEGATION-GRANT",
+        "result": "PASS",
+        "steps": "Policy-authorized seeded platform grants only new disposable principal"
+      },
+      {
+        "evidence": "governance-browser-accepted.json",
+        "checkId": "R3-OWNED-PLATFORM-BROWSER-COMPLETE",
+        "result": "PASS",
+        "steps": "Real Chrome Native Login and membership switcher on disposable platform principal"
+      },
+      {
+        "evidence": "governance-browser-accepted.json",
+        "checkId": "R3-DELEGATION-LIVE-REFRESH",
+        "result": "PASS",
+        "steps": "Use same pre-grant Native token after grant"
+      },
+      {
+        "evidence": "governance-browser-accepted.json",
+        "checkId": "R3-DELEGATION-DUPLICATE",
+        "result": "PASS",
+        "steps": "Repeat supported grant for same owned user"
+      },
+      {
+        "evidence": "governance-browser-accepted.json",
+        "checkId": "R3-WORKING-CONTEXT-PLATFORM-LANDING",
+        "result": "PASS",
+        "steps": "Newly authorized platform principal reads context with no header"
+      },
+      {
+        "evidence": "governance-browser-accepted.json",
+        "checkId": "R3-WORKING-CONTEXT-EXPLICIT-SELECTION",
+        "result": "PASS",
+        "steps": "Select only own preexisting active tenant membership using supported UUID header"
+      },
+      {
+        "evidence": "governance-browser-accepted.json",
+        "checkId": "R3-WORKING-CONTEXT-TENANT-READ",
+        "result": "PASS",
+        "steps": "Read projects in explicitly selected authorized tenant"
+      },
+      {
+        "evidence": "governance-browser-accepted.json",
+        "checkId": "R3-WORKING-CONTEXT-FOREIGN-DENY",
+        "result": "PASS",
+        "steps": "Attempt Olympus context without membership"
+      },
+      {
+        "evidence": "governance-browser-accepted.json",
+        "checkId": "R3-DELEGATION-REVOKE",
+        "result": "PASS",
+        "steps": "Revoke only created disposable grant"
+      },
+      {
+        "evidence": "governance-browser-accepted.json",
+        "checkId": "R3-DELEGATION-IMMEDIATE-REVOCATION",
+        "result": "PASS",
+        "steps": "Replay same Native token after revocation"
+      },
+      {
+        "evidence": "governance-browser-accepted.json",
+        "checkId": "R3-SESSION-OWNED-LOGOUT-ALL",
+        "result": "PASS",
+        "steps": "Two native tokens; revoke owned user sessions via supported logout-all"
+      },
+      {
+        "evidence": "governance-browser-accepted.json",
+        "checkId": "R3-SESSION-OLD-first",
+        "result": "PASS",
+        "steps": "Replay first token after owned logout-all"
+      },
+      {
+        "evidence": "governance-browser-accepted.json",
+        "checkId": "R3-SESSION-OLD-second",
+        "result": "PASS",
+        "steps": "Replay second token after owned logout-all"
+      },
+      {
+        "evidence": "governance-browser-accepted.json",
+        "checkId": "R3-GOVERNANCE-CLEANUP",
+        "result": "PASS",
+        "steps": "Disable only new owned tenant; no seed authority changed"
+      },
+      {
+        "evidence": "governance.json",
+        "checkId": "UAT-ACCOUNT-SUSPENDED-AUTHORIZATION",
+        "result": "PASS",
+        "steps": "Seeded platform requests status on newly activated disposable account"
+      },
+      {
+        "evidence": "governance.json",
+        "checkId": "UAT-ACCOUNT-DISABLED-AUTHORIZATION",
+        "result": "PASS",
+        "steps": "Seeded platform requests status on newly activated disposable account"
+      },
+      {
+        "evidence": "governance.json",
+        "checkId": "UAT-ACCOUNT-ACTIVE-AUTHORIZATION",
+        "result": "PASS",
+        "steps": "Seeded platform requests status on newly activated disposable account"
+      },
+      {
+        "evidence": "governance.json",
+        "checkId": "R3-PLATFORM-NO-INHERITED-TENANT",
+        "result": "PASS",
+        "steps": "Read seeded platform auth context without header"
+      },
+      {
+        "evidence": "governance.json",
+        "checkId": "R3-PLATFORM-FORGED-HEADER",
+        "result": "PASS",
+        "steps": "Seeded platform supplies Olympus UUID without membership"
+      },
+      {
+        "evidence": "governance.json",
+        "checkId": "R3-DELEGATION-VIEWER-DENIED",
+        "result": "PASS",
+        "steps": "Viewer attempts platform grant on disposable user"
+      },
+      {
+        "evidence": "governance.json",
+        "checkId": "R3-DELEGATION-BEFORE",
+        "result": "PASS",
+        "steps": "Disposable tenant admin calls platform directory before delegation"
+      },
+      {
+        "evidence": "governance.json",
+        "checkId": "R3-DELEGATION-GRANT",
+        "result": "PASS",
+        "steps": "Policy-authorized seeded platform grants only new disposable principal"
+      },
+      {
+        "evidence": "governance.json",
+        "checkId": "R3-DELEGATION-LIVE-REFRESH",
+        "result": "PASS",
+        "steps": "Use same pre-grant Native token after grant"
+      },
+      {
+        "evidence": "governance.json",
+        "checkId": "R3-DELEGATION-DUPLICATE",
+        "result": "FAIL",
+        "steps": "Repeat supported grant for same owned user"
+      },
+      {
+        "evidence": "governance.json",
+        "checkId": "R3-WORKING-CONTEXT-PLATFORM-LANDING",
+        "result": "PASS",
+        "steps": "Newly authorized platform principal reads context with no header"
+      },
+      {
+        "evidence": "governance.json",
+        "checkId": "R3-WORKING-CONTEXT-EXPLICIT-SELECTION",
+        "result": "PASS",
+        "steps": "Select only own preexisting active tenant membership using supported UUID header"
+      },
+      {
+        "evidence": "governance.json",
+        "checkId": "R3-WORKING-CONTEXT-TENANT-READ",
+        "result": "PASS",
+        "steps": "Read projects in explicitly selected authorized tenant"
+      },
+      {
+        "evidence": "governance.json",
+        "checkId": "R3-WORKING-CONTEXT-FOREIGN-DENY",
+        "result": "PASS",
+        "steps": "Attempt Olympus context without membership"
+      },
+      {
+        "evidence": "governance.json",
+        "checkId": "R3-DELEGATION-REVOKE",
+        "result": "PASS",
+        "steps": "Revoke only created disposable grant"
+      },
+      {
+        "evidence": "governance.json",
+        "checkId": "R3-DELEGATION-IMMEDIATE-REVOCATION",
+        "result": "PASS",
+        "steps": "Replay same Native token after revocation"
+      },
+      {
+        "evidence": "governance.json",
+        "checkId": "R3-SESSION-OWNED-LOGOUT-ALL",
+        "result": "PASS",
+        "steps": "Two native tokens; revoke owned user sessions via supported logout-all"
+      },
+      {
+        "evidence": "governance.json",
+        "checkId": "R3-SESSION-OLD-first",
+        "result": "PASS",
+        "steps": "Replay first token after owned logout-all"
+      },
+      {
+        "evidence": "governance.json",
+        "checkId": "R3-SESSION-OLD-second",
+        "result": "PASS",
+        "steps": "Replay second token after owned logout-all"
+      },
+      {
+        "evidence": "governance.json",
+        "checkId": "R3-GOVERNANCE-CLEANUP",
+        "result": "PASS",
+        "steps": "Disable only new owned tenant; no seed authority changed"
+      }
+    ],
+    "actual": "Current V5 catalogue intentionally excludes platform:user:manage_status. Direct status attempt on a task-owned principal returned 403. No legal positive transition or suspension/session/audit lifecycle executed; requires an approved supported capability, not a seeded-role grant.",
+    "httpResults": [
+      200,
+      201,
+      204,
+      401,
+      403,
+      409
+    ],
+    "evidence": [
+      "evidence/governance-browser-accepted.json",
+      "evidence/governance.json"
+    ],
+    "originalSource": "docs/uat/evidence/2026-10-19/cases.json",
+    "reconciliationAt": "2026-10-20T10:58:04.682769+00:00",
+    "executionScope": "Round3 only; historical baseline unchanged",
+    "implementationAtInitialReview": "Not addressed in R1/R2; inspect current catalog and explicit status capability",
+    "executedTenantScope": "Olympus disposable resources with Viewer and Isolation Control negative checks where applicable; account status requests in Platform context",
+    "approvalDisposition": "Unresolved authorized capability / Product-Security contract decision; no seeded privilege changes",
+    "testCaseId": "UAT-ACCOUNT-SUSPENDED",
+    "defectReferences": [],
+    "preconditions": "Isolated local Greenfield UUID; seeded identities unchanged; Native credentials loaded privately; only task-owned resources changed. Exact per-check preconditions and role/tenant details are retained in linked evidence.",
+    "remainingLimitations": "Current V5 catalogue intentionally excludes platform:user:manage_status. Direct status attempt on a task-owned principal returned 403. No legal positive transition or suspension/session/audit lifecycle executed; requires an approved supported capability, not a seeded-role grant."
+  },
+  {
+    "originalId": "UAT-ACCOUNT-DISABLED",
+    "originalModule": "Authorization",
+    "originalRole": "platform/disposable user",
+    "originalTenant": "Platform context; disposable Olympus user7",
+    "originalExpectedResult": "Exercise DISABLED account behavior only after an authorized disposable-account state transition",
+    "originalStatus": "BLOCKED",
+    "originalBlocker": {
+      "change": {
+        "status": 403,
+        "count": 0,
+        "keys": [
+          "detail"
+        ],
+        "error": {
+          "detail": {
+            "code": "IAM_PLATFORM_PERMISSION_DENIED",
+            "message": "Platform permission is required for this action."
+          }
+        },
+        "requestId": "3f079f68cc73"
+      },
+      "nativeLoginStatus": 200,
+      "blocker": "Live Platform Admin permission list lacks platform:user:manage_status. State change was correctly rejected with 403, so suspended/disabled behavior was not executed.",
+      "harness_note": "Initial expectation assumed a broader platform privilege. Corrected against the live authorization catalogue; no account status was changed."
+    },
+    "dependency": "Platform IAM status permission",
+    "currentImplementationState": "Direct DISABLED transition remains forbidden by current platform permission catalogue. No seeded or disposable account status was changed. Positive lifecycle remains authorization-blocked.",
+    "round1Or2PrerequisiteResolution": "Not addressed in R1/R2; seeded role unchanged",
+    "executionTechnicallyPossible": "Policy-dependent; negative check possible",
+    "approvalNeeded": "Same as suspended",
+    "plannedExecutionMethod": "Read catalogue/auth context; direct denial; authorized isolated DISABLED transition plus session invalidation/audit",
+    "status": "BLOCKED",
+    "executedSteps": [
+      {
+        "evidence": "governance-browser-accepted.json",
+        "checkId": "UAT-ACCOUNT-SUSPENDED-AUTHORIZATION",
+        "result": "PASS",
+        "steps": "Seeded platform requests status on newly activated disposable account"
+      },
+      {
+        "evidence": "governance-browser-accepted.json",
+        "checkId": "UAT-ACCOUNT-DISABLED-AUTHORIZATION",
+        "result": "PASS",
+        "steps": "Seeded platform requests status on newly activated disposable account"
+      },
+      {
+        "evidence": "governance-browser-accepted.json",
+        "checkId": "UAT-ACCOUNT-ACTIVE-AUTHORIZATION",
+        "result": "PASS",
+        "steps": "Seeded platform requests status on newly activated disposable account"
+      },
+      {
+        "evidence": "governance-browser-accepted.json",
+        "checkId": "R3-PLATFORM-NO-INHERITED-TENANT",
+        "result": "PASS",
+        "steps": "Read seeded platform auth context without header"
+      },
+      {
+        "evidence": "governance-browser-accepted.json",
+        "checkId": "R3-PLATFORM-FORGED-HEADER",
+        "result": "PASS",
+        "steps": "Seeded platform supplies Olympus UUID without membership"
+      },
+      {
+        "evidence": "governance-browser-accepted.json",
+        "checkId": "R3-DELEGATION-VIEWER-DENIED",
+        "result": "PASS",
+        "steps": "Viewer attempts platform grant on disposable user"
+      },
+      {
+        "evidence": "governance-browser-accepted.json",
+        "checkId": "R3-DELEGATION-BEFORE",
+        "result": "PASS",
+        "steps": "Disposable tenant admin calls platform directory before delegation"
+      },
+      {
+        "evidence": "governance-browser-accepted.json",
+        "checkId": "R3-DELEGATION-GRANT",
+        "result": "PASS",
+        "steps": "Policy-authorized seeded platform grants only new disposable principal"
+      },
+      {
+        "evidence": "governance-browser-accepted.json",
+        "checkId": "R3-OWNED-PLATFORM-BROWSER-COMPLETE",
+        "result": "PASS",
+        "steps": "Real Chrome Native Login and membership switcher on disposable platform principal"
+      },
+      {
+        "evidence": "governance-browser-accepted.json",
+        "checkId": "R3-DELEGATION-LIVE-REFRESH",
+        "result": "PASS",
+        "steps": "Use same pre-grant Native token after grant"
+      },
+      {
+        "evidence": "governance-browser-accepted.json",
+        "checkId": "R3-DELEGATION-DUPLICATE",
+        "result": "PASS",
+        "steps": "Repeat supported grant for same owned user"
+      },
+      {
+        "evidence": "governance-browser-accepted.json",
+        "checkId": "R3-WORKING-CONTEXT-PLATFORM-LANDING",
+        "result": "PASS",
+        "steps": "Newly authorized platform principal reads context with no header"
+      },
+      {
+        "evidence": "governance-browser-accepted.json",
+        "checkId": "R3-WORKING-CONTEXT-EXPLICIT-SELECTION",
+        "result": "PASS",
+        "steps": "Select only own preexisting active tenant membership using supported UUID header"
+      },
+      {
+        "evidence": "governance-browser-accepted.json",
+        "checkId": "R3-WORKING-CONTEXT-TENANT-READ",
+        "result": "PASS",
+        "steps": "Read projects in explicitly selected authorized tenant"
+      },
+      {
+        "evidence": "governance-browser-accepted.json",
+        "checkId": "R3-WORKING-CONTEXT-FOREIGN-DENY",
+        "result": "PASS",
+        "steps": "Attempt Olympus context without membership"
+      },
+      {
+        "evidence": "governance-browser-accepted.json",
+        "checkId": "R3-DELEGATION-REVOKE",
+        "result": "PASS",
+        "steps": "Revoke only created disposable grant"
+      },
+      {
+        "evidence": "governance-browser-accepted.json",
+        "checkId": "R3-DELEGATION-IMMEDIATE-REVOCATION",
+        "result": "PASS",
+        "steps": "Replay same Native token after revocation"
+      },
+      {
+        "evidence": "governance-browser-accepted.json",
+        "checkId": "R3-SESSION-OWNED-LOGOUT-ALL",
+        "result": "PASS",
+        "steps": "Two native tokens; revoke owned user sessions via supported logout-all"
+      },
+      {
+        "evidence": "governance-browser-accepted.json",
+        "checkId": "R3-SESSION-OLD-first",
+        "result": "PASS",
+        "steps": "Replay first token after owned logout-all"
+      },
+      {
+        "evidence": "governance-browser-accepted.json",
+        "checkId": "R3-SESSION-OLD-second",
+        "result": "PASS",
+        "steps": "Replay second token after owned logout-all"
+      },
+      {
+        "evidence": "governance-browser-accepted.json",
+        "checkId": "R3-GOVERNANCE-CLEANUP",
+        "result": "PASS",
+        "steps": "Disable only new owned tenant; no seed authority changed"
+      },
+      {
+        "evidence": "governance.json",
+        "checkId": "UAT-ACCOUNT-SUSPENDED-AUTHORIZATION",
+        "result": "PASS",
+        "steps": "Seeded platform requests status on newly activated disposable account"
+      },
+      {
+        "evidence": "governance.json",
+        "checkId": "UAT-ACCOUNT-DISABLED-AUTHORIZATION",
+        "result": "PASS",
+        "steps": "Seeded platform requests status on newly activated disposable account"
+      },
+      {
+        "evidence": "governance.json",
+        "checkId": "UAT-ACCOUNT-ACTIVE-AUTHORIZATION",
+        "result": "PASS",
+        "steps": "Seeded platform requests status on newly activated disposable account"
+      },
+      {
+        "evidence": "governance.json",
+        "checkId": "R3-PLATFORM-NO-INHERITED-TENANT",
+        "result": "PASS",
+        "steps": "Read seeded platform auth context without header"
+      },
+      {
+        "evidence": "governance.json",
+        "checkId": "R3-PLATFORM-FORGED-HEADER",
+        "result": "PASS",
+        "steps": "Seeded platform supplies Olympus UUID without membership"
+      },
+      {
+        "evidence": "governance.json",
+        "checkId": "R3-DELEGATION-VIEWER-DENIED",
+        "result": "PASS",
+        "steps": "Viewer attempts platform grant on disposable user"
+      },
+      {
+        "evidence": "governance.json",
+        "checkId": "R3-DELEGATION-BEFORE",
+        "result": "PASS",
+        "steps": "Disposable tenant admin calls platform directory before delegation"
+      },
+      {
+        "evidence": "governance.json",
+        "checkId": "R3-DELEGATION-GRANT",
+        "result": "PASS",
+        "steps": "Policy-authorized seeded platform grants only new disposable principal"
+      },
+      {
+        "evidence": "governance.json",
+        "checkId": "R3-DELEGATION-LIVE-REFRESH",
+        "result": "PASS",
+        "steps": "Use same pre-grant Native token after grant"
+      },
+      {
+        "evidence": "governance.json",
+        "checkId": "R3-DELEGATION-DUPLICATE",
+        "result": "FAIL",
+        "steps": "Repeat supported grant for same owned user"
+      },
+      {
+        "evidence": "governance.json",
+        "checkId": "R3-WORKING-CONTEXT-PLATFORM-LANDING",
+        "result": "PASS",
+        "steps": "Newly authorized platform principal reads context with no header"
+      },
+      {
+        "evidence": "governance.json",
+        "checkId": "R3-WORKING-CONTEXT-EXPLICIT-SELECTION",
+        "result": "PASS",
+        "steps": "Select only own preexisting active tenant membership using supported UUID header"
+      },
+      {
+        "evidence": "governance.json",
+        "checkId": "R3-WORKING-CONTEXT-TENANT-READ",
+        "result": "PASS",
+        "steps": "Read projects in explicitly selected authorized tenant"
+      },
+      {
+        "evidence": "governance.json",
+        "checkId": "R3-WORKING-CONTEXT-FOREIGN-DENY",
+        "result": "PASS",
+        "steps": "Attempt Olympus context without membership"
+      },
+      {
+        "evidence": "governance.json",
+        "checkId": "R3-DELEGATION-REVOKE",
+        "result": "PASS",
+        "steps": "Revoke only created disposable grant"
+      },
+      {
+        "evidence": "governance.json",
+        "checkId": "R3-DELEGATION-IMMEDIATE-REVOCATION",
+        "result": "PASS",
+        "steps": "Replay same Native token after revocation"
+      },
+      {
+        "evidence": "governance.json",
+        "checkId": "R3-SESSION-OWNED-LOGOUT-ALL",
+        "result": "PASS",
+        "steps": "Two native tokens; revoke owned user sessions via supported logout-all"
+      },
+      {
+        "evidence": "governance.json",
+        "checkId": "R3-SESSION-OLD-first",
+        "result": "PASS",
+        "steps": "Replay first token after owned logout-all"
+      },
+      {
+        "evidence": "governance.json",
+        "checkId": "R3-SESSION-OLD-second",
+        "result": "PASS",
+        "steps": "Replay second token after owned logout-all"
+      },
+      {
+        "evidence": "governance.json",
+        "checkId": "R3-GOVERNANCE-CLEANUP",
+        "result": "PASS",
+        "steps": "Disable only new owned tenant; no seed authority changed"
+      }
+    ],
+    "actual": "Direct DISABLED transition remains forbidden by current platform permission catalogue. No seeded or disposable account status was changed. Positive lifecycle remains authorization-blocked.",
+    "httpResults": [
+      200,
+      201,
+      204,
+      401,
+      403,
+      409
+    ],
+    "evidence": [
+      "evidence/governance-browser-accepted.json",
+      "evidence/governance.json"
+    ],
+    "originalSource": "docs/uat/evidence/2026-10-19/cases.json",
+    "reconciliationAt": "2026-10-20T10:58:04.683672+00:00",
+    "executionScope": "Round3 only; historical baseline unchanged",
+    "implementationAtInitialReview": "Not addressed in R1/R2; seeded role unchanged",
+    "executedTenantScope": "Olympus disposable resources with Viewer and Isolation Control negative checks where applicable; account status requests in Platform context",
+    "approvalDisposition": "Unresolved authorized capability / Product-Security contract decision; no seeded privilege changes",
+    "testCaseId": "UAT-ACCOUNT-DISABLED",
+    "defectReferences": [],
+    "preconditions": "Isolated local Greenfield UUID; seeded identities unchanged; Native credentials loaded privately; only task-owned resources changed. Exact per-check preconditions and role/tenant details are retained in linked evidence.",
+    "remainingLimitations": "Direct DISABLED transition remains forbidden by current platform permission catalogue. No seeded or disposable account status was changed. Positive lifecycle remains authorization-blocked."
+  },
+  {
+    "originalId": "UAT-ACCOUNT-ACTIVE",
+    "originalModule": "Authorization",
+    "originalRole": "platform/disposable user",
+    "originalTenant": "Platform context; disposable Olympus user7",
+    "originalExpectedResult": "Exercise ACTIVE account behavior only after an authorized disposable-account state transition",
+    "originalStatus": "BLOCKED",
+    "originalBlocker": {
+      "change": {
+        "status": 403,
+        "count": 0,
+        "keys": [
+          "detail"
+        ],
+        "error": {
+          "detail": {
+            "code": "IAM_PLATFORM_PERMISSION_DENIED",
+            "message": "Platform permission is required for this action."
+          }
+        },
+        "requestId": "f8f3cad8eee6"
+      },
+      "nativeLoginStatus": 200,
+      "blocker": "Live Platform Admin permission list lacks platform:user:manage_status. State change was correctly rejected with 403, so suspended/disabled behavior was not executed.",
+      "harness_note": "Initial expectation assumed a broader platform privilege. Corrected against the live authorization catalogue; no account status was changed."
+    },
+    "dependency": "Platform IAM status permission",
+    "currentImplementationState": "New principal ACTIVE login succeeds, but reactivation from SUSPENDED/DISABLED cannot be executed without the excluded manage_status capability. Ordinary login is not reactivation acceptance.",
+    "round1Or2PrerequisiteResolution": "Not addressed in R1/R2",
+    "executionTechnicallyPossible": "Policy-dependent; negative check possible",
+    "approvalNeeded": "Same as suspended",
+    "plannedExecutionMethod": "Authorized isolated reactivation after suspension/disable, login and audit; no seeded state changes",
+    "status": "BLOCKED",
+    "executedSteps": [
+      {
+        "evidence": "governance-browser-accepted.json",
+        "checkId": "UAT-ACCOUNT-SUSPENDED-AUTHORIZATION",
+        "result": "PASS",
+        "steps": "Seeded platform requests status on newly activated disposable account"
+      },
+      {
+        "evidence": "governance-browser-accepted.json",
+        "checkId": "UAT-ACCOUNT-DISABLED-AUTHORIZATION",
+        "result": "PASS",
+        "steps": "Seeded platform requests status on newly activated disposable account"
+      },
+      {
+        "evidence": "governance-browser-accepted.json",
+        "checkId": "UAT-ACCOUNT-ACTIVE-AUTHORIZATION",
+        "result": "PASS",
+        "steps": "Seeded platform requests status on newly activated disposable account"
+      },
+      {
+        "evidence": "governance-browser-accepted.json",
+        "checkId": "R3-PLATFORM-NO-INHERITED-TENANT",
+        "result": "PASS",
+        "steps": "Read seeded platform auth context without header"
+      },
+      {
+        "evidence": "governance-browser-accepted.json",
+        "checkId": "R3-PLATFORM-FORGED-HEADER",
+        "result": "PASS",
+        "steps": "Seeded platform supplies Olympus UUID without membership"
+      },
+      {
+        "evidence": "governance-browser-accepted.json",
+        "checkId": "R3-DELEGATION-VIEWER-DENIED",
+        "result": "PASS",
+        "steps": "Viewer attempts platform grant on disposable user"
+      },
+      {
+        "evidence": "governance-browser-accepted.json",
+        "checkId": "R3-DELEGATION-BEFORE",
+        "result": "PASS",
+        "steps": "Disposable tenant admin calls platform directory before delegation"
+      },
+      {
+        "evidence": "governance-browser-accepted.json",
+        "checkId": "R3-DELEGATION-GRANT",
+        "result": "PASS",
+        "steps": "Policy-authorized seeded platform grants only new disposable principal"
+      },
+      {
+        "evidence": "governance-browser-accepted.json",
+        "checkId": "R3-OWNED-PLATFORM-BROWSER-COMPLETE",
+        "result": "PASS",
+        "steps": "Real Chrome Native Login and membership switcher on disposable platform principal"
+      },
+      {
+        "evidence": "governance-browser-accepted.json",
+        "checkId": "R3-DELEGATION-LIVE-REFRESH",
+        "result": "PASS",
+        "steps": "Use same pre-grant Native token after grant"
+      },
+      {
+        "evidence": "governance-browser-accepted.json",
+        "checkId": "R3-DELEGATION-DUPLICATE",
+        "result": "PASS",
+        "steps": "Repeat supported grant for same owned user"
+      },
+      {
+        "evidence": "governance-browser-accepted.json",
+        "checkId": "R3-WORKING-CONTEXT-PLATFORM-LANDING",
+        "result": "PASS",
+        "steps": "Newly authorized platform principal reads context with no header"
+      },
+      {
+        "evidence": "governance-browser-accepted.json",
+        "checkId": "R3-WORKING-CONTEXT-EXPLICIT-SELECTION",
+        "result": "PASS",
+        "steps": "Select only own preexisting active tenant membership using supported UUID header"
+      },
+      {
+        "evidence": "governance-browser-accepted.json",
+        "checkId": "R3-WORKING-CONTEXT-TENANT-READ",
+        "result": "PASS",
+        "steps": "Read projects in explicitly selected authorized tenant"
+      },
+      {
+        "evidence": "governance-browser-accepted.json",
+        "checkId": "R3-WORKING-CONTEXT-FOREIGN-DENY",
+        "result": "PASS",
+        "steps": "Attempt Olympus context without membership"
+      },
+      {
+        "evidence": "governance-browser-accepted.json",
+        "checkId": "R3-DELEGATION-REVOKE",
+        "result": "PASS",
+        "steps": "Revoke only created disposable grant"
+      },
+      {
+        "evidence": "governance-browser-accepted.json",
+        "checkId": "R3-DELEGATION-IMMEDIATE-REVOCATION",
+        "result": "PASS",
+        "steps": "Replay same Native token after revocation"
+      },
+      {
+        "evidence": "governance-browser-accepted.json",
+        "checkId": "R3-SESSION-OWNED-LOGOUT-ALL",
+        "result": "PASS",
+        "steps": "Two native tokens; revoke owned user sessions via supported logout-all"
+      },
+      {
+        "evidence": "governance-browser-accepted.json",
+        "checkId": "R3-SESSION-OLD-first",
+        "result": "PASS",
+        "steps": "Replay first token after owned logout-all"
+      },
+      {
+        "evidence": "governance-browser-accepted.json",
+        "checkId": "R3-SESSION-OLD-second",
+        "result": "PASS",
+        "steps": "Replay second token after owned logout-all"
+      },
+      {
+        "evidence": "governance-browser-accepted.json",
+        "checkId": "R3-GOVERNANCE-CLEANUP",
+        "result": "PASS",
+        "steps": "Disable only new owned tenant; no seed authority changed"
+      },
+      {
+        "evidence": "governance.json",
+        "checkId": "UAT-ACCOUNT-SUSPENDED-AUTHORIZATION",
+        "result": "PASS",
+        "steps": "Seeded platform requests status on newly activated disposable account"
+      },
+      {
+        "evidence": "governance.json",
+        "checkId": "UAT-ACCOUNT-DISABLED-AUTHORIZATION",
+        "result": "PASS",
+        "steps": "Seeded platform requests status on newly activated disposable account"
+      },
+      {
+        "evidence": "governance.json",
+        "checkId": "UAT-ACCOUNT-ACTIVE-AUTHORIZATION",
+        "result": "PASS",
+        "steps": "Seeded platform requests status on newly activated disposable account"
+      },
+      {
+        "evidence": "governance.json",
+        "checkId": "R3-PLATFORM-NO-INHERITED-TENANT",
+        "result": "PASS",
+        "steps": "Read seeded platform auth context without header"
+      },
+      {
+        "evidence": "governance.json",
+        "checkId": "R3-PLATFORM-FORGED-HEADER",
+        "result": "PASS",
+        "steps": "Seeded platform supplies Olympus UUID without membership"
+      },
+      {
+        "evidence": "governance.json",
+        "checkId": "R3-DELEGATION-VIEWER-DENIED",
+        "result": "PASS",
+        "steps": "Viewer attempts platform grant on disposable user"
+      },
+      {
+        "evidence": "governance.json",
+        "checkId": "R3-DELEGATION-BEFORE",
+        "result": "PASS",
+        "steps": "Disposable tenant admin calls platform directory before delegation"
+      },
+      {
+        "evidence": "governance.json",
+        "checkId": "R3-DELEGATION-GRANT",
+        "result": "PASS",
+        "steps": "Policy-authorized seeded platform grants only new disposable principal"
+      },
+      {
+        "evidence": "governance.json",
+        "checkId": "R3-DELEGATION-LIVE-REFRESH",
+        "result": "PASS",
+        "steps": "Use same pre-grant Native token after grant"
+      },
+      {
+        "evidence": "governance.json",
+        "checkId": "R3-DELEGATION-DUPLICATE",
+        "result": "FAIL",
+        "steps": "Repeat supported grant for same owned user"
+      },
+      {
+        "evidence": "governance.json",
+        "checkId": "R3-WORKING-CONTEXT-PLATFORM-LANDING",
+        "result": "PASS",
+        "steps": "Newly authorized platform principal reads context with no header"
+      },
+      {
+        "evidence": "governance.json",
+        "checkId": "R3-WORKING-CONTEXT-EXPLICIT-SELECTION",
+        "result": "PASS",
+        "steps": "Select only own preexisting active tenant membership using supported UUID header"
+      },
+      {
+        "evidence": "governance.json",
+        "checkId": "R3-WORKING-CONTEXT-TENANT-READ",
+        "result": "PASS",
+        "steps": "Read projects in explicitly selected authorized tenant"
+      },
+      {
+        "evidence": "governance.json",
+        "checkId": "R3-WORKING-CONTEXT-FOREIGN-DENY",
+        "result": "PASS",
+        "steps": "Attempt Olympus context without membership"
+      },
+      {
+        "evidence": "governance.json",
+        "checkId": "R3-DELEGATION-REVOKE",
+        "result": "PASS",
+        "steps": "Revoke only created disposable grant"
+      },
+      {
+        "evidence": "governance.json",
+        "checkId": "R3-DELEGATION-IMMEDIATE-REVOCATION",
+        "result": "PASS",
+        "steps": "Replay same Native token after revocation"
+      },
+      {
+        "evidence": "governance.json",
+        "checkId": "R3-SESSION-OWNED-LOGOUT-ALL",
+        "result": "PASS",
+        "steps": "Two native tokens; revoke owned user sessions via supported logout-all"
+      },
+      {
+        "evidence": "governance.json",
+        "checkId": "R3-SESSION-OLD-first",
+        "result": "PASS",
+        "steps": "Replay first token after owned logout-all"
+      },
+      {
+        "evidence": "governance.json",
+        "checkId": "R3-SESSION-OLD-second",
+        "result": "PASS",
+        "steps": "Replay second token after owned logout-all"
+      },
+      {
+        "evidence": "governance.json",
+        "checkId": "R3-GOVERNANCE-CLEANUP",
+        "result": "PASS",
+        "steps": "Disable only new owned tenant; no seed authority changed"
+      }
+    ],
+    "actual": "New principal ACTIVE login succeeds, but reactivation from SUSPENDED/DISABLED cannot be executed without the excluded manage_status capability. Ordinary login is not reactivation acceptance.",
+    "httpResults": [
+      200,
+      201,
+      204,
+      401,
+      403,
+      409
+    ],
+    "evidence": [
+      "evidence/governance-browser-accepted.json",
+      "evidence/governance.json"
+    ],
+    "originalSource": "docs/uat/evidence/2026-10-19/cases.json",
+    "reconciliationAt": "2026-10-20T10:58:04.684643+00:00",
+    "executionScope": "Round3 only; historical baseline unchanged",
+    "implementationAtInitialReview": "Not addressed in R1/R2",
+    "executedTenantScope": "Olympus disposable resources with Viewer and Isolation Control negative checks where applicable; account status requests in Platform context",
+    "approvalDisposition": "Unresolved authorized capability / Product-Security contract decision; no seeded privilege changes",
+    "testCaseId": "UAT-ACCOUNT-ACTIVE",
+    "defectReferences": [],
+    "preconditions": "Isolated local Greenfield UUID; seeded identities unchanged; Native credentials loaded privately; only task-owned resources changed. Exact per-check preconditions and role/tenant details are retained in linked evidence.",
+    "remainingLimitations": "New principal ACTIVE login succeeds, but reactivation from SUSPENDED/DISABLED cannot be executed without the excluded manage_status capability. Ordinary login is not reactivation acceptance."
+  },
+  {
+    "originalId": "UAT-AI-LIVE-PROVIDER",
+    "originalModule": "AI configuration and providers",
+    "originalRole": "admin",
+    "originalTenant": "Olympus (disabled effective AI configuration)",
+    "originalExpectedResult": "Successful live AI completion requires an enabled application feature and reachable configured provider",
+    "originalStatus": "BLOCKED",
+    "originalBlocker": {
+      "status": null,
+      "feature_enabled": false,
+      "ollama": {
+        "status": 200,
+        "reachable": true,
+        "available_model_names": []
+      },
+      "hosted_providers": "Unavailable in runtime catalogue; no credential fabricated"
+    },
+    "dependency": "Effective feature flag and installed free local model",
+    "currentImplementationState": "User explicitly approved a small isolated free model. Real Copilot completed HTTP 200 with Ollama qwen2.5:0.5b on separate port11435 and a task-owned tenant override; cost0. Global flags/providers unchanged; server stopped. Hosted/paid provider acceptance is not established.",
+    "round1Or2PrerequisiteResolution": "R2 did not enable feature or install model",
+    "executionTechnicallyPossible": "Readiness check possible; completion depends on resources",
+    "approvalNeeded": "Download/resource/provider approval if needed",
+    "plannedExecutionMethod": "Read effective configuration and Ollama tags without secrets; assert disabled gate; keep BLOCKED if no approved model",
+    "status": "PASS",
+    "executedSteps": [
+      {
+        "evidence": "readiness.json",
+        "checkId": "R3-READINESS-/api/auth/me",
+        "result": "PASS",
+        "steps": "GET /api/auth/me"
+      },
+      {
+        "evidence": "readiness.json",
+        "checkId": "R3-READINESS-/api/v1/ai/settings",
+        "result": "PASS",
+        "steps": "GET /api/v1/ai/settings"
+      },
+      {
+        "evidence": "readiness.json",
+        "checkId": "R3-READINESS-/api/v1/ai/providers/available",
+        "result": "PASS",
+        "steps": "GET /api/v1/ai/providers/available"
+      },
+      {
+        "evidence": "readiness.json",
+        "checkId": "R3-READINESS-/api/v1/ai/credentials",
+        "result": "PASS",
+        "steps": "GET /api/v1/ai/credentials"
+      },
+      {
+        "evidence": "readiness.json",
+        "checkId": "R3-AI-DISABLED-GATE",
+        "result": "PASS",
+        "steps": "POST copilot/ask; do not enable feature"
+      },
+      {
+        "evidence": "readiness.json",
+        "checkId": "R3-OLLAMA-READINESS",
+        "result": "PASS",
+        "steps": "GET existing local Ollama /api/tags; no model download"
+      },
+      {
+        "evidence": "ai-local.json",
+        "checkId": "R3-AI-ISOLATED-FEATURE",
+        "result": "PASS",
+        "steps": "Enable only new disposable tenant override"
+      },
+      {
+        "evidence": "ai-local.json",
+        "checkId": "R3-AI-LOCAL-CONFIG",
+        "result": "PASS",
+        "steps": "Create own tenant local-only free credential"
+      },
+      {
+        "evidence": "ai-local.json",
+        "checkId": "R3-AI-LOCAL-HEALTH",
+        "result": "PASS",
+        "steps": "Application adapter probes separate real local model"
+      },
+      {
+        "evidence": "ai-local.json",
+        "checkId": "UAT-AI-LIVE-PROVIDER",
+        "result": "PASS",
+        "steps": "Real authenticated application Copilot request to approved separate local Ollama"
+      },
+      {
+        "evidence": "ai-local.json",
+        "checkId": "R3-SECRET-CREATE",
+        "result": "PASS",
+        "steps": "Create only synthetic scoped credential"
+      },
+      {
+        "evidence": "ai-local.json",
+        "checkId": "R3-SECRET-UPSTREAM-initial",
+        "result": "PASS",
+        "steps": "Call local authenticated mock through application provider adapter"
+      },
+      {
+        "evidence": "ai-local.json",
+        "checkId": "R3-SECRET-ROTATE",
+        "result": "PASS",
+        "steps": "Rotate synthetic secret only, same credential identity"
+      },
+      {
+        "evidence": "ai-local.json",
+        "checkId": "R3-SECRET-UPSTREAM-rotated",
+        "result": "PASS",
+        "steps": "Call local authenticated mock through application provider adapter"
+      },
+      {
+        "evidence": "ai-local.json",
+        "checkId": "R3-SECRET-ROLE-DENIED",
+        "result": "PASS",
+        "steps": "Viewer attempts scoped credential update"
+      },
+      {
+        "evidence": "ai-local.json",
+        "checkId": "R3-SECRET-FOREIGN-DENIED",
+        "result": "PASS",
+        "steps": "Foreign administrator reads owned credential ID"
+      },
+      {
+        "evidence": "ai-local.json",
+        "checkId": "R3-SECRET-REVOKE",
+        "result": "PASS",
+        "steps": "Delete only newly owned synthetic credential"
+      },
+      {
+        "evidence": "ai-local.json",
+        "checkId": "R3-SECRET-REVOKED-READ",
+        "result": "PASS",
+        "steps": "Read revoked own synthetic credential"
+      },
+      {
+        "evidence": "ai-local.json",
+        "checkId": "R3-AI-CLEANUP",
+        "result": "PASS",
+        "steps": "Remove own override/providers; disable only owned tenant"
+      },
+      {
+        "evidence": "ai-local.json",
+        "checkId": "R3-AI-GLOBAL-PRESERVED",
+        "result": "PASS",
+        "steps": "Compare global AI settings before/after scoped local test"
+      }
+    ],
+    "actual": "User explicitly approved a small isolated free model. Real Copilot completed HTTP 200 with Ollama qwen2.5:0.5b on separate port11435 and a task-owned tenant override; cost0. Global flags/providers unchanged; server stopped. Hosted/paid provider acceptance is not established.",
+    "httpResults": [
+      200,
+      201,
+      204,
+      403,
+      404,
+      409
+    ],
+    "evidence": [
+      "evidence/readiness.json",
+      "evidence/local-model.json",
+      "evidence/ai-local.json",
+      "evidence/local-model-cleanup.json"
+    ],
+    "originalSource": "docs/uat/evidence/2026-10-19/workflow-cases.json",
+    "reconciliationAt": "2026-10-20T10:58:04.687057+00:00",
+    "executionScope": "Round3 only; historical baseline unchanged",
+    "implementationAtInitialReview": "R2 did not enable feature or install model",
+    "executedTenantScope": "New task-owned isolated tenant; global inheritance preserved",
+    "approvalDisposition": "User explicitly approved a small isolated free local model test; completed and stopped, global settings unchanged",
+    "testCaseId": "UAT-AI-LIVE-PROVIDER",
+    "defectReferences": [],
+    "preconditions": "Isolated local Greenfield UUID; seeded identities unchanged; Native credentials loaded privately; only task-owned resources changed. Exact per-check preconditions and role/tenant details are retained in linked evidence.",
+    "remainingLimitations": "Qualified execution scope and any earlier failed attempt remain in actual/evidence; no complete485-case acceptance inferred."
+  },
+  {
+    "originalId": "UAT-VEX-ASSIGNED-DEVELOPER",
+    "originalModule": "VEX Investigation",
+    "originalRole": "developer",
+    "originalTenant": "Olympus",
+    "originalExpectedResult": "Assigned Developer can open and update owned investigation",
+    "originalStatus": "BLOCKED",
+    "originalBlocker": "Blocked by UAT-DEF-003: detail serialization fails. Positive assignment/edit UI cannot be accepted; non-owner rejection was executed separately.",
+    "dependency": "VEX response schema and authorized assignment",
+    "currentImplementationState": "Admin assigned owned investigation; actual Developer UI saved a justified decision; fresh Admin readback persisted it. API stale409 and no duplicate version/history, Viewer/unassigned Developer403 and foreign404; unassignment immediately revokes mutation.",
+    "round1Or2PrerequisiteResolution": "SBO-70 fixed; assigned Developer API/UI verified R1/R2",
+    "executionTechnicallyPossible": "Yes",
+    "approvalNeeded": "No",
+    "plannedExecutionMethod": "Rerun real Admin assignment and Developer decision with unique reason; stale 409; fresh persisted history; unassign and immediate 403",
+    "status": "PASS",
+    "executedSteps": [
+      {
+        "evidence": "api-round3-vex.json",
+        "checkId": "UAT-VEX-DETAIL",
+        "result": "PASS",
+        "steps": "Detail serializes analyzer confidence without HTTP 500"
+      },
+      {
+        "evidence": "api-round3-vex.json",
+        "checkId": "UAT-VEX-DECISION",
+        "result": "PASS",
+        "steps": "One decision returns 200 with persisted row_version"
+      },
+      {
+        "evidence": "api-round3-vex.json",
+        "checkId": "UAT-VEX-STALE",
+        "result": "PASS",
+        "steps": "Stale version returns 409 and does not mutate again"
+      },
+      {
+        "evidence": "api-round3-vex.json",
+        "checkId": "R1-VEX-NO-DUPLICATE",
+        "result": "PASS",
+        "steps": "One component audit plus one context audit are appended; stale request appends none"
+      },
+      {
+        "evidence": "api-round3-vex.json",
+        "checkId": "UAT-VEX-VALIDATION",
+        "result": "PASS",
+        "steps": "NOT_AFFECTED without justification is rejected with 422"
+      },
+      {
+        "evidence": "api-round3-vex.json",
+        "checkId": "UAT-VEX-DENY-viewer",
+        "result": "PASS",
+        "steps": "Unowned/foreign decision rejected HTTP 403"
+      },
+      {
+        "evidence": "api-round3-vex.json",
+        "checkId": "UAT-VEX-DENY-developer",
+        "result": "PASS",
+        "steps": "Unowned/foreign decision rejected HTTP 403"
+      },
+      {
+        "evidence": "api-round3-vex.json",
+        "checkId": "UAT-VEX-DENY-foreign",
+        "result": "PASS",
+        "steps": "Unowned/foreign decision rejected HTTP 404"
+      },
+      {
+        "evidence": "api-round3-vex.json",
+        "checkId": "R1-VEX-FOREIGN-DETAIL",
+        "result": "PASS",
+        "steps": "Cross-tenant detail concealed with 404"
+      },
+      {
+        "evidence": "api-round3-vex.json",
+        "checkId": "R1-VEX-ASSIGN",
+        "result": "PASS",
+        "steps": "Assignment returns fully serialized detail"
+      },
+      {
+        "evidence": "api-round3-vex.json",
+        "checkId": "UAT-VEX-ASSIGNED-DEVELOPER-DETAIL",
+        "result": "PASS",
+        "steps": "Assigned Developer can read detail with update capability"
+      },
+      {
+        "evidence": "api-round3-vex.json",
+        "checkId": "UAT-VEX-ASSIGNED-DEVELOPER",
+        "result": "PASS",
+        "steps": "Assigned Developer decision returns 200 with persisted state"
+      },
+      {
+        "evidence": "api-round3-vex.json",
+        "checkId": "R1-VEX-UNASSIGN",
+        "result": "PASS",
+        "steps": "Admin unassigns disposable context without changing seeded membership"
+      },
+      {
+        "evidence": "api-round3-vex.json",
+        "checkId": "R1-VEX-OWNERSHIP-REVOKED",
+        "result": "PASS",
+        "steps": "Previously assigned Developer immediately loses mutation authority"
+      },
+      {
+        "evidence": "browser-protection-vex.json",
+        "checkId": "UAT-VEX-DECISION-UI-DETAIL",
+        "result": "PASS",
+        "steps": "Real investigation dialog opens analyzer evidence without 500"
+      },
+      {
+        "evidence": "browser-protection-vex.json",
+        "checkId": "UAT-VEX-DECISION-UI",
+        "result": "PASS",
+        "steps": "Admin UI decision returns 200 and displays persisted state"
+      },
+      {
+        "evidence": "browser-protection-vex.json",
+        "checkId": "R1-VEX-ASSIGN-UI",
+        "result": "PASS",
+        "steps": "Admin UI can assign disposable context to authorized Developer"
+      },
+      {
+        "evidence": "browser-protection-vex.json",
+        "checkId": "UAT-VEX-ASSIGNED-DEVELOPER-UI",
+        "result": "PASS",
+        "steps": "Assigned Developer can save actual browser decision"
+      },
+      {
+        "evidence": "browser-protection-vex.json",
+        "checkId": "R1-VEX-UI-CLEANUP",
+        "result": "PASS",
+        "steps": "Remove only disposable assignment"
+      },
+      {
+        "evidence": "browser-protection-vex-readback.json",
+        "checkId": "R1-VEX-UI-PERSISTED-READBACK",
+        "result": "PASS",
+        "steps": "Reopened real dialog displays persisted Developer determination and audit reason"
+      }
+    ],
+    "actual": "Admin assigned owned investigation; actual Developer UI saved a justified decision; fresh Admin readback persisted it. API stale409 and no duplicate version/history, Viewer/unassigned Developer403 and foreign404; unassignment immediately revokes mutation.",
+    "httpResults": [
+      200,
+      403,
+      404,
+      409,
+      422
+    ],
+    "evidence": [
+      "evidence/api-round3-vex.json",
+      "evidence/browser-protection-vex.json",
+      "evidence/browser-protection-vex-readback.json"
+    ],
+    "originalSource": "docs/uat/evidence/2026-10-19/extended-cases.json",
+    "reconciliationAt": "2026-10-20T10:58:04.690097+00:00",
+    "executionScope": "Round3 only; historical baseline unchanged",
+    "implementationAtInitialReview": "SBO-70 fixed; assigned Developer API/UI verified R1/R2",
+    "executedTenantScope": "Olympus disposable resources with Viewer and Isolation Control negative checks where applicable; account status requests in Platform context",
+    "approvalDisposition": "Executed within authorized isolated scope; no additional approval needed",
+    "testCaseId": "UAT-VEX-ASSIGNED-DEVELOPER",
+    "defectReferences": [],
+    "preconditions": "Isolated local Greenfield UUID; seeded identities unchanged; Native credentials loaded privately; only task-owned resources changed. Exact per-check preconditions and role/tenant details are retained in linked evidence.",
+    "remainingLimitations": "Qualified execution scope and any earlier failed attempt remain in actual/evidence; no complete485-case acceptance inferred."
+  },
+  {
+    "originalId": "UAT-SCHEDULE-VALIDATION",
+    "originalModule": "Schedules",
+    "originalRole": "admin",
+    "originalTenant": "Olympus; disabled disposable schedule",
+    "originalExpectedResult": "Invalid cron receives 400/422",
+    "originalStatus": "BLOCKED",
+    "originalBlocker": {
+      "status": 422,
+      "data": {
+        "detail": "CUSTOM cadence needs the 'croniter' package; pip install croniter"
+      },
+      "requestId": "adacb4de6ca7",
+      "limitation": "The optional croniter parser is missing. Rejection did not establish invalid-cron syntax validation."
+    },
+    "dependency": "Supported CUSTOM cron parser dependency",
+    "currentImplementationState": "Before: valid and invalid CUSTOM both dependency422. Pinned supported croniter; final real invalid syntax, six/seven fields, impossible date, invalid IANA timezone reject422; valid disabled schedule201. Viewer403 and foreign404. No shared recurring execution.",
+    "round1Or2PrerequisiteResolution": "Not addressed in R1/R2; inspect croniter declarations",
+    "executionTechnicallyPossible": "Yes after supported dependency correction",
+    "approvalNeeded": "No for isolated supported dependency",
+    "plannedExecutionMethod": "POST invalid disabled CUSTOM schedules; assert 400/422, no row; test timezone and role denial",
+    "status": "PASS",
+    "executedSteps": [
+      {
+        "evidence": "scope-creation.json",
+        "checkId": "R3-PROJECT-CREATE",
+        "result": "PASS",
+        "steps": "Create owned project"
+      },
+      {
+        "evidence": "scope-creation.json",
+        "checkId": "R3-APPLICATION-CREATE",
+        "result": "PASS",
+        "steps": "Create owned application"
+      },
+      {
+        "evidence": "scope-creation.json",
+        "checkId": "R3-SBOM-UPLOAD-1",
+        "result": "PASS",
+        "steps": "Upload valid fixture with project/application UUIDs"
+      },
+      {
+        "evidence": "scope-creation.json",
+        "checkId": "R3-SBOM-UPLOAD-2",
+        "result": "PASS",
+        "steps": "Upload valid fixture with project/application UUIDs"
+      },
+      {
+        "evidence": "scope-creation.json",
+        "checkId": "R3-CRON-BASELINE-10",
+        "result": "PASS",
+        "steps": "Submit disabled custom schedule before dependency correction"
+      },
+      {
+        "evidence": "scope-creation.json",
+        "checkId": "R3-CRON-BASELINE-11",
+        "result": "PASS",
+        "steps": "Submit disabled custom schedule before dependency correction"
+      },
+      {
+        "evidence": "cron-accepted.json",
+        "checkId": "R3-CRON-INVALID-0",
+        "result": "PASS",
+        "steps": "Submit disabled malformed/unsupported/impossible cron or invalid IANA timezone"
+      },
+      {
+        "evidence": "cron-accepted.json",
+        "checkId": "R3-CRON-INVALID-1",
+        "result": "PASS",
+        "steps": "Submit disabled malformed/unsupported/impossible cron or invalid IANA timezone"
+      },
+      {
+        "evidence": "cron-accepted.json",
+        "checkId": "R3-CRON-INVALID-2",
+        "result": "PASS",
+        "steps": "Submit disabled malformed/unsupported/impossible cron or invalid IANA timezone"
+      },
+      {
+        "evidence": "cron-accepted.json",
+        "checkId": "R3-CRON-INVALID-3",
+        "result": "PASS",
+        "steps": "Submit disabled malformed/unsupported/impossible cron or invalid IANA timezone"
+      },
+      {
+        "evidence": "cron-accepted.json",
+        "checkId": "R3-CRON-INVALID-4",
+        "result": "PASS",
+        "steps": "Submit disabled malformed/unsupported/impossible cron or invalid IANA timezone"
+      },
+      {
+        "evidence": "cron-accepted.json",
+        "checkId": "UAT-SCHEDULE-CUSTOM",
+        "result": "PASS",
+        "steps": "Store disabled supported five-field schedule"
+      },
+      {
+        "evidence": "cron-accepted.json",
+        "checkId": "R3-CRON-NEXT-RUN",
+        "result": "PASS",
+        "steps": "Resume only owned daily-midnight schedule, then immediately pause before due"
+      },
+      {
+        "evidence": "cron-accepted.json",
+        "checkId": "R3-CRON-PAUSE",
+        "result": "PASS",
+        "steps": "Pause owned schedule immediately after next-run check"
+      },
+      {
+        "evidence": "cron-accepted.json",
+        "checkId": "R3-SCHEDULE-DENY-viewer",
+        "result": "PASS",
+        "steps": "Direct lower-role/foreign mutation of known product UUID"
+      },
+      {
+        "evidence": "cron-accepted.json",
+        "checkId": "R3-SCHEDULE-DENY-foreign",
+        "result": "PASS",
+        "steps": "Direct lower-role/foreign mutation of known product UUID"
+      },
+      {
+        "evidence": "cron-accepted.json",
+        "checkId": "R3-SCHEDULE-MONTHLY",
+        "result": "PASS",
+        "steps": "Store existing Monthly preset on owned scope"
+      },
+      {
+        "evidence": "cron-accepted.json",
+        "checkId": "R3-MONTHLY-NEXT-RUN",
+        "result": "PASS",
+        "steps": "Compute Monthly preset then immediately pause"
+      },
+      {
+        "evidence": "cron-accepted.json",
+        "checkId": "R3-SCHEDULE-CLEANUP",
+        "result": "PASS",
+        "steps": "Remove only task-owned product schedule after bounded checks"
+      }
+    ],
+    "actual": "Before: valid and invalid CUSTOM both dependency422. Pinned supported croniter; final real invalid syntax, six/seven fields, impossible date, invalid IANA timezone reject422; valid disabled schedule201. Viewer403 and foreign404. No shared recurring execution.",
+    "httpResults": [
+      200,
+      201,
+      202,
+      403,
+      404,
+      422
+    ],
+    "evidence": [
+      "evidence/scope-creation.json",
+      "evidence/cron-accepted.json"
+    ],
+    "originalSource": "docs/uat/evidence/2026-10-19/extended-cases.json",
+    "reconciliationAt": "2026-10-20T10:58:04.690856+00:00",
+    "executionScope": "Round3 only; historical baseline unchanged",
+    "implementationAtInitialReview": "Not addressed in R1/R2; inspect croniter declarations",
+    "executedTenantScope": "Olympus disposable resources with Viewer and Isolation Control negative checks where applicable; account status requests in Platform context",
+    "approvalDisposition": "Executed within authorized isolated scope; no additional approval needed",
+    "testCaseId": "UAT-SCHEDULE-VALIDATION",
+    "defectReferences": [
+      "R3-DEF-002",
+      "R3-DEF-003"
+    ],
+    "preconditions": "Isolated local Greenfield UUID; seeded identities unchanged; Native credentials loaded privately; only task-owned resources changed. Exact per-check preconditions and role/tenant details are retained in linked evidence.",
+    "remainingLimitations": "Qualified execution scope and any earlier failed attempt remain in actual/evidence; no complete485-case acceptance inferred."
+  },
+  {
+    "originalId": "UAT-ENV-FRONTEND-RESTART",
+    "originalModule": "Environment stability",
+    "originalRole": "browser all roles",
+    "originalTenant": "Olympus tenant browser context; platform/foreign contexts covered separately",
+    "originalExpectedResult": "Frontend remains available across module navigation",
+    "originalStatus": "BLOCKED",
+    "originalBlocker": {
+      "log": [
+        "\u26a0 Server is approaching the used memory threshold, restarting..."
+      ],
+      "observed": "net::ERR_EMPTY_RESPONSE during vendor-record page; subsequent HTTPS probe returned 200 after server self-restart",
+      "hostSwapMB": 9045,
+      "cause_limit": "Next explicitly reported its memory restart threshold; underlying host pressure and exact allocation cause were not profiled."
+    },
+    "dependency": "Available host memory and stable isolated Next service",
+    "currentImplementationState": "Initial overlapping-load attempt reached seven modules but Users & Access timed out60s with swap over9GiB. After the diagnostic workload stopped, serial follow-up passed18checks: two rounds8modules plus two clean-context concurrent session reads, no network failures. Same Next PID80918, zero added restart warnings/empty responses; navigation1.06\u201327.392s. This bounded follow-up closes original navigation acceptance only; the load/resource limitation and first FAIL remain explicit, with no leak-free or performance sign-off claim.",
+    "round1Or2PrerequisiteResolution": "R2 normal browser passed; no long stability claim",
+    "executionTechnicallyPossible": "Yes, bounded navigation/requests",
+    "approvalNeeded": "No; do not change OS settings",
+    "plannedExecutionMethod": "Collect process/RSS/swap/CPU/logs and latency; sequential then bounded normal concurrent navigation; record PID/restarts",
+    "status": "PASS",
+    "executedSteps": [
+      {
+        "evidence": "browser-stability.json",
+        "checkId": "R3-STABILITY-NAV-0-/",
+        "result": "PASS",
+        "steps": "Protected module navigation reaches expected heading without empty response"
+      },
+      {
+        "evidence": "browser-stability.json",
+        "checkId": "R3-STABILITY-NAV-0-/projects",
+        "result": "PASS",
+        "steps": "Protected module navigation reaches expected heading without empty response"
+      },
+      {
+        "evidence": "browser-stability.json",
+        "checkId": "R3-STABILITY-NAV-0-/sboms",
+        "result": "PASS",
+        "steps": "Protected module navigation reaches expected heading without empty response"
+      },
+      {
+        "evidence": "browser-stability.json",
+        "checkId": "R3-STABILITY-NAV-0-/kev",
+        "result": "PASS",
+        "steps": "Protected module navigation reaches expected heading without empty response"
+      },
+      {
+        "evidence": "browser-stability.json",
+        "checkId": "R3-STABILITY-NAV-0-/schedules",
+        "result": "PASS",
+        "steps": "Protected module navigation reaches expected heading without empty response"
+      },
+      {
+        "evidence": "browser-stability.json",
+        "checkId": "R3-STABILITY-NAV-0-/vex-investigation",
+        "result": "PASS",
+        "steps": "Protected module navigation reaches expected heading without empty response"
+      },
+      {
+        "evidence": "browser-stability.json",
+        "checkId": "R3-STABILITY-NAV-0-/component-advisor",
+        "result": "PASS",
+        "steps": "Protected module navigation reaches expected heading without empty response"
+      },
+      {
+        "evidence": "browser-stability.json",
+        "checkId": "R3-STABILITY-EXECUTION",
+        "result": "FAIL",
+        "steps": "Complete bounded normal-access measurement"
+      },
+      {
+        "evidence": "browser-stability-serial.json",
+        "checkId": "R3-STABILITY-NAV-0-/",
+        "result": "PASS",
+        "steps": "Protected module navigation reaches expected heading without empty response"
+      },
+      {
+        "evidence": "browser-stability-serial.json",
+        "checkId": "R3-STABILITY-NAV-0-/projects",
+        "result": "PASS",
+        "steps": "Protected module navigation reaches expected heading without empty response"
+      },
+      {
+        "evidence": "browser-stability-serial.json",
+        "checkId": "R3-STABILITY-NAV-0-/sboms",
+        "result": "PASS",
+        "steps": "Protected module navigation reaches expected heading without empty response"
+      },
+      {
+        "evidence": "browser-stability-serial.json",
+        "checkId": "R3-STABILITY-NAV-0-/kev",
+        "result": "PASS",
+        "steps": "Protected module navigation reaches expected heading without empty response"
+      },
+      {
+        "evidence": "browser-stability-serial.json",
+        "checkId": "R3-STABILITY-NAV-0-/schedules",
+        "result": "PASS",
+        "steps": "Protected module navigation reaches expected heading without empty response"
+      },
+      {
+        "evidence": "browser-stability-serial.json",
+        "checkId": "R3-STABILITY-NAV-0-/vex-investigation",
+        "result": "PASS",
+        "steps": "Protected module navigation reaches expected heading without empty response"
+      },
+      {
+        "evidence": "browser-stability-serial.json",
+        "checkId": "R3-STABILITY-NAV-0-/component-advisor",
+        "result": "PASS",
+        "steps": "Protected module navigation reaches expected heading without empty response"
+      },
+      {
+        "evidence": "browser-stability-serial.json",
+        "checkId": "R3-STABILITY-NAV-0-/settings/users",
+        "result": "PASS",
+        "steps": "Protected module navigation reaches expected heading without empty response"
+      },
+      {
+        "evidence": "browser-stability-serial.json",
+        "checkId": "R3-STABILITY-NAV-1-/",
+        "result": "PASS",
+        "steps": "Protected module navigation reaches expected heading without empty response"
+      },
+      {
+        "evidence": "browser-stability-serial.json",
+        "checkId": "R3-STABILITY-NAV-1-/projects",
+        "result": "PASS",
+        "steps": "Protected module navigation reaches expected heading without empty response"
+      },
+      {
+        "evidence": "browser-stability-serial.json",
+        "checkId": "R3-STABILITY-NAV-1-/sboms",
+        "result": "PASS",
+        "steps": "Protected module navigation reaches expected heading without empty response"
+      },
+      {
+        "evidence": "browser-stability-serial.json",
+        "checkId": "R3-STABILITY-NAV-1-/kev",
+        "result": "PASS",
+        "steps": "Protected module navigation reaches expected heading without empty response"
+      },
+      {
+        "evidence": "browser-stability-serial.json",
+        "checkId": "R3-STABILITY-NAV-1-/schedules",
+        "result": "PASS",
+        "steps": "Protected module navigation reaches expected heading without empty response"
+      },
+      {
+        "evidence": "browser-stability-serial.json",
+        "checkId": "R3-STABILITY-NAV-1-/vex-investigation",
+        "result": "PASS",
+        "steps": "Protected module navigation reaches expected heading without empty response"
+      },
+      {
+        "evidence": "browser-stability-serial.json",
+        "checkId": "R3-STABILITY-NAV-1-/component-advisor",
+        "result": "PASS",
+        "steps": "Protected module navigation reaches expected heading without empty response"
+      },
+      {
+        "evidence": "browser-stability-serial.json",
+        "checkId": "R3-STABILITY-NAV-1-/settings/users",
+        "result": "PASS",
+        "steps": "Protected module navigation reaches expected heading without empty response"
+      },
+      {
+        "evidence": "browser-stability-serial.json",
+        "checkId": "R3-STABILITY-NORMAL-CONCURRENCY",
+        "result": "PASS",
+        "steps": "Two independent ordinary session reads succeed"
+      },
+      {
+        "evidence": "browser-stability-serial.json",
+        "checkId": "R3-STABILITY-NETWORK",
+        "result": "PASS",
+        "steps": "No non-navigation-abort browser network failures during bounded sequence"
+      }
+    ],
+    "actual": "Initial overlapping-load attempt reached seven modules but Users & Access timed out60s with swap over9GiB. After the diagnostic workload stopped, serial follow-up passed18checks: two rounds8modules plus two clean-context concurrent session reads, no network failures. Same Next PID80918, zero added restart warnings/empty responses; navigation1.06\u201327.392s. This bounded follow-up closes original navigation acceptance only; the load/resource limitation and first FAIL remain explicit, with no leak-free or performance sign-off claim.",
+    "httpResults": [
+      200
+    ],
+    "evidence": [
+      "evidence/browser-stability.json",
+      "evidence/environment-before.json",
+      "evidence/environment-intermediate.json",
+      "evidence/environment-after.json",
+      "evidence/browser-stability-serial.json",
+      "evidence/environment-serial-before.json",
+      "evidence/environment-serial-after.json",
+      "evidence/stability-reconciliation.json"
+    ],
+    "originalSource": "docs/uat/evidence/2026-10-19/extended-cases.json",
+    "reconciliationAt": "2026-10-20T10:58:04.693968+00:00",
+    "executionScope": "Round3 only; historical baseline unchanged",
+    "implementationAtInitialReview": "R2 normal browser passed; no long stability claim",
+    "executedTenantScope": "Olympus disposable resources with Viewer and Isolation Control negative checks where applicable; account status requests in Platform context",
+    "approvalDisposition": "Executed within authorized isolated scope; no additional approval needed",
+    "round3ExecutionHistory": [
+      {
+        "result": "FAIL",
+        "evidence": "evidence/browser-stability.json",
+        "qualification": "Overlapping bulk regression/resource pressure; heading timeout60s"
+      },
+      {
+        "result": "PASS",
+        "evidence": "evidence/browser-stability-serial.json",
+        "qualification": "Later two-round bounded serial18-check run; no leak/performance signoff inferred"
+      }
+    ],
+    "testCaseId": "UAT-ENV-FRONTEND-RESTART",
+    "defectReferences": [
+      "R3-ENV-001"
+    ],
+    "preconditions": "Isolated local Greenfield UUID; seeded identities unchanged; Native credentials loaded privately; only task-owned resources changed. Exact per-check preconditions and role/tenant details are retained in linked evidence.",
+    "remainingLimitations": "Qualified execution scope and any earlier failed attempt remain in actual/evidence; no complete485-case acceptance inferred."
+  },
+  {
+    "originalId": "UAT-SCHEDULE-CUSTOM",
+    "originalModule": "Schedules",
+    "originalRole": "admin",
+    "originalTenant": "Olympus; disabled disposable schedule",
+    "originalExpectedResult": "Valid custom cron can be stored without enabling execution",
+    "originalStatus": "BLOCKED",
+    "originalBlocker": {
+      "status": 422,
+      "data": {
+        "detail": "CUSTOM cadence needs the 'croniter' package; pip install croniter"
+      },
+      "request_id": "8dc965547435"
+    },
+    "dependency": "Supported CUSTOM cron parser dependency",
+    "currentImplementationState": "Valid five-field CUSTOM schedule201 while disabled; next run calculated in UTC, IANA display timezone retained. Pause/cleanup200, Monthly future-first-day02UTC preserved. Strict syntax, role and foreign controls executed.",
+    "round1Or2PrerequisiteResolution": "Not addressed in R1/R2",
+    "executionTechnicallyPossible": "Yes after supported dependency correction",
+    "approvalNeeded": "No for isolated supported dependency",
+    "plannedExecutionMethod": "Create disabled valid cron/timezone on disposable scope; next-run calculation; invalid syntax; compare Monthly; cleanup owned schedule",
+    "status": "PASS",
+    "executedSteps": [
+      {
+        "evidence": "cron-accepted.json",
+        "checkId": "R3-CRON-INVALID-0",
+        "result": "PASS",
+        "steps": "Submit disabled malformed/unsupported/impossible cron or invalid IANA timezone"
+      },
+      {
+        "evidence": "cron-accepted.json",
+        "checkId": "R3-CRON-INVALID-1",
+        "result": "PASS",
+        "steps": "Submit disabled malformed/unsupported/impossible cron or invalid IANA timezone"
+      },
+      {
+        "evidence": "cron-accepted.json",
+        "checkId": "R3-CRON-INVALID-2",
+        "result": "PASS",
+        "steps": "Submit disabled malformed/unsupported/impossible cron or invalid IANA timezone"
+      },
+      {
+        "evidence": "cron-accepted.json",
+        "checkId": "R3-CRON-INVALID-3",
+        "result": "PASS",
+        "steps": "Submit disabled malformed/unsupported/impossible cron or invalid IANA timezone"
+      },
+      {
+        "evidence": "cron-accepted.json",
+        "checkId": "R3-CRON-INVALID-4",
+        "result": "PASS",
+        "steps": "Submit disabled malformed/unsupported/impossible cron or invalid IANA timezone"
+      },
+      {
+        "evidence": "cron-accepted.json",
+        "checkId": "UAT-SCHEDULE-CUSTOM",
+        "result": "PASS",
+        "steps": "Store disabled supported five-field schedule"
+      },
+      {
+        "evidence": "cron-accepted.json",
+        "checkId": "R3-CRON-NEXT-RUN",
+        "result": "PASS",
+        "steps": "Resume only owned daily-midnight schedule, then immediately pause before due"
+      },
+      {
+        "evidence": "cron-accepted.json",
+        "checkId": "R3-CRON-PAUSE",
+        "result": "PASS",
+        "steps": "Pause owned schedule immediately after next-run check"
+      },
+      {
+        "evidence": "cron-accepted.json",
+        "checkId": "R3-SCHEDULE-DENY-viewer",
+        "result": "PASS",
+        "steps": "Direct lower-role/foreign mutation of known product UUID"
+      },
+      {
+        "evidence": "cron-accepted.json",
+        "checkId": "R3-SCHEDULE-DENY-foreign",
+        "result": "PASS",
+        "steps": "Direct lower-role/foreign mutation of known product UUID"
+      },
+      {
+        "evidence": "cron-accepted.json",
+        "checkId": "R3-SCHEDULE-MONTHLY",
+        "result": "PASS",
+        "steps": "Store existing Monthly preset on owned scope"
+      },
+      {
+        "evidence": "cron-accepted.json",
+        "checkId": "R3-MONTHLY-NEXT-RUN",
+        "result": "PASS",
+        "steps": "Compute Monthly preset then immediately pause"
+      },
+      {
+        "evidence": "cron-accepted.json",
+        "checkId": "R3-SCHEDULE-CLEANUP",
+        "result": "PASS",
+        "steps": "Remove only task-owned product schedule after bounded checks"
+      }
+    ],
+    "actual": "Valid five-field CUSTOM schedule201 while disabled; next run calculated in UTC, IANA display timezone retained. Pause/cleanup200, Monthly future-first-day02UTC preserved. Strict syntax, role and foreign controls executed.",
+    "httpResults": [
+      200,
+      201,
+      403,
+      404,
+      422
+    ],
+    "evidence": [
+      "evidence/cron-accepted.json"
+    ],
+    "originalSource": "docs/uat/evidence/2026-10-19/extended-cases.json",
+    "reconciliationAt": "2026-10-20T10:58:04.694138+00:00",
+    "executionScope": "Round3 only; historical baseline unchanged",
+    "implementationAtInitialReview": "Not addressed in R1/R2",
+    "executedTenantScope": "Olympus disposable resources with Viewer and Isolation Control negative checks where applicable; account status requests in Platform context",
+    "approvalDisposition": "Executed within authorized isolated scope; no additional approval needed",
+    "testCaseId": "UAT-SCHEDULE-CUSTOM",
+    "defectReferences": [
+      "R3-DEF-002",
+      "R3-DEF-003"
+    ],
+    "preconditions": "Isolated local Greenfield UUID; seeded identities unchanged; Native credentials loaded privately; only task-owned resources changed. Exact per-check preconditions and role/tenant details are retained in linked evidence.",
+    "remainingLimitations": "Qualified execution scope and any earlier failed attempt remain in actual/evidence; no complete485-case acceptance inferred."
+  },
+  {
+    "originalId": "UAT-DASHBOARD-DEPENDENT-FILTERS",
+    "originalModule": "Dashboard",
+    "originalRole": "admin / relevant tenant roles",
+    "originalTenant": "Olympus; foreign-control negatives use Isolation Control",
+    "originalExpectedResult": "Complete project \u2192 product \u2192 SBOM browser selection and drill-down with refresh/deep links",
+    "originalStatus": "BLOCKED",
+    "originalBlocker": {
+      "limitation": "The executed Project UUID selection resets because the shared numeric URL parser rejects UUIDs; dependent hierarchy acceptance is blocked."
+    },
+    "dependency": "UUID URL scope parsing",
+    "currentImplementationState": "Actual Project\u2192Application\u2192SBOM UUID selection, parent reset, refresh/deep links/drilldown, switch between owned scopes, inactive exclusion and three displayed metric totals matched API (1/1/1 after R3 switch). Invalid IDs rejected and foreign known UUID404.",
+    "round1Or2PrerequisiteResolution": "SBO-71 fixed and browser hierarchy verified R1/R2",
+    "executionTechnicallyPossible": "Yes",
+    "approvalNeeded": "No",
+    "plannedExecutionMethod": "Real dropdown Project\u2192Application\u2192SBOM; refresh/deep link/drilldown/reset/scope switch; inactive exclusion/backend counts/foreign404",
+    "status": "PASS",
+    "executedSteps": [
+      {
+        "evidence": "browser-dashboard-current.json",
+        "checkId": "R2-BROWSER-TLS",
+        "result": "PASS",
+        "steps": "R2-BROWSER-TLS"
+      },
+      {
+        "evidence": "browser-dashboard-current.json",
+        "checkId": "R2-DASHBOARD-Project",
+        "result": "PASS",
+        "steps": "R2-DASHBOARD-Project"
+      },
+      {
+        "evidence": "browser-dashboard-current.json",
+        "checkId": "R2-DASHBOARD-Application",
+        "result": "PASS",
+        "steps": "R2-DASHBOARD-Application"
+      },
+      {
+        "evidence": "browser-dashboard-current.json",
+        "checkId": "R2-DASHBOARD-SBOM",
+        "result": "PASS",
+        "steps": "R2-DASHBOARD-SBOM"
+      },
+      {
+        "evidence": "browser-dashboard-current.json",
+        "checkId": "R2-DASHBOARD-REFRESH",
+        "result": "PASS",
+        "steps": "R2-DASHBOARD-REFRESH"
+      },
+      {
+        "evidence": "browser-dashboard-current.json",
+        "checkId": "R2-DASHBOARD-DRILLDOWN",
+        "result": "PASS",
+        "steps": "R2-DASHBOARD-DRILLDOWN"
+      },
+      {
+        "evidence": "browser-dashboard-current.json",
+        "checkId": "R2-DASHBOARD-DEEP-LINK",
+        "result": "PASS",
+        "steps": "R2-DASHBOARD-DEEP-LINK"
+      },
+      {
+        "evidence": "browser-dashboard-current.json",
+        "checkId": "R2-DASHBOARD-DEPENDENT-RESET",
+        "result": "PASS",
+        "steps": "R2-DASHBOARD-DEPENDENT-RESET"
+      },
+      {
+        "evidence": "browser-dashboard-current.json",
+        "checkId": "R2-DASHBOARD-INVALID",
+        "result": "PASS",
+        "steps": "R2-DASHBOARD-INVALID"
+      },
+      {
+        "evidence": "browser-dashboard-current.json",
+        "checkId": "R2-DASHBOARD-FOREIGN",
+        "result": "PASS",
+        "steps": "R2-DASHBOARD-FOREIGN"
+      },
+      {
+        "evidence": "browser-scope-extra-settled.json",
+        "checkId": "R3-DASHBOARD-SCOPE-SWITCH",
+        "result": "PASS",
+        "steps": "Switch from complete R1 hierarchy to fresh R3 project using actual dropdown"
+      },
+      {
+        "evidence": "browser-scope-extra-settled.json",
+        "checkId": "R3-DASHBOARD-INACTIVE-UI",
+        "result": "PASS",
+        "steps": "Inspect actual dependent SBOM dropdown after owned lifecycle deactivation"
+      },
+      {
+        "evidence": "browser-scope-extra-settled.json",
+        "checkId": "R3-DASHBOARD-SWITCH-METRICS",
+        "result": "PASS",
+        "steps": "Compare all three visible counters after project/application/SBOM switch"
+      },
+      {
+        "evidence": "scope-exports.json",
+        "checkId": "R3-OWNED-ANALYSIS",
+        "result": "PASS",
+        "steps": "Analyze fresh own scope"
+      },
+      {
+        "evidence": "scope-exports.json",
+        "checkId": "R3-DASHBOARD-OWNED-BEFORE",
+        "result": "PASS",
+        "steps": "Read fresh two-SBOM scoped posture"
+      },
+      {
+        "evidence": "scope-exports.json",
+        "checkId": "R3-DASHBOARD-INACTIVATE-OWNED",
+        "result": "PASS",
+        "steps": "Deactivate only second freshly created SBOM"
+      },
+      {
+        "evidence": "scope-exports.json",
+        "checkId": "R3-DASHBOARD-INACTIVE-EXCLUDED-admin",
+        "result": "PASS",
+        "steps": "Read same project/application scope after owned deactivation"
+      },
+      {
+        "evidence": "scope-exports.json",
+        "checkId": "R3-DASHBOARD-INACTIVE-EXCLUDED-analyst",
+        "result": "PASS",
+        "steps": "Read same project/application scope after owned deactivation"
+      },
+      {
+        "evidence": "scope-exports.json",
+        "checkId": "R3-DASHBOARD-INACTIVE-EXCLUDED-developer",
+        "result": "PASS",
+        "steps": "Read same project/application scope after owned deactivation"
+      },
+      {
+        "evidence": "scope-exports.json",
+        "checkId": "R3-DASHBOARD-INACTIVE-EXCLUDED-viewer",
+        "result": "PASS",
+        "steps": "Read same project/application scope after owned deactivation"
+      },
+      {
+        "evidence": "scope-exports.json",
+        "checkId": "R3-DASHBOARD-INACTIVE-OPTIONS",
+        "result": "PASS",
+        "steps": "Read actual dependent SBOM choices"
+      },
+      {
+        "evidence": "scope-exports.json",
+        "checkId": "R3-DASHBOARD-OWNED-FOREIGN",
+        "result": "PASS",
+        "steps": "Foreign user supplies known R3 UUID hierarchy"
+      },
+      {
+        "evidence": "scope-exports.json",
+        "checkId": "R3-EXPORT-pdf",
+        "result": "PASS",
+        "steps": "Generate and inspect real pdf artifact"
+      },
+      {
+        "evidence": "scope-exports.json",
+        "checkId": "R3-EXPORT-pdf-viewer",
+        "result": "PASS",
+        "steps": "Direct viewer export of known owned resource"
+      },
+      {
+        "evidence": "scope-exports.json",
+        "checkId": "R3-EXPORT-pdf-foreign",
+        "result": "PASS",
+        "steps": "Direct foreign export of known owned resource"
+      },
+      {
+        "evidence": "scope-exports.json",
+        "checkId": "R3-EXPORT-sarif",
+        "result": "PASS",
+        "steps": "Generate and inspect real sarif artifact"
+      },
+      {
+        "evidence": "scope-exports.json",
+        "checkId": "R3-EXPORT-sarif-viewer",
+        "result": "PASS",
+        "steps": "Direct viewer export of known owned resource"
+      },
+      {
+        "evidence": "scope-exports.json",
+        "checkId": "R3-EXPORT-sarif-foreign",
+        "result": "PASS",
+        "steps": "Direct foreign export of known owned resource"
+      },
+      {
+        "evidence": "scope-exports.json",
+        "checkId": "R3-EXPORT-csv",
+        "result": "PASS",
+        "steps": "Generate and inspect real csv artifact"
+      },
+      {
+        "evidence": "scope-exports.json",
+        "checkId": "R3-EXPORT-csv-viewer",
+        "result": "PASS",
+        "steps": "Direct viewer export of known owned resource"
+      },
+      {
+        "evidence": "scope-exports.json",
+        "checkId": "R3-EXPORT-csv-foreign",
+        "result": "PASS",
+        "steps": "Direct foreign export of known owned resource"
+      },
+      {
+        "evidence": "scope-exports.json",
+        "checkId": "R3-EXPORT-xlsx",
+        "result": "PASS",
+        "steps": "Generate and inspect real xlsx artifact"
+      },
+      {
+        "evidence": "scope-exports.json",
+        "checkId": "R3-EXPORT-xlsx-viewer",
+        "result": "PASS",
+        "steps": "Direct viewer export of known owned resource"
+      },
+      {
+        "evidence": "scope-exports.json",
+        "checkId": "R3-EXPORT-xlsx-foreign",
+        "result": "PASS",
+        "steps": "Direct foreign export of known owned resource"
+      },
+      {
+        "evidence": "scope-exports.json",
+        "checkId": "R3-FDA-LIFECYCLE-REFRESH",
+        "result": "PASS",
+        "steps": "Request supported lifecycle evidence for own fresh fixture"
+      },
+      {
+        "evidence": "scope-exports.json",
+        "checkId": "R3-EXPORT-FDA",
+        "result": "PASS",
+        "steps": "Export required FDA workbook with synthetic metadata and explicit finding run"
+      }
+    ],
+    "actual": "Actual Project\u2192Application\u2192SBOM UUID selection, parent reset, refresh/deep links/drilldown, switch between owned scopes, inactive exclusion and three displayed metric totals matched API (1/1/1 after R3 switch). Invalid IDs rejected and foreign known UUID404.",
+    "httpResults": [
+      200,
+      403,
+      404
+    ],
+    "evidence": [
+      "evidence/browser-dashboard-current.json",
+      "evidence/browser-scope-extra-settled.json",
+      "evidence/scope-exports.json"
+    ],
+    "originalSource": "docs/uat/evidence/2026-10-19/outstanding-cases.json",
+    "reconciliationAt": "2026-10-20T10:58:04.698922+00:00",
+    "executionScope": "Round3 only; historical baseline unchanged",
+    "implementationAtInitialReview": "SBO-71 fixed and browser hierarchy verified R1/R2",
+    "executedTenantScope": "Olympus disposable resources with Viewer and Isolation Control negative checks where applicable; account status requests in Platform context",
+    "approvalDisposition": "Executed within authorized isolated scope; no additional approval needed",
+    "testCaseId": "UAT-DASHBOARD-DEPENDENT-FILTERS",
+    "defectReferences": [],
+    "preconditions": "Isolated local Greenfield UUID; seeded identities unchanged; Native credentials loaded privately; only task-owned resources changed. Exact per-check preconditions and role/tenant details are retained in linked evidence.",
+    "remainingLimitations": "Qualified execution scope and any earlier failed attempt remain in actual/evidence; no complete485-case acceptance inferred."
+  },
+  {
+    "originalId": "UAT-VEX-DECISION-UI",
+    "originalModule": "VEX Investigation",
+    "originalRole": "admin / analyst / assigned developer",
+    "originalTenant": "Olympus",
+    "originalExpectedResult": "Open detail, assign, save a justified decision and verify refreshed state through UI",
+    "originalStatus": "BLOCKED",
+    "originalBlocker": {
+      "limitation": "Executed detail GET returns 500; the same serializer also breaks mutation and stale conflict responses. Lower-role/foreign rejection was independently executed."
+    },
+    "dependency": "VEX detail/decision serialization",
+    "currentImplementationState": "Actual Admin, Analyst and assigned Developer opened investigation and saved justified decisions200; refreshed UI/history readback. Stale409/version preservation and unauthorized403/foreign404 independently exercised.",
+    "round1Or2PrerequisiteResolution": "SBO-70 fixed; actual UI save/readback verified R1/R2",
+    "executionTechnicallyPossible": "Yes",
+    "approvalNeeded": "No",
+    "plannedExecutionMethod": "Real Admin/Analyst/assigned Developer detail, justified save, refreshed state; assignment and audit; stale conflict and unassignment controls",
+    "status": "PASS",
+    "executedSteps": [
+      {
+        "evidence": "browser-protection-vex.json",
+        "checkId": "UAT-VEX-DECISION-UI-DETAIL",
+        "result": "PASS",
+        "steps": "Real investigation dialog opens analyzer evidence without 500"
+      },
+      {
+        "evidence": "browser-protection-vex.json",
+        "checkId": "UAT-VEX-DECISION-UI",
+        "result": "PASS",
+        "steps": "Admin UI decision returns 200 and displays persisted state"
+      },
+      {
+        "evidence": "browser-protection-vex.json",
+        "checkId": "R1-VEX-ASSIGN-UI",
+        "result": "PASS",
+        "steps": "Admin UI can assign disposable context to authorized Developer"
+      },
+      {
+        "evidence": "browser-protection-vex.json",
+        "checkId": "UAT-VEX-ASSIGNED-DEVELOPER-UI",
+        "result": "PASS",
+        "steps": "Assigned Developer can save actual browser decision"
+      },
+      {
+        "evidence": "browser-protection-vex.json",
+        "checkId": "R1-VEX-UI-CLEANUP",
+        "result": "PASS",
+        "steps": "Remove only disposable assignment"
+      },
+      {
+        "evidence": "browser-protection-vex-readback.json",
+        "checkId": "R1-VEX-UI-PERSISTED-READBACK",
+        "result": "PASS",
+        "steps": "Reopened real dialog displays persisted Developer determination and audit reason"
+      },
+      {
+        "evidence": "browser-protection-vex-analyst.json",
+        "checkId": "UAT-VEX-DECISION-UI-ANALYST",
+        "result": "PASS",
+        "steps": "Analyst actual dialog justified decision succeeds"
+      },
+      {
+        "evidence": "browser-protection-vex-analyst.json",
+        "checkId": "UAT-VEX-DECISION-UI-ANALYST-READBACK",
+        "result": "PASS",
+        "steps": "Refreshed dialog retains Analyst decision audit reason"
+      },
+      {
+        "evidence": "api-round3-vex.json",
+        "checkId": "UAT-VEX-DETAIL",
+        "result": "PASS",
+        "steps": "Detail serializes analyzer confidence without HTTP 500"
+      },
+      {
+        "evidence": "api-round3-vex.json",
+        "checkId": "UAT-VEX-DECISION",
+        "result": "PASS",
+        "steps": "One decision returns 200 with persisted row_version"
+      },
+      {
+        "evidence": "api-round3-vex.json",
+        "checkId": "UAT-VEX-STALE",
+        "result": "PASS",
+        "steps": "Stale version returns 409 and does not mutate again"
+      },
+      {
+        "evidence": "api-round3-vex.json",
+        "checkId": "R1-VEX-NO-DUPLICATE",
+        "result": "PASS",
+        "steps": "One component audit plus one context audit are appended; stale request appends none"
+      },
+      {
+        "evidence": "api-round3-vex.json",
+        "checkId": "UAT-VEX-VALIDATION",
+        "result": "PASS",
+        "steps": "NOT_AFFECTED without justification is rejected with 422"
+      },
+      {
+        "evidence": "api-round3-vex.json",
+        "checkId": "UAT-VEX-DENY-viewer",
+        "result": "PASS",
+        "steps": "Unowned/foreign decision rejected HTTP 403"
+      },
+      {
+        "evidence": "api-round3-vex.json",
+        "checkId": "UAT-VEX-DENY-developer",
+        "result": "PASS",
+        "steps": "Unowned/foreign decision rejected HTTP 403"
+      },
+      {
+        "evidence": "api-round3-vex.json",
+        "checkId": "UAT-VEX-DENY-foreign",
+        "result": "PASS",
+        "steps": "Unowned/foreign decision rejected HTTP 404"
+      },
+      {
+        "evidence": "api-round3-vex.json",
+        "checkId": "R1-VEX-FOREIGN-DETAIL",
+        "result": "PASS",
+        "steps": "Cross-tenant detail concealed with 404"
+      },
+      {
+        "evidence": "api-round3-vex.json",
+        "checkId": "R1-VEX-ASSIGN",
+        "result": "PASS",
+        "steps": "Assignment returns fully serialized detail"
+      },
+      {
+        "evidence": "api-round3-vex.json",
+        "checkId": "UAT-VEX-ASSIGNED-DEVELOPER-DETAIL",
+        "result": "PASS",
+        "steps": "Assigned Developer can read detail with update capability"
+      },
+      {
+        "evidence": "api-round3-vex.json",
+        "checkId": "UAT-VEX-ASSIGNED-DEVELOPER",
+        "result": "PASS",
+        "steps": "Assigned Developer decision returns 200 with persisted state"
+      },
+      {
+        "evidence": "api-round3-vex.json",
+        "checkId": "R1-VEX-UNASSIGN",
+        "result": "PASS",
+        "steps": "Admin unassigns disposable context without changing seeded membership"
+      },
+      {
+        "evidence": "api-round3-vex.json",
+        "checkId": "R1-VEX-OWNERSHIP-REVOKED",
+        "result": "PASS",
+        "steps": "Previously assigned Developer immediately loses mutation authority"
+      }
+    ],
+    "actual": "Actual Admin, Analyst and assigned Developer opened investigation and saved justified decisions200; refreshed UI/history readback. Stale409/version preservation and unauthorized403/foreign404 independently exercised.",
+    "httpResults": [
+      200,
+      403,
+      404,
+      409,
+      422
+    ],
+    "evidence": [
+      "evidence/browser-protection-vex.json",
+      "evidence/browser-protection-vex-readback.json",
+      "evidence/browser-protection-vex-analyst.json",
+      "evidence/api-round3-vex.json"
+    ],
+    "originalSource": "docs/uat/evidence/2026-10-19/outstanding-cases.json",
+    "reconciliationAt": "2026-10-20T10:58:04.700788+00:00",
+    "executionScope": "Round3 only; historical baseline unchanged",
+    "implementationAtInitialReview": "SBO-70 fixed; actual UI save/readback verified R1/R2",
+    "executedTenantScope": "Olympus disposable resources with Viewer and Isolation Control negative checks where applicable; account status requests in Platform context",
+    "approvalDisposition": "Executed within authorized isolated scope; no additional approval needed",
+    "testCaseId": "UAT-VEX-DECISION-UI",
+    "defectReferences": [],
+    "preconditions": "Isolated local Greenfield UUID; seeded identities unchanged; Native credentials loaded privately; only task-owned resources changed. Exact per-check preconditions and role/tenant details are retained in linked evidence.",
+    "remainingLimitations": "Qualified execution scope and any earlier failed attempt remain in actual/evidence; no complete485-case acceptance inferred."
+  },
+  {
+    "originalId": "UAT-PLATFORM-TENANT-WORKING-CONTEXT",
+    "originalModule": "Platform",
+    "originalRole": "platform",
+    "originalTenant": "Platform context; seeded Platform user had no tenant membership",
+    "originalExpectedResult": "Enter an authorized working tenant using the supported membership-based switcher",
+    "originalStatus": "BLOCKED",
+    "originalBlocker": {
+      "limitation": "Seeded Platform user has no tenant membership; supported switcher requires one. No seeded membership was added. Platform administration endpoints and forged-header denial were executed."
+    },
+    "dependency": "Membership-authorized tenant selection",
+    "currentImplementationState": "Policy-authorized Platform Admin granted authority only to a new disposable principal with its own explicit membership. Actual Native UI landed platform-only, switcher listed only own tenant, entered/refreshed/returned platform and signed out. Forged Olympus header403; grant revoked and owned tenant disabled. Seeded Platform membership unchanged.",
+    "round1Or2PrerequisiteResolution": "Seeded platform lacks membership; no privileges changed R1/R2",
+    "executionTechnicallyPossible": "Negative boundary possible; positive requires disposable authorized membership",
+    "approvalNeeded": "If current platform policy does not allow provisioning disposable principal",
+    "plannedExecutionMethod": "Verify platform landing/context; supported own membership switch; forged header denial; refresh/logout; preserve seeded context",
+    "status": "PASS",
+    "executedSteps": [
+      {
+        "evidence": "browser-owned-platform-accepted.json",
+        "checkId": "R3-OWNED-PLATFORM-LANDING",
+        "result": "PASS",
+        "steps": "R3-OWNED-PLATFORM-LANDING"
+      },
+      {
+        "evidence": "browser-owned-platform-accepted.json",
+        "checkId": "R3-OWNED-SWITCHER-BOUNDARY",
+        "result": "PASS",
+        "steps": "R3-OWNED-SWITCHER-BOUNDARY"
+      },
+      {
+        "evidence": "browser-owned-platform-accepted.json",
+        "checkId": "UAT-PLATFORM-TENANT-WORKING-CONTEXT",
+        "result": "PASS",
+        "steps": "UAT-PLATFORM-TENANT-WORKING-CONTEXT"
+      },
+      {
+        "evidence": "browser-owned-platform-accepted.json",
+        "checkId": "R3-OWNED-TENANT-REFRESH",
+        "result": "PASS",
+        "steps": "R3-OWNED-TENANT-REFRESH"
+      },
+      {
+        "evidence": "browser-owned-platform-accepted.json",
+        "checkId": "R3-OWNED-TENANT-OPERATIONS",
+        "result": "PASS",
+        "steps": "R3-OWNED-TENANT-OPERATIONS"
+      },
+      {
+        "evidence": "browser-owned-platform-accepted.json",
+        "checkId": "R3-OWNED-PLATFORM-FORGED",
+        "result": "PASS",
+        "steps": "R3-OWNED-PLATFORM-FORGED"
+      },
+      {
+        "evidence": "browser-owned-platform-accepted.json",
+        "checkId": "R3-OWNED-RETURN-PLATFORM",
+        "result": "PASS",
+        "steps": "R3-OWNED-RETURN-PLATFORM"
+      },
+      {
+        "evidence": "browser-owned-platform-accepted.json",
+        "checkId": "R3-OWNED-PLATFORM-LOGOUT",
+        "result": "PASS",
+        "steps": "R3-OWNED-PLATFORM-LOGOUT"
+      },
+      {
+        "evidence": "governance-browser-accepted.json",
+        "checkId": "UAT-ACCOUNT-SUSPENDED-AUTHORIZATION",
+        "result": "PASS",
+        "steps": "Seeded platform requests status on newly activated disposable account"
+      },
+      {
+        "evidence": "governance-browser-accepted.json",
+        "checkId": "UAT-ACCOUNT-DISABLED-AUTHORIZATION",
+        "result": "PASS",
+        "steps": "Seeded platform requests status on newly activated disposable account"
+      },
+      {
+        "evidence": "governance-browser-accepted.json",
+        "checkId": "UAT-ACCOUNT-ACTIVE-AUTHORIZATION",
+        "result": "PASS",
+        "steps": "Seeded platform requests status on newly activated disposable account"
+      },
+      {
+        "evidence": "governance-browser-accepted.json",
+        "checkId": "R3-PLATFORM-NO-INHERITED-TENANT",
+        "result": "PASS",
+        "steps": "Read seeded platform auth context without header"
+      },
+      {
+        "evidence": "governance-browser-accepted.json",
+        "checkId": "R3-PLATFORM-FORGED-HEADER",
+        "result": "PASS",
+        "steps": "Seeded platform supplies Olympus UUID without membership"
+      },
+      {
+        "evidence": "governance-browser-accepted.json",
+        "checkId": "R3-DELEGATION-VIEWER-DENIED",
+        "result": "PASS",
+        "steps": "Viewer attempts platform grant on disposable user"
+      },
+      {
+        "evidence": "governance-browser-accepted.json",
+        "checkId": "R3-DELEGATION-BEFORE",
+        "result": "PASS",
+        "steps": "Disposable tenant admin calls platform directory before delegation"
+      },
+      {
+        "evidence": "governance-browser-accepted.json",
+        "checkId": "R3-DELEGATION-GRANT",
+        "result": "PASS",
+        "steps": "Policy-authorized seeded platform grants only new disposable principal"
+      },
+      {
+        "evidence": "governance-browser-accepted.json",
+        "checkId": "R3-OWNED-PLATFORM-BROWSER-COMPLETE",
+        "result": "PASS",
+        "steps": "Real Chrome Native Login and membership switcher on disposable platform principal"
+      },
+      {
+        "evidence": "governance-browser-accepted.json",
+        "checkId": "R3-DELEGATION-LIVE-REFRESH",
+        "result": "PASS",
+        "steps": "Use same pre-grant Native token after grant"
+      },
+      {
+        "evidence": "governance-browser-accepted.json",
+        "checkId": "R3-DELEGATION-DUPLICATE",
+        "result": "PASS",
+        "steps": "Repeat supported grant for same owned user"
+      },
+      {
+        "evidence": "governance-browser-accepted.json",
+        "checkId": "R3-WORKING-CONTEXT-PLATFORM-LANDING",
+        "result": "PASS",
+        "steps": "Newly authorized platform principal reads context with no header"
+      },
+      {
+        "evidence": "governance-browser-accepted.json",
+        "checkId": "R3-WORKING-CONTEXT-EXPLICIT-SELECTION",
+        "result": "PASS",
+        "steps": "Select only own preexisting active tenant membership using supported UUID header"
+      },
+      {
+        "evidence": "governance-browser-accepted.json",
+        "checkId": "R3-WORKING-CONTEXT-TENANT-READ",
+        "result": "PASS",
+        "steps": "Read projects in explicitly selected authorized tenant"
+      },
+      {
+        "evidence": "governance-browser-accepted.json",
+        "checkId": "R3-WORKING-CONTEXT-FOREIGN-DENY",
+        "result": "PASS",
+        "steps": "Attempt Olympus context without membership"
+      },
+      {
+        "evidence": "governance-browser-accepted.json",
+        "checkId": "R3-DELEGATION-REVOKE",
+        "result": "PASS",
+        "steps": "Revoke only created disposable grant"
+      },
+      {
+        "evidence": "governance-browser-accepted.json",
+        "checkId": "R3-DELEGATION-IMMEDIATE-REVOCATION",
+        "result": "PASS",
+        "steps": "Replay same Native token after revocation"
+      },
+      {
+        "evidence": "governance-browser-accepted.json",
+        "checkId": "R3-SESSION-OWNED-LOGOUT-ALL",
+        "result": "PASS",
+        "steps": "Two native tokens; revoke owned user sessions via supported logout-all"
+      },
+      {
+        "evidence": "governance-browser-accepted.json",
+        "checkId": "R3-SESSION-OLD-first",
+        "result": "PASS",
+        "steps": "Replay first token after owned logout-all"
+      },
+      {
+        "evidence": "governance-browser-accepted.json",
+        "checkId": "R3-SESSION-OLD-second",
+        "result": "PASS",
+        "steps": "Replay second token after owned logout-all"
+      },
+      {
+        "evidence": "governance-browser-accepted.json",
+        "checkId": "R3-GOVERNANCE-CLEANUP",
+        "result": "PASS",
+        "steps": "Disable only new owned tenant; no seed authority changed"
+      }
+    ],
+    "actual": "Policy-authorized Platform Admin granted authority only to a new disposable principal with its own explicit membership. Actual Native UI landed platform-only, switcher listed only own tenant, entered/refreshed/returned platform and signed out. Forged Olympus header403; grant revoked and owned tenant disabled. Seeded Platform membership unchanged.",
+    "httpResults": [
+      200,
+      201,
+      204,
+      401,
+      403,
+      409
+    ],
+    "evidence": [
+      "evidence/browser-owned-platform-accepted.json",
+      "evidence/governance-browser-accepted.json"
+    ],
+    "originalSource": "docs/uat/evidence/2026-10-19/outstanding-cases.json",
+    "reconciliationAt": "2026-10-20T10:58:04.701371+00:00",
+    "executionScope": "Round3 only; historical baseline unchanged",
+    "implementationAtInitialReview": "Seeded platform lacks membership; no privileges changed R1/R2",
+    "executedTenantScope": "Platform/owned disposable tenant; explicit Olympus forged-context denial",
+    "approvalDisposition": "Executed within authorized isolated scope; no additional approval needed",
+    "testCaseId": "UAT-PLATFORM-TENANT-WORKING-CONTEXT",
+    "defectReferences": [],
+    "preconditions": "Isolated local Greenfield UUID; seeded identities unchanged; Native credentials loaded privately; only task-owned resources changed. Exact per-check preconditions and role/tenant details are retained in linked evidence.",
+    "remainingLimitations": "Qualified execution scope and any earlier failed attempt remain in actual/evidence; no complete485-case acceptance inferred."
+  },
+  {
+    "originalId": "UAT-ACTIVE-POLICY-RULES",
+    "originalModule": "Advisor policy configuration",
+    "originalRole": "isolated tenant administrator",
+    "originalTenant": "Original NOT RUN case assigned no executed tenant; isolated tenant fixture planned",
+    "originalExpectedResult": "Publish ACTIVE trust/risk/scoring rules and validate downstream classification and historical explanations",
+    "originalStatus": "NOT RUN",
+    "originalBlocker": {
+      "limitation": "Disabled-version publication, INHERIT, conflicts and settings boundaries were executed. ACTIVE rule combinations and their downstream classification were not executed."
+    },
+    "dependency": "Disposable tenant with policy settings permission and classification data",
+    "currentImplementationState": "Fresh tenant published ACTIVE trust/accepted-risk/scoring201 with integer policy version IDs; history200 exactly normalized rules, stale409/no extra version, real OSV/classification explanations reference active policies. INHERIT versions appended. Smart Recommendations/Vendor Alternatives remain deferred, not activated by this execution.",
+    "round1Or2PrerequisiteResolution": "SBO-76 history fixed; ACTIVE evaluation not yet accepted",
+    "executionTechnicallyPossible": "Yes",
+    "approvalNeeded": "No; Smart Recommendations/Vendor Alternatives remain deferred",
+    "plannedExecutionMethod": "Publish ACTIVE trust/risk/scoring rules; evaluate disposable findings; history/inheritance and stale409; lower-role and foreign isolation",
+    "status": "PASS",
+    "executedSteps": [
+      {
+        "evidence": "active-policies-accepted.json",
+        "checkId": "R3-POLICY-ANALYSIS",
+        "result": "PASS",
+        "steps": "Analyze task-owned lodash fixture against real configured OSV"
+      },
+      {
+        "evidence": "active-policies-accepted.json",
+        "checkId": "R3-ACTIVE-trust",
+        "result": "PASS",
+        "steps": "Publish supported active trust rules in isolated tenant"
+      },
+      {
+        "evidence": "active-policies-accepted.json",
+        "checkId": "R3-ACTIVE-STALE-trust",
+        "result": "PASS",
+        "steps": "Repeat with obsolete row_version"
+      },
+      {
+        "evidence": "active-policies-accepted.json",
+        "checkId": "R3-ACTIVE-HISTORY-trust",
+        "result": "PASS",
+        "steps": "Read actual nonempty policy history"
+      },
+      {
+        "evidence": "active-policies-accepted.json",
+        "checkId": "R3-ACTIVE-accepted-risk",
+        "result": "PASS",
+        "steps": "Publish supported active accepted-risk rules in isolated tenant"
+      },
+      {
+        "evidence": "active-policies-accepted.json",
+        "checkId": "R3-ACTIVE-STALE-accepted-risk",
+        "result": "PASS",
+        "steps": "Repeat with obsolete row_version"
+      },
+      {
+        "evidence": "active-policies-accepted.json",
+        "checkId": "R3-ACTIVE-HISTORY-accepted-risk",
+        "result": "PASS",
+        "steps": "Read actual nonempty policy history"
+      },
+      {
+        "evidence": "active-policies-accepted.json",
+        "checkId": "R3-ACTIVE-scoring",
+        "result": "PASS",
+        "steps": "Publish supported active scoring rules in isolated tenant"
+      },
+      {
+        "evidence": "active-policies-accepted.json",
+        "checkId": "R3-ACTIVE-STALE-scoring",
+        "result": "PASS",
+        "steps": "Repeat with obsolete row_version"
+      },
+      {
+        "evidence": "active-policies-accepted.json",
+        "checkId": "R3-ACTIVE-HISTORY-scoring",
+        "result": "PASS",
+        "steps": "Read actual nonempty policy history"
+      },
+      {
+        "evidence": "active-policies-accepted.json",
+        "checkId": "R3-ACTIVE-DOWNSTREAM",
+        "result": "PASS",
+        "steps": "Read actual component classification under configured trust/risk rules"
+      },
+      {
+        "evidence": "active-policies-accepted.json",
+        "checkId": "R3-POLICY-INHERIT-trust",
+        "result": "PASS",
+        "steps": "Append INHERIT version without modifying global defaults"
+      },
+      {
+        "evidence": "active-policies-accepted.json",
+        "checkId": "R3-POLICY-INHERIT-accepted-risk",
+        "result": "PASS",
+        "steps": "Append INHERIT version without modifying global defaults"
+      },
+      {
+        "evidence": "active-policies-accepted.json",
+        "checkId": "R3-POLICY-INHERIT-scoring",
+        "result": "PASS",
+        "steps": "Append INHERIT version without modifying global defaults"
+      },
+      {
+        "evidence": "active-policies-accepted.json",
+        "checkId": "R3-ACTIVE-POLICY-CLEANUP",
+        "result": "PASS",
+        "steps": "Disable only newly owned policy tenant"
+      }
+    ],
+    "actual": "Fresh tenant published ACTIVE trust/accepted-risk/scoring201 with integer policy version IDs; history200 exactly normalized rules, stale409/no extra version, real OSV/classification explanations reference active policies. INHERIT versions appended. Smart Recommendations/Vendor Alternatives remain deferred, not activated by this execution.",
+    "httpResults": [
+      200,
+      201,
+      409
+    ],
+    "evidence": [
+      "evidence/active-policies-accepted.json"
+    ],
+    "originalSource": "docs/uat/evidence/2026-10-19/outstanding-cases.json",
+    "reconciliationAt": "2026-10-20T10:58:04.701899+00:00",
+    "executionScope": "Round3 only; historical baseline unchanged",
+    "implementationAtInitialReview": "SBO-76 history fixed; ACTIVE evaluation not yet accepted",
+    "executedTenantScope": "New task-owned isolated tenant; global inheritance preserved",
+    "approvalDisposition": "Executed within authorized isolated scope; no additional approval needed",
+    "testCaseId": "UAT-ACTIVE-POLICY-RULES",
+    "defectReferences": [],
+    "preconditions": "Isolated local Greenfield UUID; seeded identities unchanged; Native credentials loaded privately; only task-owned resources changed. Exact per-check preconditions and role/tenant details are retained in linked evidence.",
+    "remainingLimitations": "Qualified execution scope and any earlier failed attempt remain in actual/evidence; no complete485-case acceptance inferred."
+  },
+  {
+    "originalId": "UAT-REPAIR-AUTOMATIC-APPROVAL",
+    "originalModule": "Validation repair",
+    "originalRole": "admin / analyst",
+    "originalTenant": "Original NOT RUN case assigned no executed tenant; isolated tenant fixture planned",
+    "originalExpectedResult": "Create a deterministically repairable semantic-error fixture; review candidate diff; approve/reject; verify retry hash and import lineage",
+    "originalStatus": "NOT RUN",
+    "originalBlocker": {
+      "limitation": "Malformed JSON manual-review analysis and manual draft/import were executed; positive deterministic candidate approval/rejection was not executed."
+    },
+    "dependency": "Deterministically repairable semantic SBOM and repair permissions",
+    "currentImplementationState": "Reproduced immutable candidate-byte/hash mismatch409; scoped correction preserves native artifact bytes. Fresh candidate proposal/diff/revalidation; explicit Analyst rejection200 and post-reject409; Admin matching-hash approval200/public UUID; wronghash409, repeat same import, original bytes/history preserved, Viewer403/foreign404.",
+    "round1Or2PrerequisiteResolution": "R2 did not execute automatic candidate approval",
+    "executionTechnicallyPossible": "Yes",
+    "approvalNeeded": "No",
+    "plannedExecutionMethod": "Generate malformed synthetic SBOM; inspect original hash/diff; reject then approve with authorized actor; revalidate/import lineage; unauthorized approval and idempotency",
+    "status": "PASS",
+    "executedSteps": [
+      {
+        "evidence": "repair.json",
+        "checkId": "R3-REPAIR-QUARANTINE-reject",
+        "result": "PASS",
+        "steps": "Upload semantic-invalid synthetic SBOM"
+      },
+      {
+        "evidence": "repair.json",
+        "checkId": "R3-REPAIR-PROPOSAL-reject",
+        "result": "PASS",
+        "steps": "Analyze quarantine"
+      },
+      {
+        "evidence": "repair.json",
+        "checkId": "R3-REPAIR-JOB-reject",
+        "result": "PASS",
+        "steps": "Generate bounded candidate"
+      },
+      {
+        "evidence": "repair.json",
+        "checkId": "R3-REPAIR-RETRY-reject",
+        "result": "PASS",
+        "steps": "Repeat repair input"
+      },
+      {
+        "evidence": "repair.json",
+        "checkId": "R3-REPAIR-REVIEW-reject",
+        "result": "PASS",
+        "steps": "Download candidate and changes; inspect session import state"
+      },
+      {
+        "evidence": "repair.json",
+        "checkId": "R3-REPAIR-VIEWER-reject",
+        "result": "PASS",
+        "steps": "Viewer direct approval attempt"
+      },
+      {
+        "evidence": "repair.json",
+        "checkId": "R3-REPAIR-FOREIGN-reject",
+        "result": "PASS",
+        "steps": "Foreign administrator approval attempt"
+      },
+      {
+        "evidence": "repair.json",
+        "checkId": "R3-REPAIR-REJECT",
+        "result": "PASS",
+        "steps": "Analyst explicitly rejects own-tenant candidate"
+      },
+      {
+        "evidence": "repair.json",
+        "checkId": "R3-REPAIR-REJECTED-NOT-APPROVABLE",
+        "result": "PASS",
+        "steps": "Admin attempts approval of rejected candidate"
+      },
+      {
+        "evidence": "repair.json",
+        "checkId": "R3-REPAIR-PRESERVATION-reject",
+        "result": "PASS",
+        "steps": "Download original after terminal decision and read history"
+      },
+      {
+        "evidence": "repair.json",
+        "checkId": "R3-REPAIR-QUARANTINE-approve",
+        "result": "PASS",
+        "steps": "Upload semantic-invalid synthetic SBOM"
+      },
+      {
+        "evidence": "repair.json",
+        "checkId": "R3-REPAIR-PROPOSAL-approve",
+        "result": "PASS",
+        "steps": "Analyze quarantine"
+      },
+      {
+        "evidence": "repair.json",
+        "checkId": "R3-REPAIR-JOB-approve",
+        "result": "PASS",
+        "steps": "Generate bounded candidate"
+      },
+      {
+        "evidence": "repair.json",
+        "checkId": "R3-REPAIR-RETRY-approve",
+        "result": "PASS",
+        "steps": "Repeat repair input"
+      },
+      {
+        "evidence": "repair.json",
+        "checkId": "R3-REPAIR-REVIEW-approve",
+        "result": "PASS",
+        "steps": "Download candidate and changes; inspect session import state"
+      },
+      {
+        "evidence": "repair.json",
+        "checkId": "R3-REPAIR-VIEWER-approve",
+        "result": "PASS",
+        "steps": "Viewer direct approval attempt"
+      },
+      {
+        "evidence": "repair.json",
+        "checkId": "R3-REPAIR-FOREIGN-approve",
+        "result": "PASS",
+        "steps": "Foreign administrator approval attempt"
+      },
+      {
+        "evidence": "repair.json",
+        "checkId": "R3-REPAIR-HASH-MISMATCH",
+        "result": "PASS",
+        "steps": "Approve with incorrect review hash"
+      },
+      {
+        "evidence": "repair.json",
+        "checkId": "R3-REPAIR-APPROVE",
+        "result": "FAIL",
+        "steps": "Explicit Admin approval with exact candidate hash"
+      },
+      {
+        "evidence": "repair-after.json",
+        "checkId": "R3-REPAIR-QUARANTINE-reject",
+        "result": "PASS",
+        "steps": "Upload semantic-invalid synthetic SBOM"
+      },
+      {
+        "evidence": "repair-after.json",
+        "checkId": "R3-REPAIR-PROPOSAL-reject",
+        "result": "PASS",
+        "steps": "Analyze quarantine"
+      },
+      {
+        "evidence": "repair-after.json",
+        "checkId": "R3-REPAIR-JOB-reject",
+        "result": "PASS",
+        "steps": "Generate bounded candidate"
+      },
+      {
+        "evidence": "repair-after.json",
+        "checkId": "R3-REPAIR-RETRY-reject",
+        "result": "PASS",
+        "steps": "Repeat repair input"
+      },
+      {
+        "evidence": "repair-after.json",
+        "checkId": "R3-REPAIR-REVIEW-reject",
+        "result": "PASS",
+        "steps": "Download candidate and changes; inspect session import state"
+      },
+      {
+        "evidence": "repair-after.json",
+        "checkId": "R3-REPAIR-VIEWER-reject",
+        "result": "PASS",
+        "steps": "Viewer direct approval attempt"
+      },
+      {
+        "evidence": "repair-after.json",
+        "checkId": "R3-REPAIR-FOREIGN-reject",
+        "result": "PASS",
+        "steps": "Foreign administrator approval attempt"
+      },
+      {
+        "evidence": "repair-after.json",
+        "checkId": "R3-REPAIR-REJECT",
+        "result": "PASS",
+        "steps": "Analyst explicitly rejects own-tenant candidate"
+      },
+      {
+        "evidence": "repair-after.json",
+        "checkId": "R3-REPAIR-REJECTED-NOT-APPROVABLE",
+        "result": "PASS",
+        "steps": "Admin attempts approval of rejected candidate"
+      },
+      {
+        "evidence": "repair-after.json",
+        "checkId": "R3-REPAIR-PRESERVATION-reject",
+        "result": "PASS",
+        "steps": "Download original after terminal decision and read history"
+      },
+      {
+        "evidence": "repair-after.json",
+        "checkId": "R3-REPAIR-QUARANTINE-approve",
+        "result": "PASS",
+        "steps": "Upload semantic-invalid synthetic SBOM"
+      },
+      {
+        "evidence": "repair-after.json",
+        "checkId": "R3-REPAIR-PROPOSAL-approve",
+        "result": "PASS",
+        "steps": "Analyze quarantine"
+      },
+      {
+        "evidence": "repair-after.json",
+        "checkId": "R3-REPAIR-JOB-approve",
+        "result": "PASS",
+        "steps": "Generate bounded candidate"
+      },
+      {
+        "evidence": "repair-after.json",
+        "checkId": "R3-REPAIR-RETRY-approve",
+        "result": "PASS",
+        "steps": "Repeat repair input"
+      },
+      {
+        "evidence": "repair-after.json",
+        "checkId": "R3-REPAIR-REVIEW-approve",
+        "result": "PASS",
+        "steps": "Download candidate and changes; inspect session import state"
+      },
+      {
+        "evidence": "repair-after.json",
+        "checkId": "R3-REPAIR-VIEWER-approve",
+        "result": "PASS",
+        "steps": "Viewer direct approval attempt"
+      },
+      {
+        "evidence": "repair-after.json",
+        "checkId": "R3-REPAIR-FOREIGN-approve",
+        "result": "PASS",
+        "steps": "Foreign administrator approval attempt"
+      },
+      {
+        "evidence": "repair-after.json",
+        "checkId": "R3-REPAIR-HASH-MISMATCH",
+        "result": "PASS",
+        "steps": "Approve with incorrect review hash"
+      },
+      {
+        "evidence": "repair-after.json",
+        "checkId": "R3-REPAIR-APPROVE",
+        "result": "PASS",
+        "steps": "Explicit Admin approval with exact candidate hash"
+      },
+      {
+        "evidence": "repair-after.json",
+        "checkId": "R3-REPAIR-APPROVAL-RETRY",
+        "result": "PASS",
+        "steps": "Repeat same approved job"
+      },
+      {
+        "evidence": "repair-after.json",
+        "checkId": "R3-REPAIR-IMPORTED-READ",
+        "result": "PASS",
+        "steps": "Read repaired public identity and validation lineage"
+      },
+      {
+        "evidence": "repair-after.json",
+        "checkId": "R3-REPAIR-PRESERVATION-approve",
+        "result": "PASS",
+        "steps": "Download original after terminal decision and read history"
+      },
+      {
+        "evidence": "browser-repair-final.json",
+        "checkId": "R3-UI-REPAIR-QUARANTINE-reject",
+        "result": "PASS",
+        "steps": "Prepare task-owned malformed fixture through authenticated live API"
+      },
+      {
+        "evidence": "browser-repair-final.json",
+        "checkId": "R3-UI-REPAIR-GENERATE-reject",
+        "result": "PASS",
+        "steps": "Click Auto-Repair Safe Issues"
+      },
+      {
+        "evidence": "browser-repair-final.json",
+        "checkId": "R3-UI-REPAIR-REVIEW-reject",
+        "result": "PASS",
+        "steps": "Open View Changes in actual workspace"
+      },
+      {
+        "evidence": "browser-repair-final.json",
+        "checkId": "R3-UI-REPAIR-DECIDE-reject",
+        "result": "PASS",
+        "steps": "Click explicit reject in reviewed panel"
+      },
+      {
+        "evidence": "browser-repair-final.json",
+        "checkId": "R3-UI-REPAIR-ORIGINAL-reject",
+        "result": "PASS",
+        "steps": "Download immutable source after actual terminal UI decision"
+      },
+      {
+        "evidence": "browser-repair-final.json",
+        "checkId": "R3-UI-REPAIR-QUARANTINE-approve",
+        "result": "PASS",
+        "steps": "Prepare task-owned malformed fixture through authenticated live API"
+      },
+      {
+        "evidence": "browser-repair-final.json",
+        "checkId": "R3-UI-REPAIR-GENERATE-approve",
+        "result": "PASS",
+        "steps": "Click Auto-Repair Safe Issues"
+      },
+      {
+        "evidence": "browser-repair-final.json",
+        "checkId": "R3-UI-REPAIR-REVIEW-approve",
+        "result": "PASS",
+        "steps": "Open View Changes in actual workspace"
+      },
+      {
+        "evidence": "browser-repair-final.json",
+        "checkId": "R3-UI-REPAIR-DECIDE-approve",
+        "result": "PASS",
+        "steps": "Click explicit approve in reviewed panel"
+      },
+      {
+        "evidence": "browser-repair-final.json",
+        "checkId": "R3-UI-REPAIR-ORIGINAL-approve",
+        "result": "PASS",
+        "steps": "Download immutable source after actual terminal UI decision"
+      }
+    ],
+    "actual": "Reproduced immutable candidate-byte/hash mismatch409; scoped correction preserves native artifact bytes. Fresh candidate proposal/diff/revalidation; explicit Analyst rejection200 and post-reject409; Admin matching-hash approval200/public UUID; wronghash409, repeat same import, original bytes/history preserved, Viewer403/foreign404.",
+    "httpResults": [
+      200,
+      403,
+      404,
+      409,
+      422
+    ],
+    "evidence": [
+      "evidence/repair.json",
+      "evidence/repair-after.json",
+      "evidence/browser-repair-final.json"
+    ],
+    "originalSource": "docs/uat/evidence/2026-10-19/outstanding-cases.json",
+    "reconciliationAt": "2026-10-20T10:58:04.711013+00:00",
+    "executionScope": "Round3 only; historical baseline unchanged",
+    "implementationAtInitialReview": "R2 did not execute automatic candidate approval",
+    "executedTenantScope": "Olympus disposable resources with Viewer and Isolation Control negative checks where applicable; account status requests in Platform context",
+    "approvalDisposition": "Executed within authorized isolated scope; no additional approval needed",
+    "testCaseId": "UAT-REPAIR-AUTOMATIC-APPROVAL",
+    "defectReferences": [
+      "R3-DEF-001"
+    ],
+    "preconditions": "Isolated local Greenfield UUID; seeded identities unchanged; Native credentials loaded privately; only task-owned resources changed. Exact per-check preconditions and role/tenant details are retained in linked evidence.",
+    "remainingLimitations": "Qualified execution scope and any earlier failed attempt remain in actual/evidence; no complete485-case acceptance inferred."
+  },
+  {
+    "originalId": "UAT-REPORT-OTHER-FORMATS",
+    "originalModule": "Reports",
+    "originalRole": "permitted export roles",
+    "originalTenant": "Original NOT RUN case assigned no executed tenant; isolated tenant fixture planned",
+    "originalExpectedResult": "Validate PDF, FDA 510(k), other configured output formats and corresponding role denials",
+    "originalStatus": "NOT RUN",
+    "originalBlocker": {
+      "limitation": "Vulnerability XLSX workbook contents, lifecycle/VEX ZIP exports and local report-notification delivery were executed; other output formats were not executed."
+    },
+    "dependency": "Configured report generation libraries and disposable analyzed SBOM",
+    "currentImplementationState": "Real PDF/CSV/XLSX/SARIF and FDA510(k) workbook downloads200. Parsed nonempty PDF/pages, CSV/SARIF five findings agreement, FDA eight populated sheets with synthetic metadata. Viewer403 and foreign404. Actual Chrome Export Vulnerability Excel download and native CycloneDX download passed; files parsed/header inspected.",
+    "round1Or2PrerequisiteResolution": "R2 did not execute additional formats",
+    "executionTechnicallyPossible": "Yes for implemented formats",
+    "approvalNeeded": "Only for deferred product scope",
+    "plannedExecutionMethod": "Discover export endpoints; PDF/FDA/CSV/XLSX/SARIF where supported; inspect bytes/content; role/foreign denial and real browser download",
+    "status": "PASS",
+    "executedSteps": [
+      {
+        "evidence": "scope-exports.json",
+        "checkId": "R3-OWNED-ANALYSIS",
+        "result": "PASS",
+        "steps": "Analyze fresh own scope"
+      },
+      {
+        "evidence": "scope-exports.json",
+        "checkId": "R3-DASHBOARD-OWNED-BEFORE",
+        "result": "PASS",
+        "steps": "Read fresh two-SBOM scoped posture"
+      },
+      {
+        "evidence": "scope-exports.json",
+        "checkId": "R3-DASHBOARD-INACTIVATE-OWNED",
+        "result": "PASS",
+        "steps": "Deactivate only second freshly created SBOM"
+      },
+      {
+        "evidence": "scope-exports.json",
+        "checkId": "R3-DASHBOARD-INACTIVE-EXCLUDED-admin",
+        "result": "PASS",
+        "steps": "Read same project/application scope after owned deactivation"
+      },
+      {
+        "evidence": "scope-exports.json",
+        "checkId": "R3-DASHBOARD-INACTIVE-EXCLUDED-analyst",
+        "result": "PASS",
+        "steps": "Read same project/application scope after owned deactivation"
+      },
+      {
+        "evidence": "scope-exports.json",
+        "checkId": "R3-DASHBOARD-INACTIVE-EXCLUDED-developer",
+        "result": "PASS",
+        "steps": "Read same project/application scope after owned deactivation"
+      },
+      {
+        "evidence": "scope-exports.json",
+        "checkId": "R3-DASHBOARD-INACTIVE-EXCLUDED-viewer",
+        "result": "PASS",
+        "steps": "Read same project/application scope after owned deactivation"
+      },
+      {
+        "evidence": "scope-exports.json",
+        "checkId": "R3-DASHBOARD-INACTIVE-OPTIONS",
+        "result": "PASS",
+        "steps": "Read actual dependent SBOM choices"
+      },
+      {
+        "evidence": "scope-exports.json",
+        "checkId": "R3-DASHBOARD-OWNED-FOREIGN",
+        "result": "PASS",
+        "steps": "Foreign user supplies known R3 UUID hierarchy"
+      },
+      {
+        "evidence": "scope-exports.json",
+        "checkId": "R3-EXPORT-pdf",
+        "result": "PASS",
+        "steps": "Generate and inspect real pdf artifact"
+      },
+      {
+        "evidence": "scope-exports.json",
+        "checkId": "R3-EXPORT-pdf-viewer",
+        "result": "PASS",
+        "steps": "Direct viewer export of known owned resource"
+      },
+      {
+        "evidence": "scope-exports.json",
+        "checkId": "R3-EXPORT-pdf-foreign",
+        "result": "PASS",
+        "steps": "Direct foreign export of known owned resource"
+      },
+      {
+        "evidence": "scope-exports.json",
+        "checkId": "R3-EXPORT-sarif",
+        "result": "PASS",
+        "steps": "Generate and inspect real sarif artifact"
+      },
+      {
+        "evidence": "scope-exports.json",
+        "checkId": "R3-EXPORT-sarif-viewer",
+        "result": "PASS",
+        "steps": "Direct viewer export of known owned resource"
+      },
+      {
+        "evidence": "scope-exports.json",
+        "checkId": "R3-EXPORT-sarif-foreign",
+        "result": "PASS",
+        "steps": "Direct foreign export of known owned resource"
+      },
+      {
+        "evidence": "scope-exports.json",
+        "checkId": "R3-EXPORT-csv",
+        "result": "PASS",
+        "steps": "Generate and inspect real csv artifact"
+      },
+      {
+        "evidence": "scope-exports.json",
+        "checkId": "R3-EXPORT-csv-viewer",
+        "result": "PASS",
+        "steps": "Direct viewer export of known owned resource"
+      },
+      {
+        "evidence": "scope-exports.json",
+        "checkId": "R3-EXPORT-csv-foreign",
+        "result": "PASS",
+        "steps": "Direct foreign export of known owned resource"
+      },
+      {
+        "evidence": "scope-exports.json",
+        "checkId": "R3-EXPORT-xlsx",
+        "result": "PASS",
+        "steps": "Generate and inspect real xlsx artifact"
+      },
+      {
+        "evidence": "scope-exports.json",
+        "checkId": "R3-EXPORT-xlsx-viewer",
+        "result": "PASS",
+        "steps": "Direct viewer export of known owned resource"
+      },
+      {
+        "evidence": "scope-exports.json",
+        "checkId": "R3-EXPORT-xlsx-foreign",
+        "result": "PASS",
+        "steps": "Direct foreign export of known owned resource"
+      },
+      {
+        "evidence": "scope-exports.json",
+        "checkId": "R3-FDA-LIFECYCLE-REFRESH",
+        "result": "PASS",
+        "steps": "Request supported lifecycle evidence for own fresh fixture"
+      },
+      {
+        "evidence": "scope-exports.json",
+        "checkId": "R3-EXPORT-FDA",
+        "result": "PASS",
+        "steps": "Export required FDA workbook with synthetic metadata and explicit finding run"
+      },
+      {
+        "evidence": "artifact-content-validation.json",
+        "checkId": null,
+        "result": null,
+        "steps": null
+      },
+      {
+        "evidence": "artifact-content-validation.json",
+        "checkId": null,
+        "result": null,
+        "steps": null
+      },
+      {
+        "evidence": "artifact-content-validation.json",
+        "checkId": null,
+        "result": null,
+        "steps": null
+      },
+      {
+        "evidence": "artifact-content-validation.json",
+        "checkId": null,
+        "result": null,
+        "steps": null
+      },
+      {
+        "evidence": "artifact-content-validation.json",
+        "checkId": null,
+        "result": null,
+        "steps": null
+      },
+      {
+        "evidence": "browser-sbom-followup.json",
+        "checkId": "R3-UI-UPLOAD-READBACK",
+        "result": "PASS",
+        "steps": "Resolve owned product latest upload through API after actual202 form response; open UUID detail"
+      },
+      {
+        "evidence": "browser-sbom-followup.json",
+        "checkId": "R3-UI-COMPONENT-READ",
+        "result": "PASS",
+        "steps": "Open Components List in newly uploaded detail"
+      },
+      {
+        "evidence": "browser-sbom-followup.json",
+        "checkId": "R3-UI-NATIVE-DOWNLOAD",
+        "result": "PASS",
+        "steps": "Click actual Export CycloneDX link; save and parse download"
+      },
+      {
+        "evidence": "browser-sbom-followup.json",
+        "checkId": "R3-UI-REPORT-DOWNLOAD",
+        "result": "PASS",
+        "steps": "On previously analyzed task-owned scope, click Export Vulnerability Excel and save actual browser download"
+      }
+    ],
+    "actual": "Real PDF/CSV/XLSX/SARIF and FDA510(k) workbook downloads200. Parsed nonempty PDF/pages, CSV/SARIF five findings agreement, FDA eight populated sheets with synthetic metadata. Viewer403 and foreign404. Actual Chrome Export Vulnerability Excel download and native CycloneDX download passed; files parsed/header inspected.",
+    "httpResults": [
+      200,
+      403,
+      404
+    ],
+    "evidence": [
+      "evidence/scope-exports.json",
+      "evidence/artifact-content-validation.json",
+      "evidence/browser-sbom-followup.json"
+    ],
+    "originalSource": "docs/uat/evidence/2026-10-19/outstanding-cases.json",
+    "reconciliationAt": "2026-10-20T10:58:04.714722+00:00",
+    "executionScope": "Round3 only; historical baseline unchanged",
+    "implementationAtInitialReview": "R2 did not execute additional formats",
+    "executedTenantScope": "Olympus disposable resources with Viewer and Isolation Control negative checks where applicable; account status requests in Platform context",
+    "approvalDisposition": "Executed within authorized isolated scope; no additional approval needed",
+    "testCaseId": "UAT-REPORT-OTHER-FORMATS",
+    "defectReferences": [],
+    "preconditions": "Isolated local Greenfield UUID; seeded identities unchanged; Native credentials loaded privately; only task-owned resources changed. Exact per-check preconditions and role/tenant details are retained in linked evidence.",
+    "remainingLimitations": "Qualified execution scope and any earlier failed attempt remain in actual/evidence; no complete485-case acceptance inferred."
+  },
+  {
+    "originalId": "UAT-SBOM-SIGNATURE-CONVERSION",
+    "originalModule": "SBOM upload and validation",
+    "originalRole": "permitted upload roles",
+    "originalTenant": "Original NOT RUN case assigned no executed tenant; isolated tenant fixture planned",
+    "originalExpectedResult": "Verify signed/tampered SBOMs, SPDX conversion, and large-file streaming repair",
+    "originalStatus": "NOT RUN",
+    "originalBlocker": {
+      "limitation": "CycloneDX upload, malformed JSON rejection, component reads, repair import and version lineage were executed. Signature, conversion and large-file variants were not executed."
+    },
+    "dependency": "Supported local verification keys, format converters and bounded large fixture",
+    "currentImplementationState": "SPDX\u2192CycloneDX conversion and reference checks executed. Missing JSF schema/URI checker fixed; explicit signature validation reaches stable E110 verifier-not-implemented instead of internal E025. Cryptographic valid/tampered verification is deferred/unsupported, so composite case cannot PASS. Initial export raw-byte assertion was a harness error: native export intentionally formats JSON; before/after export hash matched. Bounded >5MiB paged read/search and reviewed manual line patch/revalidation/import passed with source bytes retained; automatic repair correctly respects its5MiB manual-review boundary.",
+    "round1Or2PrerequisiteResolution": "R2 fixed CSAF native document boundary, not signatures/conversion",
+    "executionTechnicallyPossible": "Yes for local supported contract",
+    "approvalNeeded": "No for synthetic keys; no production certificates",
+    "plannedExecutionMethod": "Inspect signature contract; synthetic signed/tampered documents; SPDX/CycloneDX roundtrip references/duplicates; bounded large streaming repair; API errors",
+    "status": "BLOCKED",
+    "executedSteps": [
+      {
+        "evidence": "conversion.json",
+        "checkId": "R3-SPDX-UPLOAD",
+        "result": "PASS",
+        "steps": "Upload supported synthetic SPDX 2.3"
+      },
+      {
+        "evidence": "conversion.json",
+        "checkId": "R3-SPDX-CONVERT",
+        "result": "PASS",
+        "steps": "Convert native SPDX through supported application endpoint"
+      },
+      {
+        "evidence": "conversion.json",
+        "checkId": "R3-CONVERSION-REFERENCES",
+        "result": "PASS",
+        "steps": "Download converted artifact; inspect identity/dependency references"
+      },
+      {
+        "evidence": "conversion.json",
+        "checkId": "R3-CONVERSION-ORIGINAL-PRESERVED",
+        "result": "FAIL",
+        "steps": "Download original before/after conversion"
+      },
+      {
+        "evidence": "conversion.json",
+        "checkId": "R3-CONVERSION-WRONG-FORMAT",
+        "result": "PASS",
+        "steps": "Attempt SPDX-only conversion on CycloneDX record"
+      },
+      {
+        "evidence": "conversion.json",
+        "checkId": "R3-CONVERSION-VIEWER",
+        "result": "PASS",
+        "steps": "Viewer attempts conversion"
+      },
+      {
+        "evidence": "conversion.json",
+        "checkId": "R3-CONVERSION-FOREIGN",
+        "result": "PASS",
+        "steps": "Foreign tenant attempts known UUID conversion"
+      },
+      {
+        "evidence": "conversion.json",
+        "checkId": "R3-SIGNATURE-IMPLEMENTATION-CONTRACT",
+        "result": "FAIL",
+        "steps": "Validate synthetic signature with explicit verify_signature=true; no global flag change"
+      },
+      {
+        "evidence": "conversion-accepted.json",
+        "checkId": "R3-SPDX-UPLOAD",
+        "result": "PASS",
+        "steps": "Upload supported synthetic SPDX 2.3"
+      },
+      {
+        "evidence": "conversion-accepted.json",
+        "checkId": "R3-SPDX-CONVERT",
+        "result": "PASS",
+        "steps": "Convert native SPDX through supported application endpoint"
+      },
+      {
+        "evidence": "conversion-accepted.json",
+        "checkId": "R3-CONVERSION-REFERENCES",
+        "result": "PASS",
+        "steps": "Download converted artifact; inspect identity/dependency references"
+      },
+      {
+        "evidence": "conversion-accepted.json",
+        "checkId": "R3-CONVERSION-ORIGINAL-PRESERVED",
+        "result": "PASS",
+        "steps": "Download original before/after conversion"
+      },
+      {
+        "evidence": "conversion-accepted.json",
+        "checkId": "R3-CONVERSION-WRONG-FORMAT",
+        "result": "PASS",
+        "steps": "Attempt SPDX-only conversion on CycloneDX record"
+      },
+      {
+        "evidence": "conversion-accepted.json",
+        "checkId": "R3-CONVERSION-VIEWER",
+        "result": "PASS",
+        "steps": "Viewer attempts conversion"
+      },
+      {
+        "evidence": "conversion-accepted.json",
+        "checkId": "R3-CONVERSION-FOREIGN",
+        "result": "PASS",
+        "steps": "Foreign tenant attempts known UUID conversion"
+      },
+      {
+        "evidence": "signature-schema-accepted.json",
+        "checkId": "R3-SIGNATURE-OFFLINE-SCHEMA-RETEST",
+        "result": "PASS",
+        "steps": "Revalidate same owned synthetic signature after vendored schema/URI dependency correction"
+      },
+      {
+        "evidence": "large-manual-accepted.json",
+        "checkId": "R3-LARGE-SAFE-BOUNDARY",
+        "result": "PASS",
+        "steps": "Read existing >5MiB automatic-repair safety decision"
+      },
+      {
+        "evidence": "large-manual-accepted.json",
+        "checkId": "R3-LARGE-PATCH-DENY-viewer",
+        "result": "PASS",
+        "steps": "Attempt explicit bounded line patch as viewer"
+      },
+      {
+        "evidence": "large-manual-accepted.json",
+        "checkId": "R3-LARGE-PATCH-DENY-foreign",
+        "result": "PASS",
+        "steps": "Attempt explicit bounded line patch as foreign"
+      },
+      {
+        "evidence": "large-manual-accepted.json",
+        "checkId": "R3-LARGE-STREAM-PATCH",
+        "result": "PASS",
+        "steps": "Admin applies one reviewed line replacement through filesystem patch endpoint"
+      },
+      {
+        "evidence": "large-manual-accepted.json",
+        "checkId": "R3-LARGE-REVALIDATE",
+        "result": "PASS",
+        "steps": "Run same validator on stream-patched draft"
+      },
+      {
+        "evidence": "large-manual-accepted.json",
+        "checkId": "R3-LARGE-IMPORT-DENY-viewer",
+        "result": "PASS",
+        "steps": "Attempt import as viewer"
+      },
+      {
+        "evidence": "large-manual-accepted.json",
+        "checkId": "R3-LARGE-IMPORT-DENY-foreign",
+        "result": "PASS",
+        "steps": "Attempt import as foreign"
+      },
+      {
+        "evidence": "large-manual-accepted.json",
+        "checkId": "R3-LARGE-IMPORT",
+        "result": "PASS",
+        "steps": "Explicit Admin import after manual review/revalidation"
+      },
+      {
+        "evidence": "large-manual-accepted.json",
+        "checkId": "R3-LARGE-LINEAGE",
+        "result": "PASS",
+        "steps": "Read immutable original and history after import"
+      }
+    ],
+    "actual": "SPDX\u2192CycloneDX conversion and reference checks executed. Missing JSF schema/URI checker fixed; explicit signature validation reaches stable E110 verifier-not-implemented instead of internal E025. Cryptographic valid/tampered verification is deferred/unsupported, so composite case cannot PASS. Initial export raw-byte assertion was a harness error: native export intentionally formats JSON; before/after export hash matched. Bounded >5MiB paged read/search and reviewed manual line patch/revalidation/import passed with source bytes retained; automatic repair correctly respects its5MiB manual-review boundary.",
+    "httpResults": [
+      200,
+      202,
+      400,
+      403,
+      404
+    ],
+    "evidence": [
+      "evidence/conversion.json",
+      "evidence/conversion-accepted.json",
+      "evidence/signature-schema-accepted.json",
+      "evidence/large-manual-accepted.json"
+    ],
+    "originalSource": "docs/uat/evidence/2026-10-19/outstanding-cases.json",
+    "reconciliationAt": "2026-10-20T10:58:04.717094+00:00",
+    "executionScope": "Round3 only; historical baseline unchanged",
+    "implementationAtInitialReview": "R2 fixed CSAF native document boundary, not signatures/conversion",
+    "executedTenantScope": "Olympus disposable resources with Viewer and Isolation Control negative checks where applicable; account status requests in Platform context",
+    "approvalDisposition": "Unresolved authorized capability / Product-Security contract decision; no seeded privilege changes",
+    "testCaseId": "UAT-SBOM-SIGNATURE-CONVERSION",
+    "defectReferences": [
+      "R3-DEF-004",
+      "deferred cryptographic verifier"
+    ],
+    "preconditions": "Isolated local Greenfield UUID; seeded identities unchanged; Native credentials loaded privately; only task-owned resources changed. Exact per-check preconditions and role/tenant details are retained in linked evidence.",
+    "remainingLimitations": "SPDX\u2192CycloneDX conversion and reference checks executed. Missing JSF schema/URI checker fixed; explicit signature validation reaches stable E110 verifier-not-implemented instead of internal E025. Cryptographic valid/tampered verification is deferred/unsupported, so composite case cannot PASS. Initial export raw-byte assertion was a harness error: native export intentionally formats JSON; before/after export hash matched. Bounded >5MiB paged read/search and reviewed manual line patch/revalidation/import passed with source bytes retained; automatic repair correctly respects its5MiB manual-review boundary."
+  },
+  {
+    "originalId": "UAT-REPORT-SCHEDULED-TRIGGER",
+    "originalModule": "Reports and notifications",
+    "originalRole": "admin",
+    "originalTenant": "Original NOT RUN case assigned no executed tenant; isolated tenant fixture planned",
+    "originalExpectedResult": "Observe recurring enabled schedule firing and report notification retry/dedup behavior",
+    "originalStatus": "NOT RUN",
+    "originalBlocker": {
+      "limitation": "Disabled preset schedule resolution, cleanup, authorization and real local immediate report delivery were executed; no enabled recurring job or forced SMTP outage was created."
+    },
+    "dependency": "Isolated Beat/worker queue, Mailpit and bounded owned schedule",
+    "currentImplementationState": "Owned bounded Celery Beat\u2192worker schedule fired using isolated due-clock only. Controlled first SMTP_UNAVAILABLE then real120s retry\u2192SENT; repeated ticks one delivery cycle, one Mailpit digest with two attachments. Artifact content/downloads and foreign404, pause/delete verified; owned Beat/worker stopped. Initial subject-filter harness failure corrected against actual digest subject.",
+    "round1Or2PrerequisiteResolution": "R2 only existing immediate delivery, no recurring acceptance",
+    "executionTechnicallyPossible": "Possible after queue/dispatcher ownership check",
+    "approvalNeeded": "No unrestricted shared recurring jobs",
+    "plannedExecutionMethod": "One owned due schedule with controlled window; Beat dispatch\u2192worker\u2192artifact\u2192Mailpit; duplicate/retry safety then pause/cancel/cleanup",
+    "status": "PASS",
+    "executedSteps": [
+      {
+        "evidence": "scheduled-report.json",
+        "checkId": "R3-REPORT-ANALYSIS",
+        "result": "PASS",
+        "steps": "Analyze new owned scope with real OSV"
+      },
+      {
+        "evidence": "scheduled-report.json",
+        "checkId": "R3-REPORT-SCHEDULE-CREATE",
+        "result": "PASS",
+        "steps": "Create bounded owned enabled recurring daily report"
+      },
+      {
+        "evidence": "scheduled-report.json",
+        "checkId": "R3-REPORT-RETRY-PENDING",
+        "result": "PASS",
+        "steps": "Observe controlled first-send failure and durable delayed retry"
+      },
+      {
+        "evidence": "scheduled-report.json",
+        "checkId": "UAT-REPORT-SCHEDULED-TRIGGER",
+        "result": "PASS",
+        "steps": "Actual owned Beat dispatch \u2192 worker \u2192 controlled first failure \u2192 real Mailpit retry"
+      },
+      {
+        "evidence": "scheduled-report.json",
+        "checkId": "R3-REPORT-CYCLE-DEDUP",
+        "result": "PASS",
+        "steps": "Allow another Beat tick after completed cycle"
+      },
+      {
+        "evidence": "scheduled-report.json",
+        "checkId": "R3-REPORT-MAILPIT",
+        "result": "FAIL",
+        "steps": "Read Mailpit metadata for unique owned recipient"
+      },
+      {
+        "evidence": "scheduled-report.json",
+        "checkId": "R3-REPORT-ARTIFACT-PDF",
+        "result": "PASS",
+        "steps": "Download actual generated retained report"
+      },
+      {
+        "evidence": "scheduled-report.json",
+        "checkId": "R3-REPORT-ARTIFACT-FOREIGN-PDF",
+        "result": "PASS",
+        "steps": "Foreign tenant requests known owned artifact"
+      },
+      {
+        "evidence": "scheduled-report.json",
+        "checkId": "R3-REPORT-ARTIFACT-XLSX",
+        "result": "PASS",
+        "steps": "Download actual generated retained report"
+      },
+      {
+        "evidence": "scheduled-report.json",
+        "checkId": "R3-REPORT-ARTIFACT-FOREIGN-XLSX",
+        "result": "PASS",
+        "steps": "Foreign tenant requests known owned artifact"
+      },
+      {
+        "evidence": "scheduled-report.json",
+        "checkId": "R3-REPORT-ARTIFACT-JSON",
+        "result": "PASS",
+        "steps": "Download actual generated retained report"
+      },
+      {
+        "evidence": "scheduled-report.json",
+        "checkId": "R3-REPORT-ARTIFACT-FOREIGN-JSON",
+        "result": "PASS",
+        "steps": "Foreign tenant requests known owned artifact"
+      },
+      {
+        "evidence": "scheduled-report.json",
+        "checkId": "R3-REPORT-ARTIFACT-PDF",
+        "result": "PASS",
+        "steps": "Download actual generated retained report"
+      },
+      {
+        "evidence": "scheduled-report.json",
+        "checkId": "R3-REPORT-ARTIFACT-FOREIGN-PDF",
+        "result": "PASS",
+        "steps": "Foreign tenant requests known owned artifact"
+      },
+      {
+        "evidence": "scheduled-report.json",
+        "checkId": "R3-REPORT-ARTIFACT-XLSX",
+        "result": "PASS",
+        "steps": "Download actual generated retained report"
+      },
+      {
+        "evidence": "scheduled-report.json",
+        "checkId": "R3-REPORT-ARTIFACT-FOREIGN-XLSX",
+        "result": "PASS",
+        "steps": "Foreign tenant requests known owned artifact"
+      },
+      {
+        "evidence": "scheduled-report.json",
+        "checkId": "R3-REPORT-ARTIFACT-JSON",
+        "result": "PASS",
+        "steps": "Download actual generated retained report"
+      },
+      {
+        "evidence": "scheduled-report.json",
+        "checkId": "R3-REPORT-ARTIFACT-FOREIGN-JSON",
+        "result": "PASS",
+        "steps": "Foreign tenant requests known owned artifact"
+      },
+      {
+        "evidence": "scheduled-report.json",
+        "checkId": "R3-REPORT-PAUSE",
+        "result": "PASS",
+        "steps": "Pause owned schedule before stopping control worker"
+      },
+      {
+        "evidence": "scheduled-report.json",
+        "checkId": "R3-REPORT-CLEANUP",
+        "result": "PASS",
+        "steps": "Stop only owned worker/Beat, remove owned subscription, disable owned tenant"
+      },
+      {
+        "evidence": "report-mailpit-accepted.json",
+        "checkId": "R3-REPORT-MAILPIT-ACCEPTED",
+        "result": "PASS",
+        "steps": "Read actual unique recipient digest subject and attachment metadata; distinguish the earlier activation mail"
+      },
+      {
+        "evidence": "artifact-content-validation.json",
+        "checkId": null,
+        "result": null,
+        "steps": null
+      },
+      {
+        "evidence": "artifact-content-validation.json",
+        "checkId": null,
+        "result": null,
+        "steps": null
+      },
+      {
+        "evidence": "artifact-content-validation.json",
+        "checkId": null,
+        "result": null,
+        "steps": null
+      },
+      {
+        "evidence": "artifact-content-validation.json",
+        "checkId": null,
+        "result": null,
+        "steps": null
+      },
+      {
+        "evidence": "artifact-content-validation.json",
+        "checkId": null,
+        "result": null,
+        "steps": null
+      }
+    ],
+    "actual": "Owned bounded Celery Beat\u2192worker schedule fired using isolated due-clock only. Controlled first SMTP_UNAVAILABLE then real120s retry\u2192SENT; repeated ticks one delivery cycle, one Mailpit digest with two attachments. Artifact content/downloads and foreign404, pause/delete verified; owned Beat/worker stopped. Initial subject-filter harness failure corrected against actual digest subject.",
+    "httpResults": [
+      200,
+      201,
+      404
+    ],
+    "evidence": [
+      "evidence/scheduled-report.json",
+      "evidence/report-mailpit-accepted.json",
+      "evidence/artifact-content-validation.json"
+    ],
+    "originalSource": "docs/uat/evidence/2026-10-19/outstanding-cases.json",
+    "reconciliationAt": "2026-10-20T10:58:04.718308+00:00",
+    "executionScope": "Round3 only; historical baseline unchanged",
+    "implementationAtInitialReview": "R2 only existing immediate delivery, no recurring acceptance",
+    "executedTenantScope": "New task-owned isolated tenant; global inheritance preserved",
+    "approvalDisposition": "Executed within authorized isolated scope; no additional approval needed",
+    "testCaseId": "UAT-REPORT-SCHEDULED-TRIGGER",
+    "defectReferences": [],
+    "preconditions": "Isolated local Greenfield UUID; seeded identities unchanged; Native credentials loaded privately; only task-owned resources changed. Exact per-check preconditions and role/tenant details are retained in linked evidence.",
+    "remainingLimitations": "Qualified execution scope and any earlier failed attempt remain in actual/evidence; no complete485-case acceptance inferred."
+  },
+  {
+    "originalId": "UAT-PROVIDER-SECRET-ROTATION",
+    "originalModule": "Integration configuration",
+    "originalRole": "platform / isolated tenant administrator",
+    "originalTenant": "Original NOT RUN case assigned no executed tenant; isolated tenant fixture planned",
+    "originalExpectedResult": "Verify credential creation/rotation/revocation and successful authenticated upstream provider calls",
+    "originalStatus": "NOT RUN",
+    "originalBlocker": {
+      "limitation": "Provider configuration reads, isolated lifecycle override/reset and invalid provider/timeout tests were executed. No real upstream credentials were supplied or fabricated; secret rotation was not executed."
+    },
+    "dependency": "Synthetic secret and isolated authorized local mock upstream",
+    "currentImplementationState": "Synthetic credentials on authenticated isolated local mock: create, rotate, verify upstream current key, revoke/read404. Tenant encryption-at-rest and redacted scoped audit inspected without exposing secrets. Viewer403/foreign404 and reset to inherited disabled global configuration. This establishes local mock acceptance, not real hosted-provider credentials.",
+    "round1Or2PrerequisiteResolution": "R2 did not execute secret lifecycle",
+    "executionTechnicallyPossible": "Local mock possible; real upstream remains external",
+    "approvalNeeded": "Real provider credentials require approval",
+    "plannedExecutionMethod": "Create/update/rotate/revoke disposable scoped provider secret; redaction/encryption/inheritance/role/audit; mock call acceptance explicitly distinguished",
+    "status": "PASS",
+    "executedSteps": [
+      {
+        "evidence": "ai-local.json",
+        "checkId": "R3-AI-ISOLATED-FEATURE",
+        "result": "PASS",
+        "steps": "Enable only new disposable tenant override"
+      },
+      {
+        "evidence": "ai-local.json",
+        "checkId": "R3-AI-LOCAL-CONFIG",
+        "result": "PASS",
+        "steps": "Create own tenant local-only free credential"
+      },
+      {
+        "evidence": "ai-local.json",
+        "checkId": "R3-AI-LOCAL-HEALTH",
+        "result": "PASS",
+        "steps": "Application adapter probes separate real local model"
+      },
+      {
+        "evidence": "ai-local.json",
+        "checkId": "UAT-AI-LIVE-PROVIDER",
+        "result": "PASS",
+        "steps": "Real authenticated application Copilot request to approved separate local Ollama"
+      },
+      {
+        "evidence": "ai-local.json",
+        "checkId": "R3-SECRET-CREATE",
+        "result": "PASS",
+        "steps": "Create only synthetic scoped credential"
+      },
+      {
+        "evidence": "ai-local.json",
+        "checkId": "R3-SECRET-UPSTREAM-initial",
+        "result": "PASS",
+        "steps": "Call local authenticated mock through application provider adapter"
+      },
+      {
+        "evidence": "ai-local.json",
+        "checkId": "R3-SECRET-ROTATE",
+        "result": "PASS",
+        "steps": "Rotate synthetic secret only, same credential identity"
+      },
+      {
+        "evidence": "ai-local.json",
+        "checkId": "R3-SECRET-UPSTREAM-rotated",
+        "result": "PASS",
+        "steps": "Call local authenticated mock through application provider adapter"
+      },
+      {
+        "evidence": "ai-local.json",
+        "checkId": "R3-SECRET-ROLE-DENIED",
+        "result": "PASS",
+        "steps": "Viewer attempts scoped credential update"
+      },
+      {
+        "evidence": "ai-local.json",
+        "checkId": "R3-SECRET-FOREIGN-DENIED",
+        "result": "PASS",
+        "steps": "Foreign administrator reads owned credential ID"
+      },
+      {
+        "evidence": "ai-local.json",
+        "checkId": "R3-SECRET-REVOKE",
+        "result": "PASS",
+        "steps": "Delete only newly owned synthetic credential"
+      },
+      {
+        "evidence": "ai-local.json",
+        "checkId": "R3-SECRET-REVOKED-READ",
+        "result": "PASS",
+        "steps": "Read revoked own synthetic credential"
+      },
+      {
+        "evidence": "ai-local.json",
+        "checkId": "R3-AI-CLEANUP",
+        "result": "PASS",
+        "steps": "Remove own override/providers; disable only owned tenant"
+      },
+      {
+        "evidence": "ai-local.json",
+        "checkId": "R3-AI-GLOBAL-PRESERVED",
+        "result": "PASS",
+        "steps": "Compare global AI settings before/after scoped local test"
+      },
+      {
+        "evidence": "secret-lifecycle.json",
+        "checkId": "R3-SECRET-CREATE",
+        "result": "PASS",
+        "steps": "Create only synthetic scoped credential"
+      },
+      {
+        "evidence": "secret-lifecycle.json",
+        "checkId": "R3-SECRET-UPSTREAM-initial",
+        "result": "PASS",
+        "steps": "Call local authenticated mock through application provider adapter"
+      },
+      {
+        "evidence": "secret-lifecycle.json",
+        "checkId": "R3-SECRET-ROTATE",
+        "result": "PASS",
+        "steps": "Rotate synthetic secret only, same credential identity"
+      },
+      {
+        "evidence": "secret-lifecycle.json",
+        "checkId": "R3-SECRET-UPSTREAM-rotated",
+        "result": "PASS",
+        "steps": "Call local authenticated mock through application provider adapter"
+      },
+      {
+        "evidence": "secret-lifecycle.json",
+        "checkId": "R3-SECRET-ROLE-DENIED",
+        "result": "PASS",
+        "steps": "Viewer attempts scoped credential update"
+      },
+      {
+        "evidence": "secret-lifecycle.json",
+        "checkId": "R3-SECRET-FOREIGN-DENIED",
+        "result": "PASS",
+        "steps": "Foreign administrator reads owned credential ID"
+      },
+      {
+        "evidence": "secret-lifecycle.json",
+        "checkId": "R3-SECRET-ENCRYPTION-AUDIT",
+        "result": "PASS",
+        "steps": "Read only exact owned credential ciphertext and scoped audit metadata; never print values"
+      },
+      {
+        "evidence": "secret-lifecycle.json",
+        "checkId": "R3-SECRET-REVOKE",
+        "result": "PASS",
+        "steps": "Delete only newly owned synthetic credential"
+      },
+      {
+        "evidence": "secret-lifecycle.json",
+        "checkId": "R3-SECRET-REVOKED-READ",
+        "result": "PASS",
+        "steps": "Read revoked own synthetic credential"
+      },
+      {
+        "evidence": "secret-lifecycle.json",
+        "checkId": "R3-SECRET-INHERITANCE",
+        "result": "PASS",
+        "steps": "Reset only new owned tenant override; compare inherited disabled global state"
+      },
+      {
+        "evidence": "secret-lifecycle.json",
+        "checkId": "R3-SECRET-CLEANUP",
+        "result": "PASS",
+        "steps": "Disable only owned synthetic-provider tenant"
+      }
+    ],
+    "actual": "Synthetic credentials on authenticated isolated local mock: create, rotate, verify upstream current key, revoke/read404. Tenant encryption-at-rest and redacted scoped audit inspected without exposing secrets. Viewer403/foreign404 and reset to inherited disabled global configuration. This establishes local mock acceptance, not real hosted-provider credentials.",
+    "httpResults": [
+      200,
+      201,
+      204,
+      403,
+      404
+    ],
+    "evidence": [
+      "evidence/ai-local.json",
+      "evidence/secret-lifecycle.json"
+    ],
+    "originalSource": "docs/uat/evidence/2026-10-19/outstanding-cases.json",
+    "reconciliationAt": "2026-10-20T10:58:04.718834+00:00",
+    "executionScope": "Round3 only; historical baseline unchanged",
+    "implementationAtInitialReview": "R2 did not execute secret lifecycle",
+    "executedTenantScope": "New task-owned isolated tenant; global inheritance preserved",
+    "approvalDisposition": "Executed within authorized isolated scope; no additional approval needed",
+    "testCaseId": "UAT-PROVIDER-SECRET-ROTATION",
+    "defectReferences": [],
+    "preconditions": "Isolated local Greenfield UUID; seeded identities unchanged; Native credentials loaded privately; only task-owned resources changed. Exact per-check preconditions and role/tenant details are retained in linked evidence.",
+    "remainingLimitations": "Qualified execution scope and any earlier failed attempt remain in actual/evidence; no complete485-case acceptance inferred."
+  },
+  {
+    "originalId": "UAT-SESSION-EXPIRY-CONCURRENCY",
+    "originalModule": "Session security",
+    "originalRole": "all six roles",
+    "originalTenant": "Original NOT RUN case assigned no executed tenant; isolated tenant fixture planned",
+    "originalExpectedResult": "Observe idle/absolute session expiry, concurrent session revocation and long-lived refresh under role/tenant changes",
+    "originalStatus": "NOT RUN",
+    "originalBlocker": {
+      "limitation": "Isolated login, refresh context, cookie flags/storage, cross-origin denial, logout and old-cookie replay were executed. Long-duration expiry and concurrency were not executed."
+    },
+    "dependency": "Controlled test clock/config and independent browser contexts",
+    "currentImplementationState": "Six real Native clean-context flows and parallel second contexts retain isolation across refresh/logout; old cookie replay unauthenticated, second session stays valid. Owned logout-all invalidates both native JWTs401; controlled signed-token absolute expiry tests pass at TTL60/900/86400. Original independent idle expiry/long-lived role-change criterion has no idle-timeout contract in current fixed-absolute Native implementation; Product/Security disposition required. Live TTL and seeded roles unchanged.",
+    "round1Or2PrerequisiteResolution": "R2 checked refresh/logout, not expiry/concurrency",
+    "executionTechnicallyPossible": "Yes via isolated test clocks and live concurrency",
+    "approvalNeeded": "No seeded role changes or weakened live expiry",
+    "plannedExecutionMethod": "Test idle/absolute expiry in isolated tests; live two contexts per role refresh/logout/replay/switch boundaries; expired token rejection",
+    "status": "BLOCKED",
+    "executedSteps": [
+      {
+        "evidence": "browser-six-roles-accepted.json",
+        "checkId": "R3-NATIVE-CONTEXT-admin",
+        "result": "PASS",
+        "steps": "Actual Native Login form; supported tenant selection; inspect authenticated context"
+      },
+      {
+        "evidence": "browser-six-roles-accepted.json",
+        "checkId": "R3-NATIVE-REFRESH-admin",
+        "result": "PASS",
+        "steps": "Refresh authenticated page; read authoritative context"
+      },
+      {
+        "evidence": "browser-six-roles-accepted.json",
+        "checkId": "R3-USERS-ACCESS-admin",
+        "result": "PASS",
+        "steps": "Open Users & Access; compare Add Existing visibility with authoritative permission; direct directory read"
+      },
+      {
+        "evidence": "browser-six-roles-accepted.json",
+        "checkId": "R3-USERS-SEARCH",
+        "result": "PASS",
+        "steps": "Search seeded Viewer email in actual member directory"
+      },
+      {
+        "evidence": "browser-six-roles-accepted.json",
+        "checkId": "R3-PUBLIC-BOUNDARY-admin",
+        "result": "PASS",
+        "steps": "Attempt decision on unknown investigation using valid request schema"
+      },
+      {
+        "evidence": "browser-six-roles-accepted.json",
+        "checkId": "R3-CONCURRENT-LOGIN-admin",
+        "result": "PASS",
+        "steps": "Independent second browser context uses real Native BFF API login fixture"
+      },
+      {
+        "evidence": "browser-six-roles-accepted.json",
+        "checkId": "R3-LOGOUT-ISOLATION-admin",
+        "result": "PASS",
+        "steps": "UI Sign Out first context; replay previous cookie in fresh context; inspect second session"
+      },
+      {
+        "evidence": "browser-six-roles-accepted.json",
+        "checkId": "R3-NATIVE-CONTEXT-analyst",
+        "result": "PASS",
+        "steps": "Actual Native Login form; supported tenant selection; inspect authenticated context"
+      },
+      {
+        "evidence": "browser-six-roles-accepted.json",
+        "checkId": "R3-NATIVE-REFRESH-analyst",
+        "result": "PASS",
+        "steps": "Refresh authenticated page; read authoritative context"
+      },
+      {
+        "evidence": "browser-six-roles-accepted.json",
+        "checkId": "R3-USERS-ACCESS-analyst",
+        "result": "PASS",
+        "steps": "Open Users & Access; compare Add Existing visibility with authoritative permission; direct directory read"
+      },
+      {
+        "evidence": "browser-six-roles-accepted.json",
+        "checkId": "R3-PUBLIC-BOUNDARY-analyst",
+        "result": "PASS",
+        "steps": "Attempt decision on unknown investigation using valid request schema"
+      },
+      {
+        "evidence": "browser-six-roles-accepted.json",
+        "checkId": "R3-CONCURRENT-LOGIN-analyst",
+        "result": "PASS",
+        "steps": "Independent second browser context uses real Native BFF API login fixture"
+      },
+      {
+        "evidence": "browser-six-roles-accepted.json",
+        "checkId": "R3-LOGOUT-ISOLATION-analyst",
+        "result": "PASS",
+        "steps": "UI Sign Out first context; replay previous cookie in fresh context; inspect second session"
+      },
+      {
+        "evidence": "browser-six-roles-accepted.json",
+        "checkId": "R3-NATIVE-CONTEXT-developer",
+        "result": "PASS",
+        "steps": "Actual Native Login form; supported tenant selection; inspect authenticated context"
+      },
+      {
+        "evidence": "browser-six-roles-accepted.json",
+        "checkId": "R3-NATIVE-REFRESH-developer",
+        "result": "PASS",
+        "steps": "Refresh authenticated page; read authoritative context"
+      },
+      {
+        "evidence": "browser-six-roles-accepted.json",
+        "checkId": "R3-USERS-ACCESS-developer",
+        "result": "PASS",
+        "steps": "Open Users & Access; compare Add Existing visibility with authoritative permission; direct directory read"
+      },
+      {
+        "evidence": "browser-six-roles-accepted.json",
+        "checkId": "R3-PUBLIC-BOUNDARY-developer",
+        "result": "PASS",
+        "steps": "Attempt decision on unknown investigation using valid request schema"
+      },
+      {
+        "evidence": "browser-six-roles-accepted.json",
+        "checkId": "R3-CONCURRENT-LOGIN-developer",
+        "result": "PASS",
+        "steps": "Independent second browser context uses real Native BFF API login fixture"
+      },
+      {
+        "evidence": "browser-six-roles-accepted.json",
+        "checkId": "R3-LOGOUT-ISOLATION-developer",
+        "result": "PASS",
+        "steps": "UI Sign Out first context; replay previous cookie in fresh context; inspect second session"
+      },
+      {
+        "evidence": "browser-six-roles-accepted.json",
+        "checkId": "R3-NATIVE-CONTEXT-viewer",
+        "result": "PASS",
+        "steps": "Actual Native Login form; supported tenant selection; inspect authenticated context"
+      },
+      {
+        "evidence": "browser-six-roles-accepted.json",
+        "checkId": "R3-NATIVE-REFRESH-viewer",
+        "result": "PASS",
+        "steps": "Refresh authenticated page; read authoritative context"
+      },
+      {
+        "evidence": "browser-six-roles-accepted.json",
+        "checkId": "R3-USERS-ACCESS-viewer",
+        "result": "PASS",
+        "steps": "Open Users & Access; compare Add Existing visibility with authoritative permission; direct directory read"
+      },
+      {
+        "evidence": "browser-six-roles-accepted.json",
+        "checkId": "R3-PUBLIC-BOUNDARY-viewer",
+        "result": "PASS",
+        "steps": "Attempt decision on unknown investigation using valid request schema"
+      },
+      {
+        "evidence": "browser-six-roles-accepted.json",
+        "checkId": "R3-CONCURRENT-LOGIN-viewer",
+        "result": "PASS",
+        "steps": "Independent second browser context uses real Native BFF API login fixture"
+      },
+      {
+        "evidence": "browser-six-roles-accepted.json",
+        "checkId": "R3-LOGOUT-ISOLATION-viewer",
+        "result": "PASS",
+        "steps": "UI Sign Out first context; replay previous cookie in fresh context; inspect second session"
+      },
+      {
+        "evidence": "browser-six-roles-accepted.json",
+        "checkId": "R3-NATIVE-CONTEXT-foreign",
+        "result": "PASS",
+        "steps": "Actual Native Login form; supported tenant selection; inspect authenticated context"
+      },
+      {
+        "evidence": "browser-six-roles-accepted.json",
+        "checkId": "R3-NATIVE-REFRESH-foreign",
+        "result": "PASS",
+        "steps": "Refresh authenticated page; read authoritative context"
+      },
+      {
+        "evidence": "browser-six-roles-accepted.json",
+        "checkId": "R3-USERS-ACCESS-foreign",
+        "result": "PASS",
+        "steps": "Open Users & Access; compare Add Existing visibility with authoritative permission; direct directory read"
+      },
+      {
+        "evidence": "browser-six-roles-accepted.json",
+        "checkId": "R3-PUBLIC-BOUNDARY-foreign",
+        "result": "PASS",
+        "steps": "Attempt decision on unknown investigation using valid request schema"
+      },
+      {
+        "evidence": "browser-six-roles-accepted.json",
+        "checkId": "R3-CONCURRENT-LOGIN-foreign",
+        "result": "PASS",
+        "steps": "Independent second browser context uses real Native BFF API login fixture"
+      },
+      {
+        "evidence": "browser-six-roles-accepted.json",
+        "checkId": "R3-LOGOUT-ISOLATION-foreign",
+        "result": "PASS",
+        "steps": "UI Sign Out first context; replay previous cookie in fresh context; inspect second session"
+      },
+      {
+        "evidence": "browser-six-roles-accepted.json",
+        "checkId": "R3-NATIVE-CONTEXT-platform",
+        "result": "PASS",
+        "steps": "Actual Native Login form; supported tenant selection; inspect authenticated context"
+      },
+      {
+        "evidence": "browser-six-roles-accepted.json",
+        "checkId": "R3-NATIVE-REFRESH-platform",
+        "result": "PASS",
+        "steps": "Refresh authenticated page; read authoritative context"
+      },
+      {
+        "evidence": "browser-six-roles-accepted.json",
+        "checkId": "R3-PLATFORM-LANDING",
+        "result": "PASS",
+        "steps": "Inspect global action in current platform context"
+      },
+      {
+        "evidence": "browser-six-roles-accepted.json",
+        "checkId": "R3-CONCURRENT-LOGIN-platform",
+        "result": "PASS",
+        "steps": "Independent second browser context uses real Native BFF API login fixture"
+      },
+      {
+        "evidence": "browser-six-roles-accepted.json",
+        "checkId": "R3-LOGOUT-ISOLATION-platform",
+        "result": "PASS",
+        "steps": "UI Sign Out first context; replay previous cookie in fresh context; inspect second session"
+      },
+      {
+        "evidence": "governance-browser-accepted.json",
+        "checkId": "UAT-ACCOUNT-SUSPENDED-AUTHORIZATION",
+        "result": "PASS",
+        "steps": "Seeded platform requests status on newly activated disposable account"
+      },
+      {
+        "evidence": "governance-browser-accepted.json",
+        "checkId": "UAT-ACCOUNT-DISABLED-AUTHORIZATION",
+        "result": "PASS",
+        "steps": "Seeded platform requests status on newly activated disposable account"
+      },
+      {
+        "evidence": "governance-browser-accepted.json",
+        "checkId": "UAT-ACCOUNT-ACTIVE-AUTHORIZATION",
+        "result": "PASS",
+        "steps": "Seeded platform requests status on newly activated disposable account"
+      },
+      {
+        "evidence": "governance-browser-accepted.json",
+        "checkId": "R3-PLATFORM-NO-INHERITED-TENANT",
+        "result": "PASS",
+        "steps": "Read seeded platform auth context without header"
+      },
+      {
+        "evidence": "governance-browser-accepted.json",
+        "checkId": "R3-PLATFORM-FORGED-HEADER",
+        "result": "PASS",
+        "steps": "Seeded platform supplies Olympus UUID without membership"
+      },
+      {
+        "evidence": "governance-browser-accepted.json",
+        "checkId": "R3-DELEGATION-VIEWER-DENIED",
+        "result": "PASS",
+        "steps": "Viewer attempts platform grant on disposable user"
+      },
+      {
+        "evidence": "governance-browser-accepted.json",
+        "checkId": "R3-DELEGATION-BEFORE",
+        "result": "PASS",
+        "steps": "Disposable tenant admin calls platform directory before delegation"
+      },
+      {
+        "evidence": "governance-browser-accepted.json",
+        "checkId": "R3-DELEGATION-GRANT",
+        "result": "PASS",
+        "steps": "Policy-authorized seeded platform grants only new disposable principal"
+      },
+      {
+        "evidence": "governance-browser-accepted.json",
+        "checkId": "R3-OWNED-PLATFORM-BROWSER-COMPLETE",
+        "result": "PASS",
+        "steps": "Real Chrome Native Login and membership switcher on disposable platform principal"
+      },
+      {
+        "evidence": "governance-browser-accepted.json",
+        "checkId": "R3-DELEGATION-LIVE-REFRESH",
+        "result": "PASS",
+        "steps": "Use same pre-grant Native token after grant"
+      },
+      {
+        "evidence": "governance-browser-accepted.json",
+        "checkId": "R3-DELEGATION-DUPLICATE",
+        "result": "PASS",
+        "steps": "Repeat supported grant for same owned user"
+      },
+      {
+        "evidence": "governance-browser-accepted.json",
+        "checkId": "R3-WORKING-CONTEXT-PLATFORM-LANDING",
+        "result": "PASS",
+        "steps": "Newly authorized platform principal reads context with no header"
+      },
+      {
+        "evidence": "governance-browser-accepted.json",
+        "checkId": "R3-WORKING-CONTEXT-EXPLICIT-SELECTION",
+        "result": "PASS",
+        "steps": "Select only own preexisting active tenant membership using supported UUID header"
+      },
+      {
+        "evidence": "governance-browser-accepted.json",
+        "checkId": "R3-WORKING-CONTEXT-TENANT-READ",
+        "result": "PASS",
+        "steps": "Read projects in explicitly selected authorized tenant"
+      },
+      {
+        "evidence": "governance-browser-accepted.json",
+        "checkId": "R3-WORKING-CONTEXT-FOREIGN-DENY",
+        "result": "PASS",
+        "steps": "Attempt Olympus context without membership"
+      },
+      {
+        "evidence": "governance-browser-accepted.json",
+        "checkId": "R3-DELEGATION-REVOKE",
+        "result": "PASS",
+        "steps": "Revoke only created disposable grant"
+      },
+      {
+        "evidence": "governance-browser-accepted.json",
+        "checkId": "R3-DELEGATION-IMMEDIATE-REVOCATION",
+        "result": "PASS",
+        "steps": "Replay same Native token after revocation"
+      },
+      {
+        "evidence": "governance-browser-accepted.json",
+        "checkId": "R3-SESSION-OWNED-LOGOUT-ALL",
+        "result": "PASS",
+        "steps": "Two native tokens; revoke owned user sessions via supported logout-all"
+      },
+      {
+        "evidence": "governance-browser-accepted.json",
+        "checkId": "R3-SESSION-OLD-first",
+        "result": "PASS",
+        "steps": "Replay first token after owned logout-all"
+      },
+      {
+        "evidence": "governance-browser-accepted.json",
+        "checkId": "R3-SESSION-OLD-second",
+        "result": "PASS",
+        "steps": "Replay second token after owned logout-all"
+      },
+      {
+        "evidence": "governance-browser-accepted.json",
+        "checkId": "R3-GOVERNANCE-CLEANUP",
+        "result": "PASS",
+        "steps": "Disable only new owned tenant; no seed authority changed"
+      }
+    ],
+    "actual": "Six real Native clean-context flows and parallel second contexts retain isolation across refresh/logout; old cookie replay unauthenticated, second session stays valid. Owned logout-all invalidates both native JWTs401; controlled signed-token absolute expiry tests pass at TTL60/900/86400. Original independent idle expiry/long-lived role-change criterion has no idle-timeout contract in current fixed-absolute Native implementation; Product/Security disposition required. Live TTL and seeded roles unchanged.",
+    "httpResults": [
+      200,
+      201,
+      204,
+      401,
+      403,
+      409,
+      422
+    ],
+    "evidence": [
+      "evidence/browser-six-roles-accepted.json",
+      "evidence/governance-browser-accepted.json"
+    ],
+    "originalSource": "docs/uat/evidence/2026-10-19/outstanding-cases.json",
+    "reconciliationAt": "2026-10-20T10:58:04.719630+00:00",
+    "executionScope": "Round3 only; historical baseline unchanged",
+    "implementationAtInitialReview": "R2 checked refresh/logout, not expiry/concurrency",
+    "executedTenantScope": "All six seeded identities in separate contexts; Olympus, Isolation Control and platform as authorized",
+    "approvalDisposition": "Unresolved authorized capability / Product-Security contract decision; no seeded privilege changes",
+    "testCaseId": "UAT-SESSION-EXPIRY-CONCURRENCY",
+    "defectReferences": [
+      "R3-DEF-005",
+      "idle-expiry contract decision"
+    ],
+    "preconditions": "Isolated local Greenfield UUID; seeded identities unchanged; Native credentials loaded privately; only task-owned resources changed. Exact per-check preconditions and role/tenant details are retained in linked evidence.",
+    "remainingLimitations": "Six real Native clean-context flows and parallel second contexts retain isolation across refresh/logout; old cookie replay unauthenticated, second session stays valid. Owned logout-all invalidates both native JWTs401; controlled signed-token absolute expiry tests pass at TTL60/900/86400. Original independent idle expiry/long-lived role-change criterion has no idle-timeout contract in current fixed-absolute Native implementation; Product/Security disposition required. Live TTL and seeded roles unchanged."
+  },
+  {
+    "originalId": "UAT-PLATFORM-GRANT-REVOKE",
+    "originalModule": "Platform Administrators",
+    "originalRole": "platform",
+    "originalTenant": "Original NOT RUN case assigned no executed tenant; isolated tenant fixture planned",
+    "originalExpectedResult": "Grant/revoke platform authority on an eligible disposable user and verify live privilege refresh",
+    "originalStatus": "NOT RUN",
+    "originalBlocker": {
+      "limitation": "Platform administrator directory and lower-role grant rejection were executed. Positive grant/revoke and last-administrator guard were not executed; seeded platform role was preserved."
+    },
+    "dependency": "Explicit platform delegation capability, eligible disposable user",
+    "currentImplementationState": "Eligible new principal: lower-role grant403, authorized grant201, same JWT authority refresh200, duplicate409, revoke204, immediate old-token platform403. Own membership required for working tenant, forged Olympus403. Seeded Platform authority unchanged. Last-admin guard current native regression passed within163-case protection suite.",
+    "round1Or2PrerequisiteResolution": "R2 unchanged; positive delegation not accepted",
+    "executionTechnicallyPossible": "Policy-dependent; existing negative test possible",
+    "approvalNeeded": "If explicit current policy lacks grant/revoke authorization",
+    "plannedExecutionMethod": "Read platform effective permissions; authorized API grant/revoke disposable principal only if allowed; privilege refresh/audit/last-admin guard in isolated test DB",
+    "status": "PASS",
+    "executedSteps": [
+      {
+        "evidence": "governance-browser-accepted.json",
+        "checkId": "UAT-ACCOUNT-SUSPENDED-AUTHORIZATION",
+        "result": "PASS",
+        "steps": "Seeded platform requests status on newly activated disposable account"
+      },
+      {
+        "evidence": "governance-browser-accepted.json",
+        "checkId": "UAT-ACCOUNT-DISABLED-AUTHORIZATION",
+        "result": "PASS",
+        "steps": "Seeded platform requests status on newly activated disposable account"
+      },
+      {
+        "evidence": "governance-browser-accepted.json",
+        "checkId": "UAT-ACCOUNT-ACTIVE-AUTHORIZATION",
+        "result": "PASS",
+        "steps": "Seeded platform requests status on newly activated disposable account"
+      },
+      {
+        "evidence": "governance-browser-accepted.json",
+        "checkId": "R3-PLATFORM-NO-INHERITED-TENANT",
+        "result": "PASS",
+        "steps": "Read seeded platform auth context without header"
+      },
+      {
+        "evidence": "governance-browser-accepted.json",
+        "checkId": "R3-PLATFORM-FORGED-HEADER",
+        "result": "PASS",
+        "steps": "Seeded platform supplies Olympus UUID without membership"
+      },
+      {
+        "evidence": "governance-browser-accepted.json",
+        "checkId": "R3-DELEGATION-VIEWER-DENIED",
+        "result": "PASS",
+        "steps": "Viewer attempts platform grant on disposable user"
+      },
+      {
+        "evidence": "governance-browser-accepted.json",
+        "checkId": "R3-DELEGATION-BEFORE",
+        "result": "PASS",
+        "steps": "Disposable tenant admin calls platform directory before delegation"
+      },
+      {
+        "evidence": "governance-browser-accepted.json",
+        "checkId": "R3-DELEGATION-GRANT",
+        "result": "PASS",
+        "steps": "Policy-authorized seeded platform grants only new disposable principal"
+      },
+      {
+        "evidence": "governance-browser-accepted.json",
+        "checkId": "R3-OWNED-PLATFORM-BROWSER-COMPLETE",
+        "result": "PASS",
+        "steps": "Real Chrome Native Login and membership switcher on disposable platform principal"
+      },
+      {
+        "evidence": "governance-browser-accepted.json",
+        "checkId": "R3-DELEGATION-LIVE-REFRESH",
+        "result": "PASS",
+        "steps": "Use same pre-grant Native token after grant"
+      },
+      {
+        "evidence": "governance-browser-accepted.json",
+        "checkId": "R3-DELEGATION-DUPLICATE",
+        "result": "PASS",
+        "steps": "Repeat supported grant for same owned user"
+      },
+      {
+        "evidence": "governance-browser-accepted.json",
+        "checkId": "R3-WORKING-CONTEXT-PLATFORM-LANDING",
+        "result": "PASS",
+        "steps": "Newly authorized platform principal reads context with no header"
+      },
+      {
+        "evidence": "governance-browser-accepted.json",
+        "checkId": "R3-WORKING-CONTEXT-EXPLICIT-SELECTION",
+        "result": "PASS",
+        "steps": "Select only own preexisting active tenant membership using supported UUID header"
+      },
+      {
+        "evidence": "governance-browser-accepted.json",
+        "checkId": "R3-WORKING-CONTEXT-TENANT-READ",
+        "result": "PASS",
+        "steps": "Read projects in explicitly selected authorized tenant"
+      },
+      {
+        "evidence": "governance-browser-accepted.json",
+        "checkId": "R3-WORKING-CONTEXT-FOREIGN-DENY",
+        "result": "PASS",
+        "steps": "Attempt Olympus context without membership"
+      },
+      {
+        "evidence": "governance-browser-accepted.json",
+        "checkId": "R3-DELEGATION-REVOKE",
+        "result": "PASS",
+        "steps": "Revoke only created disposable grant"
+      },
+      {
+        "evidence": "governance-browser-accepted.json",
+        "checkId": "R3-DELEGATION-IMMEDIATE-REVOCATION",
+        "result": "PASS",
+        "steps": "Replay same Native token after revocation"
+      },
+      {
+        "evidence": "governance-browser-accepted.json",
+        "checkId": "R3-SESSION-OWNED-LOGOUT-ALL",
+        "result": "PASS",
+        "steps": "Two native tokens; revoke owned user sessions via supported logout-all"
+      },
+      {
+        "evidence": "governance-browser-accepted.json",
+        "checkId": "R3-SESSION-OLD-first",
+        "result": "PASS",
+        "steps": "Replay first token after owned logout-all"
+      },
+      {
+        "evidence": "governance-browser-accepted.json",
+        "checkId": "R3-SESSION-OLD-second",
+        "result": "PASS",
+        "steps": "Replay second token after owned logout-all"
+      },
+      {
+        "evidence": "governance-browser-accepted.json",
+        "checkId": "R3-GOVERNANCE-CLEANUP",
+        "result": "PASS",
+        "steps": "Disable only new owned tenant; no seed authority changed"
+      },
+      {
+        "evidence": "browser-owned-platform-accepted.json",
+        "checkId": "R3-OWNED-PLATFORM-LANDING",
+        "result": "PASS",
+        "steps": "R3-OWNED-PLATFORM-LANDING"
+      },
+      {
+        "evidence": "browser-owned-platform-accepted.json",
+        "checkId": "R3-OWNED-SWITCHER-BOUNDARY",
+        "result": "PASS",
+        "steps": "R3-OWNED-SWITCHER-BOUNDARY"
+      },
+      {
+        "evidence": "browser-owned-platform-accepted.json",
+        "checkId": "UAT-PLATFORM-TENANT-WORKING-CONTEXT",
+        "result": "PASS",
+        "steps": "UAT-PLATFORM-TENANT-WORKING-CONTEXT"
+      },
+      {
+        "evidence": "browser-owned-platform-accepted.json",
+        "checkId": "R3-OWNED-TENANT-REFRESH",
+        "result": "PASS",
+        "steps": "R3-OWNED-TENANT-REFRESH"
+      },
+      {
+        "evidence": "browser-owned-platform-accepted.json",
+        "checkId": "R3-OWNED-TENANT-OPERATIONS",
+        "result": "PASS",
+        "steps": "R3-OWNED-TENANT-OPERATIONS"
+      },
+      {
+        "evidence": "browser-owned-platform-accepted.json",
+        "checkId": "R3-OWNED-PLATFORM-FORGED",
+        "result": "PASS",
+        "steps": "R3-OWNED-PLATFORM-FORGED"
+      },
+      {
+        "evidence": "browser-owned-platform-accepted.json",
+        "checkId": "R3-OWNED-RETURN-PLATFORM",
+        "result": "PASS",
+        "steps": "R3-OWNED-RETURN-PLATFORM"
+      },
+      {
+        "evidence": "browser-owned-platform-accepted.json",
+        "checkId": "R3-OWNED-PLATFORM-LOGOUT",
+        "result": "PASS",
+        "steps": "R3-OWNED-PLATFORM-LOGOUT"
+      }
+    ],
+    "actual": "Eligible new principal: lower-role grant403, authorized grant201, same JWT authority refresh200, duplicate409, revoke204, immediate old-token platform403. Own membership required for working tenant, forged Olympus403. Seeded Platform authority unchanged. Last-admin guard current native regression passed within163-case protection suite.",
+    "httpResults": [
+      200,
+      201,
+      204,
+      401,
+      403,
+      409
+    ],
+    "evidence": [
+      "evidence/governance-browser-accepted.json",
+      "evidence/browser-owned-platform-accepted.json",
+      "evidence/pytest-round1-round2-protection.xml"
+    ],
+    "originalSource": "docs/uat/evidence/2026-10-19/outstanding-cases.json",
+    "reconciliationAt": "2026-10-20T10:58:04.720038+00:00",
+    "executionScope": "Round3 only; historical baseline unchanged",
+    "implementationAtInitialReview": "R2 unchanged; positive delegation not accepted",
+    "executedTenantScope": "Platform/owned disposable tenant; explicit Olympus forged-context denial",
+    "approvalDisposition": "Executed within authorized isolated scope; no additional approval needed",
+    "testCaseId": "UAT-PLATFORM-GRANT-REVOKE",
+    "defectReferences": [],
+    "preconditions": "Isolated local Greenfield UUID; seeded identities unchanged; Native credentials loaded privately; only task-owned resources changed. Exact per-check preconditions and role/tenant details are retained in linked evidence.",
+    "remainingLimitations": "Qualified execution scope and any earlier failed attempt remain in actual/evidence; no complete485-case acceptance inferred."
+  }
+]

@@ -1,0 +1,180 @@
+{
+  "actual_database_execution": false,
+  "limits": {
+    "attempts": 1,
+    "connect_seconds": 5,
+    "controls": 2,
+    "cooperative_seconds": 60,
+    "idle_ms": 5000,
+    "lock_ms": 250,
+    "queries": 40,
+    "rows_per_query": 1024,
+    "simultaneous_connections": 1,
+    "statement_ms": 2000,
+    "total_rows": 8192
+  },
+  "mutations_allowed": false,
+  "planned_order": [
+    "identity",
+    "schemas",
+    "relations",
+    "functions",
+    "types",
+    "operators",
+    "other_objects",
+    "triggers",
+    "rules",
+    "event_triggers",
+    "extensions",
+    "foreign_objects",
+    "replication",
+    "roles",
+    "memberships",
+    "ownership_acl",
+    "default_acl",
+    "role_settings",
+    "shared_dependencies",
+    "settings",
+    "hba_file",
+    "clients",
+    "locks",
+    "alembic",
+    "schema_privileges",
+    "columns",
+    "plpgsql_functions",
+    "privileges",
+    "databases",
+    "tablespaces",
+    "identity",
+    "clients",
+    "locks"
+  ],
+  "queries": {
+    "alembic": {
+      "sha256": "ae996a7091717741477c0d1fbc61e2c98950a578bef4dbdcffcf25086912dba4",
+      "sql": "SELECT pg_catalog.to_regclass('public.alembic_version')::text AS relation"
+    },
+    "clients": {
+      "sha256": "73a16a8b5e52a8843a6aca8d898503dc9f55dba7b5cfbb0d8bc142dd832cebc1",
+      "sql": "SELECT pid,usename,state,xact_start IS NOT NULL AS transaction_open\n      FROM pg_catalog.pg_stat_activity WHERE datname=current_database() AND pid<>pg_backend_pid()\n      AND backend_type='client backend' ORDER BY pid"
+    },
+    "columns": {
+      "sha256": "6454dbeeb6522cc3bbfc2df38259944c8a002fe40661953cca10bc207cb5ff3f",
+      "sql": "SELECT n.nspname,c.relname,a.attname,pg_catalog.format_type(a.atttypid,a.atttypmod) AS type,\na.attnotnull,a.attidentity,a.attgenerated FROM pg_catalog.pg_attribute a\nJOIN pg_catalog.pg_class c ON c.oid=a.attrelid JOIN pg_catalog.pg_namespace n ON n.oid=c.relnamespace\nWHERE a.attnum>0 AND NOT a.attisdropped AND ((n.nspname NOT IN ('pg_catalog','information_schema')\nAND n.nspname NOT LIKE 'pg_toast%') OR c.oid>=16384) ORDER BY n.nspname,c.relname,a.attnum"
+    },
+    "databases": {
+      "sha256": "b8ba9d6dc0390eca12376adfa298af507fde6544268368b57731d789f84d1b0c",
+      "sql": "SELECT datname,pg_catalog.pg_get_userbyid(datdba) AS owner,datistemplate,datallowconn\nFROM pg_catalog.pg_database ORDER BY datname"
+    },
+    "default_acl": {
+      "sha256": "7421f9c5660a54f0242f6c10bd59a3458c155a1208cb8d215287e3791a15a2a3",
+      "sql": "SELECT pg_catalog.pg_get_userbyid(defaclrole) AS owner,defaclnamespace,defaclobjtype,defaclacl::text\n      FROM pg_catalog.pg_default_acl ORDER BY defaclrole,defaclnamespace,defaclobjtype"
+    },
+    "event_triggers": {
+      "sha256": "f22091896e2c14ccb7ca6cdcf0628c0447522c6e5ec01b400447141272e1732a",
+      "sql": "SELECT evtname,evtenabled FROM pg_catalog.pg_event_trigger ORDER BY evtname"
+    },
+    "extensions": {
+      "sha256": "92ec351b3402d0b83ff799ee684e18f1a526402920e1bd184f067830d44206d4",
+      "sql": "SELECT e.extname,e.extversion,n.nspname AS schema,pg_catalog.pg_get_userbyid(e.extowner) AS owner\n      FROM pg_catalog.pg_extension e JOIN pg_catalog.pg_namespace n ON n.oid=e.extnamespace ORDER BY e.extname"
+    },
+    "foreign_objects": {
+      "sha256": "accc85713af550d804d63da2995f883fc4d0cf3a868a031be85bd2cfb020fafb",
+      "sql": "SELECT 'wrapper' AS kind,fdwname AS name FROM pg_catalog.pg_foreign_data_wrapper\n      UNION ALL SELECT 'server',srvname FROM pg_catalog.pg_foreign_server\n      UNION ALL SELECT 'mapping',oid::text FROM pg_catalog.pg_user_mapping ORDER BY 1,2"
+    },
+    "functions": {
+      "sha256": "214a7497b1775703a33a6716b5dfa1aaa3236bb41ffc94b418e7d23b86af5363",
+      "sql": "SELECT n.nspname,p.proname,pg_catalog.pg_get_function_identity_arguments(p.oid) AS arguments,\n      pg_catalog.pg_get_userbyid(p.proowner) AS owner,p.proacl::text AS acl,p.prosecdef,p.proconfig\n      FROM pg_catalog.pg_proc p JOIN pg_catalog.pg_namespace n ON n.oid=p.pronamespace\n      WHERE n.nspname NOT IN ('pg_catalog','information_schema') OR (p.oid>=16384 AND NOT EXISTS\n      (SELECT 1 FROM pg_catalog.pg_depend d WHERE d.classid='pg_proc'::regclass AND d.objid=p.oid AND d.deptype='e'))\n      ORDER BY n.nspname,p.proname,arguments"
+    },
+    "hba_file": {
+      "sha256": "9f7d3fcda9ed96ae3fb5c0c5ac30ba0542d215ca71595a58d71318b21d3e4fb2",
+      "sql": "SELECT rule_number,type,database,user_name,address,netmask,auth_method,error IS NULL AS parse_ok\n      FROM pg_catalog.pg_hba_file_rules ORDER BY rule_number"
+    },
+    "identity": {
+      "sha256": "257c8b82621f8d547f3551e5e93602dc7a8c969e510eece3c0c994e3ae7b1484",
+      "sql": "SELECT current_database() AS database,current_user AS current_user,session_user AS session_user,\n(SELECT oid::bigint FROM pg_catalog.pg_database WHERE datname=current_database()) AS database_oid,\n(SELECT system_identifier::text FROM pg_catalog.pg_control_system()) AS system_identifier,\ncurrent_setting('server_version_num')::integer AS server_version_num,current_setting('server_version') AS server_version,\ncurrent_setting('transaction_read_only') AS transaction_read_only,pg_catalog.pg_is_in_recovery() AS recovery,\npg_catalog.host(pg_catalog.inet_server_addr()) AS server_ip,pg_catalog.inet_server_port() AS server_port,\ncurrent_setting('data_directory') AS data_directory,pg_catalog.pg_postmaster_start_time()::text AS postmaster_start,\ncurrent_setting('session_replication_role') AS replication,current_setting('row_security') AS row_security,\ncurrent_setting('search_path') AS search_path"
+    },
+    "locks": {
+      "sha256": "0ee1da7af05023298b4db296afa1f8ed2ec771052055c14662fb4056cfd64423",
+      "sql": "SELECT l.locktype,l.mode,l.granted,l.relation FROM pg_catalog.pg_locks l\nJOIN pg_catalog.pg_stat_activity a ON a.pid=l.pid WHERE a.datname=current_database()\nAND a.backend_type='client backend' AND l.pid<>pg_backend_pid() ORDER BY l.pid,l.locktype,l.mode"
+    },
+    "memberships": {
+      "sha256": "31e2309fd21d4468c30021df31da76afef6699f1e6ccfa9b85e10df1121cec9a",
+      "sql": "SELECT pg_catalog.pg_get_userbyid(roleid) AS role,pg_catalog.pg_get_userbyid(member) AS member,\n      pg_catalog.pg_get_userbyid(grantor) AS grantor,admin_option,inherit_option,set_option\n      FROM pg_catalog.pg_auth_members ORDER BY roleid,member"
+    },
+    "operators": {
+      "sha256": "e21cc82083745fe304eb71d720eff88ca4c8de8ff476fe8f8eb54795e7e3d6c7",
+      "sql": "SELECT n.nspname,o.oprname FROM pg_catalog.pg_operator o\n      JOIN pg_catalog.pg_namespace n ON n.oid=o.oprnamespace\n      WHERE n.nspname<>'pg_catalog' OR o.oid>=16384 ORDER BY n.nspname,o.oprname"
+    },
+    "other_objects": {
+      "sha256": "2ae747ee816cfb8542bf820fee9d902fac94985629778c29c0fdcf2efddb4f8f",
+      "sql": "SELECT 'collation' AS kind,n.nspname,c.collname AS name FROM pg_catalog.pg_collation c\n      JOIN pg_catalog.pg_namespace n ON n.oid=c.collnamespace WHERE n.nspname<>'pg_catalog' OR c.oid>=16384\n      UNION ALL SELECT 'conversion',n.nspname,c.conname FROM pg_catalog.pg_conversion c\n      JOIN pg_catalog.pg_namespace n ON n.oid=c.connamespace WHERE n.nspname<>'pg_catalog' OR c.oid>=16384\n      UNION ALL SELECT 'textsearch',n.nspname,c.cfgname FROM pg_catalog.pg_ts_config c\n      JOIN pg_catalog.pg_namespace n ON n.oid=c.cfgnamespace WHERE n.nspname<>'pg_catalog' OR c.oid>=16384\n      UNION ALL SELECT 'language','',lanname FROM pg_catalog.pg_language WHERE lanname NOT IN ('internal','c','sql','plpgsql')\n      UNION ALL SELECT 'cast','',oid::text FROM pg_catalog.pg_cast WHERE oid>=16384\n      UNION ALL SELECT 'access_method','',amname FROM pg_catalog.pg_am WHERE oid>=16384\n      UNION ALL SELECT 'operator_class',n.nspname,c.opcname FROM pg_catalog.pg_opclass c JOIN pg_catalog.pg_namespace n ON n.oid=c.opcnamespace WHERE n.nspname<>'pg_catalog' OR c.oid>=16384\n      UNION ALL SELECT 'operator_family',n.nspname,c.opfname FROM pg_catalog.pg_opfamily c JOIN pg_catalog.pg_namespace n ON n.oid=c.opfnamespace WHERE n.nspname<>'pg_catalog' OR c.oid>=16384\n      UNION ALL SELECT 'textsearch_dictionary',n.nspname,c.dictname FROM pg_catalog.pg_ts_dict c JOIN pg_catalog.pg_namespace n ON n.oid=c.dictnamespace WHERE n.nspname<>'pg_catalog' OR c.oid>=16384\n      UNION ALL SELECT 'textsearch_parser',n.nspname,c.prsname FROM pg_catalog.pg_ts_parser c JOIN pg_catalog.pg_namespace n ON n.oid=c.prsnamespace WHERE n.nspname<>'pg_catalog' OR c.oid>=16384\n      UNION ALL SELECT 'textsearch_template',n.nspname,c.tmplname FROM pg_catalog.pg_ts_template c JOIN pg_catalog.pg_namespace n ON n.oid=c.tmplnamespace WHERE n.nspname<>'pg_catalog' OR c.oid>=16384\n      UNION ALL SELECT 'transform','',oid::text FROM pg_catalog.pg_transform\n      UNION ALL SELECT 'large_object','',oid::text FROM pg_catalog.pg_largeobject_metadata\n      UNION ALL SELECT 'security_label','',objoid::text FROM pg_catalog.pg_seclabel ORDER BY 1,2,3"
+    },
+    "ownership_acl": {
+      "sha256": "15d00ded8df2e75fd7466bc6301d6ae58a9cc16cf6d8bcf87839b8db2997fecd",
+      "sql": "SELECT oid::bigint AS oid,datname,pg_catalog.pg_get_userbyid(datdba) AS owner,\ndatacl IS NULL AS default_acl,datistemplate,datallowconn,datconnlimit,\npg_catalog.pg_encoding_to_char(encoding) AS encoding,datcollate,datctype,datlocprovider,datcollversion\nFROM pg_catalog.pg_database WHERE datname=current_database()"
+    },
+    "plpgsql_functions": {
+      "sha256": "b039ce409cc804ecd673159ab83943dd4dc67faecc1d70513a08993b8e5efe06",
+      "sql": "SELECT p.proname,pg_catalog.pg_get_function_identity_arguments(p.oid) AS arguments,\npg_catalog.pg_get_function_result(p.oid) AS result,n.nspname,pg_catalog.pg_get_userbyid(p.proowner) AS owner,\nl.lanname,p.prosecdef,p.proleakproof,p.proconfig,p.proacl IS NULL AS default_acl\nFROM pg_catalog.pg_proc p JOIN pg_catalog.pg_namespace n ON n.oid=p.pronamespace\nJOIN pg_catalog.pg_language l ON l.oid=p.prolang JOIN pg_catalog.pg_depend d\nON d.classid='pg_catalog.pg_proc'::regclass AND d.objid=p.oid AND d.deptype='e'\nJOIN pg_catalog.pg_extension e ON e.oid=d.refobjid WHERE e.extname='plpgsql'\nORDER BY p.proname,arguments"
+    },
+    "privileges": {
+      "sha256": "f5e69a35a78f3a55d1c730643e6c0cabc86c85fcce556842da4e2707a46f1ca8",
+      "sql": "SELECT pg_catalog.has_database_privilege(current_database(),'CONNECT') AS connect,\npg_catalog.has_database_privilege(current_database(),'CREATE') AS create_database_objects,\npg_catalog.has_database_privilege(current_database(),'TEMP') AS temporary,\npg_catalog.has_schema_privilege('public','USAGE') AS public_usage,\npg_catalog.has_schema_privilege('public','CREATE') AS public_create,\npg_catalog.has_table_privilege('pg_catalog.pg_authid','SELECT') AS role_read,\npg_catalog.has_function_privilege('pg_catalog.pg_control_system()','EXECUTE') AS control_read"
+    },
+    "relations": {
+      "sha256": "4aaa0a7cb95c8c88e164c6204429d77ccce04ea068cc2b65a510d611f61d5a65",
+      "sql": "SELECT n.nspname,c.relname,c.relkind,c.relpersistence\n      FROM pg_catalog.pg_class c JOIN pg_catalog.pg_namespace n ON n.oid=c.relnamespace\n      WHERE n.nspname NOT IN ('pg_catalog','information_schema') AND n.nspname NOT LIKE 'pg_toast%'\n      OR (n.nspname='pg_catalog' AND c.oid>=16384) ORDER BY n.nspname,c.relname"
+    },
+    "replication": {
+      "sha256": "6cfb85bc402fc6f72e65c1bcb09e169a36df47a4fa7f58532e9c04c73c619a5a",
+      "sql": "SELECT 'publication' AS kind,pubname AS name FROM pg_catalog.pg_publication\n      UNION ALL SELECT 'subscription',subname FROM pg_catalog.pg_subscription WHERE subdbid=\n      (SELECT oid FROM pg_catalog.pg_database WHERE datname=current_database()) ORDER BY 1,2"
+    },
+    "role_settings": {
+      "sha256": "57783cb02910380b17c0590a4bf7c11498439a63c81dd2dfe1a81157657fdf70",
+      "sql": "SELECT setdatabase,setrole,setconfig IS NOT NULL AS has_settings\n      FROM pg_catalog.pg_db_role_setting ORDER BY setdatabase,setrole"
+    },
+    "roles": {
+      "sha256": "c4e7ac13b5a092fd14b52ba9e80501eeb98b1378b055ca4811fefc7ee7a7a65a",
+      "sql": "SELECT r.oid,r.rolname,r.rolsuper,r.rolinherit,r.rolcreaterole,r.rolcreatedb,r.rolcanlogin,\n      r.rolreplication,r.rolbypassrls,r.rolconnlimit,r.rolconfig IS NULL AS config_null,\n      a.rolpassword IS NULL AS password_null,\n      COALESCE(a.rolpassword LIKE 'SCRAM-SHA-256$%',false) AS password_scram\n      FROM pg_catalog.pg_roles r JOIN pg_catalog.pg_authid a ON a.oid=r.oid ORDER BY r.rolname"
+    },
+    "rules": {
+      "sha256": "977f8368825e65282d45b32bd613375b9b5e67cd87f6409266a0c5f76a7a4e86",
+      "sql": "SELECT r.rulename FROM pg_catalog.pg_rewrite r JOIN pg_catalog.pg_class c ON c.oid=r.ev_class\n      JOIN pg_catalog.pg_namespace n ON n.oid=c.relnamespace\n      WHERE n.nspname NOT IN ('pg_catalog','information_schema') ORDER BY r.rulename"
+    },
+    "schema_privileges": {
+      "sha256": "99b4caade1189858f0e6dc4ebee99eff10864608361f235415945183fd5b69fe",
+      "sql": "SELECT n.nspname,pg_catalog.pg_get_userbyid(n.nspowner) AS owner,\nCASE WHEN a.grantee=0 THEN 'PUBLIC' ELSE pg_catalog.pg_get_userbyid(a.grantee) END AS grantee,\npg_catalog.pg_get_userbyid(a.grantor) AS grantor,\na.privilege_type,a.is_grantable FROM pg_catalog.pg_namespace n\nCROSS JOIN LATERAL pg_catalog.aclexplode(COALESCE(n.nspacl,pg_catalog.acldefault('n',n.nspowner))) a\nORDER BY n.nspname,grantee,a.privilege_type"
+    },
+    "schemas": {
+      "sha256": "fdeac11b077d9a5dd8040dc2ff23eb15431220ae9116034b427f7ddb360e057a",
+      "sql": "SELECT nspname, pg_catalog.pg_get_userbyid(nspowner) AS owner, nspacl::text AS acl\n      FROM pg_catalog.pg_namespace ORDER BY nspname"
+    },
+    "settings": {
+      "sha256": "97c866d4803d0f86bba4b9b4414567b92225669c00a84fc09d1eee4abc90ed08",
+      "sql": "SELECT name,setting,source FROM pg_catalog.pg_settings WHERE name IN\n('statement_timeout','lock_timeout','idle_in_transaction_session_timeout','default_transaction_read_only',\n 'transaction_read_only','search_path','row_security','check_function_bodies','password_encryption','ssl',\n 'listen_addresses','port','max_connections','shared_buffers','work_mem','stats_fetch_consistency') ORDER BY name"
+    },
+    "shared_dependencies": {
+      "sha256": "91bfb0bf578e1bb27ed2b73680be12710f23c212e5f75900ecd70b0f070866fb",
+      "sql": "SELECT classid::regclass::text,objid,refclassid::regclass::text,refobjid,deptype\n      FROM pg_catalog.pg_shdepend WHERE dbid=(SELECT oid FROM pg_catalog.pg_database WHERE datname=current_database())\n      ORDER BY classid,objid,refclassid,refobjid,deptype"
+    },
+    "tablespaces": {
+      "sha256": "5e6b353f58431567405c4ffac80656d281db26e63f49b5cab5fe5984ef160c74",
+      "sql": "SELECT spcname,pg_catalog.pg_get_userbyid(spcowner) AS owner,spcacl IS NULL AS default_acl,\npg_catalog.pg_tablespace_location(oid) AS location FROM pg_catalog.pg_tablespace ORDER BY spcname"
+    },
+    "triggers": {
+      "sha256": "52ff47d0454fc458dd0b8a82886dbc128513806516ef1867eb6fa966043c324e",
+      "sql": "SELECT tgname FROM pg_catalog.pg_trigger WHERE NOT tgisinternal ORDER BY tgname"
+    },
+    "types": {
+      "sha256": "6c699df8f56fcbdadce3425a73ffa1c059955ca635c0415499c98c8cfac01de3",
+      "sql": "SELECT n.nspname,t.typname,t.typtype FROM pg_catalog.pg_type t\n      JOIN pg_catalog.pg_namespace n ON n.oid=t.typnamespace\n      WHERE n.nspname NOT IN ('pg_catalog','information_schema') AND n.nspname NOT LIKE 'pg_toast%'\n      OR (n.nspname='pg_catalog' AND t.oid>=16384) ORDER BY n.nspname,t.typname"
+    }
+  },
+  "schema": "w24e-fixed-catalog-sql-v1",
+  "schema_privilege_change": "W2.4E.1 grantor projection only; same30catalog SELECTs/33planned executions/40ceiling; no added SQL action",
+  "transaction_controls": [
+    "BEGIN READ ONLY",
+    "ROLLBACK"
+  ]
+}

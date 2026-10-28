@@ -2,7 +2,6 @@ from __future__ import annotations
 
 import json
 import logging
-import os
 import ssl
 import threading
 import time
@@ -11,6 +10,8 @@ import urllib.request
 from collections.abc import AsyncIterator, Callable
 from functools import lru_cache
 from typing import TYPE_CHECKING, Any
+
+from ..services.identity_verification_policy import verification_complete
 
 if TYPE_CHECKING:
     from ..models import IAMUser
@@ -125,6 +126,8 @@ def get_jwks_client() -> PyJWKClient:
 
 def validate_hcl_token(token: str) -> dict[str, Any]:
     settings = get_settings()
+    if not settings.hcl_auth_enabled:
+        raise _unauthorized()
     algorithms = [value.strip() for value in settings.hcl_iam_allowed_algorithms.split(",") if value.strip()]
     if not algorithms or any(value.upper().startswith("HS") for value in algorithms):
         raise RuntimeError("HCL IAM must use configured asymmetric JWT algorithms")
@@ -163,11 +166,30 @@ def validate_hcl_token(token: str) -> dict[str, Any]:
     return claims
 
 
+def validate_auth_mode(settings=None) -> None:
+    """Local identities are allowed only in explicitly configured development."""
+    settings = settings or get_settings()
+    if not settings.auth_enabled and (
+        settings.app_environment not in {"development", "test"}
+        or settings.native_iam_production
+        or settings.native_auth_enabled
+        or settings.entra_enabled
+        or not settings.dev_default_tenant
+    ):
+        raise RuntimeError("AUTH_ENABLED must be true outside local development without enabled providers")
+    if settings.app_environment in {"staging", "production"} and (
+        settings.authorization_catalog_mode != "DATABASE"
+        or settings.tenant_role_assignment_mode != "DATABASE"
+    ):
+        raise RuntimeError("Production authorization modes must use DATABASE")
+
+
 def get_current_claims(
     authorization: str | None = Header(default=None),
 ) -> dict[str, Any]:
     settings = get_settings()
     if not settings.auth_enabled:
+        validate_auth_mode(settings)
         return {
             "iss": "https://local-dev.invalid",
             "sub": "dev-user",
@@ -183,6 +205,18 @@ def get_current_claims(
     token = authorization[7:].strip()
     if not token:
         raise _unauthorized()
+    # Unverified issuer selects a fixed validator; it never grants trust and
+    # a native validation failure must never fall back to HCL.
+    try:
+        issuer = jwt.decode(token, options={"verify_signature": False}).get("iss")
+    except jwt.InvalidTokenError:
+        raise _unauthorized() from None
+    if settings.native_auth_enabled and issuer == settings.native_jwt_issuer:
+        from ..services.native_jwt_service import validate_token
+        return validate_token(token)
+    from ..services import entra_auth_service
+    if settings.entra_enabled and issuer == entra_auth_service.issuer():
+        return entra_auth_service.validate_token(token)
     return validate_hcl_token(token)
 
 
@@ -257,9 +291,13 @@ def _block_user_access(
         event = IdentityAuditEvent.ACCESS_BLOCKED_DISABLED
         code = IdentityErrorCode.ACCOUNT_DISABLED
         message = "This SBOM Analyzer account is disabled. Contact support."
-    elif state == AuthorizationState.ACCOUNT_PENDING_APPROVAL:
+    elif state == AuthorizationState.USER_SUSPENDED:
+        event = IdentityAuditEvent.ACCESS_BLOCKED_DISABLED
+        code = IdentityErrorCode.USER_SUSPENDED
+        message = "This SBOM Analyzer account is suspended. Contact an administrator."
+    elif state in {AuthorizationState.ACCOUNT_PENDING_APPROVAL, AuthorizationState.USER_ACCESS_PENDING}:
         event = IdentityAuditEvent.ACCESS_BLOCKED_PENDING
-        code = IdentityErrorCode.ACCOUNT_PENDING_APPROVAL
+        code = IdentityErrorCode.USER_ACCESS_PENDING if state == AuthorizationState.USER_ACCESS_PENDING else IdentityErrorCode.ACCOUNT_PENDING_APPROVAL
         message = "This SBOM Analyzer account is awaiting administrator approval."
     else:
         event = IdentityAuditEvent.ACCESS_BLOCKED_UNVERIFIED
@@ -282,7 +320,7 @@ def _block_user_access(
 
 def require_verified_user(user: IAMUser) -> IAMUser:
     """Enforce local enablement and SBOM email verification."""
-    if user.status == "DISABLED":
+    if user.status not in {"ACTIVE", "PENDING", "PENDING_EMAIL_VERIFICATION"}:
         raise identity_http_error(
             IdentityErrorCode.ACCOUNT_DISABLED,
             "This SBOM Analyzer account is disabled. Contact support.",
@@ -292,7 +330,7 @@ def require_verified_user(user: IAMUser) -> IAMUser:
             IdentityErrorCode.ACCOUNT_PENDING_APPROVAL,
             "This SBOM Analyzer account is awaiting administrator approval.",
         )
-    if not user.email_verified or user.verification_required:
+    if user.status == "PENDING_EMAIL_VERIFICATION" or not verification_complete(user):
         raise identity_http_error(
             IdentityErrorCode.EMAIL_VERIFICATION_REQUIRED,
             "Email verification is required before accessing SBOM Analyzer.",
@@ -308,23 +346,17 @@ def _resolve_context(
     allow_platform_context: bool = False,
     request: Request | None = None,
 ) -> CurrentContext:
-    from ..services import audit_service
     from ..services.auth_context_service import resolve_authorization_state
-    from ..services.email_verification_service import (
-        ensure_initial_verification_delivery,
-    )
-    from ..services.identity_service import provision_local_identity
+    from ..services.authenticated_principal_service import resolve_principal
 
     settings = get_settings()
-    provisioned = provision_local_identity(db, claims, request=request)
-    user = provisioned.user
-    db.commit()
-    ensure_initial_verification_delivery(db, user, request=request)
-    db.refresh(user)
-    identity_roles = _roles(_claim(claims, settings.hcl_iam_role_claim))
+    principal = resolve_principal(db, claims, request=request)
+    user = principal.user
+    identity_roles = _roles(_claim(claims, settings.hcl_iam_role_claim)) if principal.provider == "HCL_CS" else frozenset()
     state = resolve_authorization_state(
         db,
         user,
+        provider=principal.provider,
         selected_tenant=selected_tenant,
         selector_hint=_claim(claims, settings.hcl_iam_tenant_claim),
         allow_platform_context=allow_platform_context,
@@ -333,6 +365,8 @@ def _resolve_context(
     if state.status in {
         AuthorizationState.ACCOUNT_DISABLED,
         AuthorizationState.ACCOUNT_PENDING_APPROVAL,
+        AuthorizationState.USER_ACCESS_PENDING,
+        AuthorizationState.USER_SUSPENDED,
         AuthorizationState.VERIFICATION_REQUIRED,
     }:
         _block_user_access(db, user, state=state.status, request=request)
@@ -349,17 +383,6 @@ def _resolve_context(
             "Select an authorized tenant before accessing SBOM Analyzer.",
         )
 
-    if state.is_platform_admin and state.active_membership is None and state.active_tenant is not None:
-        audit_service.write_authorization_audit(
-            db,
-            action="platform.cross_tenant_access",
-            outcome="SUCCESS",
-            actor_user_id=user.id,
-            target_user_id=user.id,
-            tenant_id=state.active_tenant.id,
-            request=request,
-            detail="Explicit platform administrator selected a tenant without local membership",
-        )
     from ..services import tenant_role_assignment_service
 
     roles = (
@@ -386,11 +409,11 @@ def _resolve_context(
         if state.active_membership
         else set()
     )
-    if state.is_platform_admin:
+    if state.is_platform_admin and state.active_tenant is None:
         roles.add("PLATFORM_ADMIN")
     from ..services.authorization_catalog_service import resolve_permissions_for_roles
 
-    if state.is_platform_admin:
+    if state.is_platform_admin and state.active_tenant is None:
         permissions.update(
             resolve_permissions_for_roles(
                 db,
@@ -413,9 +436,16 @@ def _resolve_context(
         ),
         roles=frozenset(roles),
         permissions=frozenset(permissions),
-        is_platform_admin=state.is_platform_admin,
+        is_platform_admin=state.is_platform_admin and state.active_tenant is None,
         identity_roles=identity_roles,
     )
+
+
+def _platform_configuration_path(path: str, method: str = "GET") -> bool:
+    from .route_policy import lookup_policy
+
+    policy = lookup_policy(method, path)
+    return policy is not None and policy.startswith("platform:")
 
 
 async def get_current_tenant_context(
@@ -428,7 +458,8 @@ async def get_current_tenant_context(
     method = request.method.upper() if request is not None else "GET"
     allow_platform_context = (
         path.startswith("/api/platform/")
-        or path in {"/api/auth/me", "/api/v1/auth/me", "/api/tenants"}
+        or _platform_configuration_path(path, method)
+        or path in {"/api/auth/me", "/api/v1/auth/me", "/api/tenants", "/api/analysis/config"}
         or (path == "/api/tenants" and method == "POST")
     )
     # Authorization is deliberately resolved from the database on every
@@ -436,13 +467,15 @@ async def get_current_tenant_context(
     context = _resolve_context(
         db,
         claims,
-        x_tenant_id,
+        None if path.startswith("/api/platform/") or _platform_configuration_path(path, method) or (path == "/api/tenants" and method == "POST") else x_tenant_id,
         allow_platform_context=allow_platform_context,
         request=request,
     )
 
     if request is not None and "/stream" in request.url.path:
         db.close()
+    if request is not None:
+        request.state.current_context = context
     token = bind_context(context)
     try:
         yield context
@@ -451,6 +484,10 @@ async def get_current_tenant_context(
 
 
 def require_permission(permission: str) -> Callable:
+    from .permissions import ALL_PERMISSIONS
+
+    if permission not in ALL_PERMISSIONS:
+        raise ValueError("Unknown authorization permission")
     def dependency(
         context: CurrentContext = Depends(get_current_tenant_context),
     ) -> CurrentContext:
@@ -463,6 +500,10 @@ def require_permission(permission: str) -> Callable:
 
 def require_platform_permission(permission: str) -> Callable:
     """Require current-request database platform authority and audit denials."""
+    from .permissions import ALL_PERMISSIONS
+
+    if permission not in ALL_PERMISSIONS or not permission.startswith("platform:"):
+        raise ValueError("Unknown platform authorization permission")
 
     def dependency(
         request: Request,
@@ -507,97 +548,9 @@ def require_role(*roles: str) -> Callable:
 
 
 def permission_for_request(request: Request) -> str:
-    path = request.url.path
-    method = request.method.upper()
-    if path.startswith("/api/platform/authorization"):
-        return (
-            "platform:authorization:read"
-            if method == "GET"
-            else "platform:authorization:manage"
-        )
-    if path.startswith("/api/platform/administrators"):
-        if method == "GET":
-            return "platform:administrator:read"
-        if method == "POST":
-            return "platform:administrator:grant"
-        return "platform:administrator:revoke"
-    if path.startswith("/api/platform/users"):
-        return (
-            "platform:user:read"
-            if method == "GET"
-            else "platform:user:manage_status"
-        )
-    if path.startswith("/api/platform/tenants"):
-        return "platform:admin"
-    if path == "/api/tenants" and method == "POST":
-        return "platform:tenant:create"
-    if path.startswith("/api/nvd-mirror"):
-        return "platform:admin"
-    if path.startswith("/dashboard"):
-        return "dashboard:read"
-    if path.startswith(("/api/report-subscriptions", "/api/report-deliveries", "/api/report-notifications")):
-        # These are per-user preferences, not tenant settings administration.
-        # The report router enforces owner/admin and scope checks separately.
-        return "sbom:read"
-    if "/vex" in path or (path.startswith("/api/sboms/") and "/components/" in path and path.endswith("/vulnerabilities")):
-        return "vex:read" if method == "GET" else "vex:write"
-    if path.startswith("/api/remediation"):
-        return "remediation:read" if method == "GET" else "remediation:write"
-    if "lifecycle" in path:
-        return "lifecycle:read" if method == "GET" else "lifecycle:override"
-    if "schedule" in path:
-        return "schedule:read" if method == "GET" else "schedule:write"
-    if path.startswith("/api/projects"):
-        return {
-            "GET": "project:read",
-            "POST": "project:create",
-            "PATCH": "project:update",
-            "PUT": "project:update",
-            "DELETE": "project:delete",
-        }.get(method, "project:read")
-    if path.startswith("/api/products"):
-        return {
-            "GET": "product:read",
-            "POST": "product:create",
-            "PATCH": "product:update",
-            "PUT": "product:update",
-            "DELETE": "product:delete",
-        }.get(method, "product:read")
-    if path.startswith("/api/components"):
-        return "component:read" if method == "GET" else "component:update"
-    if (
-        path.startswith("/api/sbom-validation-sessions")
-        or path.startswith("/api/validation-sessions")
-        or path.startswith("/api/sbom-workspaces")
-    ):
-        if method == "GET":
-            if path.endswith("/download-original") or path.endswith("/download-repair-draft"):
-                return "sbom:repair:download"
-            if path.endswith("/search"):
-                return "sbom:repair:search"
-            return "sbom:repair:read"
-        if path.endswith("/validate") or path.endswith("/revalidate") or path.endswith("/import"):
-            return "sbom:repair:revalidate"
-        return "sbom:repair:update"
-    if path.startswith("/api/sboms"):
-        if method == "GET":
-            return "sbom:export" if any(part in path for part in ("/export", "/reports/")) else "sbom:read"
-        if method == "DELETE":
-            return "sbom:delete"
-        if path.endswith("/workspace"):
-            return "sbom:repair:update"
-        if method == "POST" and (path.endswith("/upload") or path == "/api/sboms"):
-            return "sbom:upload"
-        if "/analyze" in path:
-            return "analysis:run"
-        return "sbom:update"
-    if path.startswith("/api/runs") or path.startswith("/api/analysis"):
-        return "analysis:read" if method == "GET" else "analysis:run"
-    if path in {"/api/auth/me", "/api/v1/auth/me", "/api/tenants"}:
-        return "dashboard:read" if method == "GET" else "tenant:settings:update"
-    if path.startswith("/api/tenants"):
-        return "tenant:user:read" if method == "GET" else "tenant:user:update"
-    return "dashboard:read" if method == "GET" else "tenant:settings:update"
+    from .route_policy import permission_for_registered_request
+
+    return permission_for_registered_request(request)
 
 
 def enforce_request_access(
@@ -633,8 +586,13 @@ def enforce_request_access(
 
 def validate_hcl_auth_setup() -> None:
     settings = get_settings()
+    validate_auth_mode(settings)
     if not settings.auth_enabled:
         log.warning("AUTH_ENABLED=false: using explicit local development identity")
+        return
+    if not settings.hcl_auth_enabled:
+        if not (settings.native_auth_enabled or settings.entra_enabled) or settings.dev_default_tenant:
+            raise RuntimeError("Authentication requires an enabled provider and no development tenant")
         return
     required = {
         "HCL_IAM_ISSUER": settings.hcl_iam_issuer,
@@ -651,7 +609,7 @@ def validate_hcl_auth_setup() -> None:
         "HCL_IAM_DISCOVERY_URL": settings.hcl_iam_discovery_url,
         "HCL_IAM_JWKS_URL": settings.hcl_iam_jwks_url,
     }.items():
-        if value and not value.lower().startswith("https://") and not os.getenv("PYTEST_CURRENT_TEST"):
+        if value and not value.lower().startswith("https://"):
             raise RuntimeError(f"{name} must use HTTPS")
     algorithms = [item.strip().upper() for item in settings.hcl_iam_allowed_algorithms.split(",") if item.strip()]
     if algorithms != ["RS256"]:

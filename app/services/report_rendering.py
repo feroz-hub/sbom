@@ -10,6 +10,7 @@ from reportlab.lib.styles import getSampleStyleSheet
 from reportlab.lib.units import inch
 from reportlab.platypus import LongTable, Paragraph, SimpleDocTemplate, Spacer, TableStyle
 
+from ..record_presentation import integer_label
 from .email_sender import EmailAttachment
 from .report_composer import PART_NAMES
 
@@ -20,8 +21,13 @@ def _text(value):
     return "—" if value is None else str(value)
 
 
-def report_sections(report, *, compact=False):
+def report_sections(report, *, compact=False, display=False):
     """One section source for all human-readable formats, including failed parts."""
+
+    def reference(row, key, kind):
+        field = "display_id" if key == "id" else key[:-3] + "_display_id"
+        return integer_label(kind, row.get(field)) if display else row.get(key)
+
     summary = report["summary"]
     yield (
         "Reporting window",
@@ -39,6 +45,7 @@ def report_sections(report, *, compact=False):
                 "runs_considered",
                 "severity_floor",
             )
+            if not (display and k == "tenant_id")
         ],
     )
     yield "Portfolio summary · Convention A", ["Metric", "Value"], [[k, v] for k, v in summary.items()]
@@ -57,7 +64,14 @@ def report_sections(report, *, compact=False):
         yield (
             "Scheduled cycle outcomes (posture uses the last successful data)",
             ["SBOM ID", "Completion status", "Run ID"],
-            [[sid, outcome["status"], outcome.get("run_id")] for sid, outcome in report["scheduled_outcomes"].items()],
+            [
+                [
+                    integer_label("SBOM", outcome.get("sbom_display_id")) if display else sid,
+                    outcome["status"],
+                    reference(outcome, "run_id", "Run"),
+                ]
+                for sid, outcome in report["scheduled_outcomes"].items()
+            ],
         )
     yield (
         "SBOM results",
@@ -66,7 +80,7 @@ def report_sections(report, *, compact=False):
             [
                 s["name"],
                 s["version"],
-                s["A"]["run_id"],
+                reference(s["A"], "run_id", "Run"),
                 s["A"]["run_status"],
                 s["A"]["latest_attempt_status"],
                 s["A"]["total_findings"],
@@ -126,8 +140,8 @@ def report_sections(report, *, compact=False):
                 title,
                 ["Metric", "Value"],
                 [
-                    ["Baseline run", comparison["run_a"]["id"]],
-                    ["Current run", comparison["run_b"]["id"]],
+                    ["Baseline run", reference(comparison["run_a"], "id", "Run")],
+                    ["Current run", reference(comparison["run_b"], "id", "Run")],
                     ["Elapsed days", comparison["relationship"]["days_between"]],
                     ["Relationship", comparison["relationship"]["classification"]],
                     *[[k, v] for k, v in comparison["posture"].items() if not isinstance(v, list)],
@@ -302,7 +316,7 @@ def render_email(report, *, links=(), omitted=()):
     # The plain-text part carries the complete compact digest; the HTML part is
     # the executive template (full detail travels in the PDF/XLSX/JSON artifacts).
     text = [subject]
-    for title, columns, rows in report_sections(report, compact=True):
+    for title, columns, rows in report_sections(report, compact=True, display=True):
         text.extend(["", title, " | ".join(columns)])
         text.extend(" | ".join(_text(v) for v in row) for row in rows)
     text.extend(omitted)
@@ -437,7 +451,7 @@ def render_email(report, *, links=(), omitted=()):
         [
             f"<strong>{_e(s['name'])}</strong>",
             _e(s.get("version")),
-            _e(s["A"].get("run_id")),
+            _e(integer_label("Run", s["A"].get("run_display_id"))),
             _e(s["A"].get("run_status")),
             _e(s["A"].get("total_findings")),
         ]
@@ -461,8 +475,12 @@ def render_email(report, *, links=(), omitted=()):
     # Scheduled cycle outcomes
     if report.get("scheduled_outcomes"):
         outcome_rows = [
-            [_e(sbom_id), _e(outcome.get("status")), _e(outcome.get("run_id"))]
-            for sbom_id, outcome in report["scheduled_outcomes"].items()
+            [
+                _e(integer_label("SBOM", outcome.get("sbom_display_id"))),
+                _e(outcome.get("status")),
+                _e(integer_label("Run", outcome.get("run_display_id"))),
+            ]
+            for outcome in report["scheduled_outcomes"].values()
         ]
         html.append(
             _block(
@@ -503,7 +521,7 @@ def render_email(report, *, links=(), omitted=()):
     html.append(
         f"<tr><td style='padding:18px 36px; background-color:{_HEAD_BG}; border-top:1px solid {_BORDER};'>"
         f"<div style='font-size:11px; color:#94a3b8; line-height:1.6;'>{caveats}<br><br>"
-        f"SBOM Analyzer &middot; tenant {_e(report['tenant_id'])} &middot; {_e(report['scope'])} scope &middot; "
+        f"SBOM Analyzer &middot; tenant-scoped report &middot; {_e(report['scope'])} scope &middot; "
         f"cycle {_e(report['cycle_start'][:10])} &rarr; {_e(report['cycle_end'][:10])}</div></td></tr>"
     )
     html.append("</table></td></tr></table></body></html>")

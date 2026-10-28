@@ -3,9 +3,10 @@
 import { QueryClient, QueryClientProvider } from '@tanstack/react-query';
 import { fireEvent, render, screen, within } from '@testing-library/react';
 import type { ReactNode } from 'react';
-import { beforeEach, describe, expect, it, vi } from 'vitest';
+import { afterEach, beforeEach, describe, expect, it, vi } from 'vitest';
 import { Sidebar } from './Sidebar';
 import { SidebarProvider } from './SidebarContext';
+import { getHealth, getRecentSboms, getRuns } from '@/lib/api';
 
 const navigationState = vi.hoisted(() => ({
   pathname: '/sboms',
@@ -45,6 +46,7 @@ vi.mock('@/lib/api', async () => {
   const actual = await vi.importActual<typeof import('@/lib/api')>('@/lib/api');
   return {
     ...actual,
+    getHealth: vi.fn().mockResolvedValue({ status: 'ok' }),
     getRecentSboms: vi.fn().mockResolvedValue([]),
     getRuns: vi.fn().mockResolvedValue([]),
   };
@@ -72,10 +74,104 @@ function collapseSidebar() {
 }
 
 describe('Sidebar analysis navigation', () => {
+  it('shows API health in expanded and collapsed development sidebars', async () => {
+    renderSidebar();
+
+    expect(screen.getByText('System Status')).toBeInTheDocument();
+    expect(await screen.findByText('API healthy')).toBeInTheDocument();
+    expect(getHealth).toHaveBeenCalled();
+
+    collapseSidebar();
+
+    expect(screen.queryByText('System Status')).not.toBeInTheDocument();
+    expect(await screen.findByLabelText('Status: API healthy')).toBeInTheDocument();
+  });
+
+  it('omits API health and its polling in expanded and collapsed production sidebars', () => {
+    vi.stubEnv('NODE_ENV', 'production');
+    renderSidebar();
+
+    expect(screen.queryByText('System Status')).not.toBeInTheDocument();
+    expect(screen.queryByRole('status')).not.toBeInTheDocument();
+    expect(getHealth).not.toHaveBeenCalled();
+
+    collapseSidebar();
+
+    expect(screen.queryByLabelText(/^Status:/)).not.toBeInTheDocument();
+    expect(getHealth).not.toHaveBeenCalled();
+    expect(screen.getByRole('button', { name: 'Expand sidebar' })).toBeInTheDocument();
+  });
+
+  it('groups only authorized tenant working areas and preserves the selected route', () => {
+    navigationState.permissions = new Set(['dashboard:read', 'project:read', 'sbom:read', 'analysis:read', 'vex:read', 'schedule:read', 'tenant:user:read']);
+    renderSidebar('/projects');
+    for (const label of ['Overview', 'Inventory', 'Security Operations', 'Administration']) {
+      expect(screen.getByRole('heading', { name: label })).toBeInTheDocument();
+    }
+    expect(screen.getByRole('link', { name: 'Projects' })).toHaveAttribute('aria-current', 'page');
+    expect(screen.getByRole('link', { name: 'Projects' })).toHaveClass('active');
+    expect(screen.getByRole('complementary')).toHaveClass('tenant-sidebar');
+    expect(screen.getByText('System Status')).toBeInTheDocument();
+    expect(screen.queryByRole('link', { name: 'Platform Dashboard' })).not.toBeInTheDocument();
+  });
+  it('omits sections whose items are unauthorized', () => {
+    navigationState.permissions = new Set(['dashboard:read']); renderSidebar('/');
+    expect(screen.getByRole('heading', { name: 'Overview' })).toBeInTheDocument();
+    expect(screen.queryByRole('heading', { name: 'Inventory' })).not.toBeInTheDocument();
+    expect(screen.queryByRole('heading', { name: 'Security Operations' })).not.toBeInTheDocument();
+    expect(screen.queryByRole('heading', { name: 'Administration' })).not.toBeInTheDocument();
+  });
+  it('announces Settings expansion and retains authorized child routes', () => {
+    navigationState.permissions = new Set(['tenant:user:read', 'tenant:ai:read']);
+    renderSidebar('/projects');
+    const settings = screen.getByRole('button', { name: 'Settings' });
+    expect(settings).toHaveAttribute('aria-expanded', 'false');
+    expect(settings).toHaveAttribute('aria-controls', 'sidebar-flyout-settings-children');
+    fireEvent.click(settings);
+    expect(settings).toHaveAttribute('aria-expanded', 'true');
+    expect(screen.getByRole('link', { name: 'Users & Access' })).toHaveAttribute('href', '/settings/users');
+    expect(screen.queryByRole('link', { name: 'Lifecycle Providers' })).not.toBeInTheDocument();
+    fireEvent.click(settings); expect(settings).toHaveAttribute('aria-expanded', 'false');
+  });
+  it('keeps labeled navigation and workspace controls in the collapsed rail', () => {
+    renderSidebar('/projects'); collapseSidebar();
+    expect(screen.getByRole('link', { name: 'Projects' })).toHaveAttribute('title', 'Projects');
+    expect(screen.getByRole('button', { name: 'Switch tenant' })).toBeInTheDocument();
+    expect(screen.getByRole('button', { name: 'Expand sidebar' })).toHaveAttribute('aria-expanded', 'false');
+  });
+  it('shows only the control plane for a pure Platform Admin', () => {
+    navigationState.permissions = new Set(['platform:tenant:read', 'platform:administrator:read', 'platform:health:read', 'platform:admin', 'platform:ai:read', 'platform:lifecycle-provider:read']);
+    renderSidebar('/platform');
+    expect(screen.getByRole('link', { name: 'Platform Dashboard' })).toBeInTheDocument();
+    expect(screen.getByRole('link', { name: 'Tenants' })).toBeInTheDocument();
+    expect(screen.getByRole('region', { name: 'Configuration' })).toBeInTheDocument();
+    expect(screen.getByRole('region', { name: 'Administration' })).toBeInTheDocument();
+    expect(screen.queryByRole('button', { name: 'Settings' })).not.toBeInTheDocument();
+    expect(screen.getByRole('link', { name: 'Platform Dashboard' })).toHaveAttribute('aria-current', 'page');
+    for (const name of ['Dashboard', 'Projects', 'SBOMs', 'CISA KEV', 'VEX Investigation', 'Schedules', 'Users & Access']) {
+      expect(screen.queryByRole('link', { name })).not.toBeInTheDocument();
+    }
+    expect(screen.queryByRole('button', { name: 'Analysis' })).not.toBeInTheDocument();
+    expect(getRecentSboms).not.toHaveBeenCalled();
+    expect(getRuns).not.toHaveBeenCalled();
+  });
+  it.each(['platform:user:read', 'tenant:user:read', 'neither'])('guards the single Users & Access entry with %s', permission => {
+    navigationState.permissions = new Set([permission]);
+    renderSidebar('/settings/users');
+    expect(screen.queryAllByRole('link', { name: 'Users & Access' })).toHaveLength(permission === 'tenant:user:read' ? 1 : 0);
+    expect(screen.queryByText('Administration · Users')).not.toBeInTheDocument();
+    expect(screen.queryByText('Tenant users')).not.toBeInTheDocument();
+  });
   beforeEach(() => {
+    vi.clearAllMocks();
+    vi.stubEnv('NODE_ENV', 'development');
     navigationState.pathname = '/sboms';
     navigationState.search = '';
     navigationState.permissions = new Set(['*']);
+  });
+
+  afterEach(() => {
+    vi.unstubAllEnvs();
   });
 
   it('shows Analysis children in expanded mode and exposes Runs navigation', () => {
@@ -187,9 +283,9 @@ describe('Sidebar analysis navigation', () => {
 
   it('shows platform administration only with platform permissions', () => {
     renderSidebar('/settings');
-    fireEvent.click(screen.getByRole('button', { name: 'Settings' }));
-    expect(screen.getByRole('link', { name: 'Platform tenants' })).toBeInTheDocument();
-    expect(screen.getByRole('link', { name: 'Platform administrators' })).toBeInTheDocument();
+    expect(screen.getByRole('link', { name: 'Tenants' })).toBeInTheDocument();
+    expect(screen.getByRole('region', { name: 'Administration' })).toBeInTheDocument();
+    expect(screen.getByRole('link', { name: 'Platform Administrators' })).toBeInTheDocument();
   });
 
   it('shows tenant administration without platform administration for a Tenant Administrator', () => {
@@ -197,11 +293,11 @@ describe('Sidebar analysis navigation', () => {
       'tenant:user:read',
       'tenant:settings:update',
     ]);
-    renderSidebar('/settings/tenant');
+    renderSidebar('/settings/users');
     const nav = screen.getByRole('navigation', { name: 'Main' });
-    expect(within(nav).getByRole('link', { name: 'Tenant users' })).toBeInTheDocument();
+    expect(within(nav).getByRole('link', { name: 'Users & Access' })).toBeInTheDocument();
     expect(within(nav).queryByRole('link', { name: 'Platform tenants' })).not.toBeInTheDocument();
-    expect(within(nav).queryByRole('link', { name: 'Platform administrators' })).not.toBeInTheDocument();
+    expect(within(nav).queryByRole('link', { name: 'Platform Administrators' })).not.toBeInTheDocument();
   });
 
   it('does not show administration pages for Security Analyst or Viewer permissions', () => {
@@ -210,6 +306,6 @@ describe('Sidebar analysis navigation', () => {
     const nav = screen.getByRole('navigation', { name: 'Main' });
     expect(within(nav).queryByRole('link', { name: 'Tenant users' })).not.toBeInTheDocument();
     expect(within(nav).queryByRole('link', { name: 'Platform tenants' })).not.toBeInTheDocument();
-    expect(within(nav).queryByRole('link', { name: 'Platform administrators' })).not.toBeInTheDocument();
+    expect(within(nav).queryByRole('link', { name: 'Platform Administrators' })).not.toBeInTheDocument();
   });
 });

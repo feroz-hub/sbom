@@ -2,7 +2,7 @@
 
 SBOM Analyser is a FastAPI and Next.js platform for importing, validating, normalizing, analysing, and managing software bills of materials. It combines SBOM inventory, multi-source vulnerability analysis, CISA Known Exploited Vulnerabilities (KEV), lifecycle intelligence, VEX, remediation, reporting, tenant isolation, and role-based access control in one application.
 
-The current application version is `2.0.0`. The current Alembic schema head is `055_ai_model_registry`.
+The current application version is `2.0.0`. The current Alembic schema head is `103_tenant_admin_governance`.
 
 ## Highlights
 
@@ -169,7 +169,42 @@ docker-compose.yml      Local PostgreSQL 16 service
 - Redis when running Celery workers/Beat in the normal configuration. A PostgreSQL-backed Kombu broker is available for local development when Redis cannot be installed.
 - Docker Compose if using the provided local PostgreSQL service
 
-## Quick start: macOS/Linux
+## Quick start: Windows, macOS, Linux
+
+```bash
+git clone <repository-url>
+cd sbom
+python3 scripts/dev.py start
+```
+
+Greenfield HTTPS uses a leaf certificate signed by an existing **locally trusted mkcert CA**, with `localhost`, `127.0.0.1` and `::1` SANs. Setup/start checks macOS Keychain trust and never installs a root CA automatically. On a new Mac, install mkcert and independently approve its local CA trust setup first; a missing/untrusted CA stops setup with an actionable message. Valid leaf material is reused, with renewal only when needed. `make greenfield-https` verifies the running endpoint with system curl (no `-k` or custom trust bypass). See [local HTTPS trust and Chrome verification](docs/uuid-migration/GREENFIELD_HTTPS_CERTIFICATE_FIX.md). Production certificate management is separate.
+
+When `~/.sbom-greenfield-uuid` is installed, this command selects the UUID environment automatically: database `sbom_greenfield_uuid` on localhost **56044**, Redis **56381**, and Mailpit **8026** (SMTP **1026**). It resumes only the recorded existing Docker containers and starts the API, Celery worker (including reports), and HTTPS frontend. It does not bootstrap, seed or replay migrations. Its worker embeds a restricted scheduler for local security-mail dispatch only; application-wide provider/mirror/analysis schedules stay disabled. Settings and logs remain private under `~/.sbom-greenfield-uuid`; the legacy `.env.dev.local` is not loaded. Open **https://localhost:13000**; API **http://127.0.0.1:18000**. `status`, `stop`, `restart`, `--check` and Ctrl+C use the same process ownership controls. Stop/Ctrl+C preserve running data services and all data. An incomplete greenfield installation fails rather than falling back to another database. For first installation, see [greenfield setup](docs/uuid-migration/GREENFIELD_UUID_ACCEPTANCE.md#reproduce-and-operate).
+
+Use `--profile greenfield` to require this environment explicitly. `--profile legacy` explicitly selects the older launcher behavior described below. Without a greenfield installation, automatic selection retains that legacy behavior.
+
+Legacy profile: The launcher creates `.venv` and the ignored `.env.dev.local`, installs dependencies when needed, and starts the Native IAM API, Celery worker, one Celery Beat, and HTTPS frontend. It uses this project's Docker PostgreSQL and Redis services when available, or local PostgreSQL and Redis if Docker is unavailable. Redis is required for the normal stack. It uses project Mailpit for local-only activation and reset email; open [Mailpit](http://127.0.0.1:8025) to receive test links. On first use, trust the generated `frontend/certificates/localhost.pem` certificate in your browser. The application is at [https://localhost:13000](https://localhost:13000), with API at [http://127.0.0.1:18000](http://127.0.0.1:18000). Process logs are in ignored `.dev-logs/`. Press Ctrl+C to stop the application processes; development data services remain running.
+
+The launcher saves its Docker/local PostgreSQL and Redis choices in `.env.dev.local` and reselects only if a saved provider is unavailable. It creates/reuses only the local `sbom_analyser_dev` database, checks an existing schema before migration, and runs `alembic upgrade head`. It never uses the database in `.env`, drops data, or sends mail to real recipients. It stores generated JWT, session, and outbox keys once in `.env.dev.local` (mode 600 where supported) and refuses invalid saved keys. Do not commit this file. It reports ready only after the API, IAM readiness, and HTTPS frontend respond. For the first Native Platform User, follow [the greenfield setup guide](docs/native-iam-greenfield-setup.md); set `NATIVE_PLATFORM_BOOTSTRAP_ENABLED=true` in `.env.dev.local` only during bootstrap, then set it back to `false`.
+
+Manage the same repository instance from another terminal:
+
+```bash
+python3 scripts/dev.py start       # foreground; no command also defaults to start
+python3 scripts/dev.py status
+python3 scripts/dev.py stop        # safe and idempotent; preserves data services/logs
+python3 scripts/dev.py restart
+python3 scripts/dev.py --check
+python3 scripts/dev.py start --verbose
+```
+
+On Windows, use `python` if `python3` is unavailable. Ctrl+C or SIGTERM still cleans up a foreground instance. The ignored, private `.dev-runtime.json` records process birth identities and groups, not secrets. An OS lock prevents duplicate launchers; `.dev-runtime.lock` intentionally remains on disk after exit, with its lock released. `.dev-runtime.stop` carries an instance-scoped stop request between terminals. Normal stop never stops PostgreSQL, Redis or Mailpit and never removes volumes.
+
+Stale process records are reconciled by `stop` or the next `start`. Unknown/reused PIDs and unrelated port owners are never killed; status reports them. Older launchers started before the registry was introduced cannot be safely adopted: stop those with Ctrl+C in their original terminal. See [launcher lifecycle and safety](docs/dev-launcher-lifecycle.md) for recovery and platform details. Explicit `.env.dev.local` values such as `AI_FIXES_ENABLED=true` or `false` are preserved; lifecycle commands do not introduce a new AI default.
+
+Use `python3 scripts/dev.py --check` to inspect prerequisites without starting services or changing the database. Use `--verbose` for a technical error trace. A locally installed PostgreSQL may prompt once for a user/password with database-create access; these are saved only in `.env.dev.local`. Existing manual setup commands below remain available for advanced troubleshooting.
+
+## Manual quick start: macOS/Linux
 
 ### 1. Start PostgreSQL
 
@@ -366,6 +401,12 @@ Recent schema work:
 | `042`-`043` | Wider vulnerability evidence and match-reason fields. |
 | `044` | Canonical CISA KEV vulnerabilities table and metadata. |
 | `054` | Hierarchical Project/Product/SBOM scheduling, explicit current SBOMs, and target policies. |
+| `100` | Greenfield UUID finalization. |
+| `101` | IAM user public UUID. |
+| `102` | Public membership and grant analysis UUID. |
+| `103` | Restricted tenant administrator governance permission. |
+
+This table highlights selected revisions, not every migration. Run `python -m alembic heads` to verify the head in the checked-out codebase.
 
 ## Background workers
 

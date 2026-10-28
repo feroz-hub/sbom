@@ -1,0 +1,19 @@
+[
+  "/Users/ferozebasha/sbom/app/core/permissions.py",
+  "/Users/ferozebasha/sbom/app/metrics/component_advisor.py",
+  "/Users/ferozebasha/sbom/app/services/component_advisor/recommendations/service.py",
+  "/Users/ferozebasha/sbom/tests/test_alembic_metadata_commands.py",
+  "/Users/ferozebasha/sbom/tests/test_component_advisor_bench.py",
+  "/Users/ferozebasha/sbom/tests/test_component_advisor_classification.py",
+  "/Users/ferozebasha/sbom/tests/test_component_advisor_policy.py",
+  "/Users/ferozebasha/sbom/tests/test_component_advisor_scoring.py",
+  "/Users/ferozebasha/sbom/tests/test_dev_lifecycle.py",
+  "/Users/ferozebasha/sbom/tests/test_identity_mapping_service.py",
+  "/Users/ferozebasha/sbom/tests/test_native_iam_phase5.py",
+  "/Users/ferozebasha/sbom/tests/test_native_session_lifetime.py",
+  "/Users/ferozebasha/sbom/tests/test_permission_ui_catalogue.py",
+  "/Users/ferozebasha/sbom/tests/test_phase9_fresh_database_bootstrap.py",
+  "/Users/ferozebasha/sbom/tests/test_platform_advisor_policies.py",
+  "/Users/ferozebasha/sbom/tests/test_platform_tenant_v2.py",
+  "/Users/ferozebasha/sbom/tests/test_user_search.py"
+]

@@ -1,0 +1,705 @@
+"""ai_credentials router smoke tests + key-leak sweep.
+
+Phase 2 §2.5 / §2.6 hard rules verified:
+
+  * No raw API key appears in any response (only previews)
+  * No raw API key appears in any captured log line
+  * Audit row written for every mutation; payload never in audit detail
+  * Singleton constraints: only one is_default / is_fallback at a time
+"""
+
+from __future__ import annotations
+
+
+def _tenant_registry():
+    from app.ai.registry import get_registry
+    from app.core.context import minimal_background_context, tenant_scope
+    with tenant_scope(minimal_background_context(1)):
+        return get_registry()
+
+
+def _tenant_configs():
+    from app.ai.config_loader import resolve_effective_ai_configuration
+    return resolve_effective_ai_configuration(1)[0]
+
+
+import logging
+
+import pytest
+from app.ai.providers.base import (
+    ConnectionTestResult,
+    DiscoveredModel,
+    LlmResponse,
+    LlmUsage,
+)
+from app.db import SessionLocal
+from app.models import (
+    AiCredentialAuditLog,
+    AiProviderCredential,
+    AiSettings,
+)
+from app.security.secrets import generate_master_key, reset_cipher
+
+_KEY_FRAGMENTS = [
+    "sk-ant-",
+    "sk-",
+    "AIzaSy",
+    "xai-",
+]
+
+
+def _key_appears(text: str, plaintext: str) -> bool:
+    """True if the plaintext leaks anywhere in the captured text."""
+    if not plaintext:
+        return False
+    return plaintext in text
+
+
+@pytest.fixture(autouse=True)
+def _enc_key(monkeypatch):
+    """Provide a fresh encryption key per test + reset the cipher singleton."""
+    monkeypatch.setenv("AI_CONFIG_ENCRYPTION_KEY", generate_master_key())
+    reset_cipher()
+    yield
+    reset_cipher()
+
+
+@pytest.fixture(autouse=True)
+def _wipe(client):
+    db = SessionLocal()
+    try:
+        db.query(AiCredentialAuditLog).delete()
+        db.query(AiProviderCredential).delete()
+        # Reset singleton settings to defaults.
+        s = db.query(AiSettings).filter_by(id=1).one_or_none()
+        if s is not None:
+            s.feature_enabled = True
+            s.kill_switch_active = False
+            s.budget_per_request_usd = 0.10
+            s.budget_per_scan_usd = 5.00
+            s.budget_daily_usd = 5.00
+            s.updated_at = "2026-05-04T00:00:00+00:00"
+        db.commit()
+    finally:
+        db.close()
+
+
+# ============================================================ Read shape
+
+
+def test_list_empty(client):
+    resp = client.get("/api/v1/ai/credentials")
+    assert resp.status_code == 200
+    assert resp.json() == []
+
+
+def test_create_response_omits_raw_key(client):
+    raw_key = "sk-ant-api03-VERY-SECRET-KEY-PAYLOAD-AhB7"
+    resp = client.post(
+        "/api/v1/ai/credentials",
+        json={
+            "provider_name": "anthropic",
+            "label": "default",
+            "api_key": raw_key,
+            "default_model": "claude-sonnet-4-5",
+            "tier": "paid",
+        },
+    )
+    assert resp.status_code == 201, resp.text
+    body = resp.json()
+    # Hard rule: response must not echo the raw key anywhere.
+    assert raw_key not in resp.text
+    assert body["api_key_present"] is True
+    assert body["api_key_preview"] is None
+    assert body["api_key_preview"] is None
+
+
+def test_get_one_response_shape(client):
+    resp = client.post(
+        "/api/v1/ai/credentials",
+        json={
+            "provider_name": "gemini",
+            "api_key": "AIzaSy-test-gemini-key-1234567890",
+            "default_model": "gemini-2.5-flash",
+            "tier": "free",
+        },
+    )
+    cred_id = resp.json()["id"]
+    resp = client.get(f"/api/v1/ai/credentials/{cred_id}")
+    assert resp.status_code == 200
+    body = resp.json()
+    assert "api_key" not in body  # the field doesn't even exist
+    assert body["api_key_present"] is True
+
+
+# ============================================================ Update / preserve key
+
+
+def test_update_omitted_api_key_preserves(client):
+    raw_key = "sk-ant-original-key-xxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxx"
+    create = client.post(
+        "/api/v1/ai/credentials",
+        json={
+            "provider_name": "anthropic",
+            "api_key": raw_key,
+            "default_model": "claude-sonnet-4-5",
+        },
+    )
+    cred_id = create.json()["id"]
+
+    # Update model only — leave api_key out.
+    resp = client.put(
+        f"/api/v1/ai/credentials/{cred_id}",
+        json={"default_model": "claude-haiku-4-5"},
+    )
+    assert resp.status_code == 200
+    body = resp.json()
+    assert body["default_model"] == "claude-haiku-4-5"
+    # Preview must still match the original key (the tail).
+    assert body["api_key_preview"] is None
+
+
+def test_update_with_new_api_key_replaces(client):
+    create = client.post(
+        "/api/v1/ai/credentials",
+        json={
+            "provider_name": "anthropic",
+            "api_key": "sk-ant-OLD-XXXXXXXXXXXXXXXXXXXXXXXXX",
+            "default_model": "claude-sonnet-4-5",
+        },
+    )
+    cred_id = create.json()["id"]
+    resp = client.put(
+        f"/api/v1/ai/credentials/{cred_id}",
+        json={"api_key": "sk-ant-NEWNEWNEW-YYYYYYYYYYYYYYYYY"},
+    )
+    body = resp.json()
+    assert body["api_key_preview"] is None
+
+
+# ============================================================ Set default / fallback
+
+
+def test_set_default_swaps_atomically(client):
+    a = client.post(
+        "/api/v1/ai/credentials",
+        json={"provider_name": "anthropic", "api_key": "sk-a-XXXXXXXXXXXX", "default_model": "claude-sonnet-4-5"},
+    ).json()
+    b = client.post(
+        "/api/v1/ai/credentials",
+        json={"provider_name": "openai", "api_key": "sk-b-YYYYYYYYYYYY", "default_model": "gpt-4o-mini"},
+    ).json()
+    # Promote A.
+    resp = client.put(f"/api/v1/ai/credentials/{a['id']}/set-default")
+    assert resp.status_code == 200
+    assert resp.json()["is_default"] is True
+    # Promote B — must demote A in the same transaction.
+    resp = client.put(f"/api/v1/ai/credentials/{b['id']}/set-default")
+    assert resp.status_code == 200
+    # List view confirms only one default.
+    listing = client.get("/api/v1/ai/credentials").json()
+    defaults = [c for c in listing if c["is_default"]]
+    assert len(defaults) == 1
+    assert defaults[0]["id"] == b["id"]
+
+
+def test_default_provider_change_rebuilds_registry_without_restart(client):
+
+    first = client.post(
+        "/api/v1/ai/credentials",
+        json={
+            "provider_name": "openai",
+            "label": "primary",
+            "api_key": "first-secret-value",
+            "default_model": "gpt-4o-mini",
+        },
+    ).json()
+    second = client.post(
+        "/api/v1/ai/credentials",
+        json={
+            "provider_name": "openai",
+            "label": "secondary",
+            "api_key": "second-secret-value",
+            "default_model": "gpt-4.1-mini",
+        },
+    ).json()
+    client.put(f"/api/v1/ai/credentials/{first['id']}/set-default")
+    assert _tenant_registry().get_default_config().credential_id == first["id"]
+
+    client.put(f"/api/v1/ai/credentials/{second['id']}/set-default")
+    assert _tenant_registry().get_default_config().credential_id == second["id"]
+
+
+def test_set_fallback_swaps_atomically(client):
+    a = client.post(
+        "/api/v1/ai/credentials",
+        json={
+            "provider_name": "gemini",
+            "api_key": "AIzaSy-1-XXXXXXXX",
+            "default_model": "gemini-2.5-flash",
+            "tier": "free",
+        },
+    ).json()
+    b = client.post(
+        "/api/v1/ai/credentials",
+        json={"provider_name": "grok", "api_key": "xai-2-YYYYYYYY", "default_model": "grok-2-mini", "tier": "free"},
+    ).json()
+    client.put(f"/api/v1/ai/credentials/{a['id']}/set-fallback")
+    client.put(f"/api/v1/ai/credentials/{b['id']}/set-fallback")
+    listing = client.get("/api/v1/ai/credentials").json()
+    fallbacks = [c for c in listing if c["is_fallback"]]
+    assert len(fallbacks) == 1
+    assert fallbacks[0]["id"] == b["id"]
+
+
+# ============================================================ Delete
+
+
+def test_delete_credential_removes_row_and_audits(client):
+    create = client.post(
+        "/api/v1/ai/credentials",
+        json={"provider_name": "anthropic", "api_key": "sk-ant-XXXXXXXXX", "default_model": "claude-sonnet-4-5"},
+    )
+    cred_id = create.json()["id"]
+    resp = client.delete(f"/api/v1/ai/credentials/{cred_id}")
+    assert resp.status_code == 204
+    assert client.get(f"/api/v1/ai/credentials/{cred_id}").status_code == 404
+    # Audit row should be present.
+    db = SessionLocal()
+    try:
+        rows = db.query(AiCredentialAuditLog).filter_by(action="credential.delete").all()
+        assert any(r.target_id == cred_id for r in rows)
+    finally:
+        db.close()
+
+
+# ============================================================ Settings
+
+
+def test_settings_get_matches_env_fallback_when_singleton_missing(client):
+    resp = client.get("/api/v1/ai/settings")
+    assert resp.status_code == 200
+    body = resp.json()
+    assert body["source"] == "env"
+
+
+def test_settings_update_validates_cap_ordering(client):
+    # per_request > per_scan → 400.
+    resp = client.put(
+        "/api/v1/ai/settings",
+        json={"budget_per_request_usd": 100.0, "budget_per_scan_usd": 1.0},
+    )
+    assert resp.status_code == 400
+
+
+def test_settings_update_persists(client):
+    resp = client.put(
+        "/api/v1/ai/settings",
+        json={
+            "budget_per_request_usd": 0.05,
+            "budget_per_scan_usd": 2.50,
+            "budget_daily_usd": 10.00,
+            "kill_switch_active": True,
+        },
+    )
+    assert resp.status_code == 200
+    body = resp.json()
+    assert body["source"] == "db"
+    assert body["kill_switch_active"] is True
+    assert body["budget_daily_usd"] == 10.00
+
+
+def test_settings_write_updates_runtime_surfaces_without_restart(client):
+    response = client.put(
+        "/api/v1/ai/settings",
+        json={
+            "feature_enabled": True,
+            "kill_switch_active": True,
+            "budget_per_request_usd": 0.03,
+            "budget_per_scan_usd": 0.40,
+            "budget_daily_usd": 6.00,
+        },
+    )
+    assert response.status_code == 200
+
+    analysis = client.get("/api/analysis/config").json()
+    usage = client.get("/api/v1/ai/usage").json()
+    assert analysis["ai_fixes_enabled"] is False  # Analysis config now reflects the authenticated tenant runtime.
+    assert analysis["ai_status"]["state"] == "DISABLED"
+    assert analysis["ai_settings_source"] in {"env", "db"}
+    assert usage["budget_caps_usd"] == {
+        "per_request_usd": 0.03,
+        "per_scan_usd": 0.40,
+        "per_day_org_usd": 6.00,
+    }
+
+
+# ============================================================ Audit trail
+
+
+def test_audit_log_records_create(client):
+    raw_key = "sk-ant-VERY-SECRET-KEY-VALUE-1234567890"
+    client.post(
+        "/api/v1/ai/credentials",
+        json={"provider_name": "anthropic", "api_key": raw_key, "default_model": "claude-sonnet-4-5"},
+    )
+    db = SessionLocal()
+    try:
+        rows = db.query(AiCredentialAuditLog).filter_by(action="credential.create").all()
+        assert len(rows) == 1
+        # Hard rule: payload must NOT appear in audit detail.
+        for r in rows:
+            assert raw_key not in (r.detail or "")
+            for fragment in _KEY_FRAGMENTS:
+                if fragment in raw_key:
+                    # Detail might mention key_present=True; that's fine.
+                    pass
+    finally:
+        db.close()
+
+
+def test_audit_log_test_action_records_outcome(client):
+    # Probe an unsaved credential — Anthropic with a fake key. The
+    # provider tries to reach the upstream and either fails network
+    # or auth; either way the audit row should be present.
+    client.post(
+        "/api/v1/ai/credentials/test",
+        json={
+            "provider_name": "anthropic",
+            "api_key": "sk-ant-test-NEVER-VALID",
+            "default_model": "claude-sonnet-4-5",
+            "tier": "paid",
+        },
+    )
+    db = SessionLocal()
+    try:
+        rows = db.query(AiCredentialAuditLog).filter_by(action="credential.test").all()
+        assert len(rows) >= 1
+    finally:
+        db.close()
+
+
+# ============================================================ Key-leak sweep
+
+
+def test_no_raw_key_leaks_into_log_records(client, caplog):
+    """Hard-rule sweep — sentinel key must not appear in ANY captured log line.
+
+    This is the load-bearing security test for §2.6. Future regressions
+    (debug logging that includes the request body, exception traces that
+    interpolate the credential, etc.) get caught here.
+    """
+    sentinel = "sk-ant-SENTINEL-DO-NOT-LEAK-2025-0504-XYZ"
+    with caplog.at_level(logging.DEBUG):
+        client.post(
+            "/api/v1/ai/credentials",
+            json={
+                "provider_name": "anthropic",
+                "api_key": sentinel,
+                "default_model": "claude-sonnet-4-5",
+                "tier": "paid",
+            },
+        )
+        # Update the same key + delete it.
+        cred_id = client.get("/api/v1/ai/credentials").json()[0]["id"]
+        client.put(
+            f"/api/v1/ai/credentials/{cred_id}",
+            json={"api_key": sentinel + "-V2"},
+        )
+        client.delete(f"/api/v1/ai/credentials/{cred_id}")
+
+    # Concatenate every captured record (message + extras + exception).
+    blob = "\n".join(r.getMessage() + " " + str(r.__dict__) for r in caplog.records)
+    assert sentinel not in blob
+    # Audit detail in the DB, too — must not contain the sentinel.
+    db = SessionLocal()
+    try:
+        all_audit_text = " ".join((r.detail or "") for r in db.query(AiCredentialAuditLog).all())
+        assert sentinel not in all_audit_text
+    finally:
+        db.close()
+
+
+def test_no_raw_key_leaks_into_response_text(client):
+    sentinel = "sk-ant-SENTINEL-RESPONSE-DO-NOT-LEAK"
+    resp = client.post(
+        "/api/v1/ai/credentials",
+        json={
+            "provider_name": "anthropic",
+            "api_key": sentinel,
+            "default_model": "claude-sonnet-4-5",
+        },
+    )
+    cred_id = resp.json()["id"]
+    # Hit every read endpoint that touches this row.
+    for path in [
+        "/api/v1/ai/credentials",
+        f"/api/v1/ai/credentials/{cred_id}",
+    ]:
+        r = client.get(path)
+        assert sentinel not in r.text, f"sentinel leaked via {path}"
+
+
+def test_unknown_provider_returns_400(client):
+    resp = client.post(
+        "/api/v1/ai/credentials",
+        json={"provider_name": "bogus", "default_model": "x", "api_key": "k"},
+    )
+    assert resp.status_code == 400
+
+
+@pytest.mark.parametrize(
+    ("base_url", "model", "expected"),
+    [
+        (None, "model", 400),
+        ("http://localhost:1234/v1", None, 400),
+        ("http://example.com/v1", "model", 400),
+        ("http://localhost:1234/v1", "model", 201),
+        ("https://example.com/v1", "model", 201),
+    ],
+)
+def test_custom_openai_validation_contract(client, base_url, model, expected):
+    response = client.post(
+        "/api/v1/ai/credentials",
+        json={
+            "provider_name": "custom_openai",
+            "api_key": None,
+            "base_url": base_url,
+            "default_model": model,
+            "cost_per_1k_input_usd": 0.001,
+            "cost_per_1k_output_usd": 0.002,
+            "is_local": base_url is not None and "localhost" in base_url,
+        },
+    )
+    assert response.status_code == expected, response.text
+
+
+def test_missing_encryption_key_returns_actionable_503(client, monkeypatch):
+    monkeypatch.delenv("AI_CONFIG_ENCRYPTION_KEY", raising=False)
+    reset_cipher()
+    response = client.post(
+        "/api/v1/ai/credentials",
+        json={"provider_name": "openai", "api_key": "secret-value", "default_model": "gpt-4o-mini"},
+    )
+    assert response.status_code == 503
+    assert "AI_CONFIG_ENCRYPTION_KEY" in response.json()["detail"]
+    assert "secret-value" not in response.text
+
+
+def test_malformed_encryption_key_returns_actionable_503(client, monkeypatch):
+    monkeypatch.setenv("AI_CONFIG_ENCRYPTION_KEY", "not-valid-base64")
+    reset_cipher()
+    response = client.post(
+        "/api/v1/ai/credentials",
+        json={"provider_name": "openai", "api_key": "secret-value", "default_model": "gpt-4o-mini"},
+    )
+    assert response.status_code == 503
+    assert "AI_CONFIG_ENCRYPTION_KEY" in response.json()["detail"]
+    assert "secret-value" not in response.text
+
+
+def test_saved_key_remains_decryptable_after_cipher_restart(client, monkeypatch):
+    stable_key = generate_master_key()
+    monkeypatch.setenv("AI_CONFIG_ENCRYPTION_KEY", stable_key)
+    reset_cipher()
+    raw_key = "restart-safe-secret-value"
+    created = client.post(
+        "/api/v1/ai/credentials",
+        json={"provider_name": "openai", "api_key": raw_key, "default_model": "gpt-4o-mini"},
+    )
+    assert created.status_code == 201
+
+    reset_cipher()  # simulate a new API process using the same environment key
+    listing = client.get("/api/v1/ai/credentials")
+    assert listing.status_code == 200
+    assert listing.json()[0]["api_key_preview"] is None
+    assert raw_key not in listing.text
+
+
+def test_wrong_key_saved_test_returns_safe_diagnostic(client, monkeypatch):
+    raw_key = "wrong-key-secret-value"
+    created = client.post(
+        "/api/v1/ai/credentials",
+        json={"provider_name": "openai", "api_key": raw_key, "default_model": "gpt-4o-mini"},
+    )
+    credential_id = created.json()["id"]
+    monkeypatch.setenv("AI_CONFIG_ENCRYPTION_KEY", generate_master_key())
+    reset_cipher()
+
+    response = client.post(f"/api/v1/ai/credentials/{credential_id}/test")
+    assert response.status_code == 503
+    assert "cannot be decrypted" in response.json()["detail"]
+    assert raw_key not in response.text
+
+
+def test_effective_config_diagnostic_never_exposes_secrets(client):
+    raw_key = "diagnostic-secret-value"
+    created = client.post(
+        "/api/v1/ai/credentials",
+        json={"provider_name": "openai", "api_key": raw_key, "default_model": "gpt-4o-mini"},
+    )
+    client.put(f"/api/v1/ai/credentials/{created.json()['id']}/set-default")
+
+    response = client.get("/api/v1/ai/effective-config")
+    assert response.status_code == 200
+    body = response.json()
+    assert body["encryption_config_available"] is True
+    assert body["default_selection_key"].startswith("credential:")
+    assert raw_key not in response.text
+    assert "api_key" not in response.text
+
+
+def test_candidate_edit_test_uses_saved_key_without_exposing_it(client, monkeypatch):
+    raw_key = "candidate-edit-secret-value"
+    created = client.post(
+        "/api/v1/ai/credentials",
+        json={"provider_name": "openai", "api_key": raw_key, "default_model": "gpt-4o-mini"},
+    )
+    credential_id = created.json()["id"]
+    seen = {}
+
+    class _Provider:
+        async def test_connection(self, *, model=None):
+            return ConnectionTestResult(success=True, provider="openai", model_tested=model)
+
+    def _build(payload):
+        seen["key"] = payload.api_key
+        seen["model"] = payload.default_model
+        return _Provider()
+
+    monkeypatch.setattr("app.routers.ai_credentials._build_transient_provider", _build)
+    response = client.post(
+        "/api/v1/ai/credentials/test",
+        json={
+            "credential_id": credential_id,
+            "provider_name": "openai",
+            "api_key": None,
+            "default_model": "gpt-4.1-mini",
+        },
+    )
+    assert response.status_code == 200
+    assert response.json()["success"] is True
+    assert seen == {"key": raw_key, "model": "gpt-4.1-mini"}
+    assert raw_key not in response.text
+
+
+def test_model_registry_api_refresh_test_and_explicit_select(client, monkeypatch):
+    created = client.post(
+        "/api/v1/ai/credentials",
+        json={"provider_name": "openai", "api_key": "model-registry-secret", "default_model": "legacy"},
+    )
+    credential_id = created.json()["id"]
+
+    class _Provider:
+        name = "openai"
+        default_model = "legacy"
+
+        async def list_models(self):
+            return [
+                DiscoveredModel(
+                    provider_model_id="new-live-model",
+                    runtime_model_id="new-live-model",
+                    display_name="New live model",
+                    provider_name="openai",
+                    supports_chat=True,
+                    supports_structured_output=True,
+                )
+            ]
+
+        async def generate(self, request):
+            assert request.model == "new-live-model"
+            return LlmResponse(
+                text='{"ok": true}',
+                parsed={"ok": True},
+                usage=LlmUsage(input_tokens=1, output_tokens=1, cost_usd=0),
+                provider="openai",
+                model=request.model,
+                latency_ms=1,
+            )
+
+    monkeypatch.setattr("app.ai.model_registry.build_provider_for_credential", lambda row: _Provider())
+    refreshed = client.post(f"/api/v1/ai/credentials/{credential_id}/models/refresh")
+    assert refreshed.status_code == 200, refreshed.text
+    assert refreshed.json()["created"] == 1
+
+    models = client.get(f"/api/v1/ai/credentials/{credential_id}/models").json()
+    legacy = next(model for model in models if model["runtime_model_id"] == "legacy")
+    live = next(model for model in models if model["runtime_model_id"] == "new-live-model")
+    assert legacy["is_selected"] is True
+    assert legacy["is_available"] is False
+    assert live["is_selected"] is False
+
+    tested = client.post(f"/api/v1/ai/credentials/{credential_id}/models/{live['id']}/test")
+    assert tested.status_code == 200
+    assert tested.json()["success"] is True
+
+    selected = client.post(f"/api/v1/ai/credentials/{credential_id}/models/{live['id']}/select")
+    assert selected.status_code == 200
+    assert selected.json()["is_selected"] is True
+    assert client.get(f"/api/v1/ai/credentials/{credential_id}").json()["default_model"] == "new-live-model"
+
+@pytest.mark.parametrize('kind,status', [('provider_unavailable', 503), ('rate_limit', 429), ('network', None)])
+def test_transient_probe_does_not_block_encrypted_save_or_retest(client, monkeypatch, caplog, kind, status):
+    from app.security.secrets import get_cipher
+    secret = 'sentinel-provider-key-never-return'
+    outcome = ConnectionTestResult(success=False, error_kind=kind, http_status=status, error_message=secret, provider='gemini')
+    class Provider:
+        name = 'gemini'
+        async def test_connection(self, **kwargs):
+            return outcome
+    monkeypatch.setattr('app.routers.ai_credentials._build_transient_provider', lambda body: Provider())
+    payload = {'provider_name': 'gemini', 'api_key': secret, 'default_model': 'gemini-2.5-flash', 'tier': 'free'}
+    result = client.post('/api/v1/ai/credentials/test', json=payload)
+    assert result.status_code == 200 and result.json()['error_kind'] == kind
+    assert secret not in result.text
+    # Persistence must not call any upstream probe.
+    monkeypatch.setattr(Provider, 'test_connection', lambda *a, **k: pytest.fail('Save contacted the provider'))
+    saved = client.post('/api/v1/ai/credentials', json=payload)
+    assert saved.status_code == 201, saved.text
+    row_id = saved.json()['id']
+    assert saved.json()['verification_status'] == 'UNVERIFIED'
+    assert saved.json()['enabled'] is True
+    with SessionLocal() as db:
+        row = db.get(AiProviderCredential, row_id)
+        assert row.api_key_encrypted != secret
+        assert get_cipher().decrypt(row.api_key_encrypted) == secret
+    async def transient(**kwargs):
+        return outcome
+    provider = Provider()
+    provider.test_connection = transient
+    monkeypatch.setattr('app.routers.ai_credentials._build_transient_provider', lambda body: provider)
+    client.post(f'/api/v1/ai/credentials/{row_id}/test')
+    row = client.get(f'/api/v1/ai/credentials/{row_id}').json()
+    assert row['enabled'] is True
+    # Runtime selection must remain eligible after transient verification failures.
+    assert any(config.credential_id == row_id and config.enabled for config in _tenant_configs())
+    assert row['verification_status'] == 'TEMPORARILY_UNAVAILABLE'
+    async def successful(**kwargs):
+        return ConnectionTestResult(success=True, provider='gemini')
+    provider.test_connection = successful
+    assert client.post(f'/api/v1/ai/credentials/{row_id}/test').json()['success']
+    assert client.get(f'/api/v1/ai/credentials/{row_id}').json()['verification_status'] == 'VERIFIED'
+    assert secret not in caplog.text
+    with SessionLocal() as db:
+        assert all(secret not in (a.detail or '') for a in db.query(AiCredentialAuditLog).all())
+
+
+def test_rejected_saved_key_requires_successful_retest_before_enable(client, monkeypatch):
+    outcome = ConnectionTestResult(success=False, error_kind='auth', http_status=401, error_message='private secret')
+    class Provider:
+        name = 'openai'
+        async def test_connection(self, **kwargs):
+            return outcome
+    monkeypatch.setattr('app.routers.ai_credentials._build_transient_provider', lambda body: Provider())
+    saved = client.post('/api/v1/ai/credentials', json={'provider_name': 'openai', 'api_key': 'private secret', 'default_model': 'gpt-4o-mini'}).json()
+    path = f"/api/v1/ai/credentials/{saved['id']}"
+    client.post(path + '/test')
+    rejected = client.get(path).json()
+    assert rejected['verification_status'] == 'INVALID_CREDENTIALS'
+    assert rejected['enabled'] is False
+    assert client.put(path, json={'enabled': True}).status_code == 409
+    assert client.put(path, json={'api_key': 'corrected-key'}).status_code == 200
+    assert client.put(path, json={'enabled': True}).status_code == 409
+    outcome = ConnectionTestResult(success=True, provider='openai')
+    assert client.post(path + '/test').json()['success']
+    assert client.put(path, json={'enabled': True}).status_code == 200

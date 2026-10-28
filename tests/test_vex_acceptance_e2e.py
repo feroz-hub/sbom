@@ -1,3 +1,5 @@
+from tests.tenant_fixture_scope import verified_fixture_tenant
+
 """PR-7 — end-to-end acceptance suite for the VEX workstream.
 
 Spec sections 47-48. These drive the *public* entry points (import a VEX
@@ -17,8 +19,6 @@ import json
 from pathlib import Path
 
 import pytest
-from sqlalchemy import select, text
-
 from app.db import SessionLocal
 from app.models import (
     AnalysisFinding,
@@ -36,6 +36,7 @@ from app.services.lifecycle.vex_provider import (
     vex_report_csv,
 )
 from app.services.vex.reconciliation import recompute_for_sbom
+from sqlalchemy import select
 
 FIXTURES = Path(__file__).parent / "fixtures" / "vex"
 NOW = "2026-09-24T00:00:00Z"
@@ -49,8 +50,10 @@ def load(name: str) -> dict:
 def db():
     session = SessionLocal()
     try:
-        yield session
+        with verified_fixture_tenant(session, 1):
+            yield session
     finally:
+        session.rollback()
         session.close()
 
 
@@ -407,8 +410,8 @@ def test_inactive_sbom_is_excluded_from_current_counts__VEX_DASH_005(db, project
     db.commit()
 
 
-def test_superseded_sbom_version_is_excluded__VEX_DASH_005(db, project):
-    """A superseded (non-HEAD) SBOM version drops out of current counts."""
+def test_pending_successor_preserves_last_known_posture__VEX_DASH_005(db, project):
+    """An unanalysed upload cannot erase its predecessor's known posture."""
     add_finding(db, project, "openssl", "CVE-2026-9401")
     db.commit()
     reconcile(db, project)
@@ -426,10 +429,10 @@ def test_superseded_sbom_version_is_excluded__VEX_DASH_005(db, project):
     eligible = [row[0] for row in db.execute(select(SBOMSource.id).where(
         SBOMSource.id.in_(scope.eligible_sbom_ids())
     )).all()]
-    assert project["sbom"].id not in eligible, "the parent is no longer HEAD"
+    assert project["sbom"].id in eligible, "the pending child has no replacement analysis"
 
     payload = vex_dashboard_summary(db, tenant_id=1, sbom_ids=scope.eligible_sbom_ids())
-    assert payload["total_contexts"] == 0
+    assert payload["total_contexts"] == 1
 
     db.query(SBOMSource).filter_by(id=successor.id).delete()
     db.commit()
@@ -443,7 +446,7 @@ def test_tile_counts_equal_table_counts__VEX_DASH_004(client, db, project):
 
     payload = summary(db, project)
     response = client.get(
-        "/api/vex/investigations", params={"sbom_id": project["sbom"].id}
+        "/api/vex/investigations", params={"sbom_id": str(project["sbom"].public_id)}
     )
     assert response.status_code == 200, response.text
     assert payload["total_contexts"] == response.json()["total"]
@@ -470,7 +473,7 @@ def test_report_and_csv_carry_native_and_effective_status__DoD_19(db, project):
 def test_vex_pack_zip_still_builds__DoD_19(client, db, project):
     import_vex_document(db, project["sbom"].id, project["document"], source_type="embedded")
     db.commit()
-    response = client.get(f"/api/sboms/{project['sbom'].id}/reports/vex-pack")
+    response = client.get(f"/api/sboms/{project['sbom'].public_id}/reports/vex-pack")
     assert response.status_code == 200, response.text
     assert response.headers["content-type"] == "application/zip"
 

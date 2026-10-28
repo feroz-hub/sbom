@@ -1,0 +1,42 @@
+[
+  {
+    "file": "report-pdf.pdf",
+    "pages": 3,
+    "textCharacters": 2573,
+    "containsExpectedTitle": true,
+    "noEmptyPages": true
+  },
+  {
+    "file": "scheduled-artifact-13.pdf",
+    "pages": 2,
+    "textCharacters": 3110,
+    "containsExpectedTitle": true,
+    "noEmptyPages": true
+  },
+  {
+    "file": "scheduled-artifact-16.pdf",
+    "pages": 2,
+    "textCharacters": 3110,
+    "containsExpectedTitle": true,
+    "noEmptyPages": true
+  },
+  {
+    "file": "report-fda.xlsx",
+    "sheetNames": [
+      "Instructions",
+      "SBOM Metadata",
+      "SBOM Components",
+      "Environment & 3rd-Party Deps",
+      "Vulnerabilities & VEX",
+      "Lifecycle & Support Plan",
+      "Supplier & Security Contacts",
+      "FDA Compliance Dashboard"
+    ],
+    "syntheticDevicePresent": true
+  },
+  {
+    "sarifResults": 5,
+    "csvRows": 5,
+    "matchingFindingCounts": true
+  }
+]

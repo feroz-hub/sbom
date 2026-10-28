@@ -44,7 +44,7 @@ export function useUploadSbom() {
   return useMutation<SBOMSource, Error, CreateSBOMPayload>({
     mutationFn: (payload) => uploadSbom(payload),
     onSuccess: (sbom) => {
-      invalidateUploadSurfaces(qc, sbom.project_id ?? sbom.projectid);
+      return invalidateUploadSurfaces(qc, sbom.project_id ?? sbom.projectid, sbom.product_id);
     },
   });
 }
@@ -57,7 +57,7 @@ export function useUploadSbom() {
  * SBOM just didn't pass. We still invalidate so the report card
  * re-renders in its failed form.
  */
-export function useRevalidateSbom(sbomId: number) {
+export function useRevalidateSbom(sbomId: (string | number)) {
   const qc = useQueryClient();
   return useMutation<void, Error, void>({
     mutationFn: async () => {

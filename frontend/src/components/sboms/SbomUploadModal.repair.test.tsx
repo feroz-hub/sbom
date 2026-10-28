@@ -6,11 +6,14 @@ import type { ReactNode } from 'react';
 import { beforeEach, describe, expect, it, vi } from 'vitest';
 import { HttpError } from '@/lib/api';
 
+const access = vi.hoisted(() => ({ allowed: true }));
 const push = vi.fn();
 const useUploadSbomMutate = vi.fn();
 const showToast = vi.fn();
 const getSbomTypes = vi.fn();
 const getProducts = vi.fn();
+const getLogicalSbomChoices = vi.fn();
+const getLogicalSbomVersions = vi.fn();
 
 vi.mock('next/navigation', () => ({
   useRouter: () => ({ push, replace: vi.fn(), back: vi.fn() }),
@@ -32,9 +35,11 @@ vi.mock('@/lib/api', async () => {
   const actual = await vi.importActual<typeof import('@/lib/api')>('@/lib/api');
   return {
     ...actual,
+    getLogicalSbomChoices: (...args: unknown[]) => getLogicalSbomChoices(...args),
+    getLogicalSbomVersions: (...args: unknown[]) => getLogicalSbomVersions(...args),
     getProjects: vi.fn().mockResolvedValue([
       {
-        id: 42,
+        id: "00000000-0000-4000-8000-00000000002a",
         project_name: 'Payments',
         project_details: null,
         project_status: 1,
@@ -59,17 +64,20 @@ function wrap(children: ReactNode) {
 }
 
 beforeEach(() => {
+  access.allowed = true;
   push.mockReset();
   useUploadSbomMutate.mockReset();
   showToast.mockReset();
   getSbomTypes.mockReset();
   getProducts.mockReset();
+  getLogicalSbomChoices.mockReset().mockResolvedValue([]);
+  getLogicalSbomVersions.mockReset().mockResolvedValue([]);
   getSbomTypes.mockResolvedValue([]);
   getProducts.mockResolvedValue([
     {
-      id: 77,
-      tenant_id: 1,
-      project_id: 42,
+      id: "00000000-0000-4000-8000-00000000004d",
+      tenant_id: "00000000-0000-4000-8000-000000000001",
+      project_id: "00000000-0000-4000-8000-00000000002a",
       name: 'Payments API',
       slug: 'payments-api',
       description: null,
@@ -82,12 +90,13 @@ beforeEach(() => {
 async function fillRequiredFieldsAndSubmit(name: string, content = '{"bomFormat":"CycloneDX","specVersion":"1.5","components":[]}') {
   expect(await screen.findByRole('option', { name: 'Payments' })).toBeInTheDocument();
   fireEvent.change(screen.getByLabelText(/SBOM Name/i), { target: { value: name } });
-  fireEvent.change(screen.getByLabelText(/Project/i), { target: { value: '42' } });
+  fireEvent.change(screen.getByLabelText(/Project/i), { target: { value: "00000000-0000-4000-8000-00000000002a" } });
   const productOption = await screen.findByRole('option', { name: 'Payments API' });
-  fireEvent.change(productOption.closest('select')!, { target: { value: '77' } });
+  fireEvent.change(productOption.closest('select')!, { target: { value: "00000000-0000-4000-8000-00000000004d" } });
   fireEvent.change(screen.getByPlaceholderText('Paste a small SPDX, CycloneDX, or XML SBOM preview'), {
     target: { value: content },
   });
+  await waitFor(() => expect(screen.getByRole('button', { name: /Upload SBOM/i })).toBeEnabled());
   fireEvent.click(screen.getByRole('button', { name: /Upload SBOM/i }));
 }
 
@@ -111,10 +120,10 @@ describe('SbomUploadModal validation repair handoff', () => {
     await screen.findByRole('option', { name: 'Payments API' });
     const projectSelect = screen.getByRole('combobox', { name: /Project/i });
     const productSelect = screen.getByRole('combobox', { name: /^Application/i });
-    await waitFor(() => expect(projectSelect).toHaveValue('42'));
-    await waitFor(() => expect(productSelect).toHaveValue('77'));
+    await waitFor(() => expect(projectSelect).toHaveValue("00000000-0000-4000-8000-00000000002a"));
+    await waitFor(() => expect(productSelect).toHaveValue("00000000-0000-4000-8000-00000000004d"));
 
-    fireEvent.change(productSelect, { target: { value: '77' } });
+    fireEvent.change(productSelect, { target: { value: "00000000-0000-4000-8000-00000000004d" } });
     expect(screen.queryByText('Application is required')).not.toBeInTheDocument();
   });
 
@@ -164,13 +173,14 @@ describe('SbomUploadModal validation repair handoff', () => {
 
     expect(await screen.findByRole('option', { name: 'Payments' })).toBeInTheDocument();
     fireEvent.change(screen.getByLabelText(/SBOM Name/i), { target: { value: 'unknown-sbom' } });
-    fireEvent.change(screen.getByLabelText(/Project/i), { target: { value: '42' } });
+    fireEvent.change(screen.getByLabelText(/Project/i), { target: { value: "00000000-0000-4000-8000-00000000002a" } });
     const productOption = await screen.findByRole('option', { name: 'Payments API' });
-    fireEvent.change(productOption.closest('select')!, { target: { value: '77' } });
+    fireEvent.change(productOption.closest('select')!, { target: { value: "00000000-0000-4000-8000-00000000004d" } });
     fireEvent.change(screen.getByPlaceholderText('Paste a small SPDX, CycloneDX, or XML SBOM preview'), {
       target: { value: '{"ok":false}' },
     });
-    fireEvent.click(screen.getByRole('button', { name: /Upload SBOM/i }));
+    await waitFor(() => expect(screen.getByRole('button', { name: /Upload SBOM/i })).toBeEnabled());
+  fireEvent.click(screen.getByRole('button', { name: /Upload SBOM/i }));
 
     await waitFor(() => expect(useUploadSbomMutate).toHaveBeenCalled());
     expect(useUploadSbomMutate.mock.calls[0][0].sbom_type).toBeUndefined();
@@ -183,15 +193,16 @@ describe('SbomUploadModal validation repair handoff', () => {
 
     expect(await screen.findByRole('option', { name: 'Payments' })).toBeInTheDocument();
     fireEvent.change(screen.getByLabelText(/SBOM Name/i), { target: { value: 'manual-metadata' } });
-    fireEvent.change(screen.getByLabelText(/Project/i), { target: { value: '42' } });
+    fireEvent.change(screen.getByLabelText(/Project/i), { target: { value: "00000000-0000-4000-8000-00000000002a" } });
     const productOption = await screen.findByRole('option', { name: 'Payments API' });
-    fireEvent.change(productOption.closest('select')!, { target: { value: '77' } });
+    fireEvent.change(productOption.closest('select')!, { target: { value: "00000000-0000-4000-8000-00000000004d" } });
     fireEvent.change(screen.getByLabelText(/SBOM Version/i), { target: { value: '1.1.1' } });
     fireEvent.change(screen.getByLabelText(/Product Version/i), { target: { value: '1.0.0' } });
     fireEvent.change(screen.getByPlaceholderText('Paste a small SPDX, CycloneDX, or XML SBOM preview'), {
       target: { value: '{"bomFormat":"CycloneDX","specVersion":"1.5","components":[]}' },
     });
-    fireEvent.click(screen.getByRole('button', { name: /Upload SBOM/i }));
+    await waitFor(() => expect(screen.getByRole('button', { name: /Upload SBOM/i })).toBeEnabled());
+  fireEvent.click(screen.getByRole('button', { name: /Upload SBOM/i }));
 
     await waitFor(() => expect(useUploadSbomMutate).toHaveBeenCalled());
     expect(useUploadSbomMutate.mock.calls[0][0]).toEqual(
@@ -213,10 +224,10 @@ describe('SbomUploadModal validation repair handoff', () => {
     const invalidateSpy = vi.spyOn(QueryClient.prototype, 'invalidateQueries');
     useUploadSbomMutate.mockImplementation((_payload, handlers) => {
       handlers.onSuccess({
-        id: 7,
+        id: "00000000-0000-4000-8000-000000000007",
         sbom_name: 'good-sbom',
-        projectid: 42,
-        project_id: 42,
+        projectid: "00000000-0000-4000-8000-00000000002a",
+        project_id: "00000000-0000-4000-8000-00000000002a",
         project_name: 'Payments',
         component_count: 1,
         status: 'validated',
@@ -240,7 +251,7 @@ describe('SbomUploadModal validation repair handoff', () => {
       );
     });
     expect(onClose).toHaveBeenCalledTimes(1);
-    expect(onSuccess).toHaveBeenCalledWith(expect.objectContaining({ id: 7, enrichment_status: 'pending' }));
+    expect(onSuccess).toHaveBeenCalledWith(expect.objectContaining({ id: "00000000-0000-4000-8000-000000000007", enrichment_status: 'pending' }));
     expect(invalidateSpy).toHaveBeenCalledWith({ queryKey: ['sboms'] });
     expect(invalidateSpy).toHaveBeenCalledWith({ queryKey: ['dashboard-posture'] });
     expect(push).not.toHaveBeenCalled();
@@ -252,10 +263,10 @@ describe('SbomUploadModal validation repair handoff', () => {
     const invalidateSpy = vi.spyOn(QueryClient.prototype, 'invalidateQueries');
     useUploadSbomMutate.mockImplementation((_payload, handlers) => {
       handlers.onSuccess({
-        id: 8,
+        id: "00000000-0000-4000-8000-000000000008",
         sbom_name: 'warning-sbom',
-        projectid: 42,
-        project_id: 42,
+        projectid: "00000000-0000-4000-8000-00000000002a",
+        project_id: "00000000-0000-4000-8000-00000000002a",
         project_name: 'Payments',
         component_count: 1,
         status: 'validated',
@@ -334,7 +345,7 @@ describe('SbomUploadModal validation repair handoff', () => {
     await fillRequiredFieldsAndSubmit('bad-sbom', '{"bad":true}');
 
     await waitFor(() => expect(useUploadSbomMutate).toHaveBeenCalledWith(
-      expect.objectContaining({ projectid: 42, project_id: 42 }),
+      expect.objectContaining({ projectid: "00000000-0000-4000-8000-00000000002a", project_id: "00000000-0000-4000-8000-00000000002a" }),
       expect.any(Object),
     ));
     expect(showToast).toHaveBeenCalledWith(
@@ -432,10 +443,10 @@ describe('SbomUploadModal validation repair handoff', () => {
     const onClose = vi.fn();
     useUploadSbomMutate.mockImplementation((_payload, handlers) => {
       const result = {
-        id: 9,
+        id: "00000000-0000-4000-8000-000000000009",
         sbom_name: 'single-result-sbom',
-        projectid: 42,
-        project_id: 42,
+        projectid: "00000000-0000-4000-8000-00000000002a",
+        project_id: "00000000-0000-4000-8000-00000000002a",
         project_name: 'Payments',
         component_count: 1,
         status: 'validated',
@@ -494,11 +505,12 @@ describe('SbomUploadModal validation repair handoff', () => {
 
     expect(await screen.findByRole('option', { name: 'Payments' })).toBeInTheDocument();
     fireEvent.change(screen.getByLabelText(/SBOM Name/i), { target: { value: 'blocked-sbom' } });
-    fireEvent.change(screen.getByLabelText(/Project/i), { target: { value: '42' } });
+    fireEvent.change(screen.getByLabelText(/Project/i), { target: { value: "00000000-0000-4000-8000-00000000002a" } });
     const productOption = await screen.findByRole('option', { name: 'Payments API' });
-    fireEvent.change(productOption.closest('select')!, { target: { value: '77' } });
+    fireEvent.change(productOption.closest('select')!, { target: { value: "00000000-0000-4000-8000-00000000004d" } });
     fireEvent.change(screen.getByPlaceholderText('Paste a small SPDX, CycloneDX, or XML SBOM preview'), { target: { value: '{"bad":true}' } });
-    fireEvent.click(screen.getByRole('button', { name: /Upload SBOM/i }));
+    await waitFor(() => expect(screen.getByRole('button', { name: /Upload SBOM/i })).toBeEnabled());
+  fireEvent.click(screen.getByRole('button', { name: /Upload SBOM/i }));
 
     expect(await screen.findByText('Payload blocked by security validation')).toBeInTheDocument();
     expect(screen.queryByRole('link', { name: /Open repair workspace/i })).not.toBeInTheDocument();
@@ -513,4 +525,106 @@ describe('SbomUploadModal validation repair handoff', () => {
     expect(await screen.findByRole('button', { name: /Upload SBOM/i })).toBeDisabled();
     expect(useUploadSbomMutate).not.toHaveBeenCalled();
   });
+});
+
+
+describe('Logical SBOM upload selection', () => {
+  it('adds a revision to an existing master without a new name', async () => {
+    getLogicalSbomChoices.mockResolvedValue([{ id: "00000000-0000-4000-8000-000000000009", name: 'Backend SBOM', version_count: 1 }]);
+    getLogicalSbomVersions.mockResolvedValue([{ id: 1, sbom_version: '1.0' }]);
+    render(wrap(<SbomUploadModal open onClose={vi.fn()} initialProjectId={42} initialProductId={77} />));
+    await screen.findByRole('option', { name: 'Backend SBOM (1 versions)' });
+    fireEvent.change(screen.getByRole('combobox', { name: /^SBOM$/ }), { target: { value: "00000000-0000-4000-8000-000000000009" } });
+    expect(screen.queryByLabelText(/SBOM Name/)).not.toBeInTheDocument();
+    fireEvent.change(screen.getByLabelText('SBOM Version'), { target: { value: '1.1' } });
+    fireEvent.change(screen.getByLabelText('Product Version'), { target: { value: '3.2.0' } });
+    fireEvent.change(screen.getByPlaceholderText('Paste a small SPDX, CycloneDX, or XML SBOM preview'), { target: { value: '{"bomFormat":"CycloneDX","specVersion":"1.5","components":[]}' } });
+    await waitFor(() => expect(screen.getByRole('button', { name: /Upload SBOM/i })).toBeEnabled());
+    fireEvent.click(screen.getByRole('button', { name: /Upload SBOM/i }));
+    await waitFor(() => expect(useUploadSbomMutate).toHaveBeenCalledWith(expect.objectContaining({ logical_sbom_id: "00000000-0000-4000-8000-000000000009", create_new_logical_sbom: false, sbom_name: 'Backend SBOM', sbom_version: '1.1', product_version: '3.2.0' }), expect.anything()));
+  });
+  it('blocks duplicate revisions only within the selected logical SBOM', async () => {
+    getLogicalSbomChoices.mockResolvedValue([{ id: "00000000-0000-4000-8000-000000000009", name: 'Backend SBOM', version_count: 1 }, { id: "00000000-0000-4000-8000-00000000000a", name: 'Frontend SBOM', version_count: 0 }]);
+    getLogicalSbomVersions.mockImplementation((id: (string | number)) => Promise.resolve(id === "00000000-0000-4000-8000-000000000009" ? [{ id: 1, sbom_version: '1.0' }] : []));
+    render(wrap(<SbomUploadModal open onClose={vi.fn()} initialProjectId={42} initialProductId={77} />));
+    await screen.findByRole('option', { name: 'Backend SBOM (1 versions)' });
+    fireEvent.change(screen.getByRole('combobox', { name: /^SBOM$/ }), { target: { value: "00000000-0000-4000-8000-000000000009" } });
+    fireEvent.change(screen.getByLabelText('SBOM Version'), { target: { value: '1.0' } });
+    expect(await screen.findByRole('alert')).toHaveTextContent('already exists');
+    expect(screen.getByRole('button', { name: /Upload SBOM/i })).toBeDisabled();
+    fireEvent.change(screen.getByRole('combobox', { name: /^SBOM$/ }), { target: { value: "00000000-0000-4000-8000-00000000000a" } });
+    await waitFor(() => expect(screen.queryByText('This SBOM version already exists. Choose a different revision.')).not.toBeInTheDocument());
+  });
+});
+
+vi.mock('@/hooks/useAuth', async () => {
+  const { authorizedAuth } = await import('@/test/authorizedAuth');
+  return { useAuth: () => ({ ...authorizedAuth(), hasPermission: (permission: string) => access.allowed && authorizedAuth().hasPermission(permission) }) };
+});
+
+describe('SBOM drag and drop', () => {
+  function sbomFile(name = 'dropped-sbom.json') {
+    const contents = '{"bomFormat":"CycloneDX","specVersion":"1.6","components":[]}';
+    const file = new File([contents], name, { type: 'application/json' });
+    const read = vi.fn().mockResolvedValue(contents);
+    vi.spyOn(file, 'slice').mockReturnValue({ text: read } as unknown as Blob);
+    return { file, read, contents };
+  }
+
+  it('previews a dropped file and submits the original file through the existing upload flow', async () => {
+    const { file, contents } = sbomFile();
+    render(wrap(<SbomUploadModal open onClose={vi.fn()} initialProjectId={42} initialProductId={77} />));
+    await screen.findByRole('option', { name: 'Payments API' });
+    fireEvent.drop(screen.getByRole('region', { name: 'SBOM file drop zone' }), { dataTransfer: { files: [file] } });
+    await waitFor(() => expect(screen.getByLabelText(/SBOM Name/i)).toHaveValue('dropped-sbom'));
+    expect(screen.getByPlaceholderText('Paste a small SPDX, CycloneDX, or XML SBOM preview')).toHaveValue(contents);
+    expect(screen.getByRole('status')).toHaveTextContent('Selected: dropped-sbom.json');
+    await waitFor(() => expect(screen.getByRole('button', { name: /^Upload SBOM$/i })).toBeEnabled());
+    fireEvent.click(screen.getByRole('button', { name: /^Upload SBOM$/i }));
+    await waitFor(() => expect(useUploadSbomMutate).toHaveBeenCalled());
+    expect(useUploadSbomMutate.mock.calls[0][0]).toMatchObject({ sbom_file: file, sbom_data: '' });
+  });
+
+  it('highlights the drop zone and clears it when the file leaves', () => {
+    render(wrap(<SbomUploadModal open onClose={vi.fn()} />));
+    const zone = screen.getByRole('region', { name: 'SBOM file drop zone' });
+    fireEvent.dragEnter(zone, { dataTransfer: { types: ['Files'] } });
+    expect(zone).toHaveClass('border-hcl-blue');
+    fireEvent.dragLeave(zone);
+    expect(zone).not.toHaveClass('border-hcl-blue');
+  });
+
+  it('explains multiple files and unsupported dropped file extensions without starting an upload', () => {
+    render(wrap(<SbomUploadModal open onClose={vi.fn()} />));
+    const zone = screen.getByRole('region', { name: 'SBOM file drop zone' });
+    fireEvent.drop(zone, { dataTransfer: { files: [sbomFile().file, sbomFile().file] } });
+    expect(screen.getByText('Drop one SBOM file at a time.')).toBeInTheDocument();
+    fireEvent.drop(zone, { dataTransfer: { files: [sbomFile('notes.txt').file] } });
+    expect(screen.getByText('Choose an SBOM file in JSON, XML, or SPDX format.')).toBeInTheDocument();
+    expect(useUploadSbomMutate).not.toHaveBeenCalled();
+  });
+
+  it('does not accept drops when upload permissions are missing', async () => {
+    access.allowed = false;
+    const { file, read } = sbomFile();
+    render(wrap(<SbomUploadModal open onClose={vi.fn()} />));
+    const zone = screen.getByRole('region', { name: 'SBOM file drop zone' });
+    fireEvent.drop(zone, { dataTransfer: { files: [file] } });
+    expect(read).not.toHaveBeenCalled();
+    expect(screen.getByLabelText(/SBOM Name/i)).toHaveValue('');
+    expect(screen.getByRole('button', { name: 'Upload from file' })).toBeDisabled();
+    expect(useUploadSbomMutate).not.toHaveBeenCalled();
+  });
+});
+
+it('preserves an existing designation by default and requires explicit upload opt-in', async () => {
+  render(wrap(<SbomUploadModal open onClose={vi.fn()} initialProjectId={42} initialProductId={77} />));
+  await screen.findByRole('option', {name:'Payments API'});
+  const checkbox = screen.getByRole('checkbox', {name:/Set as current SBOM/i});
+  expect(checkbox).not.toBeChecked();
+  await fillRequiredFieldsAndSubmit('Preserve designated version');
+  await waitFor(() => expect(useUploadSbomMutate).toHaveBeenCalled());
+  expect(useUploadSbomMutate.mock.calls.at(-1)?.[0].set_as_current).toBe(false);
+  fireEvent.click(checkbox);
+  expect(checkbox).toBeChecked();
 });

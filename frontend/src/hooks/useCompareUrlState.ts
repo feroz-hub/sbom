@@ -1,5 +1,6 @@
 'use client';
 
+import { publicId } from '@/lib/publicId';
 import { useCallback, useMemo } from 'react';
 import { usePathname, useRouter, useSearchParams } from 'next/navigation';
 import type {
@@ -45,10 +46,8 @@ const VALID_SEVERITIES: ReadonlySet<string> = new Set([
   'unknown',
 ]);
 
-function parseRunId(value: string | null): number | null {
-  if (!value) return null;
-  const n = Number(value);
-  return Number.isFinite(n) && n > 0 ? n : null;
+function parseRunId(value: string | null): string | null {
+  return publicId(value);
 }
 
 function parseTab(raw: string | null): CompareTab {
@@ -74,7 +73,7 @@ function parseBool(raw: string | null): boolean {
 }
 
 export function useCompareUrlState(): CompareUrlState & {
-  setRuns: (runA: number | null, runB: number | null) => void;
+  setRuns: (runA: string | null, runB: string | null) => void;
   swap: () => void;
   setTab: (tab: CompareTab) => void;
   setChangeKinds: (kinds: Set<FindingChangeKind>) => void;
@@ -125,7 +124,7 @@ export function useCompareUrlState(): CompareUrlState & {
   );
 
   const setRuns = useCallback(
-    (a: number | null, b: number | null) =>
+    (a: string | null, b: string | null) =>
       writeParams((p) => {
         if (a) p.set('run_a', String(a));
         else p.delete('run_a');

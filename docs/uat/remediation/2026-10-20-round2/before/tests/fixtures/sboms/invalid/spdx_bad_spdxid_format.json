@@ -1,0 +1,1158 @@
+{
+  "spdxVersion": "SPDX-2.3",
+  "dataLicense": "CC0-1.0",
+  "SPDXID": "SPDXRef-DOCUMENT",
+  "name": "realistic-spdx-2.3",
+  "documentNamespace": "https://example.com/sboms/realistic-spdx",
+  "creationInfo": {
+    "created": "2026-04-30T12:00:00Z",
+    "creators": [
+      "Tool: sbom-analyzer-tests-1.0",
+      "Organization: FBT"
+    ]
+  },
+  "packages": [
+    {
+      "SPDXID": "SPDXRef-Package-app",
+      "name": "app",
+      "versionInfo": "1.0.0",
+      "supplier": "Organization: ACME",
+      "downloadLocation": "NOASSERTION",
+      "filesAnalyzed": false,
+      "licenseConcluded": "Apache-2.0",
+      "licenseDeclared": "Apache-2.0",
+      "copyrightText": "NOASSERTION"
+    },
+    {
+      "SPDXID": "BAD-Package-pkg-0000",
+      "name": "pkg-0",
+      "versionInfo": "1.0.0",
+      "supplier": "Organization: vendor-0",
+      "downloadLocation": "NOASSERTION",
+      "filesAnalyzed": false,
+      "licenseConcluded": "Apache-2.0",
+      "licenseDeclared": "Apache-2.0",
+      "copyrightText": "NOASSERTION",
+      "externalRefs": [
+        {
+          "referenceCategory": "PACKAGE-MANAGER",
+          "referenceType": "purl",
+          "referenceLocator": "pkg:npm/pkg-0@1.0.0"
+        }
+      ],
+      "checksums": [
+        {
+          "algorithm": "SHA256",
+          "checksumValue": "aaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaa"
+        }
+      ]
+    }
+  ],
+  "relationships": [
+    {
+      "spdxElementId": "SPDXRef-DOCUMENT",
+      "relationshipType": "DESCRIBES",
+      "relatedSpdxElement": "SPDXRef-Package-app"
+    },
+    {
+      "spdxElementId": "SPDXRef-Package-app",
+      "relationshipType": "DEPENDS_ON",
+      "relatedSpdxElement": "SPDXRef-Package-pkg-0000"
+    },
+    {
+      "spdxElementId": "SPDXRef-Package-app",
+      "relationshipType": "DEPENDS_ON",
+      "relatedSpdxElement": "SPDXRef-Package-pkg-0001"
+    },
+    {
+      "spdxElementId": "SPDXRef-Package-app",
+      "relationshipType": "DEPENDS_ON",
+      "relatedSpdxElement": "SPDXRef-Package-pkg-0002"
+    },
+    {
+      "spdxElementId": "SPDXRef-Package-app",
+      "relationshipType": "DEPENDS_ON",
+      "relatedSpdxElement": "SPDXRef-Package-pkg-0003"
+    },
+    {
+      "spdxElementId": "SPDXRef-Package-app",
+      "relationshipType": "DEPENDS_ON",
+      "relatedSpdxElement": "SPDXRef-Package-pkg-0004"
+    },
+    {
+      "spdxElementId": "SPDXRef-Package-app",
+      "relationshipType": "DEPENDS_ON",
+      "relatedSpdxElement": "SPDXRef-Package-pkg-0005"
+    },
+    {
+      "spdxElementId": "SPDXRef-Package-app",
+      "relationshipType": "DEPENDS_ON",
+      "relatedSpdxElement": "SPDXRef-Package-pkg-0006"
+    },
+    {
+      "spdxElementId": "SPDXRef-Package-app",
+      "relationshipType": "DEPENDS_ON",
+      "relatedSpdxElement": "SPDXRef-Package-pkg-0007"
+    },
+    {
+      "spdxElementId": "SPDXRef-Package-app",
+      "relationshipType": "DEPENDS_ON",
+      "relatedSpdxElement": "SPDXRef-Package-pkg-0008"
+    },
+    {
+      "spdxElementId": "SPDXRef-Package-app",
+      "relationshipType": "DEPENDS_ON",
+      "relatedSpdxElement": "SPDXRef-Package-pkg-0009"
+    },
+    {
+      "spdxElementId": "SPDXRef-Package-app",
+      "relationshipType": "DEPENDS_ON",
+      "relatedSpdxElement": "SPDXRef-Package-pkg-0010"
+    },
+    {
+      "spdxElementId": "SPDXRef-Package-app",
+      "relationshipType": "DEPENDS_ON",
+      "relatedSpdxElement": "SPDXRef-Package-pkg-0011"
+    },
+    {
+      "spdxElementId": "SPDXRef-Package-app",
+      "relationshipType": "DEPENDS_ON",
+      "relatedSpdxElement": "SPDXRef-Package-pkg-0012"
+    },
+    {
+      "spdxElementId": "SPDXRef-Package-app",
+      "relationshipType": "DEPENDS_ON",
+      "relatedSpdxElement": "SPDXRef-Package-pkg-0013"
+    },
+    {
+      "spdxElementId": "SPDXRef-Package-app",
+      "relationshipType": "DEPENDS_ON",
+      "relatedSpdxElement": "SPDXRef-Package-pkg-0014"
+    },
+    {
+      "spdxElementId": "SPDXRef-Package-app",
+      "relationshipType": "DEPENDS_ON",
+      "relatedSpdxElement": "SPDXRef-Package-pkg-0015"
+    },
+    {
+      "spdxElementId": "SPDXRef-Package-app",
+      "relationshipType": "DEPENDS_ON",
+      "relatedSpdxElement": "SPDXRef-Package-pkg-0016"
+    },
+    {
+      "spdxElementId": "SPDXRef-Package-app",
+      "relationshipType": "DEPENDS_ON",
+      "relatedSpdxElement": "SPDXRef-Package-pkg-0017"
+    },
+    {
+      "spdxElementId": "SPDXRef-Package-app",
+      "relationshipType": "DEPENDS_ON",
+      "relatedSpdxElement": "SPDXRef-Package-pkg-0018"
+    },
+    {
+      "spdxElementId": "SPDXRef-Package-app",
+      "relationshipType": "DEPENDS_ON",
+      "relatedSpdxElement": "SPDXRef-Package-pkg-0019"
+    },
+    {
+      "spdxElementId": "SPDXRef-Package-app",
+      "relationshipType": "DEPENDS_ON",
+      "relatedSpdxElement": "SPDXRef-Package-pkg-0020"
+    },
+    {
+      "spdxElementId": "SPDXRef-Package-app",
+      "relationshipType": "DEPENDS_ON",
+      "relatedSpdxElement": "SPDXRef-Package-pkg-0021"
+    },
+    {
+      "spdxElementId": "SPDXRef-Package-app",
+      "relationshipType": "DEPENDS_ON",
+      "relatedSpdxElement": "SPDXRef-Package-pkg-0022"
+    },
+    {
+      "spdxElementId": "SPDXRef-Package-app",
+      "relationshipType": "DEPENDS_ON",
+      "relatedSpdxElement": "SPDXRef-Package-pkg-0023"
+    },
+    {
+      "spdxElementId": "SPDXRef-Package-app",
+      "relationshipType": "DEPENDS_ON",
+      "relatedSpdxElement": "SPDXRef-Package-pkg-0024"
+    },
+    {
+      "spdxElementId": "SPDXRef-Package-app",
+      "relationshipType": "DEPENDS_ON",
+      "relatedSpdxElement": "SPDXRef-Package-pkg-0025"
+    },
+    {
+      "spdxElementId": "SPDXRef-Package-app",
+      "relationshipType": "DEPENDS_ON",
+      "relatedSpdxElement": "SPDXRef-Package-pkg-0026"
+    },
+    {
+      "spdxElementId": "SPDXRef-Package-app",
+      "relationshipType": "DEPENDS_ON",
+      "relatedSpdxElement": "SPDXRef-Package-pkg-0027"
+    },
+    {
+      "spdxElementId": "SPDXRef-Package-app",
+      "relationshipType": "DEPENDS_ON",
+      "relatedSpdxElement": "SPDXRef-Package-pkg-0028"
+    },
+    {
+      "spdxElementId": "SPDXRef-Package-app",
+      "relationshipType": "DEPENDS_ON",
+      "relatedSpdxElement": "SPDXRef-Package-pkg-0029"
+    },
+    {
+      "spdxElementId": "SPDXRef-Package-app",
+      "relationshipType": "DEPENDS_ON",
+      "relatedSpdxElement": "SPDXRef-Package-pkg-0030"
+    },
+    {
+      "spdxElementId": "SPDXRef-Package-app",
+      "relationshipType": "DEPENDS_ON",
+      "relatedSpdxElement": "SPDXRef-Package-pkg-0031"
+    },
+    {
+      "spdxElementId": "SPDXRef-Package-app",
+      "relationshipType": "DEPENDS_ON",
+      "relatedSpdxElement": "SPDXRef-Package-pkg-0032"
+    },
+    {
+      "spdxElementId": "SPDXRef-Package-app",
+      "relationshipType": "DEPENDS_ON",
+      "relatedSpdxElement": "SPDXRef-Package-pkg-0033"
+    },
+    {
+      "spdxElementId": "SPDXRef-Package-app",
+      "relationshipType": "DEPENDS_ON",
+      "relatedSpdxElement": "SPDXRef-Package-pkg-0034"
+    },
+    {
+      "spdxElementId": "SPDXRef-Package-app",
+      "relationshipType": "DEPENDS_ON",
+      "relatedSpdxElement": "SPDXRef-Package-pkg-0035"
+    },
+    {
+      "spdxElementId": "SPDXRef-Package-app",
+      "relationshipType": "DEPENDS_ON",
+      "relatedSpdxElement": "SPDXRef-Package-pkg-0036"
+    },
+    {
+      "spdxElementId": "SPDXRef-Package-app",
+      "relationshipType": "DEPENDS_ON",
+      "relatedSpdxElement": "SPDXRef-Package-pkg-0037"
+    },
+    {
+      "spdxElementId": "SPDXRef-Package-app",
+      "relationshipType": "DEPENDS_ON",
+      "relatedSpdxElement": "SPDXRef-Package-pkg-0038"
+    },
+    {
+      "spdxElementId": "SPDXRef-Package-app",
+      "relationshipType": "DEPENDS_ON",
+      "relatedSpdxElement": "SPDXRef-Package-pkg-0039"
+    },
+    {
+      "spdxElementId": "SPDXRef-Package-app",
+      "relationshipType": "DEPENDS_ON",
+      "relatedSpdxElement": "SPDXRef-Package-pkg-0040"
+    },
+    {
+      "spdxElementId": "SPDXRef-Package-app",
+      "relationshipType": "DEPENDS_ON",
+      "relatedSpdxElement": "SPDXRef-Package-pkg-0041"
+    },
+    {
+      "spdxElementId": "SPDXRef-Package-app",
+      "relationshipType": "DEPENDS_ON",
+      "relatedSpdxElement": "SPDXRef-Package-pkg-0042"
+    },
+    {
+      "spdxElementId": "SPDXRef-Package-app",
+      "relationshipType": "DEPENDS_ON",
+      "relatedSpdxElement": "SPDXRef-Package-pkg-0043"
+    },
+    {
+      "spdxElementId": "SPDXRef-Package-app",
+      "relationshipType": "DEPENDS_ON",
+      "relatedSpdxElement": "SPDXRef-Package-pkg-0044"
+    },
+    {
+      "spdxElementId": "SPDXRef-Package-app",
+      "relationshipType": "DEPENDS_ON",
+      "relatedSpdxElement": "SPDXRef-Package-pkg-0045"
+    },
+    {
+      "spdxElementId": "SPDXRef-Package-app",
+      "relationshipType": "DEPENDS_ON",
+      "relatedSpdxElement": "SPDXRef-Package-pkg-0046"
+    },
+    {
+      "spdxElementId": "SPDXRef-Package-app",
+      "relationshipType": "DEPENDS_ON",
+      "relatedSpdxElement": "SPDXRef-Package-pkg-0047"
+    },
+    {
+      "spdxElementId": "SPDXRef-Package-app",
+      "relationshipType": "DEPENDS_ON",
+      "relatedSpdxElement": "SPDXRef-Package-pkg-0048"
+    },
+    {
+      "spdxElementId": "SPDXRef-Package-app",
+      "relationshipType": "DEPENDS_ON",
+      "relatedSpdxElement": "SPDXRef-Package-pkg-0049"
+    },
+    {
+      "spdxElementId": "SPDXRef-Package-app",
+      "relationshipType": "DEPENDS_ON",
+      "relatedSpdxElement": "SPDXRef-Package-pkg-0050"
+    },
+    {
+      "spdxElementId": "SPDXRef-Package-app",
+      "relationshipType": "DEPENDS_ON",
+      "relatedSpdxElement": "SPDXRef-Package-pkg-0051"
+    },
+    {
+      "spdxElementId": "SPDXRef-Package-app",
+      "relationshipType": "DEPENDS_ON",
+      "relatedSpdxElement": "SPDXRef-Package-pkg-0052"
+    },
+    {
+      "spdxElementId": "SPDXRef-Package-app",
+      "relationshipType": "DEPENDS_ON",
+      "relatedSpdxElement": "SPDXRef-Package-pkg-0053"
+    },
+    {
+      "spdxElementId": "SPDXRef-Package-app",
+      "relationshipType": "DEPENDS_ON",
+      "relatedSpdxElement": "SPDXRef-Package-pkg-0054"
+    },
+    {
+      "spdxElementId": "SPDXRef-Package-app",
+      "relationshipType": "DEPENDS_ON",
+      "relatedSpdxElement": "SPDXRef-Package-pkg-0055"
+    },
+    {
+      "spdxElementId": "SPDXRef-Package-app",
+      "relationshipType": "DEPENDS_ON",
+      "relatedSpdxElement": "SPDXRef-Package-pkg-0056"
+    },
+    {
+      "spdxElementId": "SPDXRef-Package-app",
+      "relationshipType": "DEPENDS_ON",
+      "relatedSpdxElement": "SPDXRef-Package-pkg-0057"
+    },
+    {
+      "spdxElementId": "SPDXRef-Package-app",
+      "relationshipType": "DEPENDS_ON",
+      "relatedSpdxElement": "SPDXRef-Package-pkg-0058"
+    },
+    {
+      "spdxElementId": "SPDXRef-Package-app",
+      "relationshipType": "DEPENDS_ON",
+      "relatedSpdxElement": "SPDXRef-Package-pkg-0059"
+    },
+    {
+      "spdxElementId": "SPDXRef-Package-app",
+      "relationshipType": "DEPENDS_ON",
+      "relatedSpdxElement": "SPDXRef-Package-pkg-0060"
+    },
+    {
+      "spdxElementId": "SPDXRef-Package-app",
+      "relationshipType": "DEPENDS_ON",
+      "relatedSpdxElement": "SPDXRef-Package-pkg-0061"
+    },
+    {
+      "spdxElementId": "SPDXRef-Package-app",
+      "relationshipType": "DEPENDS_ON",
+      "relatedSpdxElement": "SPDXRef-Package-pkg-0062"
+    },
+    {
+      "spdxElementId": "SPDXRef-Package-app",
+      "relationshipType": "DEPENDS_ON",
+      "relatedSpdxElement": "SPDXRef-Package-pkg-0063"
+    },
+    {
+      "spdxElementId": "SPDXRef-Package-app",
+      "relationshipType": "DEPENDS_ON",
+      "relatedSpdxElement": "SPDXRef-Package-pkg-0064"
+    },
+    {
+      "spdxElementId": "SPDXRef-Package-app",
+      "relationshipType": "DEPENDS_ON",
+      "relatedSpdxElement": "SPDXRef-Package-pkg-0065"
+    },
+    {
+      "spdxElementId": "SPDXRef-Package-app",
+      "relationshipType": "DEPENDS_ON",
+      "relatedSpdxElement": "SPDXRef-Package-pkg-0066"
+    },
+    {
+      "spdxElementId": "SPDXRef-Package-app",
+      "relationshipType": "DEPENDS_ON",
+      "relatedSpdxElement": "SPDXRef-Package-pkg-0067"
+    },
+    {
+      "spdxElementId": "SPDXRef-Package-app",
+      "relationshipType": "DEPENDS_ON",
+      "relatedSpdxElement": "SPDXRef-Package-pkg-0068"
+    },
+    {
+      "spdxElementId": "SPDXRef-Package-app",
+      "relationshipType": "DEPENDS_ON",
+      "relatedSpdxElement": "SPDXRef-Package-pkg-0069"
+    },
+    {
+      "spdxElementId": "SPDXRef-Package-app",
+      "relationshipType": "DEPENDS_ON",
+      "relatedSpdxElement": "SPDXRef-Package-pkg-0070"
+    },
+    {
+      "spdxElementId": "SPDXRef-Package-app",
+      "relationshipType": "DEPENDS_ON",
+      "relatedSpdxElement": "SPDXRef-Package-pkg-0071"
+    },
+    {
+      "spdxElementId": "SPDXRef-Package-app",
+      "relationshipType": "DEPENDS_ON",
+      "relatedSpdxElement": "SPDXRef-Package-pkg-0072"
+    },
+    {
+      "spdxElementId": "SPDXRef-Package-app",
+      "relationshipType": "DEPENDS_ON",
+      "relatedSpdxElement": "SPDXRef-Package-pkg-0073"
+    },
+    {
+      "spdxElementId": "SPDXRef-Package-app",
+      "relationshipType": "DEPENDS_ON",
+      "relatedSpdxElement": "SPDXRef-Package-pkg-0074"
+    },
+    {
+      "spdxElementId": "SPDXRef-Package-app",
+      "relationshipType": "DEPENDS_ON",
+      "relatedSpdxElement": "SPDXRef-Package-pkg-0075"
+    },
+    {
+      "spdxElementId": "SPDXRef-Package-app",
+      "relationshipType": "DEPENDS_ON",
+      "relatedSpdxElement": "SPDXRef-Package-pkg-0076"
+    },
+    {
+      "spdxElementId": "SPDXRef-Package-app",
+      "relationshipType": "DEPENDS_ON",
+      "relatedSpdxElement": "SPDXRef-Package-pkg-0077"
+    },
+    {
+      "spdxElementId": "SPDXRef-Package-app",
+      "relationshipType": "DEPENDS_ON",
+      "relatedSpdxElement": "SPDXRef-Package-pkg-0078"
+    },
+    {
+      "spdxElementId": "SPDXRef-Package-app",
+      "relationshipType": "DEPENDS_ON",
+      "relatedSpdxElement": "SPDXRef-Package-pkg-0079"
+    },
+    {
+      "spdxElementId": "SPDXRef-Package-app",
+      "relationshipType": "DEPENDS_ON",
+      "relatedSpdxElement": "SPDXRef-Package-pkg-0080"
+    },
+    {
+      "spdxElementId": "SPDXRef-Package-app",
+      "relationshipType": "DEPENDS_ON",
+      "relatedSpdxElement": "SPDXRef-Package-pkg-0081"
+    },
+    {
+      "spdxElementId": "SPDXRef-Package-app",
+      "relationshipType": "DEPENDS_ON",
+      "relatedSpdxElement": "SPDXRef-Package-pkg-0082"
+    },
+    {
+      "spdxElementId": "SPDXRef-Package-app",
+      "relationshipType": "DEPENDS_ON",
+      "relatedSpdxElement": "SPDXRef-Package-pkg-0083"
+    },
+    {
+      "spdxElementId": "SPDXRef-Package-app",
+      "relationshipType": "DEPENDS_ON",
+      "relatedSpdxElement": "SPDXRef-Package-pkg-0084"
+    },
+    {
+      "spdxElementId": "SPDXRef-Package-app",
+      "relationshipType": "DEPENDS_ON",
+      "relatedSpdxElement": "SPDXRef-Package-pkg-0085"
+    },
+    {
+      "spdxElementId": "SPDXRef-Package-app",
+      "relationshipType": "DEPENDS_ON",
+      "relatedSpdxElement": "SPDXRef-Package-pkg-0086"
+    },
+    {
+      "spdxElementId": "SPDXRef-Package-app",
+      "relationshipType": "DEPENDS_ON",
+      "relatedSpdxElement": "SPDXRef-Package-pkg-0087"
+    },
+    {
+      "spdxElementId": "SPDXRef-Package-app",
+      "relationshipType": "DEPENDS_ON",
+      "relatedSpdxElement": "SPDXRef-Package-pkg-0088"
+    },
+    {
+      "spdxElementId": "SPDXRef-Package-app",
+      "relationshipType": "DEPENDS_ON",
+      "relatedSpdxElement": "SPDXRef-Package-pkg-0089"
+    },
+    {
+      "spdxElementId": "SPDXRef-Package-app",
+      "relationshipType": "DEPENDS_ON",
+      "relatedSpdxElement": "SPDXRef-Package-pkg-0090"
+    },
+    {
+      "spdxElementId": "SPDXRef-Package-app",
+      "relationshipType": "DEPENDS_ON",
+      "relatedSpdxElement": "SPDXRef-Package-pkg-0091"
+    },
+    {
+      "spdxElementId": "SPDXRef-Package-app",
+      "relationshipType": "DEPENDS_ON",
+      "relatedSpdxElement": "SPDXRef-Package-pkg-0092"
+    },
+    {
+      "spdxElementId": "SPDXRef-Package-app",
+      "relationshipType": "DEPENDS_ON",
+      "relatedSpdxElement": "SPDXRef-Package-pkg-0093"
+    },
+    {
+      "spdxElementId": "SPDXRef-Package-app",
+      "relationshipType": "DEPENDS_ON",
+      "relatedSpdxElement": "SPDXRef-Package-pkg-0094"
+    },
+    {
+      "spdxElementId": "SPDXRef-Package-app",
+      "relationshipType": "DEPENDS_ON",
+      "relatedSpdxElement": "SPDXRef-Package-pkg-0095"
+    },
+    {
+      "spdxElementId": "SPDXRef-Package-app",
+      "relationshipType": "DEPENDS_ON",
+      "relatedSpdxElement": "SPDXRef-Package-pkg-0096"
+    },
+    {
+      "spdxElementId": "SPDXRef-Package-app",
+      "relationshipType": "DEPENDS_ON",
+      "relatedSpdxElement": "SPDXRef-Package-pkg-0097"
+    },
+    {
+      "spdxElementId": "SPDXRef-Package-app",
+      "relationshipType": "DEPENDS_ON",
+      "relatedSpdxElement": "SPDXRef-Package-pkg-0098"
+    },
+    {
+      "spdxElementId": "SPDXRef-Package-app",
+      "relationshipType": "DEPENDS_ON",
+      "relatedSpdxElement": "SPDXRef-Package-pkg-0099"
+    },
+    {
+      "spdxElementId": "SPDXRef-Package-app",
+      "relationshipType": "DEPENDS_ON",
+      "relatedSpdxElement": "SPDXRef-Package-pkg-0100"
+    },
+    {
+      "spdxElementId": "SPDXRef-Package-app",
+      "relationshipType": "DEPENDS_ON",
+      "relatedSpdxElement": "SPDXRef-Package-pkg-0101"
+    },
+    {
+      "spdxElementId": "SPDXRef-Package-app",
+      "relationshipType": "DEPENDS_ON",
+      "relatedSpdxElement": "SPDXRef-Package-pkg-0102"
+    },
+    {
+      "spdxElementId": "SPDXRef-Package-app",
+      "relationshipType": "DEPENDS_ON",
+      "relatedSpdxElement": "SPDXRef-Package-pkg-0103"
+    },
+    {
+      "spdxElementId": "SPDXRef-Package-app",
+      "relationshipType": "DEPENDS_ON",
+      "relatedSpdxElement": "SPDXRef-Package-pkg-0104"
+    },
+    {
+      "spdxElementId": "SPDXRef-Package-app",
+      "relationshipType": "DEPENDS_ON",
+      "relatedSpdxElement": "SPDXRef-Package-pkg-0105"
+    },
+    {
+      "spdxElementId": "SPDXRef-Package-app",
+      "relationshipType": "DEPENDS_ON",
+      "relatedSpdxElement": "SPDXRef-Package-pkg-0106"
+    },
+    {
+      "spdxElementId": "SPDXRef-Package-app",
+      "relationshipType": "DEPENDS_ON",
+      "relatedSpdxElement": "SPDXRef-Package-pkg-0107"
+    },
+    {
+      "spdxElementId": "SPDXRef-Package-app",
+      "relationshipType": "DEPENDS_ON",
+      "relatedSpdxElement": "SPDXRef-Package-pkg-0108"
+    },
+    {
+      "spdxElementId": "SPDXRef-Package-app",
+      "relationshipType": "DEPENDS_ON",
+      "relatedSpdxElement": "SPDXRef-Package-pkg-0109"
+    },
+    {
+      "spdxElementId": "SPDXRef-Package-app",
+      "relationshipType": "DEPENDS_ON",
+      "relatedSpdxElement": "SPDXRef-Package-pkg-0110"
+    },
+    {
+      "spdxElementId": "SPDXRef-Package-app",
+      "relationshipType": "DEPENDS_ON",
+      "relatedSpdxElement": "SPDXRef-Package-pkg-0111"
+    },
+    {
+      "spdxElementId": "SPDXRef-Package-app",
+      "relationshipType": "DEPENDS_ON",
+      "relatedSpdxElement": "SPDXRef-Package-pkg-0112"
+    },
+    {
+      "spdxElementId": "SPDXRef-Package-app",
+      "relationshipType": "DEPENDS_ON",
+      "relatedSpdxElement": "SPDXRef-Package-pkg-0113"
+    },
+    {
+      "spdxElementId": "SPDXRef-Package-app",
+      "relationshipType": "DEPENDS_ON",
+      "relatedSpdxElement": "SPDXRef-Package-pkg-0114"
+    },
+    {
+      "spdxElementId": "SPDXRef-Package-app",
+      "relationshipType": "DEPENDS_ON",
+      "relatedSpdxElement": "SPDXRef-Package-pkg-0115"
+    },
+    {
+      "spdxElementId": "SPDXRef-Package-app",
+      "relationshipType": "DEPENDS_ON",
+      "relatedSpdxElement": "SPDXRef-Package-pkg-0116"
+    },
+    {
+      "spdxElementId": "SPDXRef-Package-app",
+      "relationshipType": "DEPENDS_ON",
+      "relatedSpdxElement": "SPDXRef-Package-pkg-0117"
+    },
+    {
+      "spdxElementId": "SPDXRef-Package-app",
+      "relationshipType": "DEPENDS_ON",
+      "relatedSpdxElement": "SPDXRef-Package-pkg-0118"
+    },
+    {
+      "spdxElementId": "SPDXRef-Package-app",
+      "relationshipType": "DEPENDS_ON",
+      "relatedSpdxElement": "SPDXRef-Package-pkg-0119"
+    },
+    {
+      "spdxElementId": "SPDXRef-Package-app",
+      "relationshipType": "DEPENDS_ON",
+      "relatedSpdxElement": "SPDXRef-Package-pkg-0120"
+    },
+    {
+      "spdxElementId": "SPDXRef-Package-app",
+      "relationshipType": "DEPENDS_ON",
+      "relatedSpdxElement": "SPDXRef-Package-pkg-0121"
+    },
+    {
+      "spdxElementId": "SPDXRef-Package-app",
+      "relationshipType": "DEPENDS_ON",
+      "relatedSpdxElement": "SPDXRef-Package-pkg-0122"
+    },
+    {
+      "spdxElementId": "SPDXRef-Package-app",
+      "relationshipType": "DEPENDS_ON",
+      "relatedSpdxElement": "SPDXRef-Package-pkg-0123"
+    },
+    {
+      "spdxElementId": "SPDXRef-Package-app",
+      "relationshipType": "DEPENDS_ON",
+      "relatedSpdxElement": "SPDXRef-Package-pkg-0124"
+    },
+    {
+      "spdxElementId": "SPDXRef-Package-app",
+      "relationshipType": "DEPENDS_ON",
+      "relatedSpdxElement": "SPDXRef-Package-pkg-0125"
+    },
+    {
+      "spdxElementId": "SPDXRef-Package-app",
+      "relationshipType": "DEPENDS_ON",
+      "relatedSpdxElement": "SPDXRef-Package-pkg-0126"
+    },
+    {
+      "spdxElementId": "SPDXRef-Package-app",
+      "relationshipType": "DEPENDS_ON",
+      "relatedSpdxElement": "SPDXRef-Package-pkg-0127"
+    },
+    {
+      "spdxElementId": "SPDXRef-Package-app",
+      "relationshipType": "DEPENDS_ON",
+      "relatedSpdxElement": "SPDXRef-Package-pkg-0128"
+    },
+    {
+      "spdxElementId": "SPDXRef-Package-app",
+      "relationshipType": "DEPENDS_ON",
+      "relatedSpdxElement": "SPDXRef-Package-pkg-0129"
+    },
+    {
+      "spdxElementId": "SPDXRef-Package-app",
+      "relationshipType": "DEPENDS_ON",
+      "relatedSpdxElement": "SPDXRef-Package-pkg-0130"
+    },
+    {
+      "spdxElementId": "SPDXRef-Package-app",
+      "relationshipType": "DEPENDS_ON",
+      "relatedSpdxElement": "SPDXRef-Package-pkg-0131"
+    },
+    {
+      "spdxElementId": "SPDXRef-Package-app",
+      "relationshipType": "DEPENDS_ON",
+      "relatedSpdxElement": "SPDXRef-Package-pkg-0132"
+    },
+    {
+      "spdxElementId": "SPDXRef-Package-app",
+      "relationshipType": "DEPENDS_ON",
+      "relatedSpdxElement": "SPDXRef-Package-pkg-0133"
+    },
+    {
+      "spdxElementId": "SPDXRef-Package-app",
+      "relationshipType": "DEPENDS_ON",
+      "relatedSpdxElement": "SPDXRef-Package-pkg-0134"
+    },
+    {
+      "spdxElementId": "SPDXRef-Package-app",
+      "relationshipType": "DEPENDS_ON",
+      "relatedSpdxElement": "SPDXRef-Package-pkg-0135"
+    },
+    {
+      "spdxElementId": "SPDXRef-Package-app",
+      "relationshipType": "DEPENDS_ON",
+      "relatedSpdxElement": "SPDXRef-Package-pkg-0136"
+    },
+    {
+      "spdxElementId": "SPDXRef-Package-app",
+      "relationshipType": "DEPENDS_ON",
+      "relatedSpdxElement": "SPDXRef-Package-pkg-0137"
+    },
+    {
+      "spdxElementId": "SPDXRef-Package-app",
+      "relationshipType": "DEPENDS_ON",
+      "relatedSpdxElement": "SPDXRef-Package-pkg-0138"
+    },
+    {
+      "spdxElementId": "SPDXRef-Package-app",
+      "relationshipType": "DEPENDS_ON",
+      "relatedSpdxElement": "SPDXRef-Package-pkg-0139"
+    },
+    {
+      "spdxElementId": "SPDXRef-Package-app",
+      "relationshipType": "DEPENDS_ON",
+      "relatedSpdxElement": "SPDXRef-Package-pkg-0140"
+    },
+    {
+      "spdxElementId": "SPDXRef-Package-app",
+      "relationshipType": "DEPENDS_ON",
+      "relatedSpdxElement": "SPDXRef-Package-pkg-0141"
+    },
+    {
+      "spdxElementId": "SPDXRef-Package-app",
+      "relationshipType": "DEPENDS_ON",
+      "relatedSpdxElement": "SPDXRef-Package-pkg-0142"
+    },
+    {
+      "spdxElementId": "SPDXRef-Package-app",
+      "relationshipType": "DEPENDS_ON",
+      "relatedSpdxElement": "SPDXRef-Package-pkg-0143"
+    },
+    {
+      "spdxElementId": "SPDXRef-Package-app",
+      "relationshipType": "DEPENDS_ON",
+      "relatedSpdxElement": "SPDXRef-Package-pkg-0144"
+    },
+    {
+      "spdxElementId": "SPDXRef-Package-app",
+      "relationshipType": "DEPENDS_ON",
+      "relatedSpdxElement": "SPDXRef-Package-pkg-0145"
+    },
+    {
+      "spdxElementId": "SPDXRef-Package-app",
+      "relationshipType": "DEPENDS_ON",
+      "relatedSpdxElement": "SPDXRef-Package-pkg-0146"
+    },
+    {
+      "spdxElementId": "SPDXRef-Package-app",
+      "relationshipType": "DEPENDS_ON",
+      "relatedSpdxElement": "SPDXRef-Package-pkg-0147"
+    },
+    {
+      "spdxElementId": "SPDXRef-Package-app",
+      "relationshipType": "DEPENDS_ON",
+      "relatedSpdxElement": "SPDXRef-Package-pkg-0148"
+    },
+    {
+      "spdxElementId": "SPDXRef-Package-app",
+      "relationshipType": "DEPENDS_ON",
+      "relatedSpdxElement": "SPDXRef-Package-pkg-0149"
+    },
+    {
+      "spdxElementId": "SPDXRef-Package-app",
+      "relationshipType": "DEPENDS_ON",
+      "relatedSpdxElement": "SPDXRef-Package-pkg-0150"
+    },
+    {
+      "spdxElementId": "SPDXRef-Package-app",
+      "relationshipType": "DEPENDS_ON",
+      "relatedSpdxElement": "SPDXRef-Package-pkg-0151"
+    },
+    {
+      "spdxElementId": "SPDXRef-Package-app",
+      "relationshipType": "DEPENDS_ON",
+      "relatedSpdxElement": "SPDXRef-Package-pkg-0152"
+    },
+    {
+      "spdxElementId": "SPDXRef-Package-app",
+      "relationshipType": "DEPENDS_ON",
+      "relatedSpdxElement": "SPDXRef-Package-pkg-0153"
+    },
+    {
+      "spdxElementId": "SPDXRef-Package-app",
+      "relationshipType": "DEPENDS_ON",
+      "relatedSpdxElement": "SPDXRef-Package-pkg-0154"
+    },
+    {
+      "spdxElementId": "SPDXRef-Package-app",
+      "relationshipType": "DEPENDS_ON",
+      "relatedSpdxElement": "SPDXRef-Package-pkg-0155"
+    },
+    {
+      "spdxElementId": "SPDXRef-Package-app",
+      "relationshipType": "DEPENDS_ON",
+      "relatedSpdxElement": "SPDXRef-Package-pkg-0156"
+    },
+    {
+      "spdxElementId": "SPDXRef-Package-app",
+      "relationshipType": "DEPENDS_ON",
+      "relatedSpdxElement": "SPDXRef-Package-pkg-0157"
+    },
+    {
+      "spdxElementId": "SPDXRef-Package-app",
+      "relationshipType": "DEPENDS_ON",
+      "relatedSpdxElement": "SPDXRef-Package-pkg-0158"
+    },
+    {
+      "spdxElementId": "SPDXRef-Package-app",
+      "relationshipType": "DEPENDS_ON",
+      "relatedSpdxElement": "SPDXRef-Package-pkg-0159"
+    },
+    {
+      "spdxElementId": "SPDXRef-Package-app",
+      "relationshipType": "DEPENDS_ON",
+      "relatedSpdxElement": "SPDXRef-Package-pkg-0160"
+    },
+    {
+      "spdxElementId": "SPDXRef-Package-app",
+      "relationshipType": "DEPENDS_ON",
+      "relatedSpdxElement": "SPDXRef-Package-pkg-0161"
+    },
+    {
+      "spdxElementId": "SPDXRef-Package-app",
+      "relationshipType": "DEPENDS_ON",
+      "relatedSpdxElement": "SPDXRef-Package-pkg-0162"
+    },
+    {
+      "spdxElementId": "SPDXRef-Package-app",
+      "relationshipType": "DEPENDS_ON",
+      "relatedSpdxElement": "SPDXRef-Package-pkg-0163"
+    },
+    {
+      "spdxElementId": "SPDXRef-Package-app",
+      "relationshipType": "DEPENDS_ON",
+      "relatedSpdxElement": "SPDXRef-Package-pkg-0164"
+    },
+    {
+      "spdxElementId": "SPDXRef-Package-app",
+      "relationshipType": "DEPENDS_ON",
+      "relatedSpdxElement": "SPDXRef-Package-pkg-0165"
+    },
+    {
+      "spdxElementId": "SPDXRef-Package-app",
+      "relationshipType": "DEPENDS_ON",
+      "relatedSpdxElement": "SPDXRef-Package-pkg-0166"
+    },
+    {
+      "spdxElementId": "SPDXRef-Package-app",
+      "relationshipType": "DEPENDS_ON",
+      "relatedSpdxElement": "SPDXRef-Package-pkg-0167"
+    },
+    {
+      "spdxElementId": "SPDXRef-Package-app",
+      "relationshipType": "DEPENDS_ON",
+      "relatedSpdxElement": "SPDXRef-Package-pkg-0168"
+    },
+    {
+      "spdxElementId": "SPDXRef-Package-app",
+      "relationshipType": "DEPENDS_ON",
+      "relatedSpdxElement": "SPDXRef-Package-pkg-0169"
+    },
+    {
+      "spdxElementId": "SPDXRef-Package-app",
+      "relationshipType": "DEPENDS_ON",
+      "relatedSpdxElement": "SPDXRef-Package-pkg-0170"
+    },
+    {
+      "spdxElementId": "SPDXRef-Package-app",
+      "relationshipType": "DEPENDS_ON",
+      "relatedSpdxElement": "SPDXRef-Package-pkg-0171"
+    },
+    {
+      "spdxElementId": "SPDXRef-Package-app",
+      "relationshipType": "DEPENDS_ON",
+      "relatedSpdxElement": "SPDXRef-Package-pkg-0172"
+    },
+    {
+      "spdxElementId": "SPDXRef-Package-app",
+      "relationshipType": "DEPENDS_ON",
+      "relatedSpdxElement": "SPDXRef-Package-pkg-0173"
+    },
+    {
+      "spdxElementId": "SPDXRef-Package-app",
+      "relationshipType": "DEPENDS_ON",
+      "relatedSpdxElement": "SPDXRef-Package-pkg-0174"
+    },
+    {
+      "spdxElementId": "SPDXRef-Package-app",
+      "relationshipType": "DEPENDS_ON",
+      "relatedSpdxElement": "SPDXRef-Package-pkg-0175"
+    },
+    {
+      "spdxElementId": "SPDXRef-Package-app",
+      "relationshipType": "DEPENDS_ON",
+      "relatedSpdxElement": "SPDXRef-Package-pkg-0176"
+    },
+    {
+      "spdxElementId": "SPDXRef-Package-app",
+      "relationshipType": "DEPENDS_ON",
+      "relatedSpdxElement": "SPDXRef-Package-pkg-0177"
+    },
+    {
+      "spdxElementId": "SPDXRef-Package-app",
+      "relationshipType": "DEPENDS_ON",
+      "relatedSpdxElement": "SPDXRef-Package-pkg-0178"
+    },
+    {
+      "spdxElementId": "SPDXRef-Package-app",
+      "relationshipType": "DEPENDS_ON",
+      "relatedSpdxElement": "SPDXRef-Package-pkg-0179"
+    },
+    {
+      "spdxElementId": "SPDXRef-Package-app",
+      "relationshipType": "DEPENDS_ON",
+      "relatedSpdxElement": "SPDXRef-Package-pkg-0180"
+    },
+    {
+      "spdxElementId": "SPDXRef-Package-app",
+      "relationshipType": "DEPENDS_ON",
+      "relatedSpdxElement": "SPDXRef-Package-pkg-0181"
+    },
+    {
+      "spdxElementId": "SPDXRef-Package-app",
+      "relationshipType": "DEPENDS_ON",
+      "relatedSpdxElement": "SPDXRef-Package-pkg-0182"
+    },
+    {
+      "spdxElementId": "SPDXRef-Package-app",
+      "relationshipType": "DEPENDS_ON",
+      "relatedSpdxElement": "SPDXRef-Package-pkg-0183"
+    },
+    {
+      "spdxElementId": "SPDXRef-Package-app",
+      "relationshipType": "DEPENDS_ON",
+      "relatedSpdxElement": "SPDXRef-Package-pkg-0184"
+    },
+    {
+      "spdxElementId": "SPDXRef-Package-app",
+      "relationshipType": "DEPENDS_ON",
+      "relatedSpdxElement": "SPDXRef-Package-pkg-0185"
+    },
+    {
+      "spdxElementId": "SPDXRef-Package-app",
+      "relationshipType": "DEPENDS_ON",
+      "relatedSpdxElement": "SPDXRef-Package-pkg-0186"
+    },
+    {
+      "spdxElementId": "SPDXRef-Package-app",
+      "relationshipType": "DEPENDS_ON",
+      "relatedSpdxElement": "SPDXRef-Package-pkg-0187"
+    },
+    {
+      "spdxElementId": "SPDXRef-Package-app",
+      "relationshipType": "DEPENDS_ON",
+      "relatedSpdxElement": "SPDXRef-Package-pkg-0188"
+    },
+    {
+      "spdxElementId": "SPDXRef-Package-app",
+      "relationshipType": "DEPENDS_ON",
+      "relatedSpdxElement": "SPDXRef-Package-pkg-0189"
+    },
+    {
+      "spdxElementId": "SPDXRef-Package-app",
+      "relationshipType": "DEPENDS_ON",
+      "relatedSpdxElement": "SPDXRef-Package-pkg-0190"
+    },
+    {
+      "spdxElementId": "SPDXRef-Package-app",
+      "relationshipType": "DEPENDS_ON",
+      "relatedSpdxElement": "SPDXRef-Package-pkg-0191"
+    },
+    {
+      "spdxElementId": "SPDXRef-Package-app",
+      "relationshipType": "DEPENDS_ON",
+      "relatedSpdxElement": "SPDXRef-Package-pkg-0192"
+    },
+    {
+      "spdxElementId": "SPDXRef-Package-app",
+      "relationshipType": "DEPENDS_ON",
+      "relatedSpdxElement": "SPDXRef-Package-pkg-0193"
+    },
+    {
+      "spdxElementId": "SPDXRef-Package-app",
+      "relationshipType": "DEPENDS_ON",
+      "relatedSpdxElement": "SPDXRef-Package-pkg-0194"
+    },
+    {
+      "spdxElementId": "SPDXRef-Package-app",
+      "relationshipType": "DEPENDS_ON",
+      "relatedSpdxElement": "SPDXRef-Package-pkg-0195"
+    },
+    {
+      "spdxElementId": "SPDXRef-Package-app",
+      "relationshipType": "DEPENDS_ON",
+      "relatedSpdxElement": "SPDXRef-Package-pkg-0196"
+    },
+    {
+      "spdxElementId": "SPDXRef-Package-app",
+      "relationshipType": "DEPENDS_ON",
+      "relatedSpdxElement": "SPDXRef-Package-pkg-0197"
+    },
+    {
+      "spdxElementId": "SPDXRef-Package-app",
+      "relationshipType": "DEPENDS_ON",
+      "relatedSpdxElement": "SPDXRef-Package-pkg-0198"
+    },
+    {
+      "spdxElementId": "SPDXRef-Package-app",
+      "relationshipType": "DEPENDS_ON",
+      "relatedSpdxElement": "SPDXRef-Package-pkg-0199"
+    },
+    {
+      "spdxElementId": "SPDXRef-Package-app",
+      "relationshipType": "DEPENDS_ON",
+      "relatedSpdxElement": "SPDXRef-Package-pkg-0200"
+    },
+    {
+      "spdxElementId": "SPDXRef-Package-app",
+      "relationshipType": "DEPENDS_ON",
+      "relatedSpdxElement": "SPDXRef-Package-pkg-0201"
+    },
+    {
+      "spdxElementId": "SPDXRef-Package-app",
+      "relationshipType": "DEPENDS_ON",
+      "relatedSpdxElement": "SPDXRef-Package-pkg-0202"
+    },
+    {
+      "spdxElementId": "SPDXRef-Package-app",
+      "relationshipType": "DEPENDS_ON",
+      "relatedSpdxElement": "SPDXRef-Package-pkg-0203"
+    },
+    {
+      "spdxElementId": "SPDXRef-Package-app",
+      "relationshipType": "DEPENDS_ON",
+      "relatedSpdxElement": "SPDXRef-Package-pkg-0204"
+    },
+    {
+      "spdxElementId": "SPDXRef-Package-app",
+      "relationshipType": "DEPENDS_ON",
+      "relatedSpdxElement": "SPDXRef-Package-pkg-0205"
+    },
+    {
+      "spdxElementId": "SPDXRef-Package-app",
+      "relationshipType": "DEPENDS_ON",
+      "relatedSpdxElement": "SPDXRef-Package-pkg-0206"
+    },
+    {
+      "spdxElementId": "SPDXRef-Package-app",
+      "relationshipType": "DEPENDS_ON",
+      "relatedSpdxElement": "SPDXRef-Package-pkg-0207"
+    },
+    {
+      "spdxElementId": "SPDXRef-Package-app",
+      "relationshipType": "DEPENDS_ON",
+      "relatedSpdxElement": "SPDXRef-Package-pkg-0208"
+    },
+    {
+      "spdxElementId": "SPDXRef-Package-app",
+      "relationshipType": "DEPENDS_ON",
+      "relatedSpdxElement": "SPDXRef-Package-pkg-0209"
+    },
+    {
+      "spdxElementId": "SPDXRef-Package-app",
+      "relationshipType": "DEPENDS_ON",
+      "relatedSpdxElement": "SPDXRef-Package-pkg-0210"
+    },
+    {
+      "spdxElementId": "SPDXRef-Package-app",
+      "relationshipType": "DEPENDS_ON",
+      "relatedSpdxElement": "SPDXRef-Package-pkg-0211"
+    },
+    {
+      "spdxElementId": "SPDXRef-Package-app",
+      "relationshipType": "DEPENDS_ON",
+      "relatedSpdxElement": "SPDXRef-Package-pkg-0212"
+    },
+    {
+      "spdxElementId": "SPDXRef-Package-app",
+      "relationshipType": "DEPENDS_ON",
+      "relatedSpdxElement": "SPDXRef-Package-pkg-0213"
+    },
+    {
+      "spdxElementId": "SPDXRef-Package-app",
+      "relationshipType": "DEPENDS_ON",
+      "relatedSpdxElement": "SPDXRef-Package-pkg-0214"
+    },
+    {
+      "spdxElementId": "SPDXRef-Package-app",
+      "relationshipType": "DEPENDS_ON",
+      "relatedSpdxElement": "SPDXRef-Package-pkg-0215"
+    },
+    {
+      "spdxElementId": "SPDXRef-Package-app",
+      "relationshipType": "DEPENDS_ON",
+      "relatedSpdxElement": "SPDXRef-Package-pkg-0216"
+    },
+    {
+      "spdxElementId": "SPDXRef-Package-app",
+      "relationshipType": "DEPENDS_ON",
+      "relatedSpdxElement": "SPDXRef-Package-pkg-0217"
+    },
+    {
+      "spdxElementId": "SPDXRef-Package-app",
+      "relationshipType": "DEPENDS_ON",
+      "relatedSpdxElement": "SPDXRef-Package-pkg-0218"
+    },
+    {
+      "spdxElementId": "SPDXRef-Package-app",
+      "relationshipType": "DEPENDS_ON",
+      "relatedSpdxElement": "SPDXRef-Package-pkg-0219"
+    }
+  ]
+}

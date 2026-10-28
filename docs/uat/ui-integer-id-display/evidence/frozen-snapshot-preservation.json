@@ -1,0 +1,27 @@
+[
+  {
+    "file": "tests/snapshots/analyze_sbom_nvd.json",
+    "unchanged": true,
+    "sha256": "4d419531db2e9027133209ccc03e1c77cafbd0e5bdf46a09302e6d137fd1ad05"
+  },
+  {
+    "file": "tests/snapshots/analyze_sbom_github.json",
+    "unchanged": true,
+    "sha256": "8677913ebe19451c440f64583d69ad28459e4e5d5c672e68d5e7a76b0fefa7dd"
+  },
+  {
+    "file": "tests/snapshots/analyze_sbom_osv.json",
+    "unchanged": true,
+    "sha256": "3f892da211b434da7b2bc4421172377339cae46784cbccc3bd2b99da06bca587"
+  },
+  {
+    "file": "tests/snapshots/analyze_sbom_consolidated.json",
+    "unchanged": true,
+    "sha256": "5f0d059eee4b303279107fd0f1b04b557cfda1649c06b2fa8abe3f2ced3af6b2"
+  },
+  {
+    "file": "tests/snapshots/post_sbom_analyze.json",
+    "unchanged": true,
+    "sha256": "d56dd2d131fb6d8fc9325d16b20875689c0001ded94e3a7c53e1d09703978ad2"
+  }
+]

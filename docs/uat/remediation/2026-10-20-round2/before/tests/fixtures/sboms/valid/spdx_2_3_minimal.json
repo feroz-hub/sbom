@@ -1,0 +1,38 @@
+{
+  "spdxVersion": "SPDX-2.3",
+  "dataLicense": "CC0-1.0",
+  "SPDXID": "SPDXRef-DOCUMENT",
+  "name": "minimal-spdx-2.3",
+  "documentNamespace": "https://example.com/sboms/minimal",
+  "creationInfo": {
+    "created": "2026-04-30T12:00:00Z",
+    "creators": ["Tool: sbom-analyzer-tests-1.0"]
+  },
+  "packages": [
+    {
+      "SPDXID": "SPDXRef-Package-foo",
+      "name": "foo",
+      "versionInfo": "1.0.0",
+      "supplier": "Organization: ACME",
+      "downloadLocation": "NOASSERTION",
+      "filesAnalyzed": false,
+      "licenseConcluded": "Apache-2.0",
+      "licenseDeclared": "Apache-2.0",
+      "copyrightText": "NOASSERTION",
+      "externalRefs": [
+        {
+          "referenceCategory": "PACKAGE-MANAGER",
+          "referenceType": "purl",
+          "referenceLocator": "pkg:npm/foo@1.0.0"
+        }
+      ]
+    }
+  ],
+  "relationships": [
+    {
+      "spdxElementId": "SPDXRef-DOCUMENT",
+      "relationshipType": "DESCRIBES",
+      "relatedSpdxElement": "SPDXRef-Package-foo"
+    }
+  ]
+}

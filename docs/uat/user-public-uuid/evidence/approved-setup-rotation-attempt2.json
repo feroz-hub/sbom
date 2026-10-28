@@ -1,0 +1,18 @@
+{
+  "scope": "operator-approved setup-only credential rotation",
+  "role": "greenfield_setup",
+  "started_at": "2026-10-21T09:33:02.127731+00:00",
+  "committed": true,
+  "file_updated": true,
+  "authentication_verified": true,
+  "schema_or_business_mutations": 0,
+  "write_connection_closed": true,
+  "role_attributes_preserved": true,
+  "independent_readonly_closed": true,
+  "secret_inode_preserved": true,
+  "secret_mode": "0600",
+  "private_parent_mode": "0700",
+  "resource_identity_preserved": true,
+  "status": "PASS",
+  "finished_at": "2026-10-21T09:33:02.576144+00:00"
+}

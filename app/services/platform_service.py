@@ -13,6 +13,7 @@ from sqlalchemy.orm import Session
 from ..core.identity_states import IdentityErrorCode
 from ..core.permissions import TENANT_STATUSES
 from ..models import EmailVerificationToken, IAMUser, PlatformUserRole, Tenant, TenantUser
+from .identity_verification_policy import verification_complete, verification_complete_clause
 
 
 @dataclass(frozen=True, slots=True)
@@ -63,8 +64,7 @@ def is_effective_platform_administrator(
         and grant.role == "PLATFORM_ADMIN"
         and grant.status == "ACTIVE"
         and user.status == "ACTIVE"
-        and user.email_verified
-        and not user.verification_required
+        and verification_complete(user)
     )
 
 
@@ -108,6 +108,8 @@ def _platform_user_conditions(
             or_(
                 IAMUser.email.ilike(pattern, escape="\\"),
                 IAMUser.display_name.ilike(pattern, escape="\\"),
+                IAMUser.first_name.ilike(pattern, escape="\\"),
+                IAMUser.last_name.ilike(pattern, escape="\\"),
                 IAMUser.user_principal_name.ilike(pattern, escape="\\"),
                 IAMUser.employee_id.ilike(pattern, escape="\\"),
             )
@@ -127,8 +129,7 @@ def _platform_user_conditions(
     )
     effective_condition = and_(
         IAMUser.status == "ACTIVE",
-        IAMUser.email_verified.is_(True),
-        IAMUser.verification_required.is_(False),
+        verification_complete_clause(),
         effective_grant_exists,
     )
     if is_platform_admin is True:
@@ -161,6 +162,10 @@ def list_platform_users(
     page: int,
     page_size: int,
     search: str | None = None,
+    role: str | None = None,
+    provider: str | None = None,
+    sort_by: str = "created_at",
+    sort_order: str = "desc",
     local_status: str | None = None,
     email_verified: bool | None = None,
     verification_required: bool | None = None,
@@ -183,6 +188,27 @@ def list_platform_users(
         last_login_from=last_login_from,
         last_login_to=last_login_to,
     )
+    from ..models import UserIdentity
+    from .user_management_service import role_filter
+    if role:
+        from ..core.context import minimal_background_context, tenant_scope
+        tenant_ids = [tenant_id] if tenant_id is not None else list(db.scalars(select(Tenant.id)))
+        matching_users = set()
+        # Approved identity administration processes each selected owner;
+        # it does not bypass the tenant data-access guard.
+        for owner_id in tenant_ids:
+            with tenant_scope(minimal_background_context(owner_id)):
+                matching_users.update(db.scalars(select(IAMUser.id).where(role_filter(role, owner_id))))
+        conditions.append(IAMUser.id.in_(matching_users))
+    if provider:
+        provider_match = exists(select(UserIdentity.id).where(UserIdentity.user_id == IAMUser.id,
+                                                            UserIdentity.provider_type == provider))
+        if provider == "HCL_CS":
+            provider_match = or_(provider_match, IAMUser.external_issuer.is_not(None), IAMUser.external_iam_user_id.is_not(None))
+        conditions.append(provider_match)
+    sort_column = {"name": IAMUser.display_name, "email": IAMUser.email,
+                   "created_at": IAMUser.created_at, "last_login_at": IAMUser.last_login_at}[sort_by]
+    ordering = sort_column.asc() if sort_order == "asc" else sort_column.desc()
     active_tenant_count = (
         select(func.count(TenantUser.id))
         .join(Tenant, Tenant.id == TenantUser.tenant_id)
@@ -206,7 +232,7 @@ def list_platform_users(
             )
             .outerjoin(PlatformUserRole, PlatformUserRole.user_id == IAMUser.id)
             .where(*conditions)
-            .order_by(IAMUser.created_at.desc(), IAMUser.id.desc())
+            .order_by(ordering.nulls_last(), IAMUser.id.desc())
             .offset((page - 1) * page_size)
             .limit(page_size)
         ).all()
@@ -304,7 +330,13 @@ def _validate_grant_eligibility(user: IAMUser) -> None:
             "Pending users cannot receive platform authority.",
             status_code=409,
         )
-    if not user.email_verified or user.verification_required:
+    if user.status != "ACTIVE":
+        raise _error(
+            IdentityErrorCode.USER_STATUS_INVALID,
+            "Only active users can receive platform authority.",
+            status_code=409,
+        )
+    if not verification_complete(user):
         raise _error(
             IdentityErrorCode.EMAIL_VERIFICATION_REQUIRED,
             "Email verification is required before platform authority can be granted.",
@@ -378,8 +410,7 @@ def _effective_admin_count(db: Session) -> int:
                 PlatformUserRole.role == "PLATFORM_ADMIN",
                 PlatformUserRole.status == "ACTIVE",
                 IAMUser.status == "ACTIVE",
-                IAMUser.email_verified.is_(True),
-                IAMUser.verification_required.is_(False),
+                verification_complete_clause(),
             )
         )
         or 0
@@ -420,26 +451,8 @@ def revoke_platform_administrator(db: Session, grant_id: int) -> GrantMutation:
     return GrantMutation(grant, user, "REVOKED", old_state)
 
 
-def update_user_status(
-    db: Session,
-    user_id: int,
-    status_value: str,
-) -> StatusMutation:
-    unresolved_user = db.get(IAMUser, user_id)
-    if unresolved_user is None:
-        raise _error(
-            IdentityErrorCode.USER_NOT_FOUND,
-            "Platform user was not found.",
-            status_code=404,
-        )
-    requested = status_value.strip().upper()
-    if requested not in {"ACTIVE", "DISABLED"}:
-        raise _error(
-            IdentityErrorCode.USER_STATUS_INVALID,
-            "User status must be ACTIVE or DISABLED.",
-            status_code=422,
-        )
-    if requested == "DISABLED" and unresolved_user.status != requested:
+def lock_account_for_administration(db: Session, user_id: int, *, removing_access: bool) -> IAMUser:
+    if removing_access:
         tenant_ids = list(
             db.scalars(
                 select(TenantUser.tenant_id)
@@ -459,28 +472,52 @@ def update_user_status(
                     .with_for_update()
                 )
             )
-    user = db.scalar(select(IAMUser).where(IAMUser.id == user_id).with_for_update())
+    user = db.scalar(select(IAMUser).where(IAMUser.id == user_id).with_for_update().execution_options(populate_existing=True))
     if user is None:
         raise _error(
             IdentityErrorCode.USER_NOT_FOUND,
             "Platform user was not found.",
             status_code=404,
         )
+    return user
+
+
+def update_user_status(
+    db: Session,
+    user_id: int,
+    status_value: str,
+) -> StatusMutation:
+    unresolved_user = db.get(IAMUser, user_id)
+    if unresolved_user is None:
+        raise _error(
+            IdentityErrorCode.USER_NOT_FOUND,
+            "Platform user was not found.",
+            status_code=404,
+        )
+    requested = status_value.strip().upper()
+    if requested not in {"ACTIVE", "DISABLED", "SUSPENDED"}:
+        raise _error(
+            IdentityErrorCode.USER_STATUS_INVALID,
+            "User status must be ACTIVE, DISABLED or SUSPENDED.",
+            status_code=422,
+        )
+    user = lock_account_for_administration(db, user_id, removing_access=requested in {"DISABLED", "SUSPENDED"})
     old_status = user.status
     if old_status == requested:
         return StatusMutation(user, old_status, False)
-    allowed = {
-        ("PENDING", "ACTIVE"),
-        ("ACTIVE", "DISABLED"),
-        ("DISABLED", "ACTIVE"),
-    }
-    if (old_status, requested) not in allowed:
+    from .account_state_service import InvalidAccountTransition, validate_transition
+
+    try:
+        validate_transition(old_status, requested, explicitly_authorized=True, legacy_approval=True)
+    except InvalidAccountTransition:
         raise _error(
             IdentityErrorCode.USER_STATUS_TRANSITION_NOT_ALLOWED,
             f"Transition from {old_status} to {requested} is not allowed.",
             status_code=409,
         )
-    if requested == "DISABLED":
+    if old_status in {"DISABLED", "SUSPENDED"} and requested == "ACTIVE":
+        validate_native_reenable(db, user)
+    if requested in {"DISABLED", "SUSPENDED"}:
         from . import tenant_role_assignment_service, tenant_service
 
         grant = get_active_platform_grant(db, user.id)
@@ -527,6 +564,15 @@ def update_user_status(
                 invalidation_reason="USER_DISABLED",
             )
         )
+    # Administrative disable/re-enable must not revive previously issued JWTs.
+    from ..models import NativeUserCredential
+    credential = db.scalar(select(NativeUserCredential).where(
+        NativeUserCredential.user_id == user.id).with_for_update())
+    if credential is not None:
+        credential.security_version += 1
+        if old_status == "LOCKED" and requested == "ACTIVE":
+            credential.failed_login_count = 0
+            credential.locked_at = credential.locked_until = None
     user.status = requested
     user.updated_at = datetime.now(UTC)
     db.flush()
@@ -622,11 +668,34 @@ def update_tenant_status(
     status_value = status_value.strip().upper()
     if status_value not in TENANT_STATUSES:
         raise HTTPException(status_code=422, detail="Invalid tenant status")
-    tenant = db.get(Tenant, tenant_id)
+    tenant = db.scalar(select(Tenant).where(Tenant.id == tenant_id).with_for_update()
+                       .execution_options(populate_existing=True))
     if tenant is None:
         raise HTTPException(status_code=404, detail="Tenant not found")
+    if status_value == "ACTIVE":
+        from .tenant_service import _active_tenant_admin_count
+
+        if not _active_tenant_admin_count(db, tenant.id):
+            raise HTTPException(409, "An effective Tenant Administrator is required before activating this tenant")
     old_status = tenant.status
     tenant.status = status_value
     tenant.updated_at = datetime.now(UTC)
     db.flush()
     return tenant, old_status
+
+
+def validate_native_reenable(db: Session, user: IAMUser) -> None:
+    """Do not bypass enrollment or a required password change via disable/enable."""
+    from ..models import AuthorizationAuditLog, NativeUserCredential, UserIdentity
+    native = db.scalar(select(UserIdentity.id).where(UserIdentity.user_id == user.id,
+                                                   UserIdentity.provider_type == "NATIVE"))
+    if not native:
+        return
+    credential = db.scalar(select(NativeUserCredential).where(NativeUserCredential.user_id == user.id))
+    if credential is None or not user.email_verified or user.verification_required:
+        raise HTTPException(409, "Native enrollment must be completed before enabling this account")
+    forced = db.scalar(select(AuthorizationAuditLog.created_at).where(
+        AuthorizationAuditLog.target_user_id == user.id, AuthorizationAuditLog.action == "FORCE_PASSWORD_CHANGE_SET",
+        AuthorizationAuditLog.outcome == "SUCCESS").order_by(AuthorizationAuditLog.created_at.desc()).limit(1))
+    if forced and credential.password_changed_at <= forced:
+        raise HTTPException(409, "Required password change must be completed before enabling this account")

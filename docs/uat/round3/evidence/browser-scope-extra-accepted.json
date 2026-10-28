@@ -1,0 +1,12 @@
+[
+  {
+    "id": "R3-DASHBOARD-SCOPE-EXECUTION",
+    "role": "admin",
+    "stepsExecuted": "Execute actual scoped browser acceptance",
+    "expected": "Complete required scope/inactive checks",
+    "actual": {
+      "error": "page.waitForFunction: Timeout 60000ms exceeded."
+    },
+    "result": "FAIL"
+  }
+]

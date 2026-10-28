@@ -1,0 +1,18 @@
+{
+  "reason": "Browser acceptance complete; release task memory/CPU for backend regression",
+  "operations": [
+    {
+      "service": "frontend",
+      "pid": 60357,
+      "signal": "SIGTERM",
+      "scope": "task-owned only"
+    },
+    {
+      "service": "api",
+      "pid": 83744,
+      "signal": "SIGTERM",
+      "scope": "task-owned only"
+    }
+  ],
+  "main_services_changed": false
+}

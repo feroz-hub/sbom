@@ -228,20 +228,14 @@ def edit_sbom(
     if report.has_errors():
         sbom_status = "quarantined" if any(e.stage == "security" for e in report.errors) else "failed"
 
-    # Increment version number
-    current_ver_str = parent.sbom_version or "1.0.0"
-    try:
-        parts = current_ver_str.split(".")
-        if len(parts) == 3:
-            parts[2] = str(int(parts[2]) + 1)
-            new_version_str = ".".join(parts)
-        else:
-            new_version_str = f"{current_ver_str}.1"
-    except Exception:
-        new_version_str = f"{current_ver_str}-revised"
+    from .logical_sbom_service import ensure_version_available, next_revision
+    requested = (updates.get("metadata") or {}).get("sbom_version") or updates.get("sbom_version")
+    new_version_str = str(requested).strip() if requested else next_revision(db, parent)
+    ensure_version_available(db, parent.logical_sbom, new_version_str)
 
     # Create the new SBOMSource row
     new_sbom = SBOMSource(
+        logical_sbom_id=parent.logical_sbom_id,
         sbom_name=parent.sbom_name,
         sbom_data=new_data_str,
         sbom_type=parent.sbom_type,
@@ -343,6 +337,9 @@ def compare_versions(db: Session, sbom_a_id: int, sbom_b_id: int) -> dict[str, A
     """
     Compare two SBOM versions and identify added, removed, and modified components.
     """
+    from .sbom_lifecycle import require_processing
+    require_processing(db.get(SBOMSource, sbom_a_id), operation="Comparison")
+    require_processing(db.get(SBOMSource, sbom_b_id), operation="Comparison")
     comps_a = db.execute(select(SBOMComponent).where(SBOMComponent.sbom_id == sbom_a_id)).scalars().all()
     comps_b = db.execute(select(SBOMComponent).where(SBOMComponent.sbom_id == sbom_b_id)).scalars().all()
 
@@ -516,20 +513,14 @@ def restore_version(db: Session, sbom_id: int, restore_version_id: int, user_id:
 
     change_summary = f"Restored previous version {target.sbom_version} (created on {target.created_on})"
 
-    # Increment version number from current parent version
-    current_ver_str = parent.sbom_version or "1.0.0"
-    try:
-        parts = current_ver_str.split(".")
-        if len(parts) == 3:
-            parts[2] = str(int(parts[2]) + 1)
-            new_version_str = ".".join(parts)
-        else:
-            new_version_str = f"{current_ver_str}.1"
-    except Exception:
-        new_version_str = f"{current_ver_str}-revised"
+    if target.logical_sbom_id != parent.logical_sbom_id:
+        raise ValueError("Restoration target belongs to a different logical SBOM")
+    from .logical_sbom_service import next_revision
+    new_version_str = next_revision(db, parent)
 
     # Create the new SBOMSource row using target's data
     new_sbom = SBOMSource(
+        logical_sbom_id=parent.logical_sbom_id,
         sbom_name=parent.sbom_name,
         sbom_data=target.sbom_data,
         sbom_type=parent.sbom_type,

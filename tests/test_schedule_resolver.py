@@ -9,19 +9,21 @@ import pytest
 
 @pytest.fixture
 def db(client):
-    """Yield a SQLAlchemy session bound to the test database.
+    from app.core.context import minimal_background_context, tenant_scope
+    with tenant_scope(minimal_background_context(1)):
+        """Yield a SQLAlchemy session bound to the test database.
 
-    Depends on ``client`` (not ``app``) so the FastAPI lifespan has run and
-    Base.metadata.create_all has built the schema.
-    """
-    from app.db import SessionLocal
+        Depends on ``client`` (not ``app``) so the FastAPI lifespan has run and
+        Base.metadata.create_all has built the schema.
+        """
+        from app.db import SessionLocal
 
-    s = SessionLocal()
-    try:
-        yield s
-    finally:
-        s.rollback()
-        s.close()
+        s = SessionLocal()
+        try:
+            yield s
+        finally:
+            s.rollback()
+            s.close()
 
 
 def _now_iso() -> str:

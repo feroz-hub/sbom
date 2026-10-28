@@ -10,6 +10,9 @@ from app.models import SBOMSource
 from app.parsing.extract import extract_components
 from app.services.sbom_document_service import content_sha256, verify_upload_integrity
 
+from tests.public_id_fixture import public_row
+from tests.tenant_fixture_scope import verified_fixture_tenant
+
 
 def _large_cyclonedx(component_count: int) -> dict:
     components = [
@@ -41,7 +44,8 @@ def _large_cyclonedx(component_count: int) -> dict:
 def db(client):
     session = SessionLocal()
     try:
-        yield session
+        with verified_fixture_tenant(session, 1):
+            yield session
     finally:
         session.rollback()
         session.close()
@@ -97,7 +101,7 @@ def test_large_cyclonedx_upload_preserves_content_and_components(client, db, tmp
     assert len(payload["items"]) == 10
     assert payload["total_count"] == 250
 
-    report = verify_upload_integrity(db, sbom_id, original_path=str(path))
+    report = verify_upload_integrity(db, public_row(db, SBOMSource, sbom_id).id, original_path=str(path))
     assert report["sha256_match"] is True
     assert report["line_count_match"] is True
     assert report["component_count_match"] is True
@@ -125,7 +129,7 @@ def test_large_spdx_sample_integrity(client, db):
     assert stats["component_count"] == expected_components
     assert stats["relationship_count"] >= 900
 
-    report = verify_upload_integrity(db, sbom_id, original_path=str(sample))
+    report = verify_upload_integrity(db, public_row(db, SBOMSource, sbom_id).id, original_path=str(sample))
     assert report["truncation_detected"] is False
 
 
@@ -157,5 +161,5 @@ def test_list_sboms_omits_raw_payload(client, db):
 
     listed = client.get("/api/sboms?page_size=500")
     assert listed.status_code == 200
-    match = next(item for item in listed.json() if item["id"] == sbom.id)
+    match = next(item for item in listed.json() if item["id"] == str(sbom.public_id))
     assert match.get("sbom_data") is None

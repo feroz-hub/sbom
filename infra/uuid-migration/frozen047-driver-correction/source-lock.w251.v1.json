@@ -1,0 +1,15 @@
+{
+  "accepted": false,
+  "approvals": {},
+  "historical_sources_unchanged": true,
+  "live_mode": "DENIED",
+  "parent_lock_sha256": "cce0795d165c94453bdffae70302dd4c26013c8a9973945648b052374d5e1742",
+  "schema": "w251-frozen047-driver-correction-v1-PROPOSAL",
+  "sources": {
+    "README.md": "5fb3382d835ad3177bc567543c2d882d54111000930797d95efe31ba765269c8",
+    "test_w251_offline.py": "ef5aa82751533d944712bd857c391f8680006718e37755d241fc17cb1988a817",
+    "w251_driver.py": "a77dfbb680c2ff349b1e42ff07198f533bbae013c388c65de417b541e07cf78f",
+    "w251_entry.py": "960254ac411b4839bbd0fcad5d29a976c37e93fd71a89ddf99d91a1a55c27e9a",
+    "w251_integration.py": "e5c2bd2f384527c7995b67d146665e3b22ef58138da952acbdb77b786f24f6ea"
+  }
+}

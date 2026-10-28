@@ -1,0 +1,247 @@
+[
+  {
+    "time": "2026-10-19T15:11:26.468Z",
+    "path": "/api/auth/native/login",
+    "method": "POST",
+    "status": 200,
+    "requestId": null
+  },
+  {
+    "time": "2026-10-19T15:11:27.904Z",
+    "path": "/api/auth/session",
+    "method": "GET",
+    "status": 200,
+    "requestId": null
+  },
+  {
+    "time": "2026-10-19T15:11:27.920Z",
+    "path": "/api/auth/session",
+    "method": "GET",
+    "status": 200,
+    "requestId": null
+  },
+  {
+    "time": "2026-10-19T15:11:28.216Z",
+    "path": "/api/backend/api/auth/me",
+    "method": "GET",
+    "status": 200,
+    "requestId": "e766221be325"
+  },
+  {
+    "time": "2026-10-19T15:11:28.349Z",
+    "path": "/api/backend/api/auth/me",
+    "method": "GET",
+    "status": 200,
+    "requestId": "b62677c7b8a0"
+  },
+  {
+    "time": "2026-10-19T15:12:07.058Z",
+    "path": "/api/auth/session",
+    "method": "GET",
+    "status": 200,
+    "requestId": null
+  },
+  {
+    "time": "2026-10-19T15:12:07.167Z",
+    "path": "/api/backend/api/auth/me",
+    "method": "GET",
+    "status": 200,
+    "requestId": "e99ef295a15d"
+  },
+  {
+    "time": "2026-10-19T15:12:07.862Z",
+    "path": "/api/backend/health",
+    "method": "GET",
+    "status": 200,
+    "requestId": "4a149c879654"
+  },
+  {
+    "time": "2026-10-19T15:12:09.251Z",
+    "path": "/api/auth/session",
+    "method": "GET",
+    "status": 200,
+    "requestId": null
+  },
+  {
+    "time": "2026-10-19T15:12:09.252Z",
+    "path": "/api/auth/session",
+    "method": "GET",
+    "status": 200,
+    "requestId": null
+  },
+  {
+    "time": "2026-10-19T15:12:09.569Z",
+    "path": "/api/backend/api/auth/me",
+    "method": "GET",
+    "status": 200,
+    "requestId": "84baa24e7021"
+  },
+  {
+    "time": "2026-10-19T15:12:09.594Z",
+    "path": "/api/backend/api/auth/me",
+    "method": "GET",
+    "status": 200,
+    "requestId": "3c0f97ef72b6"
+  },
+  {
+    "time": "2026-10-19T15:12:12.552Z",
+    "path": "/api/backend/health",
+    "method": "GET",
+    "status": 200,
+    "requestId": "28629e2b38b4"
+  },
+  {
+    "time": "2026-10-19T15:12:12.717Z",
+    "path": "/api/backend/api/tenant-roles",
+    "method": "GET",
+    "status": 200,
+    "requestId": "d2fd87ebbaef"
+  },
+  {
+    "time": "2026-10-19T15:12:12.728Z",
+    "path": "/api/backend/dashboard/recent-sboms",
+    "method": "GET",
+    "status": 200,
+    "requestId": "0dd4dd8792fc"
+  },
+  {
+    "time": "2026-10-19T15:12:12.799Z",
+    "path": "/api/backend/api/tenants/3a900179-36bf-4b5f-b2e1-2a4a9d06e6af/users",
+    "method": "GET",
+    "status": 200,
+    "requestId": "0d31df839132"
+  },
+  {
+    "time": "2026-10-19T15:12:12.800Z",
+    "path": "/api/backend/api/tenants/3a900179-36bf-4b5f-b2e1-2a4a9d06e6af/audit-history",
+    "method": "GET",
+    "status": 200,
+    "requestId": "19faa7149336"
+  },
+  {
+    "time": "2026-10-19T15:12:12.814Z",
+    "path": "/api/backend/api/runs",
+    "method": "GET",
+    "status": 200,
+    "requestId": "6d066a83fa42"
+  },
+  {
+    "time": "2026-10-19T15:12:14.700Z",
+    "path": "/api/auth/session",
+    "method": "GET",
+    "status": 200,
+    "requestId": null
+  },
+  {
+    "time": "2026-10-19T15:12:14.700Z",
+    "path": "/api/auth/session",
+    "method": "GET",
+    "status": 200,
+    "requestId": null
+  },
+  {
+    "time": "2026-10-19T15:12:14.939Z",
+    "path": "/api/backend/api/auth/me",
+    "method": "GET",
+    "status": 200,
+    "requestId": "8d3453f2ca80"
+  },
+  {
+    "time": "2026-10-19T15:12:15.012Z",
+    "path": "/api/backend/api/auth/me",
+    "method": "GET",
+    "status": 200,
+    "requestId": "e1949f4e76b2"
+  },
+  {
+    "time": "2026-10-19T15:12:15.032Z",
+    "path": "/api/backend/api/auth/me",
+    "method": "GET",
+    "status": 200,
+    "requestId": "95db1eb96190"
+  },
+  {
+    "time": "2026-10-19T15:12:15.506Z",
+    "path": "/api/backend/health",
+    "method": "GET",
+    "status": 200,
+    "requestId": "e8a87ec6c349"
+  },
+  {
+    "time": "2026-10-19T15:12:15.638Z",
+    "path": "/api/backend/api/tenant-roles",
+    "method": "GET",
+    "status": 200,
+    "requestId": "e6523394218b"
+  },
+  {
+    "time": "2026-10-19T15:12:15.749Z",
+    "path": "/api/backend/api/tenants/3a900179-36bf-4b5f-b2e1-2a4a9d06e6af/users",
+    "method": "GET",
+    "status": 200,
+    "requestId": "0d32e38e73dd"
+  },
+  {
+    "time": "2026-10-19T15:12:15.749Z",
+    "path": "/api/backend/dashboard/recent-sboms",
+    "method": "GET",
+    "status": 200,
+    "requestId": "c6675a065e6f"
+  },
+  {
+    "time": "2026-10-19T15:12:15.749Z",
+    "path": "/api/backend/api/tenants/3a900179-36bf-4b5f-b2e1-2a4a9d06e6af/audit-history",
+    "method": "GET",
+    "status": 200,
+    "requestId": "42790d9dab35"
+  },
+  {
+    "time": "2026-10-19T15:12:15.795Z",
+    "path": "/api/backend/api/runs",
+    "method": "GET",
+    "status": 200,
+    "requestId": "670fbd692505"
+  },
+  {
+    "time": "2026-10-19T15:12:27.168Z",
+    "path": "/api/backend/api/auth/me",
+    "method": "GET",
+    "status": 200,
+    "requestId": "7cfdcc9130d4"
+  },
+  {
+    "time": "2026-10-19T15:12:27.399Z",
+    "path": "/api/backend/api/tenants/3a900179-36bf-4b5f-b2e1-2a4a9d06e6af/users",
+    "method": "GET",
+    "status": 200,
+    "requestId": "95d719328a38"
+  },
+  {
+    "time": "2026-10-19T15:12:42.381Z",
+    "path": "/api/backend/api/tenants/3a900179-36bf-4b5f-b2e1-2a4a9d06e6af/audit-history",
+    "method": "GET",
+    "status": 200,
+    "requestId": "a319e19769a4"
+  },
+  {
+    "time": "2026-10-19T15:12:45.589Z",
+    "path": "/api/backend/health",
+    "method": "GET",
+    "status": 200,
+    "requestId": "442e8ef5376f"
+  },
+  {
+    "time": "2026-10-19T15:12:54.379Z",
+    "path": "/api/backend/api/tenants/3a900179-36bf-4b5f-b2e1-2a4a9d06e6af/user-candidates",
+    "method": "GET",
+    "status": 200,
+    "requestId": "21e92ed8471b"
+  },
+  {
+    "time": "2026-10-19T15:12:59.123Z",
+    "path": "/api/backend/api/tenants/3a900179-36bf-4b5f-b2e1-2a4a9d06e6af/user-candidates",
+    "method": "GET",
+    "status": 200,
+    "requestId": "7d1164a810b8"
+  }
+]

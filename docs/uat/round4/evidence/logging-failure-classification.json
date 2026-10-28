@@ -1,0 +1,16 @@
+{
+  "time": "2026-10-20T16:23:17.079764+00:00",
+  "nodeid": "tests/test_structured_logging.py::test_early_body_rejection_logged",
+  "outcome": "FAIL",
+  "rootCause": "Brittle last-log-entry assertion: actual early rejection emits exactly the intended 413 completion event; installed Starlette TestClient uses httpx2, which emits an additional informational transport log afterward.",
+  "applicationBehavior": "HTTP 413 and correlation header present; structured completion event status_code=413 observed.",
+  "classification": "Incorrect test expectation about unrelated logger ordering, not missing application rejection logging",
+  "evidence": [
+    "pytest-logging-isolated-before.log",
+    "pytest-logging-isolated-before.xml"
+  ],
+  "plannedCorrection": "Select exact http_request_completed event and assert count, status, method, path, correlation and error category; explicitly retain noisy httpx2 output to prove ordering independence.",
+  "sourceEditDeferredUntilFrozenRunFinishes": true,
+  "correctionApplied": "Only tests/test_structured_logging.py: exact event selection, count=1, status=413, POST/path/error category and both correlation headers, with httpx2 INFO explicitly retained",
+  "focusedAfterEvidence": "pytest-logging-isolated-after.xml"
+}

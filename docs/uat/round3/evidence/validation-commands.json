@@ -1,0 +1,50 @@
+[
+  {
+    "check": "typescript",
+    "command": [
+      "/Users/ferozebasha/.cache/codex-runtimes/codex-primary-runtime/dependencies/node/bin/node",
+      "node_modules/typescript/bin/tsc",
+      "--noEmit"
+    ],
+    "cwd": "/Users/ferozebasha/sbom/frontend",
+    "exitCode": 0
+  },
+  {
+    "check": "eslint-full",
+    "command": [
+      "/Users/ferozebasha/.cache/codex-runtimes/codex-primary-runtime/dependencies/node/bin/node",
+      "node_modules/eslint/bin/eslint.js",
+      "src",
+      "--format",
+      "json"
+    ],
+    "cwd": "/Users/ferozebasha/sbom/frontend",
+    "exitCode": 0
+  },
+  {
+    "check": "build",
+    "command": [
+      "/Users/ferozebasha/sbom/.venv/bin/python",
+      "-m",
+      "scripts.greenfield_uuid",
+      "build"
+    ],
+    "cwd": "/Users/ferozebasha/sbom",
+    "exitCode": 0
+  },
+  {
+    "check": "ruff-full",
+    "command": [
+      "/Users/ferozebasha/sbom/.venv/bin/python",
+      "-m",
+      "ruff",
+      "check",
+      "app",
+      "tests",
+      "--output-format",
+      "json"
+    ],
+    "cwd": "/Users/ferozebasha/sbom",
+    "exitCode": 1
+  }
+]

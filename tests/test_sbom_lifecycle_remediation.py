@@ -5,6 +5,7 @@ from __future__ import annotations
 import json
 
 import pytest
+from app.core.context import tenant_scope
 from app.db import SessionLocal
 from app.models import Projects, SBOMComponent, SBOMSource
 from app.services.completeness_service import compute_and_save_completeness
@@ -15,12 +16,16 @@ from app.services.remediation_service import create_or_update_remediation, get_r
 from app.services.version_control_service import compare_versions, edit_sbom, restore_version
 from sqlalchemy import select
 
+from tests.functional_security_support import authenticated_actor_label, tenant_actor_from_database
+from tests.tenant_fixture_scope import verified_fixture_tenant
+
 
 @pytest.fixture()
 def db(client):
     session = SessionLocal()
     try:
-        yield session
+        with verified_fixture_tenant(session, 1):
+            yield session
     finally:
         session.rollback()
         session.close()
@@ -122,9 +127,11 @@ def test_sbom_editing_and_versioning(db):
     sbom_data = {
         "bomFormat": "CycloneDX",
         "specVersion": "1.4",
-        "metadata": {"component": {"name": "test-app", "version": "1.0.0"}},
+        "version": 1,
+        "metadata": {"component": {"type": "application", "name": "test-app", "version": "1.0.0"}},
         "components": [
             {
+                "type": "library",
                 "bom-ref": "pkg:maven/org.apache.logging.log4j/log4j-core@2.15.0",
                 "name": "log4j-core",
                 "version": "2.15.0",
@@ -164,7 +171,7 @@ def test_sbom_editing_and_versioning(db):
                 "version": "2.16.0",
                 "supplier": "Apache Foundation",
                 "license": "Apache-2.0",
-                "hashes": "sha256hashvalue",
+                "hashes": "0" * 64,
                 "lifecycle": {
                     "lifecycle_status": "deprecated",
                     "eos_date": "2026-12-31",
@@ -177,6 +184,7 @@ def test_sbom_editing_and_versioning(db):
     }
 
     new_version = edit_sbom(db, parent_sbom.id, user_id="bob", updates=updates, change_summary="Updated log4j version")
+    assert new_version.status == "validated" and new_version.error_count == 0
     assert new_version.parent_id == parent_sbom.id
     assert new_version.sbom_version == "1.0.1"
     assert new_version.productver == "1.0.0"
@@ -298,11 +306,11 @@ def test_sbom_versions_use_strict_parent_lineage(client, db):
     db.add(child)
     db.commit()
 
-    response = client.get(f"/api/sboms/{child.id}/versions")
+    response = client.get(f"/api/sboms/{child.public_id}/versions")
     assert response.status_code == 200
     ids = [item["id"] for item in response.json()]
-    assert ids == [root.id, child.id]
-    assert unrelated.id not in ids
+    assert ids == [str(root.public_id), str(child.public_id)]
+    assert str(unrelated.public_id) not in ids
 
 
 def test_compare_versions_reports_metadata_dependency_and_lifecycle_changes(db):
@@ -409,12 +417,12 @@ def test_export_native_sbom_and_rejects_unsupported_conversion(client, db, sampl
     db.add(sbom)
     db.commit()
 
-    native = client.get(f"/api/sboms/{sbom.id}/export")
+    native = client.get(f"/api/sboms/{sbom.public_id}/export")
     assert native.status_code == 200
     assert native.headers["content-type"].startswith("application/vnd.cyclonedx+json")
     assert json.loads(native.text)["bomFormat"] == "CycloneDX"
 
-    unsupported = client.get(f"/api/sboms/{sbom.id}/export?format=spdx")
+    unsupported = client.get(f"/api/sboms/{sbom.public_id}/export?format=spdx")
     assert unsupported.status_code == 400
     assert "Unsupported SBOM conversion" in unsupported.json()["detail"]
 
@@ -436,7 +444,22 @@ def test_remediation_tracking(db):
         "fix_notes": "Mitigating via JVM parameter until patch is verified",
     }
 
-    record = create_or_update_remediation(db, proj.id, remediation_data)
+    from app.models import VulnerabilityRemediation, VulnerabilityRemediationAudit
+    from fastapi import HTTPException
+    from sqlalchemy import func
+
+    # A tenant data scope supplies ownership, not user authority.
+    with pytest.raises(HTTPException) as denied:
+        create_or_update_remediation(db, proj.id, remediation_data)
+    assert denied.value.status_code == 403
+    assert db.scalar(select(func.count()).select_from(VulnerabilityRemediation)) == 0
+    assert db.scalar(select(func.count()).select_from(VulnerabilityRemediationAudit)) == 0
+
+    actor = tenant_actor_from_database(db, "DEVELOPER")
+    assert actor.has_permission("remediation:write")
+    assert not actor.has_permission("remediation:close")
+    with tenant_scope(actor):
+        record = create_or_update_remediation(db, proj.id, remediation_data, changed_by="spoofed-admin")
     assert record.id is not None
     assert record.status == "In Progress"
 
@@ -444,9 +467,11 @@ def test_remediation_tracking(db):
     fetched = get_remediation_for_finding(db, proj.id, "CVE-2021-44228", "log4j-core", "2.14.0")
     assert fetched is not None
     assert fetched.owner == "security-lead@org.com"
+    assert db.scalar(select(VulnerabilityRemediationAudit.changed_by)) == actor.actor_label()
 
 
 def test_remediation_validation_and_audit_history(client, db):
+    expected_actor = authenticated_actor_label(client)
     proj = Projects(project_name="remediation-validation-project", created_by="alice")
     db.add(proj)
     db.commit()
@@ -458,50 +483,50 @@ def test_remediation_validation_and_audit_history(client, db):
     }
 
     invalid_status = client.post(
-        f"/api/remediation?project_id={proj.id}",
+        f"/api/remediation?project_id={proj.public_id}",
         json={**base_payload, "status": "Resolved"},
     )
     assert invalid_status.status_code == 400
 
     invalid_due_date = client.post(
-        f"/api/remediation?project_id={proj.id}",
+        f"/api/remediation?project_id={proj.public_id}",
         json={**base_payload, "status": "Open", "due_date": "06/30/2026"},
     )
     assert invalid_due_date.status_code == 400
 
     fixed_without_resolution = client.post(
-        f"/api/remediation?project_id={proj.id}",
+        f"/api/remediation?project_id={proj.public_id}",
         json={**base_payload, "status": "Fixed", "fixed_version": "3.0.9"},
     )
     assert fixed_without_resolution.status_code == 400
 
     fixed_without_fix_detail = client.post(
-        f"/api/remediation?project_id={proj.id}",
+        f"/api/remediation?project_id={proj.public_id}",
         json={**base_payload, "status": "Fixed", "resolution_date": "2026-06-11"},
     )
     assert fixed_without_fix_detail.status_code == 400
 
     accepted_without_reason = client.post(
-        f"/api/remediation?project_id={proj.id}",
+        f"/api/remediation?project_id={proj.public_id}",
         json={**base_payload, "status": "Accepted Risk"},
     )
     assert accepted_without_reason.status_code == 400
 
     created = client.post(
-        f"/api/remediation?project_id={proj.id}&user_id=alice",
+        f"/api/remediation?project_id={proj.public_id}&user_id=alice",
         json={**base_payload, "status": "Open", "owner": "security@example.com"},
     )
     assert created.status_code == 200
     remediation_id = created.json()["id"]
 
     in_progress = client.post(
-        f"/api/remediation?project_id={proj.id}&user_id=bob",
+        f"/api/remediation?project_id={proj.public_id}&user_id=bob",
         json={**base_payload, "status": "In Progress", "owner": "security@example.com"},
     )
     assert in_progress.status_code == 200
 
     fixed = client.post(
-        f"/api/remediation?project_id={proj.id}&user_id=carol",
+        f"/api/remediation?project_id={proj.public_id}&user_id=carol",
         json={
             **base_payload,
             "status": "Fixed",
@@ -522,5 +547,6 @@ def test_remediation_validation_and_audit_history(client, db):
         ("Open", "In Progress"),
         ("In Progress", "Fixed"),
     ]
-    assert rows[-1]["changed_by"] == "carol"
+    assert all(row["changed_by"] == expected_actor for row in rows)
+    assert expected_actor not in {"alice", "bob", "carol"}
     assert rows[-1]["note"] == "Patched and verified in staging"

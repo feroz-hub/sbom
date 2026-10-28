@@ -9,8 +9,6 @@ from pathlib import Path
 from urllib.parse import urlsplit
 from uuid import uuid4
 
-from sqlalchemy import select
-
 from ..models import ReportArtifact
 from ..settings import get_settings
 
@@ -142,6 +140,8 @@ def purge_orphaned_artifacts(db):
     Only this service's random filenames are eligible. Never follow symlinks or
     remove unrelated files. The retention-age delay protects in-flight writes.
     """
+    from .maintenance_scope import _audit_discovery, _internal_only, report_artifact_owner
+    _internal_only()
     cutoff = (datetime.now(UTC) - timedelta(days=get_settings().report_retention_days)).timestamp()
     removed = 0
     for path in storage_root().iterdir():
@@ -149,9 +149,10 @@ def purge_orphaned_artifacts(db):
             continue
         if path.stat().st_mtime >= cutoff:
             continue
-        if db.scalar(select(ReportArtifact.id).where(ReportArtifact.storage_path == path.name)) is None:
+        if report_artifact_owner(path.name) is None:
             artifact_path(path.name).unlink(missing_ok=True)
             removed += 1
         if removed >= 1000:
             break
+    _audit_discovery("orphan_artifact_cleanup", removed)
     return removed

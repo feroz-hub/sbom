@@ -8,13 +8,13 @@ import { useMutation, useQueryClient } from '@tanstack/react-query';
 import { Dialog, DialogBody, DialogFooter } from '@/components/ui/Dialog';
 import { Input, Textarea } from '@/components/ui/Input';
 import { Select } from '@/components/ui/Select';
+import { PermissionFields } from '@/components/ui/PermissionGate';
 import { Button } from '@/components/ui/Button';
 import { createProject, updateProject } from '@/lib/api';
 import { useNotifications } from '@/hooks/useNotifications';
 import { toUserFacingApiError } from '@/lib/notifications';
 import {
-  invalidateProjectLists,
-  invalidateSbomLists,
+  invalidateProjectMetadata,
 } from '@/lib/queryInvalidation';
 import type { Project } from '@/types';
 
@@ -82,11 +82,8 @@ export function ProjectModal({ open, onClose, project }: ProjectModalProps) {
         project_status: toStatusInt(values.project_status),
       });
     },
-    onSuccess: () => {
-      invalidateProjectLists(queryClient);
-      // SBOM rows render project_name; a rename leaves them stale until
-      // staleTime expires. Bust the SBOM list surfaces too.
-      invalidateSbomLists(queryClient);
+    onSuccess: async (updatedProject) => {
+      await invalidateProjectMetadata(queryClient, updatedProject, project);
       showSuccess(isEdit ? 'Project updated successfully.' : 'Project created successfully.');
       onClose();
     },
@@ -111,7 +108,7 @@ export function ProjectModal({ open, onClose, project }: ProjectModalProps) {
       title={isEdit ? 'Edit Project' : 'New Project'}
       maxWidth="md"
     >
-      <form onSubmit={handleSubmit(onSubmit)}>
+      <PermissionFields permission={project ? 'project:update' : 'project:create'}><form onSubmit={handleSubmit(onSubmit)}>
         <DialogBody className="space-y-4">
           <Input
             label="Project Name"
@@ -144,7 +141,7 @@ export function ProjectModal({ open, onClose, project }: ProjectModalProps) {
             {isEdit ? 'Save Changes' : 'Create Project'}
           </Button>
         </DialogFooter>
-      </form>
+      </form></PermissionFields>
     </Dialog>
   );
 }

@@ -39,6 +39,7 @@ from . import (
     tenant_role_assignment_service,
 )
 from .identity_service import provision_local_identity
+from .identity_verification_policy import verification_complete, verification_complete_clause
 
 _TENANT_SLUG_PATTERN = re.compile(r"^[a-z0-9]+(?:-[a-z0-9]+)*$")
 _CONTROL_CHAR_PATTERN = re.compile(r"[\x00-\x1f\x7f]")
@@ -139,7 +140,7 @@ def _validate_initial_admin(user: IAMUser | None) -> IAMUser:
             "The selected initial Tenant Administrator is not eligible.",
             status_code=422,
         )
-    if not user.email_verified or user.verification_required:
+    if not verification_complete(user):
         raise TenantCreationError(
             IdentityErrorCode.EMAIL_VERIFICATION_REQUIRED,
             "The selected initial Tenant Administrator must have a verified email.",
@@ -166,8 +167,7 @@ def _validate_platform_requester(db: Session, actor_user_id: int) -> None:
         grant is None
         or actor is None
         or actor.status != "ACTIVE"
-        or not actor.email_verified
-        or actor.verification_required
+        or not verification_complete(actor)
     ):
         raise TenantCreationError(
             IdentityErrorCode.PLATFORM_PERMISSION_DENIED,
@@ -211,6 +211,12 @@ def _map_integrity_error(exc: IntegrityError) -> TenantCreationError:
             "Initial Tenant Administrator assignment failed.",
             status_code=409,
             audit_event=IdentityAuditEvent.TENANT_INITIAL_ADMIN_ASSIGNMENT_FAILED,
+        )
+    if constraint == "uq_user_identities_native_email":
+        return TenantCreationError(
+            IdentityErrorCode.TENANT_CREATION_FAILED,
+            "This Native identity was provisioned concurrently. Retry to reuse the existing user.",
+            status_code=409,
         )
     return TenantCreationError(
         IdentityErrorCode.TENANT_CREATION_FAILED,
@@ -265,11 +271,16 @@ def create_tenant_with_initial_admin(
     name: str,
     slug: str,
     external_iam_tenant_id: str | None,
-    initial_admin_user_id: int,
+    initial_admin_user_id: int | None,
+    initial_admin_invitation=None,
     request=None,
     failure_hook: Callable[[str], None] | None = None,
 ) -> TenantCreationResult:
-    """Atomically create an active tenant and its only initial membership.
+    """Atomically create a tenant and its only initial membership.
+
+    Existing eligible administrators produce ACTIVE tenants. Invited pending
+    Native administrators produce PENDING tenants until password activation;
+    token and encrypted outbox writes participate in this same transaction.
 
     Locking order is requester grant/user, initial administrator, uniqueness
     checks, tenant, membership, then audit rows. The platform dependency
@@ -316,15 +327,28 @@ def create_tenant_with_initial_admin(
                 new_value=safe_request,
             )
 
-            initial_admin = db.execute(
-                select(IAMUser)
-                .where(IAMUser.id == initial_admin_user_id)
-                .with_for_update()
-            ).scalar_one_or_none()
+            if initial_admin_invitation is not None:
+                from .native_enrollment_service import provision_native_identity
+
+                if not get_settings().native_security_outbox_enabled:
+                    raise TenantCreationError(
+                        IdentityErrorCode.TENANT_CREATION_FAILED,
+                        "Security email outbox must be enabled before inviting an initial administrator.",
+                        status_code=409,
+                    )
+                initial_admin = provision_native_identity(
+                    db, initial_admin_invitation, actor_user_id=actor_user_id,
+                )
+            else:
+                initial_admin = db.execute(
+                    select(IAMUser)
+                    .where(IAMUser.id == initial_admin_user_id)
+                    .with_for_update()
+                ).scalar_one_or_none()
+                initial_admin = _validate_initial_admin(initial_admin)
             audited_target_user_id = (
                 initial_admin.id if initial_admin is not None else None
             )
-            initial_admin = _validate_initial_admin(initial_admin)
             audit_service.write_authorization_audit(
                 db,
                 action=str(IdentityAuditEvent.TENANT_INITIAL_ADMIN_VALIDATED),
@@ -359,7 +383,7 @@ def create_tenant_with_initial_admin(
                 name=normalized_name,
                 slug=normalized_slug,
                 external_iam_tenant_id=normalized_external_id,
-                status="ACTIVE",
+                status="ACTIVE" if initial_admin.status == "ACTIVE" else "PENDING",
                 created_at=now,
                 updated_at=now,
             )
@@ -386,6 +410,16 @@ def create_tenant_with_initial_admin(
                 actor_user_id=actor_user_id,
                 source="TENANT_CREATION",
                 request=request,
+            )
+            if initial_admin_invitation is not None and initial_admin.status == "PENDING_EMAIL_VERIFICATION":
+                from .account_action_token_service import issue_activation_token
+
+                issue_activation_token(db, initial_admin.id, actor_user_id=actor_user_id)
+            audit_service.write_authorization_audit(
+                db,
+                action="TENANT_INITIAL_ADMIN_INVITED" if initial_admin_invitation is not None else "TENANT_INITIAL_ADMIN_SELECTED",
+                actor_user_id=actor_user_id, target_user_id=initial_admin.id,
+                target_membership_id=membership.id, tenant_id=tenant.id, request=request,
             )
             operation_stage = "audit"
             if failure_hook is not None:
@@ -426,6 +460,12 @@ def create_tenant_with_initial_admin(
     except TenantCreationError as exc:
         db.rollback()
         error = exc
+    except HTTPException as exc:
+        db.rollback()
+        error = TenantCreationError(
+            IdentityErrorCode.TENANT_CREATION_FAILED,
+            str(exc.detail), status_code=exc.status_code,
+        )
     except Exception as exc:
         db.rollback()
         unexpected_error = exc
@@ -533,10 +573,8 @@ def resolve_active_tenant(
             if requested in {str(tenant.id), tenant.slug, tenant.external_iam_tenant_id}:
                 membership, selected = member, tenant
                 break
-        if selected is None and is_platform_admin:
-            selected = db.execute(
-                select(Tenant).where(Tenant.status == "ACTIVE", _tenant_identity_filter(Tenant, requested))
-            ).scalar_one_or_none()
+    elif is_platform_admin and allow_platform_context:
+        pass  # Platform context never implicitly enters a customer's tenant.
     elif len(memberships) == 1:
         membership, selected = memberships[0]
     elif not auth_enabled and settings.dev_default_tenant:
@@ -552,7 +590,7 @@ def resolve_active_tenant(
                 )
             ).scalar_one_or_none()
 
-    if selected is None and is_platform_admin and allow_platform_context:
+    if not requested and selected is None and is_platform_admin and allow_platform_context:
         roles = frozenset({"PLATFORM_ADMIN"})
         return (
             None,
@@ -564,7 +602,7 @@ def resolve_active_tenant(
             True,
         )
 
-    if selected is None or (membership is None and not is_platform_admin):
+    if selected is None or membership is None:
         raise HTTPException(status_code=403, detail="Tenant access denied")
 
     effective_roles: set[str] = (
@@ -585,28 +623,16 @@ def resolve_active_tenant(
         if membership
         else set()
     )
-    if is_platform_admin:
-        effective_roles.add("PLATFORM_ADMIN")
-        permissions.update(
-            authorization_catalog_service.resolve_permissions_for_roles(
-                db,
-                frozenset({"PLATFORM_ADMIN"}),
-                actor_user_id=user.id,
-            )
-        )
     return (
         selected,
         membership,
         frozenset(effective_roles),
         frozenset(permissions),
-        is_platform_admin,
+        False,
     )
 
 
 def get_available_tenants_for_user(db: Session, user_id: int, is_platform_admin: bool) -> list[tuple[Tenant, str | None]]:
-    if is_platform_admin:
-        tenants = db.execute(select(Tenant).where(Tenant.status == "ACTIVE").order_by(Tenant.name)).scalars()
-        return [(t, "PLATFORM_ADMIN") for t in tenants]
     rows = db.execute(
         select(Tenant, TenantUser.role)
         .join(TenantUser, TenantUser.tenant_id == Tenant.id)
@@ -635,7 +661,7 @@ def add_user_to_tenant(
     db: Session,
     tenant_id: int,
     *,
-    external_iam_user_id: str,
+    user_id: int,
     role: str,
     role_codes: list[str] | None = None,
     status: str = "ACTIVE",
@@ -648,17 +674,16 @@ def add_user_to_tenant(
     normalized_role_codes = [
         normalize_role(code) for code in (role_codes or [role])
     ]
+    tenant_role_assignment_service.validate_role_delegation(
+        normalized_role_codes, is_platform_admin=assignment_source == "PLATFORM_ADMIN",
+    )
     status = validate_membership_status(status)
-    user = db.execute(select(IAMUser).where(IAMUser.external_iam_user_id == external_iam_user_id)).scalar_one_or_none()
+    # Native accounts need no legacy HCL subject; membership references IAMUser.
+    user = db.execute(select(IAMUser).where(IAMUser.id == user_id)).scalar_one_or_none()
     if user is None:
         raise HTTPException(status_code=404, detail="IAM user not found; the user must sign in once before onboarding")
-    if user.status == "DISABLED":
-        raise HTTPException(status_code=422, detail="Disabled IAM user cannot receive an active membership")
-    if status == "ACTIVE" and user.status == "PENDING":
-        # Adding an active membership is the tenant administrator's explicit
-        # onboarding approval for this discovered identity.
-        user.status = "ACTIVE"
-        user.updated_at = now
+    if user.status != "ACTIVE" or not verification_complete(user):
+        raise HTTPException(status_code=422, detail="Select an active, eligible account; tenant membership cannot change global account state")
     membership = db.execute(
         select(TenantUser).where(TenantUser.tenant_id == tenant_id, TenantUser.user_id == user.id)
     ).scalar_one_or_none()
@@ -761,34 +786,67 @@ def get_tenant_membership(db: Session, tenant_id: int, membership_id: int) -> tu
     return row
 
 
+def lock_tenant_membership(db: Session, tenant_id: int, membership_id: int) -> tuple[TenantUser, IAMUser]:
+    """Share the role service's tenant -> user -> membership locking order."""
+    tenant = db.scalar(select(Tenant).where(Tenant.id == tenant_id).with_for_update())
+    if tenant is None:
+        raise HTTPException(404, "Tenant not found")
+    membership, user = get_tenant_membership(db, tenant_id, membership_id)
+    db.refresh(user, with_for_update=True)
+    db.refresh(membership, with_for_update=True)
+    return membership, user
+
+
+def require_ordinary_membership_target(db: Session, membership: TenantUser) -> None:
+    """Tenant-context callers cannot remove any administrator's authority.
+
+    Check all assignments, not the compatibility primary-role column. Keep the
+    legacy resolver protection during configured transition modes as well.
+    This applies to every caller, including custom roles with user:update.
+    """
+    roles = tenant_role_assignment_service.assigned_role_codes(db, membership)
+    legacy_admin = get_settings().tenant_role_assignment_mode != "DATABASE" and normalize_role(membership.role) == "TENANT_ADMIN"
+    if "TENANT_ADMIN" in roles or legacy_admin:
+        raise identity_http_error(
+            IdentityErrorCode.TENANT_ROLE_NOT_ASSIGNABLE,
+            "Tenant Administrator authority can only be removed through platform governance.",
+            status_code=403,
+        )
+
+
 def _active_tenant_admin_count(db: Session, tenant_id: int, *, excluding: int | None = None) -> int:
-    statement = (
-        select(TenantUser.id)
-        .join(IAMUser, IAMUser.id == TenantUser.user_id)
-        .join(
-            TenantUserRoleAssignment,
-            TenantUserRoleAssignment.tenant_user_id == TenantUser.id,
+    from ..core.context import get_bound_context, minimal_background_context, tenant_scope
+    context = get_bound_context()
+    if context is not None and context.tenant_id != tenant_id and not context.is_platform_admin:
+        raise RuntimeError("Cross-tenant authorization metadata access blocked")
+    with tenant_scope(minimal_background_context(tenant_id)):
+        statement = (
+            select(TenantUser.id)
+            .join(IAMUser, IAMUser.id == TenantUser.user_id)
+            .join(
+                TenantUserRoleAssignment,
+                TenantUserRoleAssignment.tenant_user_id == TenantUser.id,
+            )
+            .join(
+                AuthorizationRole,
+                AuthorizationRole.id == TenantUserRoleAssignment.role_id,
+            )
+            .where(
+                TenantUser.tenant_id == tenant_id,
+                TenantUser.status == "ACTIVE",
+                IAMUser.status == "ACTIVE",
+                verification_complete_clause(),
+                TenantUserRoleAssignment.tenant_id == tenant_id,
+                TenantUserRoleAssignment.status == "ACTIVE",
+                AuthorizationRole.code == "TENANT_ADMIN",
+                AuthorizationRole.scope == "TENANT",
+                AuthorizationRole.status == "ACTIVE",
+            )
+            .distinct()
         )
-        .join(
-            AuthorizationRole,
-            AuthorizationRole.id == TenantUserRoleAssignment.role_id,
-        )
-        .where(
-            TenantUser.tenant_id == tenant_id,
-            TenantUser.status == "ACTIVE",
-            IAMUser.status == "ACTIVE",
-            IAMUser.email_verified.is_(True),
-            IAMUser.verification_required.is_(False),
-            TenantUserRoleAssignment.status == "ACTIVE",
-            AuthorizationRole.code == "TENANT_ADMIN",
-            AuthorizationRole.scope == "TENANT",
-            AuthorizationRole.status == "ACTIVE",
-        )
-        .distinct()
-    )
-    if excluding is not None:
-        statement = statement.where(TenantUser.id != excluding)
-    return len(db.execute(statement).scalars().all())
+        if excluding is not None:
+            statement = statement.where(TenantUser.id != excluding)
+        return len(db.execute(statement).scalars().all())
 
 
 def ensure_not_last_active_tenant_admin(

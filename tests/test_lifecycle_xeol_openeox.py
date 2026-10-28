@@ -24,12 +24,15 @@ from app.services.lifecycle.xeol_provider import XeolProvider
 from app.settings import reset_settings
 from sqlalchemy import select
 
+from tests.tenant_fixture_scope import verified_fixture_tenant
+
 
 @pytest.fixture()
 def db(client):
     session = SessionLocal()
     try:
-        yield session
+        with verified_fixture_tenant(session, 1):
+            yield session
     finally:
         session.rollback()
         session.close()
@@ -258,7 +261,7 @@ def test_openeox_api_and_report_pack_use_persisted_lifecycle_data(client, db):
     db.add(component)
     db.commit()
 
-    response = client.get(f"/api/sboms/{sbom.id}/lifecycle/report?format=openeox")
+    response = client.get(f"/api/sboms/{sbom.public_id}/lifecycle/report?format=openeox")
     assert response.status_code == 200
     assert response.headers["content-disposition"].endswith('lifecycle.openeox.json"')
     document = response.json()
@@ -274,7 +277,7 @@ def test_openeox_api_and_report_pack_use_persisted_lifecycle_data(client, db):
     }
     assert statement["product_identification_helper"]["purl"] == "pkg:generic/go@1.15.2"
 
-    pack = client.get(f"/api/sboms/{sbom.id}/reports/lifecycle-pack")
+    pack = client.get(f"/api/sboms/{sbom.public_id}/reports/lifecycle-pack")
     assert pack.status_code == 200
     with zipfile.ZipFile(BytesIO(pack.content)) as archive:
         assert "lifecycle.openeox.json" in archive.namelist()

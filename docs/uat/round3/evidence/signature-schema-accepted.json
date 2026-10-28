@@ -1,0 +1,304 @@
+[
+  {
+    "id": "R3-SIGNATURE-OFFLINE-SCHEMA-RETEST",
+    "role": "admin",
+    "preconditions": "Verified isolated Greenfield UUID; task-owned fixtures; credentials kept in memory",
+    "stepsExecuted": "Revalidate same owned synthetic signature after vendored schema/URI dependency correction",
+    "expected": "200 typed E110 deferred-verifier error, no internal schema error",
+    "actual": {
+      "status": 200,
+      "data": {
+        "id": "f035d3eb-045d-4283-96e0-c547fff712ec",
+        "workspace_id": "f035d3eb-045d-4283-96e0-c547fff712ec",
+        "validation_session_id": "f035d3eb-045d-4283-96e0-c547fff712ec",
+        "project_id": "93a61279-9e4f-4d5a-8680-4cd0f6eef88f",
+        "user_id": "admin@olympus.example.test",
+        "original_filename": "signed.cdx.json",
+        "sbom_name": "UAT R3 signature contract",
+        "sbom_type": null,
+        "content_type": "application/json",
+        "file_size_bytes": 214,
+        "sha256": "40a6793171a9917609c1f878952127a81750f85f42953fe6bcbb4de6904dc408",
+        "original_size_bytes": 214,
+        "original_sha256": "40a6793171a9917609c1f878952127a81750f85f42953fe6bcbb4de6904dc408",
+        "stored_size_bytes": 214,
+        "stored_sha256": "020e68e95488abe48e9c0bf84ca5b086be9a18b88c91f4ded005748dc04574b5",
+        "storage_backend": "db",
+        "detected_format": "cyclonedx_json",
+        "detected_version": "1.6",
+        "detected_spec_version": "1.6",
+        "detection_confidence": 0.99,
+        "detection_evidence": {
+          "evidence": [
+            "bomFormat=CycloneDX",
+            "components present"
+          ],
+          "warnings": []
+        },
+        "current_content": "{\"bomFormat\": \"CycloneDX\", \"specVersion\": \"1.6\", \"version\": 1, \"signature\": {\"algorithm\": \"RS256\", \"value\": \"AA\"}, \"components\": [{\"type\": \"library\", \"bom-ref\": \"a\", \"name\": \"synthetic-signature\", \"version\": \"1\"}]}",
+        "content_inline_truncated": false,
+        "validation_status": "failed",
+        "latest_error_report": {
+          "entries": [
+            {
+              "code": "SBOM_VAL_I075_ORPHAN_COMPONENT",
+              "severity": "info",
+              "stage": "integrity",
+              "path": "components[0]",
+              "message": "Component 'a' has no inbound or outbound dependency edges.",
+              "remediation": "Informational. Consider declaring the relationship that brought this component in.",
+              "spec_reference": null,
+              "stage_number": 5,
+              "can_ai_fix": true
+            },
+            {
+              "code": "SBOM_VAL_W105_NTIA_AUTHOR_MISSING",
+              "severity": "warning",
+              "stage": "ntia",
+              "path": "metadata.tools",
+              "message": "Document has no author / SBOM-data creator.",
+              "remediation": "Add `creationInfo.creators` (SPDX) or `metadata.tools[]` (CycloneDX).",
+              "spec_reference": "NTIA 2021 \u00a76",
+              "stage_number": 7,
+              "can_ai_fix": true
+            },
+            {
+              "code": "SBOM_VAL_W106_NTIA_TIMESTAMP_MISSING",
+              "severity": "warning",
+              "stage": "ntia",
+              "path": "metadata.timestamp",
+              "message": "Document has no created / metadata.timestamp.",
+              "remediation": "Add the document creation timestamp.",
+              "spec_reference": "NTIA 2021 \u00a77",
+              "stage_number": 7,
+              "can_ai_fix": true
+            },
+            {
+              "code": "SBOM_VAL_W104_NTIA_DEPENDENCY_RELATIONSHIP_MISSING",
+              "severity": "warning",
+              "stage": "ntia",
+              "path": "dependencies",
+              "message": "No dependency relationship is declared between any components.",
+              "remediation": "Add at least one dependency edge (CycloneDX `dependencies[]` or SPDX `relationships[]`).",
+              "spec_reference": "NTIA 2021 \u00a75",
+              "stage_number": 7,
+              "can_ai_fix": true
+            },
+            {
+              "code": "SBOM_VAL_W100_NTIA_SUPPLIER_MISSING",
+              "severity": "warning",
+              "stage": "ntia",
+              "path": "components[0].supplier",
+              "message": "Component 'a' has no supplier name.",
+              "remediation": "Add `supplier.name` (CycloneDX) or `supplier` (SPDX).",
+              "spec_reference": "NTIA 2021 \u00a71",
+              "stage_number": 7,
+              "can_ai_fix": true
+            },
+            {
+              "code": "SBOM_VAL_W103_NTIA_UNIQUE_ID_MISSING",
+              "severity": "warning",
+              "stage": "ntia",
+              "path": "components[0]",
+              "message": "Component 'a' has no PURL, CPE, or SPDXID.",
+              "remediation": "Add at least one unique identifier so the scanner can match against vulnerability databases.",
+              "spec_reference": "NTIA 2021 \u00a74",
+              "stage_number": 7,
+              "can_ai_fix": true
+            },
+            {
+              "code": "SBOM_VAL_E110_SIGNATURE_INVALID",
+              "severity": "error",
+              "stage": "signature",
+              "path": "signature",
+              "message": "Signature verification is enabled but the verifier is not yet implemented.",
+              "remediation": "Disable SBOM_SIGNATURE_VERIFICATION until the rollout ADR ships, or omit the signature block.",
+              "spec_reference": null,
+              "stage_number": 8,
+              "can_ai_fix": false
+            }
+          ],
+          "truncated": false,
+          "failed_stage": "signature",
+          "error_count": 1,
+          "warning_count": 5,
+          "info_count": 1,
+          "http_status": 422,
+          "status": "failed"
+        },
+        "validation_errors": [
+          {
+            "code": "SBOM_VAL_E110_SIGNATURE_INVALID",
+            "severity": "error",
+            "stage": "signature",
+            "path": "signature",
+            "message": "Signature verification is enabled but the verifier is not yet implemented.",
+            "remediation": "Disable SBOM_SIGNATURE_VERIFICATION until the rollout ADR ships, or omit the signature block.",
+            "spec_reference": null,
+            "stage_number": 8,
+            "can_ai_fix": false
+          }
+        ],
+        "validation_warnings": [
+          {
+            "code": "SBOM_VAL_W105_NTIA_AUTHOR_MISSING",
+            "severity": "warning",
+            "stage": "ntia",
+            "path": "metadata.tools",
+            "message": "Document has no author / SBOM-data creator.",
+            "remediation": "Add `creationInfo.creators` (SPDX) or `metadata.tools[]` (CycloneDX).",
+            "spec_reference": "NTIA 2021 \u00a76",
+            "stage_number": 7,
+            "can_ai_fix": true
+          },
+          {
+            "code": "SBOM_VAL_W106_NTIA_TIMESTAMP_MISSING",
+            "severity": "warning",
+            "stage": "ntia",
+            "path": "metadata.timestamp",
+            "message": "Document has no created / metadata.timestamp.",
+            "remediation": "Add the document creation timestamp.",
+            "spec_reference": "NTIA 2021 \u00a77",
+            "stage_number": 7,
+            "can_ai_fix": true
+          },
+          {
+            "code": "SBOM_VAL_W104_NTIA_DEPENDENCY_RELATIONSHIP_MISSING",
+            "severity": "warning",
+            "stage": "ntia",
+            "path": "dependencies",
+            "message": "No dependency relationship is declared between any components.",
+            "remediation": "Add at least one dependency edge (CycloneDX `dependencies[]` or SPDX `relationships[]`).",
+            "spec_reference": "NTIA 2021 \u00a75",
+            "stage_number": 7,
+            "can_ai_fix": true
+          },
+          {
+            "code": "SBOM_VAL_W100_NTIA_SUPPLIER_MISSING",
+            "severity": "warning",
+            "stage": "ntia",
+            "path": "components[0].supplier",
+            "message": "Component 'a' has no supplier name.",
+            "remediation": "Add `supplier.name` (CycloneDX) or `supplier` (SPDX).",
+            "spec_reference": "NTIA 2021 \u00a71",
+            "stage_number": 7,
+            "can_ai_fix": true
+          },
+          {
+            "code": "SBOM_VAL_W103_NTIA_UNIQUE_ID_MISSING",
+            "severity": "warning",
+            "stage": "ntia",
+            "path": "components[0]",
+            "message": "Component 'a' has no PURL, CPE, or SPDXID.",
+            "remediation": "Add at least one unique identifier so the scanner can match against vulnerability databases.",
+            "spec_reference": "NTIA 2021 \u00a74",
+            "stage_number": 7,
+            "can_ai_fix": true
+          }
+        ],
+        "stage_results": {
+          "entries": [
+            {
+              "code": "SBOM_VAL_I075_ORPHAN_COMPONENT",
+              "severity": "info",
+              "stage": "integrity",
+              "path": "components[0]",
+              "message": "Component 'a' has no inbound or outbound dependency edges.",
+              "remediation": "Informational. Consider declaring the relationship that brought this component in.",
+              "spec_reference": null,
+              "stage_number": 5,
+              "can_ai_fix": true
+            },
+            {
+              "code": "SBOM_VAL_W105_NTIA_AUTHOR_MISSING",
+              "severity": "warning",
+              "stage": "ntia",
+              "path": "metadata.tools",
+              "message": "Document has no author / SBOM-data creator.",
+              "remediation": "Add `creationInfo.creators` (SPDX) or `metadata.tools[]` (CycloneDX).",
+              "spec_reference": "NTIA 2021 \u00a76",
+              "stage_number": 7,
+              "can_ai_fix": true
+            },
+            {
+              "code": "SBOM_VAL_W106_NTIA_TIMESTAMP_MISSING",
+              "severity": "warning",
+              "stage": "ntia",
+              "path": "metadata.timestamp",
+              "message": "Document has no created / metadata.timestamp.",
+              "remediation": "Add the document creation timestamp.",
+              "spec_reference": "NTIA 2021 \u00a77",
+              "stage_number": 7,
+              "can_ai_fix": true
+            },
+            {
+              "code": "SBOM_VAL_W104_NTIA_DEPENDENCY_RELATIONSHIP_MISSING",
+              "severity": "warning",
+              "stage": "ntia",
+              "path": "dependencies",
+              "message": "No dependency relationship is declared between any components.",
+              "remediation": "Add at least one dependency edge (CycloneDX `dependencies[]` or SPDX `relationships[]`).",
+              "spec_reference": "NTIA 2021 \u00a75",
+              "stage_number": 7,
+              "can_ai_fix": true
+            },
+            {
+              "code": "SBOM_VAL_W100_NTIA_SUPPLIER_MISSING",
+              "severity": "warning",
+              "stage": "ntia",
+              "path": "components[0].supplier",
+              "message": "Component 'a' has no supplier name.",
+              "remediation": "Add `supplier.name` (CycloneDX) or `supplier` (SPDX).",
+              "spec_reference": "NTIA 2021 \u00a71",
+              "stage_number": 7,
+              "can_ai_fix": true
+            },
+            {
+              "code": "SBOM_VAL_W103_NTIA_UNIQUE_ID_MISSING",
+              "severity": "warning",
+              "stage": "ntia",
+              "path": "components[0]",
+              "message": "Component 'a' has no PURL, CPE, or SPDXID.",
+              "remediation": "Add at least one unique identifier so the scanner can match against vulnerability databases.",
+              "spec_reference": "NTIA 2021 \u00a74",
+              "stage_number": 7,
+              "can_ai_fix": true
+            },
+            {
+              "code": "SBOM_VAL_E110_SIGNATURE_INVALID",
+              "severity": "error",
+              "stage": "signature",
+              "path": "signature",
+              "message": "Signature verification is enabled but the verifier is not yet implemented.",
+              "remediation": "Disable SBOM_SIGNATURE_VERIFICATION until the rollout ADR ships, or omit the signature block.",
+              "spec_reference": null,
+              "stage_number": 8,
+              "can_ai_fix": false
+            }
+          ],
+          "truncated": false,
+          "failed_stage": "signature",
+          "error_count": 1,
+          "warning_count": 5,
+          "info_count": 1,
+          "http_status": 422,
+          "status": "failed"
+        },
+        "total_lines": 1,
+        "is_large_file": false,
+        "full_editor_allowed": true,
+        "can_edit": true,
+        "can_ai_fix": true,
+        "security_blocked_reason": null,
+        "created_at": "2026-10-20T09:17:23+00:00",
+        "updated_at": "2026-10-20T09:27:12+00:00",
+        "expires_at": "2026-10-27T09:17:23+00:00",
+        "imported_sbom_id": null,
+        "repair_workspace_url": "/repair/f035d3eb-045d-4283-96e0-c547fff712ec"
+      },
+      "request_id": "b9f665bdf3d0"
+    },
+    "result": "PASS",
+    "time": "2026-10-20T09:27:13.554726+00:00"
+  }
+]

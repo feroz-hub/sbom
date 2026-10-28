@@ -1,7 +1,11 @@
 'use client';
 
+import { recordIdLabel } from '@/components/ui/RecordIdDisplay';
+import { publicId } from '@/lib/publicId';
 import { Suspense, use, useState } from 'react';
 import { useQuery } from '@tanstack/react-query';
+import { useAnalysisTerminal } from '@/hooks/useAnalysisTerminal';
+import { ANALYSIS_POLL_MS, isActiveAnalysis } from '@/lib/analysisSync';
 import { useRouter } from 'next/navigation';
 import {
   ArrowLeft,
@@ -40,11 +44,10 @@ interface AnalysisDetailPageProps {
   params: Promise<{ id: string }>;
 }
 
-const ACTIVE_RUN_STATUSES = new Set(['PENDING', 'QUEUED', 'RUNNING', 'ANALYSING', 'ANALYZING']);
 
 function AnalysisDetailContent({ params }: AnalysisDetailPageProps) {
   const { id: idParam } = use(params);
-  const id = Number(idParam);
+  const id = idParam;
   const router = useRouter();
   const { showToast } = useToast();
 
@@ -107,10 +110,10 @@ function AnalysisDetailContent({ params }: AnalysisDetailPageProps) {
   const { data: run, isLoading: runLoading, error: runError } = useQuery({
     queryKey: ['run', id],
     queryFn: ({ signal }) => getRun(id, signal),
-    enabled: !isNaN(id),
+    enabled: !!publicId(id),
     refetchInterval: (query) => {
       const status = String(query.state.data?.run_status ?? '').toUpperCase();
-      return ACTIVE_RUN_STATUSES.has(status) ? 3000 : false;
+      return isActiveAnalysis(status) ? ANALYSIS_POLL_MS : false;
     },
     refetchOnWindowFocus: true,
   });
@@ -119,8 +122,9 @@ function AnalysisDetailContent({ params }: AnalysisDetailPageProps) {
     queryKey: ['findings-enriched', id, severityFilter],
     queryFn: ({ signal }) =>
       getAllEnrichedRunFindings(id, { severity: severityFilter || undefined }, signal),
-    enabled: !isNaN(id),
+    enabled: !!publicId(id),
   });
+  useAnalysisTerminal(run);
   const findings = findingsData?.findings;
   const findingsTotalCount = findingsData?.totalCount;
   const canonicalTotalFindings = run?.metrics?.total_findings ?? run?.total_findings ?? 0;
@@ -142,7 +146,7 @@ function AnalysisDetailContent({ params }: AnalysisDetailPageProps) {
     try {
       const blob = await downloadPdfReport({
         runId: run.id,
-        title: `Analysis Report — Run #${run.id}`,
+        title: `Analysis Report — ${recordIdLabel('Run', run.display_id)}`,
         filename: `sbom-analysis-run-${run.id}.pdf`,
       });
       downloadBlob(blob, `sbom-analysis-run-${run.id}.pdf`);
@@ -245,11 +249,11 @@ function AnalysisDetailContent({ params }: AnalysisDetailPageProps) {
   return (
     <div className="flex flex-1 flex-col">
       <TopBar
-        title={`Run #${run.id}`}
-        subtitle={run.sbom_name ?? `SBOM #${run.sbom_id ?? '—'}`}
+        title={`${recordIdLabel('Run', run.display_id)}`}
+        subtitle={run.sbom_name ?? recordIdLabel('SBOM', run.sbom_display_id)}
         breadcrumbs={[
           { label: 'Analysis Runs', href: '/analysis' },
-          { label: `Run #${run.id}` },
+          { label: `${recordIdLabel('Run', run.display_id)}` },
         ]}
         action={<ExportMenu items={exportItems} />}
       />

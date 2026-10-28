@@ -5,6 +5,8 @@ import { render, screen } from '@testing-library/react';
 import type { ReactNode } from 'react';
 import { beforeEach, describe, expect, it, vi } from 'vitest';
 import type { BootstrapState } from '@/hooks/useAuth';
+import { ThemeProvider } from '@/components/theme/ThemeProvider';
+import { TopBar } from '../TopBar';
 
 const mockPathname = vi.hoisted(() => ({ current: '/' }));
 const mockAuth = vi.hoisted(() => ({
@@ -14,7 +16,7 @@ const mockAuth = vi.hoisted(() => ({
   login: vi.fn(),
   retryBootstrap: vi.fn(),
   hasPermission: () => true,
-  user: null,
+  user: null as { permissions: string[]; roles: string[]; displayName: string; email: string } | null,
   tenants: [],
 }));
 
@@ -32,13 +34,17 @@ vi.mock('@/hooks/useAuth', () => ({
   useAuth: () => mockAuth,
 }));
 
+vi.mock('@/components/ai-fixes/GlobalAiBatchProgress', () => ({
+  GlobalAiBatchBanner: () => <div aria-label="AI batch progress">Analysis in progress</div>,
+}));
+
 import { AppShell } from '../AppShell';
 
 function wrap(children: ReactNode) {
   const queryClient = new QueryClient({ defaultOptions: { queries: { retry: false } } });
   return render(
     <QueryClientProvider client={queryClient}>
-      {children}
+      <ThemeProvider>{children}</ThemeProvider>
     </QueryClientProvider>,
   );
 }
@@ -110,6 +116,7 @@ describe('AppShell route isolation & bootstrap loader UX', () => {
   });
 
   it('renders protected app shell with sidebar when bootstrap state is ready', () => {
+    mockAuth.user = { permissions: ['dashboard:read'], roles: [], displayName: 'Test user', email: 'user@test.local' };
     mockPathname.current = '/';
     mockAuth.bootstrapState = 'ready';
 
@@ -117,5 +124,21 @@ describe('AppShell route isolation & bootstrap loader UX', () => {
 
     expect(screen.getByText('Protected Dashboard Content')).toBeInTheDocument();
     expect(screen.getByLabelText('Primary navigation')).toBeInTheDocument();
+  });
+
+  it('keeps global controls and progress outside the page content scroll region', () => {
+    mockAuth.bootstrapState = 'ready';
+    wrap(<AppShell><TopBar title="Projects" /><p role="alert">Project notification</p></AppShell>);
+
+    const main = screen.getByRole('main');
+    expect(main).toHaveAttribute('id', 'main-content');
+    expect(main).toHaveAttribute('tabindex', '-1');
+    expect(main).toContainElement(screen.getByRole('heading', { name: 'Projects' }));
+    expect(main).toContainElement(screen.getByRole('alert'));
+    expect(main).not.toContainElement(screen.getByLabelText('Authenticated application header'));
+    expect(main).not.toContainElement(screen.getByLabelText('AI batch progress'));
+    expect(main).not.toContainElement(screen.getByLabelText('Primary navigation'));
+    expect(screen.getByRole('link', { name: 'Skip to main content' })).toHaveAttribute('href', '#main-content');
+    expect(screen.getAllByRole('button', { name: 'Open command palette' })).toHaveLength(1);
   });
 });

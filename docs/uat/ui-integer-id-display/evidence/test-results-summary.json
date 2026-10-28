@@ -1,0 +1,90 @@
+{
+  "inventory_unique": 4633,
+  "inventory_sha256": "1a373f89ab1c9df280ebd5f54b8aac6eded869b105bd2aacd96aefdd9e2f75c1",
+  "broad_raw_counts": {
+    "PASS": 4606,
+    "SKIP": 11,
+    "FAIL": 7,
+    "ERROR": 7
+  },
+  "broad_exit_code": 1,
+  "broad_is_not_a_single_green_run": true,
+  "corrected_module_cases_replaced": 49,
+  "explicit_optin_skips_executed_and_replaced": 2,
+  "isolated_load_cases": 2,
+  "accepted_counts": {
+    "PASS": 4624,
+    "SKIP": 9,
+    "FAIL": 0,
+    "ERROR": 0
+  },
+  "additional_passing_subtests": 12,
+  "missing_case_ids": 0,
+  "unexpected_case_ids": 0,
+  "duplicate_case_ids": 0,
+  "parameter_label_normalizations": 0,
+  "remaining_skip_nodes": [
+    "tests/ai/test_real_provider_smoke.py::test_real_anthropic_test_connection",
+    "tests/ai/test_real_provider_smoke.py::test_real_gemini_free_tier_test_connection",
+    "tests/ai/test_real_provider_smoke.py::test_real_grok_free_tier_test_connection",
+    "tests/ai/test_real_provider_smoke.py::test_real_openai_test_connection",
+    "tests/test_greenfield_startup_postgresql.py::test_real_confirmed_startup_encrypts_and_restores_backup_then_commits101",
+    "tests/test_greenfield_startup_postgresql.py::test_real_precommit_failure_keeps100_and_retains_claim",
+    "tests/test_native_greenfield_empty.py::test_empty_database_to_native_population",
+    "tests/test_native_http_acceptance.py::test_actual_http_expiry_denies_mutation",
+    "tests/test_native_http_acceptance.py::test_two_actual_bffs_logout_recovery_and_security_revocation"
+  ],
+  "application_source_unchanged_since_broad_start": true,
+  "source_equivalence_reference": "backend-source-equivalence.json",
+  "execution_artifacts": [
+    {
+      "file": "backend-snapshot-after.xml",
+      "sha256": "6cf7a571ab8aaccfe7d39bbd543ad64554a0130f2ae5912eb9dc20daaa46f277",
+      "selected_cases": 5
+    },
+    {
+      "file": "backend-advisor-after.xml",
+      "sha256": "509a738845e7a1cb1013bcded80ed342b062a78ff16cddc61a51812948a262bb",
+      "selected_cases": 29
+    },
+    {
+      "file": "backend-migration-env-after.xml",
+      "sha256": "f4d12a15519d5ab3cf4faa4b51eef4c04dbe690f61f5d306538092e3b72477ab",
+      "selected_cases": 7
+    },
+    {
+      "file": "backend-batch-after.xml",
+      "sha256": "91ea1bcb100fb34e631f96770fc6508f3b68e7a740151fe8059dd04d533a75a6",
+      "selected_cases": 5
+    },
+    {
+      "file": "backend-production-snapshot-after.xml",
+      "sha256": "42e21466cf43c12241221fdaa467ee2ab68730541c605d8d3a64dba2532b98c2",
+      "selected_cases": 3
+    },
+    {
+      "file": "backend-optin.xml",
+      "sha256": "d43620e43c698c6adb9eba01293330808e2809887eb185ce53e9ac534563e2b2",
+      "selected_cases": 1
+    },
+    {
+      "file": "backend-backup-matched.xml",
+      "sha256": "c3c4a1816972ebe6a90211da80515a1663764c6d121df78b6940c6d43f7819ef",
+      "selected_cases": 1
+    },
+    {
+      "file": "backend-load-final.xml",
+      "sha256": "deb00933e72e8408acb89cf06ada60a8c1567174a1ffcb31cc9496eaf3921ea0",
+      "selected_cases": 2
+    }
+  ],
+  "raw_broad_journal_sha256": "f6daf69bff731860cf3416050b7285f89ef1ed95f72034c6a4b2803d3a559f29",
+  "raw_broad_xml_sha256": "19ceef5f028bae4bdf68535c1bb35b45acefdc6220b23d49377042d7dc5e554f",
+  "frontend": {
+    "passed": 1838,
+    "failed": 0,
+    "skipped": 0,
+    "files": 203,
+    "original_json_sha256": "656717bc6a23e6f1254010dcd3c383de3ae724e943398e2742c82590ff8fa4f4"
+  }
+}

@@ -1,0 +1,90 @@
+# W1.7B E-only infrastructure. Never merge with application or D Compose files.
+# Use an explicit local socket, project, single file, clean environment and /dev/null env-file.
+name: sbom-uuid-w17-e
+
+services:
+  postgres_e:
+    image: postgres@sha256:1a6ab3f5345eb6dbe04a1349529caabdb0ab09293a09590fad07b2246bfa4b54
+    pull_policy: never
+    restart: "no"
+    cpus: 1.0
+    mem_limit: 512m
+    shm_size: 64m
+    pids_limit: 128
+    stop_grace_period: 30s
+    environment:
+      POSTGRES_USER: uuid_w1_d_bootstrap
+      POSTGRES_DB: uuid_w17_e_integrity
+      POSTGRES_PASSWORD_FILE: /run/secrets/e_password
+      POSTGRES_INITDB_ARGS: --auth-host=scram-sha-256 --auth-local=scram-sha-256
+      PGDATA: /var/lib/postgresql/data/pgdata
+    command:
+      - postgres
+      - -c
+      - password_encryption=scram-sha-256
+      - -c
+      - max_connections=12
+      - -c
+      - shared_buffers=64MB
+      - -c
+      - work_mem=4MB
+      - -c
+      - statement_timeout=2s
+      - -c
+      - lock_timeout=250ms
+      - -c
+      - idle_in_transaction_session_timeout=5s
+    ports:
+      - target: 5432
+        published: "56042"
+        host_ip: 127.0.0.1
+        protocol: tcp
+    volumes:
+      - type: volume
+        source: e_pgdata
+        target: /var/lib/postgresql/data
+        volume:
+          nocopy: true
+    secrets:
+      - e_password
+    networks:
+      - e_access
+    security_opt:
+      - no-new-privileges:true
+    healthcheck:
+      test: ["CMD", "pg_isready", "-U", "uuid_w1_d_bootstrap", "-d", "uuid_w17_e_integrity"]
+      interval: 5s
+      timeout: 3s
+      retries: 12
+    labels:
+      io.sbom.uuid-migration.target: E
+      io.sbom.uuid-migration.disposable: "true"
+
+volumes:
+  e_pgdata:
+    name: sbom-uuid-w17-e_e_pgdata
+    driver: local
+    labels:
+      io.sbom.uuid-migration.target: E
+      io.sbom.uuid-migration.disposable: "true"
+
+networks:
+  e_access:
+    name: sbom-uuid-w17-e_e_access
+    driver: bridge
+    internal: false
+    attachable: false
+    enable_ipv4: true
+    enable_ipv6: false
+    driver_opts:
+      com.docker.network.bridge.gateway_mode_ipv4: nat
+      com.docker.network.bridge.host_binding_ipv4: 127.0.0.1
+      com.docker.network.bridge.enable_icc: "false"
+      com.docker.network.bridge.enable_ip_masquerade: "true"
+    labels:
+      io.sbom.uuid-migration.target: E
+      io.sbom.uuid-migration.disposable: "true"
+
+secrets:
+  e_password:
+    file: "${UUID_W17_E_PASSWORD_FILE:?Supply the approved E-only private password file}"

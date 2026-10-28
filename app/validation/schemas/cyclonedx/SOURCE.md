@@ -24,3 +24,7 @@ Schemas are loaded once at process startup (see [app/validation/stages/schema.py
 2. Bump the commit SHA / retrieved date on the affected row(s).
 3. Run `pytest tests/validation/ -m schema` to confirm the corpus still passes.
 4. Add a CHANGELOG entry if the spec version itself moved (1.6 → 1.7).
+
+## Round 3 missing signature-schema dependency
+
+`jsf-0.82.schema.json` is vendored unchanged from the same immutable CycloneDX upstream commit `29b8bddcd4de5db6bf5abf2387c6a2f695be0c27` as the BOM schemas, retrieved 2026-10-20. [Upstream file](https://raw.githubusercontent.com/CycloneDX/specification/29b8bddcd4de5db6bf5abf2387c6a2f695be0c27/schema/jsf-0.82.schema.json). Apache-2.0. SHA256: `8bae002c25e723db7ee1f26afde680ae1a2b1a8f6b4b4b0fd65dc3becb090aae`. The local JSON Schema registry now registers its declared ID. No runtime network retrieval is added. Structural validation does not assert cryptographic verification: the separately deferred Stage 8 verifier still rejects verification requests for present signatures with E110.

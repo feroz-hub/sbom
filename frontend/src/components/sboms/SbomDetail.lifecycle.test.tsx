@@ -7,6 +7,9 @@ import { beforeEach, describe, expect, it, vi } from 'vitest';
 
 const back = vi.fn();
 const push = vi.fn();
+const access = vi.hoisted(() => ({ readOnly: false, excludedPermission: null as string | null }));
+vi.mock('@/hooks/useAuth', async () => { const { authorizedAuth } = await import('@/test/authorizedAuth'); return { useAuth: () => ({ ...authorizedAuth(), activeTenantId: '00000000-0000-4000-8000-000000000001', hasPermission: (p: string) => !access.readOnly && p !== access.excludedPermission && authorizedAuth().hasPermission(p) }) }; });
+
 vi.mock('next/navigation', () => ({
   useRouter: () => ({ back, push, replace: vi.fn() }),
 }));
@@ -34,6 +37,7 @@ vi.mock('@/hooks/useToast', () => ({
 }));
 
 const getSbomComponents = vi.fn();
+const getDashboardPostureVersions = vi.fn();
 const getRuns = vi.fn();
 const getSbomInfo = vi.fn();
 const getSbomRiskSummary = vi.fn();
@@ -62,6 +66,12 @@ vi.mock('@/lib/api', async () => {
   return {
     ...actual,
     BASE_URL: 'http://test.local',
+    getProjects: async () => [],
+    getProducts: async () => ({ items: [], total: 0 }),
+    getDashboardPostureVersions: (...args: unknown[]) => getDashboardPostureVersions(...args),
+    updateSbom: (...args: unknown[]) => editSbom(...args),
+    // These legacy override scenarios have no investigation context; keep resolver refetches local.
+    getVexInvestigationByTriple: async () => null,
     getSbomComponents: (...args: unknown[]) => getSbomComponents(...args),
     getRuns: (...args: unknown[]) => getRuns(...args),
     getSbomInfo: (...args: unknown[]) => getSbomInfo(...args),
@@ -92,7 +102,7 @@ import { SbomDetail } from '@/components/sboms/SbomDetail';
 import type { SBOMComponent, SBOMSource } from '@/types';
 
 const SBOM: SBOMSource = {
-  id: 42,
+  id: "00000000-0000-4000-8000-00000000002a",
   sbom_name: 'demo-sbom',
   sbom_type: null,
   sbom_version: '1.0.0',
@@ -106,8 +116,8 @@ const SBOM: SBOMSource = {
 };
 
 const COMPONENT: SBOMComponent = {
-  id: 99,
-  sbom_id: 42,
+  id: "00000000-0000-4000-8000-000000000063",
+  sbom_id: "00000000-0000-4000-8000-00000000002a",
   bom_ref: 'pkg:npm/demo@1.0.0',
   name: 'demo',
   version: '1.0.0',
@@ -150,6 +160,9 @@ function wrap(children: ReactNode) {
 }
 
 beforeEach(() => {
+  getDashboardPostureVersions.mockResolvedValue({ items: [] });
+  access.readOnly = false;
+  access.excludedPermission = null;
   window.localStorage.clear();
   Object.defineProperty(URL, 'createObjectURL', {
     configurable: true,
@@ -166,7 +179,7 @@ beforeEach(() => {
   back.mockReset();
   push.mockReset();
   discoverSbomVexDocuments.mockResolvedValue({
-    sbom_id: 42,
+    sbom_id: "00000000-0000-4000-8000-00000000002a",
     discovered_documents: 1,
     statements_imported: 2,
     matched_statements: 1,
@@ -179,7 +192,7 @@ beforeEach(() => {
   exportSbomVexReportJson.mockResolvedValue({ blob: new Blob(['{}']), filename: 'vex.json' });
   exportSbomVexReportPack.mockResolvedValue({ blob: new Blob(['zip']), filename: 'vex.zip' });
   getVexOverrideHistory.mockResolvedValue({
-    component_id: 99,
+    component_id: "00000000-0000-4000-8000-000000000063",
     vulnerability_id: 'CVE-2026-0001',
     history: [
       {
@@ -195,8 +208,8 @@ beforeEach(() => {
   });
   overrideVexStatement.mockResolvedValue({
     id: 2,
-    sbom_id: 42,
-    component_id: 99,
+    sbom_id: "00000000-0000-4000-8000-00000000002a",
+    component_id: "00000000-0000-4000-8000-000000000063",
     vulnerability_id: 'CVE-2026-0001',
     status: 'affected',
     created_at: '2026-06-12T00:00:00Z',
@@ -217,15 +230,15 @@ beforeEach(() => {
   getSbomVersions.mockResolvedValue([]);
   compareSbomVersions.mockResolvedValue({ added: [], removed: [], changed: [] });
   restoreSbomVersion.mockResolvedValue(SBOM);
-  refreshSbomLifecycle.mockResolvedValue({ sbom_id: 42, components_enriched: 1, stale_components: 0 });
+  refreshSbomLifecycle.mockResolvedValue({ sbom_id: "00000000-0000-4000-8000-00000000002a", components_enriched: 1, stale_components: 0 });
   refreshComponentLifecycle.mockResolvedValue(COMPONENT);
   getSbomVexStatements.mockResolvedValue({
-    sbom_id: 42,
+    sbom_id: "00000000-0000-4000-8000-00000000002a",
     statements: [
       {
         id: 1,
-        sbom_id: 42,
-        component_id: 99,
+        sbom_id: "00000000-0000-4000-8000-00000000002a",
+        component_id: "00000000-0000-4000-8000-000000000063",
         component_name: 'demo',
         component_version: '1.0.0',
         vulnerability_id: 'CVE-2026-0001',
@@ -249,11 +262,11 @@ beforeEach(() => {
   });
   uploadSbomVexDocument.mockResolvedValue({
     document_id: 1,
-    sbom_id: 42,
+    sbom_id: "00000000-0000-4000-8000-00000000002a",
     statements_imported: 1,
     validation_status: 'accepted',
   });
-  editSbom.mockResolvedValue({ ...SBOM, id: 43, parent_id: 42, sbom_version: '1.0.1' });
+  editSbom.mockResolvedValue({ ...SBOM, id: "00000000-0000-4000-8000-00000000002b", parent_id: "00000000-0000-4000-8000-00000000002a", sbom_version: '1.0.1' });
   overrideComponentLifecycle.mockResolvedValue(COMPONENT);
   showToast.mockReset();
 });
@@ -280,10 +293,10 @@ describe('SbomDetail lifecycle management', () => {
     expect(screen.getByText('Manual override')).toBeInTheDocument();
 
     fireEvent.click(screen.getByRole('button', { name: /Refresh EOL \/ EOS Details/i }));
-    await waitFor(() => expect(refreshSbomLifecycle).toHaveBeenCalledWith(42, true));
+    await waitFor(() => expect(refreshSbomLifecycle).toHaveBeenCalledWith("00000000-0000-4000-8000-00000000002a", true));
 
     fireEvent.click(screen.getByRole('button', { name: /^Refresh$/i }));
-    await waitFor(() => expect(refreshComponentLifecycle).toHaveBeenCalledWith(99, true));
+    await waitFor(() => expect(refreshComponentLifecycle).toHaveBeenCalledWith("00000000-0000-4000-8000-000000000063", true));
 
     fireEvent.click(screen.getByRole('button', { name: /Edit/i }));
     expect(await screen.findByText('Lifecycle Management Parameters')).toBeInTheDocument();
@@ -294,12 +307,24 @@ describe('SbomDetail lifecycle management', () => {
     expect(screen.getByText('Override Reason')).toBeInTheDocument();
   }, 15000);
 
+  it('requires lifecycle override rather than generic component editing', async () => {
+    access.excludedPermission = 'lifecycle:override';
+    render(wrap(<SbomDetail sbom={SBOM} />));
+    fireEvent.click(screen.getByRole('button', { name: /Components List/i }));
+    expect(await screen.findByText('demo')).toBeInTheDocument();
+    const edit = screen.getByRole('button', { name: /^Edit$/i });
+    expect(edit).toBeDisabled();
+    fireEvent.click(edit);
+    expect(screen.queryByText('Lifecycle Management Parameters')).not.toBeInTheDocument();
+    expect(overrideComponentLifecycle).not.toHaveBeenCalled();
+  });
+
   it('keeps registry upgrade metadata separate from EOL and EOS status', async () => {
     getSbomComponents.mockResolvedValueOnce({
       items: [
         {
           ...COMPONENT,
-          id: 100,
+          id: "00000000-0000-4000-8000-000000000064",
           name: 'alembic',
           version: '1.18.4',
           purl: 'pkg:pypi/alembic@1.18.4',
@@ -421,9 +446,9 @@ describe('SbomDetail lifecycle management', () => {
   it('filters CVEs by the selected component in the selection step', async () => {
     const response = await getSbomVexStatements();
     getSbomVexStatements.mockResolvedValue({ ...response, vulnerability_options: [
-      { component_id: 99, vulnerability_id: 'CVE-2026-0001' },
-      { component_id: 99, vulnerability_id: 'CVE-2026-0002' },
-      { component_id: 100, vulnerability_id: 'CVE-2026-9999' },
+      { component_id: "00000000-0000-4000-8000-000000000063", vulnerability_id: 'CVE-2026-0001' },
+      { component_id: "00000000-0000-4000-8000-000000000063", vulnerability_id: 'CVE-2026-0002' },
+      { component_id: "00000000-0000-4000-8000-000000000064", vulnerability_id: 'CVE-2026-9999' },
     ] });
     render(wrap(<SbomDetail sbom={SBOM} />));
     await screen.findByText('CVE-2026-0001');
@@ -434,17 +459,17 @@ describe('SbomDetail lifecycle management', () => {
     expect(picker).toHaveValue('');
     expect(screen.queryByLabelText(/Reason for this decision/)).not.toBeInTheDocument();
 
-    fireEvent.change(screen.getByLabelText('Component'), { target: { value: '99' } });
+    fireEvent.change(screen.getByLabelText('Component'), { target: { value: "00000000-0000-4000-8000-000000000063" } });
     await screen.findByRole('option', { name: 'CVE-2026-0002' });
     expect(screen.queryByRole('option', { name: 'CVE-2026-9999' })).not.toBeInTheDocument();
   });
 
   it('switching components clears the selected CVE', async () => {
-    getSbomComponents.mockResolvedValue({ items: [COMPONENT, { ...COMPONENT, id: 100, name: 'other' }], total_count: 2 });
+    getSbomComponents.mockResolvedValue({ items: [COMPONENT, { ...COMPONENT, id: "00000000-0000-4000-8000-000000000064", name: 'other' }], total_count: 2 });
     render(wrap(<SbomDetail sbom={SBOM} />));
     await screen.findByText('CVE-2026-0001');
     fireEvent.click(screen.getAllByRole('button', { name: /^Manage VEX$/i })[0]);
-    fireEvent.change(screen.getByLabelText('Component'), { target: { value: '99' } });
+    fireEvent.change(screen.getByLabelText('Component'), { target: { value: "00000000-0000-4000-8000-000000000063" } });
     await screen.findByRole('option', { name: 'CVE-2026-0001' });
     fireEvent.change(screen.getByLabelText('Vulnerability'), { target: { value: 'CVE-2026-0001' } });
     // The editor takes over once a pair is chosen.
@@ -466,9 +491,40 @@ describe('SbomDetail lifecycle management', () => {
 
     // No reconciled context exists for a vulnerability nothing detected, so
     // the editor saves through the component-scoped override.
-    await waitFor(() => expect(overrideVexStatement).toHaveBeenCalledWith(99, 'VENDOR-42',
-      expect.objectContaining({ status: 'under_investigation', reason: 'External advisory' }), undefined, 42));
+    await waitFor(() => expect(overrideVexStatement).toHaveBeenCalledWith("00000000-0000-4000-8000-000000000063", 'VENDOR-42',
+      expect.objectContaining({ status: 'under_investigation', reason: 'External advisory' }), undefined, "00000000-0000-4000-8000-00000000002a"));
     expect(overrideComponentLifecycle).not.toHaveBeenCalled();
+  }, 15000);
+
+  it('restores a new revision, refreshes inventory choices and preserves navigation and snapshots', async () => {
+    const client = new QueryClient({ defaultOptions: { queries: { staleTime: 300_000, retry: false } } });
+    getSbomVersions.mockResolvedValue([SBOM, { ...SBOM, id: "00000000-0000-4000-8000-000000000028", sbom_version: '0.9' }]);
+    restoreSbomVersion.mockResolvedValue({ ...SBOM, id: "00000000-0000-4000-8000-00000000002b", parent_id: "00000000-0000-4000-8000-00000000002a", projectid: "00000000-0000-4000-8000-000000000007", product_id: "00000000-0000-4000-8000-000000000008" });
+    const keys = [['sboms'], ['product-sboms', "00000000-0000-4000-8000-000000000008"], ['logical-sbom-versions', "00000000-0000-4000-8000-000000000004"], ['reports', 'targets', 'SBOM', 'search']];
+    keys.forEach(key => client.setQueryData(key, 'before'));
+    client.setQueryData(['vex-run-snapshot', 'tenant', "00000000-0000-4000-8000-00000000002a", 1], 'immutable');
+    render(<QueryClientProvider client={client}><SbomDetail sbom={SBOM} /></QueryClientProvider>);
+    fireEvent.click(screen.getByRole('button', { name: /Version History/i }));
+    fireEvent.click(await screen.findByRole('button', { name: 'Restore' }));
+    expect(await screen.findByText(/Version restored successfully as a new revision/)).toBeInTheDocument();
+    await waitFor(() => keys.forEach(key => expect(client.getQueryState(key)?.isInvalidated).toBe(true)));
+    expect(client.getQueryState(['vex-run-snapshot', 'tenant', "00000000-0000-4000-8000-00000000002a", 1])?.isInvalidated).toBe(false);
+    await waitFor(() => expect(push).toHaveBeenCalledWith("/sboms/00000000-0000-4000-8000-00000000002b"), { timeout: 4000 });
+    client.clear();
+  }, 15000);
+
+  it('metadata edit uses returned owners rather than assuming form owners are unchanged', async () => {
+    const client = new QueryClient({ defaultOptions: { queries: { staleTime: 300_000, retry: false } } });
+    const owned = { ...SBOM, projectid: "00000000-0000-4000-8000-000000000001", product_id: "00000000-0000-4000-8000-00000000000a" };
+    editSbom.mockResolvedValue({ ...owned, sbom_name: 'Renamed', projectid: "00000000-0000-4000-8000-000000000002", product_id: "00000000-0000-4000-8000-000000000014" });
+    const keys = [['product-sboms', "00000000-0000-4000-8000-00000000000a"], ['product-sboms', "00000000-0000-4000-8000-000000000014"], ['project', "00000000-0000-4000-8000-000000000001"], ['project', "00000000-0000-4000-8000-000000000002"]];
+    keys.forEach(key => client.setQueryData(key, 'before')); client.setQueryData(['project', "00000000-0000-4000-8000-000000000063"], 'other');
+    render(<QueryClientProvider client={client}><SbomDetail sbom={owned} /></QueryClientProvider>);
+    fireEvent.click(screen.getByRole('button', { name: /Edit Details/i }));
+    fireEvent.change(screen.getByLabelText(/^SBOM Name/), { target: { value: 'Renamed' } });
+    fireEvent.click(screen.getByRole('button', { name: /Save Details/i }));
+    await waitFor(() => keys.forEach(key => expect(client.getQueryState(key)?.isInvalidated).toBe(true)));
+    expect(client.getQueryState(['project', "00000000-0000-4000-8000-000000000063"])?.isInvalidated).toBe(false); client.clear();
   }, 15000);
 
   it('submits a decision and shows audit history', async () => {
@@ -486,13 +542,13 @@ describe('SbomDetail lifecycle management', () => {
 
     await waitFor(() => {
       expect(overrideVexStatement).toHaveBeenCalledWith(
-        99,
+        "00000000-0000-4000-8000-000000000063",
         'CVE-2026-0001',
         expect.objectContaining({
           status: 'affected',
           action_statement: 'Upgrade immediately',
           reason: 'confirmed reachable in deployment',
-        }), undefined, 42,
+        }), undefined, "00000000-0000-4000-8000-00000000002a",
       );
     });
     expect(await screen.findByText(/VEX decision saved/i)).toBeInTheDocument();
@@ -521,12 +577,12 @@ describe('SbomDetail lifecycle management', () => {
 
     expect(await screen.findByText('VEX Statements')).toBeInTheDocument();
     fireEvent.click(screen.getByRole('button', { name: /^CSV$/i }));
-    await waitFor(() => expect(exportSbomVexReportCsv).toHaveBeenCalledWith(42));
+    await waitFor(() => expect(exportSbomVexReportCsv).toHaveBeenCalledWith("00000000-0000-4000-8000-00000000002a"));
     expect(await screen.findByText('Downloaded vex.csv.')).toBeInTheDocument();
 
     fireEvent.click(screen.getByRole('button', { name: /Components List/i }));
     fireEvent.click(await screen.findByRole('button', { name: /Lifecycle CSV/i }));
-    await waitFor(() => expect(exportSbomLifecycleReportCsv).toHaveBeenCalledWith(42));
+    await waitFor(() => expect(exportSbomLifecycleReportCsv).toHaveBeenCalledWith("00000000-0000-4000-8000-00000000002a"));
     expect(await screen.findByText('Downloaded lifecycle.csv.')).toBeInTheDocument();
   }, 15000);
 
@@ -535,7 +591,7 @@ describe('SbomDetail lifecycle management', () => {
 
     expect(await screen.findByText('VEX Statements')).toBeInTheDocument();
     fireEvent.click(screen.getByRole('button', { name: /Discover/i }));
-    await waitFor(() => expect(discoverSbomVexDocuments).toHaveBeenCalledWith(42, true));
+    await waitFor(() => expect(discoverSbomVexDocuments).toHaveBeenCalledWith("00000000-0000-4000-8000-00000000002a", true));
     expect(await screen.findByText(/Discovery imported 2 statements/i)).toBeInTheDocument();
 
     fireEvent.click(screen.getByRole('button', { name: /Components List/i }));
@@ -543,7 +599,7 @@ describe('SbomDetail lifecycle management', () => {
   }, 15000);
 
   it('hides sensitive VEX controls for viewer role', async () => {
-    window.localStorage.setItem('sbom-role', 'viewer');
+    access.readOnly = true;
     render(wrap(<SbomDetail sbom={SBOM} />));
 
     expect(await screen.findByText('VEX Statements')).toBeInTheDocument();
@@ -582,7 +638,7 @@ describe('SbomDetail lifecycle management', () => {
 
       await waitFor(() => {
         expect(overrideComponentLifecycle).toHaveBeenCalledWith(
-          99,
+          "00000000-0000-4000-8000-000000000063",
           expect.objectContaining({
             lifecycle_status: 'EOL',
             eos_date: '2026-06-30',
@@ -609,7 +665,7 @@ describe('SbomDetail lifecycle management', () => {
 
       // Assert query invalidate queries called
       await waitFor(() => {
-        expect(invalidateSpy).toHaveBeenCalledWith(expect.objectContaining({ queryKey: ['sbom-components', 42] }));
+        expect(invalidateSpy).toHaveBeenCalledWith(expect.objectContaining({ queryKey: ['sbom-components', "00000000-0000-4000-8000-00000000002a"] }));
         expect(invalidateSpy).toHaveBeenCalledWith(expect.objectContaining({ queryKey: ['dashboard-lifecycle'] }));
         expect(invalidateSpy).toHaveBeenCalledWith(expect.objectContaining({ queryKey: ['dashboard-health'] }));
       });
@@ -658,5 +714,34 @@ describe('SbomDetail lifecycle management', () => {
       expect(await screen.findByText('Backend Error: Internal Server Error')).toBeInTheDocument();
       fireEvent.click(screen.getByRole('button', { name: /Cancel/i }));
     }, 15000);
+  });
+});
+
+describe('Operational lifecycle processing restrictions', () => {
+  it('keeps inactive historical detail visible and disables analysis and reports', async () => {
+    access.readOnly = true;
+    render(wrap(<SbomDetail sbom={{ ...SBOM, lifecycle_status: 'INACTIVE' }} />));
+    expect(screen.getByText('INACTIVE')).toBeVisible();
+    expect(screen.getByRole('button', { name: /Run Analysis/i })).toBeDisabled();
+    expect(screen.getAllByText(/Analysis unavailable because this SBOM is inactive/).some(element => element.closest('#sbom-processing-unavailable'))).toBe(true);
+    expect(screen.queryByRole('button', { name: 'Mark Active' })).not.toBeInTheDocument();
+    const exports = screen.getAllByRole('button').filter(button => /Export|Report/i.test(button.textContent || ''));
+    expect(exports.length).toBeGreaterThan(0);
+    exports.forEach(button => expect(button).toBeDisabled());
+  });
+
+  it('allows reanalysis while previous reports remain stale', () => {
+    render(wrap(<SbomDetail sbom={{ ...SBOM, lifecycle_status: 'ACTIVE', analysis_requires_reanalysis: true }} />));
+    expect(screen.getByRole('button', { name: /Run Analysis/i })).toBeEnabled();
+    const exports = screen.getAllByRole('button').filter(button => /Export|Report/i.test(button.textContent || ''));
+    exports.forEach(button => expect(button).toBeDisabled());
+  });
+
+  it('requests version evidence for this SBOM instead of the whole product', async () => {
+    const selected = { ...SBOM, projectid: '00000000-0000-4000-8000-000000000007', product_id: '00000000-0000-4000-8000-000000000008' };
+    render(wrap(<SbomDetail sbom={selected} />));
+    await waitFor(() => expect(getDashboardPostureVersions).toHaveBeenCalledWith({
+      projectId: selected.projectid, applicationId: selected.product_id, sbomId: selected.id,
+    }, expect.any(AbortSignal)));
   });
 });

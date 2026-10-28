@@ -1,0 +1,1325 @@
+{
+  "source_independent31": "760c7e7b0b50688fd4f7c3471219a35fa3b025f67bf3303cc15a50f44800fd30",
+  "source_revision": "085_uuid_sbom_component_expand",
+  "source_runner13": "85507e89a3946cda7611e5498e816fcf5708af18a6549b08a4fbfe3ae1f0d80a",
+  "tables": {
+    "logical_sbom": {
+      "columns": [
+        {
+          "default": "nextval('public.logical_sbom_id_seq'::regclass)",
+          "name": "id",
+          "not_null": true,
+          "type": "integer"
+        },
+        {
+          "default": null,
+          "name": "tenant_id",
+          "not_null": true,
+          "type": "integer"
+        },
+        {
+          "default": null,
+          "name": "product_id",
+          "not_null": false,
+          "type": "integer"
+        },
+        {
+          "default": null,
+          "name": "name",
+          "not_null": true,
+          "type": "character varying"
+        },
+        {
+          "default": null,
+          "name": "description",
+          "not_null": false,
+          "type": "text"
+        },
+        {
+          "default": null,
+          "name": "created_by",
+          "not_null": false,
+          "type": "character varying"
+        },
+        {
+          "default": null,
+          "name": "created_at",
+          "not_null": true,
+          "type": "character varying"
+        },
+        {
+          "default": null,
+          "name": "updated_at",
+          "not_null": true,
+          "type": "character varying"
+        },
+        {
+          "default": "gen_random_uuid()",
+          "name": "public_id",
+          "not_null": false,
+          "type": "uuid"
+        }
+      ],
+      "constraints": [
+        {
+          "definition": "CHECK (public_id IS NULL OR public_id::text ~ '^[0-9a-f]{8}-[0-9a-f]{4}-4[0-9a-f]{3}-[89ab][0-9a-f]{3}-[0-9a-f]{12}$'::text) NOT VALID",
+          "kind": "c",
+          "name": "ck_logical_sbom_public_id_v4"
+        },
+        {
+          "definition": "FOREIGN KEY (product_id) REFERENCES public.products(id) ON DELETE CASCADE",
+          "kind": "f",
+          "name": "fk_logical_sbom_product_id_products"
+        },
+        {
+          "definition": "FOREIGN KEY (product_id, tenant_id) REFERENCES public.products(id, tenant_id) ON DELETE CASCADE",
+          "kind": "f",
+          "name": "fk_logical_sbom_product_tenant"
+        },
+        {
+          "definition": "FOREIGN KEY (tenant_id) REFERENCES public.tenants(id)",
+          "kind": "f",
+          "name": "fk_logical_sbom_tenant_id_tenants"
+        },
+        {
+          "definition": "PRIMARY KEY (id)",
+          "kind": "p",
+          "name": "pk_logical_sbom"
+        },
+        {
+          "definition": "UNIQUE (id, tenant_id)",
+          "kind": "u",
+          "name": "uq_logical_sbom_id_tenant"
+        },
+        {
+          "definition": "UNIQUE (id, tenant_id, product_id)",
+          "kind": "u",
+          "name": "uq_logical_sbom_id_tenant_product"
+        }
+      ]
+    },
+    "products": {
+      "columns": [
+        {
+          "default": "nextval('public.products_id_seq'::regclass)",
+          "name": "id",
+          "not_null": true,
+          "type": "integer"
+        },
+        {
+          "default": "'active'::character varying",
+          "name": "status",
+          "not_null": true,
+          "type": "character varying(32)"
+        },
+        {
+          "default": null,
+          "name": "latest_version",
+          "not_null": false,
+          "type": "character varying(128)"
+        },
+        {
+          "default": null,
+          "name": "metadata_json",
+          "not_null": false,
+          "type": "json"
+        },
+        {
+          "default": null,
+          "name": "created_by",
+          "not_null": false,
+          "type": "character varying(128)"
+        },
+        {
+          "default": null,
+          "name": "created_at",
+          "not_null": true,
+          "type": "character varying"
+        },
+        {
+          "default": null,
+          "name": "updated_at",
+          "not_null": false,
+          "type": "character varying"
+        },
+        {
+          "default": null,
+          "name": "deleted_at",
+          "not_null": false,
+          "type": "character varying"
+        },
+        {
+          "default": "true",
+          "name": "is_active",
+          "not_null": true,
+          "type": "boolean"
+        },
+        {
+          "default": null,
+          "name": "deactivated_at",
+          "not_null": false,
+          "type": "timestamp with time zone"
+        },
+        {
+          "default": null,
+          "name": "deactivated_by",
+          "not_null": false,
+          "type": "character varying(128)"
+        },
+        {
+          "default": null,
+          "name": "project_id",
+          "not_null": true,
+          "type": "integer"
+        },
+        {
+          "default": null,
+          "name": "tenant_id",
+          "not_null": true,
+          "type": "integer"
+        },
+        {
+          "default": null,
+          "name": "current_sbom_id",
+          "not_null": false,
+          "type": "integer"
+        },
+        {
+          "default": "'AUTO'::character varying",
+          "name": "current_sbom_mode",
+          "not_null": true,
+          "type": "character varying(16)"
+        },
+        {
+          "default": "gen_random_uuid()",
+          "name": "public_id",
+          "not_null": false,
+          "type": "uuid"
+        },
+        {
+          "default": null,
+          "name": "name",
+          "not_null": true,
+          "type": "character varying(255)"
+        },
+        {
+          "default": null,
+          "name": "normalized_name",
+          "not_null": true,
+          "type": "character varying(255)"
+        },
+        {
+          "default": null,
+          "name": "slug",
+          "not_null": true,
+          "type": "character varying(255)"
+        },
+        {
+          "default": null,
+          "name": "description",
+          "not_null": false,
+          "type": "text"
+        },
+        {
+          "default": null,
+          "name": "product_key",
+          "not_null": false,
+          "type": "character varying(128)"
+        },
+        {
+          "default": null,
+          "name": "vendor",
+          "not_null": false,
+          "type": "character varying(255)"
+        },
+        {
+          "default": null,
+          "name": "category",
+          "not_null": false,
+          "type": "character varying(128)"
+        }
+      ],
+      "constraints": [
+        {
+          "definition": "CHECK (current_sbom_mode::text = ANY (ARRAY['AUTO'::character varying::text, 'MANUAL_PIN'::character varying::text]))",
+          "kind": "c",
+          "name": "ck_products_ck_products_current_sbom_mode"
+        },
+        {
+          "definition": "CHECK (public_id IS NULL OR public_id::text ~ '^[0-9a-f]{8}-[0-9a-f]{4}-4[0-9a-f]{3}-[89ab][0-9a-f]{3}-[0-9a-f]{12}$'::text) NOT VALID",
+          "kind": "c",
+          "name": "ck_products_public_id_v4"
+        },
+        {
+          "definition": "FOREIGN KEY (current_sbom_id) REFERENCES public.sbom_source(id) ON DELETE SET NULL",
+          "kind": "f",
+          "name": "fk_products_current_sbom_id_sbom_source"
+        },
+        {
+          "definition": "FOREIGN KEY (project_id) REFERENCES public.projects(id) ON DELETE CASCADE",
+          "kind": "f",
+          "name": "fk_products_project_id_projects"
+        },
+        {
+          "definition": "FOREIGN KEY (tenant_id) REFERENCES public.tenants(id)",
+          "kind": "f",
+          "name": "fk_products_tenant_id_tenants"
+        },
+        {
+          "definition": "PRIMARY KEY (id)",
+          "kind": "p",
+          "name": "pk_products"
+        },
+        {
+          "definition": "UNIQUE (id, tenant_id)",
+          "kind": "u",
+          "name": "uq_products_id_tenant"
+        },
+        {
+          "definition": "UNIQUE (tenant_id, project_id, slug)",
+          "kind": "u",
+          "name": "uq_products_tenant_project_slug"
+        }
+      ]
+    },
+    "projects": {
+      "columns": [
+        {
+          "default": "nextval('public.projects_id_seq'::regclass)",
+          "name": "id",
+          "not_null": true,
+          "type": "integer"
+        },
+        {
+          "default": null,
+          "name": "deactivated_at",
+          "not_null": false,
+          "type": "timestamp with time zone"
+        },
+        {
+          "default": null,
+          "name": "deactivated_by",
+          "not_null": false,
+          "type": "character varying(128)"
+        },
+        {
+          "default": null,
+          "name": "tenant_id",
+          "not_null": true,
+          "type": "integer"
+        },
+        {
+          "default": "gen_random_uuid()",
+          "name": "public_id",
+          "not_null": false,
+          "type": "uuid"
+        },
+        {
+          "default": null,
+          "name": "project_name",
+          "not_null": true,
+          "type": "character varying"
+        },
+        {
+          "default": null,
+          "name": "project_details",
+          "not_null": false,
+          "type": "character varying"
+        },
+        {
+          "default": null,
+          "name": "project_status",
+          "not_null": true,
+          "type": "integer"
+        },
+        {
+          "default": null,
+          "name": "created_on",
+          "not_null": false,
+          "type": "character varying"
+        },
+        {
+          "default": null,
+          "name": "created_by",
+          "not_null": false,
+          "type": "character varying"
+        },
+        {
+          "default": null,
+          "name": "modified_on",
+          "not_null": false,
+          "type": "character varying"
+        },
+        {
+          "default": null,
+          "name": "modified_by",
+          "not_null": false,
+          "type": "character varying"
+        },
+        {
+          "default": "true",
+          "name": "is_active",
+          "not_null": true,
+          "type": "boolean"
+        }
+      ],
+      "constraints": [
+        {
+          "definition": "CHECK (public_id IS NULL OR public_id::text ~ '^[0-9a-f]{8}-[0-9a-f]{4}-4[0-9a-f]{3}-[89ab][0-9a-f]{3}-[0-9a-f]{12}$'::text) NOT VALID",
+          "kind": "c",
+          "name": "ck_projects_public_id_v4"
+        },
+        {
+          "definition": "FOREIGN KEY (tenant_id) REFERENCES public.tenants(id)",
+          "kind": "f",
+          "name": "fk_projects_tenant_id_tenants"
+        },
+        {
+          "definition": "PRIMARY KEY (id)",
+          "kind": "p",
+          "name": "pk_projects"
+        },
+        {
+          "definition": "UNIQUE (tenant_id, project_name)",
+          "kind": "u",
+          "name": "uq_projects_tenant_name"
+        }
+      ]
+    },
+    "sbom_component": {
+      "columns": [
+        {
+          "default": "nextval('public.sbom_component_id_seq'::regclass)",
+          "name": "id",
+          "not_null": true,
+          "type": "integer"
+        },
+        {
+          "default": null,
+          "name": "cpe_source",
+          "not_null": false,
+          "type": "character varying(32)"
+        },
+        {
+          "default": null,
+          "name": "supplier",
+          "not_null": false,
+          "type": "character varying"
+        },
+        {
+          "default": null,
+          "name": "scope",
+          "not_null": false,
+          "type": "character varying"
+        },
+        {
+          "default": null,
+          "name": "created_on",
+          "not_null": false,
+          "type": "character varying"
+        },
+        {
+          "default": null,
+          "name": "ecosystem",
+          "not_null": false,
+          "type": "character varying"
+        },
+        {
+          "default": null,
+          "name": "original_name",
+          "not_null": false,
+          "type": "character varying"
+        },
+        {
+          "default": null,
+          "name": "normalized_name",
+          "not_null": false,
+          "type": "character varying"
+        },
+        {
+          "default": null,
+          "name": "original_version",
+          "not_null": false,
+          "type": "character varying"
+        },
+        {
+          "default": null,
+          "name": "normalized_version",
+          "not_null": false,
+          "type": "character varying"
+        },
+        {
+          "default": null,
+          "name": "normalized_ecosystem",
+          "not_null": false,
+          "type": "character varying"
+        },
+        {
+          "default": null,
+          "name": "sbom_id",
+          "not_null": true,
+          "type": "integer"
+        },
+        {
+          "default": null,
+          "name": "original_purl",
+          "not_null": false,
+          "type": "character varying"
+        },
+        {
+          "default": null,
+          "name": "normalized_purl",
+          "not_null": false,
+          "type": "character varying"
+        },
+        {
+          "default": null,
+          "name": "purl_type",
+          "not_null": false,
+          "type": "character varying"
+        },
+        {
+          "default": null,
+          "name": "purl_namespace",
+          "not_null": false,
+          "type": "character varying"
+        },
+        {
+          "default": null,
+          "name": "purl_name",
+          "not_null": false,
+          "type": "character varying"
+        },
+        {
+          "default": null,
+          "name": "purl_version",
+          "not_null": false,
+          "type": "character varying"
+        },
+        {
+          "default": null,
+          "name": "purl_qualifiers_json",
+          "not_null": false,
+          "type": "json"
+        },
+        {
+          "default": null,
+          "name": "purl_subpath",
+          "not_null": false,
+          "type": "character varying"
+        },
+        {
+          "default": null,
+          "name": "normalized_cpes",
+          "not_null": false,
+          "type": "json"
+        },
+        {
+          "default": null,
+          "name": "primary_cpe",
+          "not_null": false,
+          "type": "character varying"
+        },
+        {
+          "default": null,
+          "name": "bom_ref",
+          "not_null": false,
+          "type": "character varying"
+        },
+        {
+          "default": null,
+          "name": "cpe_evidence_json",
+          "not_null": false,
+          "type": "json"
+        },
+        {
+          "default": null,
+          "name": "normalized_supplier",
+          "not_null": false,
+          "type": "character varying"
+        },
+        {
+          "default": null,
+          "name": "normalized_package_key",
+          "not_null": false,
+          "type": "character varying"
+        },
+        {
+          "default": null,
+          "name": "canonical_identity_confidence",
+          "not_null": false,
+          "type": "character varying"
+        },
+        {
+          "default": null,
+          "name": "license",
+          "not_null": false,
+          "type": "character varying"
+        },
+        {
+          "default": null,
+          "name": "hashes",
+          "not_null": false,
+          "type": "text"
+        },
+        {
+          "default": null,
+          "name": "lifecycle_status",
+          "not_null": false,
+          "type": "character varying"
+        },
+        {
+          "default": null,
+          "name": "eos_date",
+          "not_null": false,
+          "type": "character varying"
+        },
+        {
+          "default": null,
+          "name": "eol_date",
+          "not_null": false,
+          "type": "character varying"
+        },
+        {
+          "default": null,
+          "name": "eof_date",
+          "not_null": false,
+          "type": "character varying"
+        },
+        {
+          "default": null,
+          "name": "component_type",
+          "not_null": false,
+          "type": "character varying"
+        },
+        {
+          "default": null,
+          "name": "is_deprecated",
+          "not_null": false,
+          "type": "boolean"
+        },
+        {
+          "default": null,
+          "name": "deprecated",
+          "not_null": false,
+          "type": "boolean"
+        },
+        {
+          "default": null,
+          "name": "unsupported",
+          "not_null": false,
+          "type": "boolean"
+        },
+        {
+          "default": null,
+          "name": "maintenance_status",
+          "not_null": false,
+          "type": "character varying"
+        },
+        {
+          "default": null,
+          "name": "latest_version",
+          "not_null": false,
+          "type": "character varying"
+        },
+        {
+          "default": null,
+          "name": "latest_supported_version",
+          "not_null": false,
+          "type": "character varying"
+        },
+        {
+          "default": null,
+          "name": "recommended_version",
+          "not_null": false,
+          "type": "character varying"
+        },
+        {
+          "default": null,
+          "name": "lifecycle_recommendation",
+          "not_null": false,
+          "type": "text"
+        },
+        {
+          "default": null,
+          "name": "lifecycle_source",
+          "not_null": false,
+          "type": "character varying"
+        },
+        {
+          "default": null,
+          "name": "lifecycle_source_url",
+          "not_null": false,
+          "type": "character varying"
+        },
+        {
+          "default": null,
+          "name": "component_group",
+          "not_null": false,
+          "type": "character varying"
+        },
+        {
+          "default": null,
+          "name": "lifecycle_confidence",
+          "not_null": false,
+          "type": "character varying"
+        },
+        {
+          "default": null,
+          "name": "lifecycle_checked_at",
+          "not_null": false,
+          "type": "character varying"
+        },
+        {
+          "default": null,
+          "name": "lifecycle_evidence_json",
+          "not_null": false,
+          "type": "json"
+        },
+        {
+          "default": null,
+          "name": "lifecycle_is_stale",
+          "not_null": true,
+          "type": "boolean"
+        },
+        {
+          "default": null,
+          "name": "lifecycle_manual_override",
+          "not_null": true,
+          "type": "boolean"
+        },
+        {
+          "default": null,
+          "name": "normalized_component_key",
+          "not_null": false,
+          "type": "character varying"
+        },
+        {
+          "default": null,
+          "name": "dedupe_canonical_id",
+          "not_null": false,
+          "type": "character varying"
+        },
+        {
+          "default": null,
+          "name": "dedupe_group_id",
+          "not_null": false,
+          "type": "character varying"
+        },
+        {
+          "default": null,
+          "name": "is_duplicate",
+          "not_null": true,
+          "type": "boolean"
+        },
+        {
+          "default": null,
+          "name": "duplicate_of_component_id",
+          "not_null": false,
+          "type": "integer"
+        },
+        {
+          "default": null,
+          "name": "name",
+          "not_null": true,
+          "type": "character varying"
+        },
+        {
+          "default": null,
+          "name": "dedupe_reason",
+          "not_null": false,
+          "type": "character varying"
+        },
+        {
+          "default": null,
+          "name": "dedupe_confidence",
+          "not_null": false,
+          "type": "character varying"
+        },
+        {
+          "default": null,
+          "name": "normalization_notes_json",
+          "not_null": false,
+          "type": "json"
+        },
+        {
+          "default": null,
+          "name": "dedupe_evidence_json",
+          "not_null": false,
+          "type": "json"
+        },
+        {
+          "default": "true",
+          "name": "is_active",
+          "not_null": true,
+          "type": "boolean"
+        },
+        {
+          "default": null,
+          "name": "deactivated_at",
+          "not_null": false,
+          "type": "timestamp with time zone"
+        },
+        {
+          "default": null,
+          "name": "deactivated_by",
+          "not_null": false,
+          "type": "character varying(128)"
+        },
+        {
+          "default": null,
+          "name": "tenant_id",
+          "not_null": true,
+          "type": "integer"
+        },
+        {
+          "default": null,
+          "name": "description",
+          "not_null": false,
+          "type": "text"
+        },
+        {
+          "default": "gen_random_uuid()",
+          "name": "public_id",
+          "not_null": false,
+          "type": "uuid"
+        },
+        {
+          "default": null,
+          "name": "version",
+          "not_null": false,
+          "type": "character varying"
+        },
+        {
+          "default": null,
+          "name": "purl",
+          "not_null": false,
+          "type": "character varying"
+        },
+        {
+          "default": null,
+          "name": "cpe",
+          "not_null": false,
+          "type": "character varying"
+        }
+      ],
+      "constraints": [
+        {
+          "definition": "CHECK (public_id IS NULL OR public_id::text ~ '^[0-9a-f]{8}-[0-9a-f]{4}-4[0-9a-f]{3}-[89ab][0-9a-f]{3}-[0-9a-f]{12}$'::text) NOT VALID",
+          "kind": "c",
+          "name": "ck_sbom_component_public_id_v4"
+        },
+        {
+          "definition": "FOREIGN KEY (duplicate_of_component_id) REFERENCES public.sbom_component(id) ON DELETE CASCADE",
+          "kind": "f",
+          "name": "fk_sbom_component_duplicate_of_component_id_sbom_component"
+        },
+        {
+          "definition": "FOREIGN KEY (sbom_id) REFERENCES public.sbom_source(id)",
+          "kind": "f",
+          "name": "fk_sbom_component_sbom_id_sbom_source"
+        },
+        {
+          "definition": "FOREIGN KEY (tenant_id) REFERENCES public.tenants(id)",
+          "kind": "f",
+          "name": "fk_sbom_component_tenant_id_tenants"
+        },
+        {
+          "definition": "PRIMARY KEY (id)",
+          "kind": "p",
+          "name": "pk_sbom_component"
+        },
+        {
+          "definition": "UNIQUE (tenant_id, sbom_id, bom_ref, name, version, cpe)",
+          "kind": "u",
+          "name": "uq_sbom_component_fingerprint"
+        }
+      ]
+    },
+    "sbom_source": {
+      "columns": [
+        {
+          "default": "nextval('public.sbom_source_id_seq'::regclass)",
+          "name": "id",
+          "not_null": true,
+          "type": "integer"
+        },
+        {
+          "default": null,
+          "name": "productver",
+          "not_null": false,
+          "type": "character varying"
+        },
+        {
+          "default": null,
+          "name": "modified_on",
+          "not_null": false,
+          "type": "character varying"
+        },
+        {
+          "default": null,
+          "name": "modified_by",
+          "not_null": false,
+          "type": "character varying"
+        },
+        {
+          "default": null,
+          "name": "parent_id",
+          "not_null": false,
+          "type": "integer"
+        },
+        {
+          "default": null,
+          "name": "change_summary",
+          "not_null": false,
+          "type": "character varying"
+        },
+        {
+          "default": null,
+          "name": "completeness_score",
+          "not_null": false,
+          "type": "double precision"
+        },
+        {
+          "default": null,
+          "name": "completeness_report",
+          "not_null": false,
+          "type": "json"
+        },
+        {
+          "default": null,
+          "name": "dedupe_report_json",
+          "not_null": false,
+          "type": "json"
+        },
+        {
+          "default": null,
+          "name": "product_name",
+          "not_null": false,
+          "type": "character varying"
+        },
+        {
+          "default": null,
+          "name": "description",
+          "not_null": false,
+          "type": "character varying"
+        },
+        {
+          "default": null,
+          "name": "sbom_name",
+          "not_null": true,
+          "type": "character varying"
+        },
+        {
+          "default": "'validated'::character varying",
+          "name": "status",
+          "not_null": true,
+          "type": "character varying(24)"
+        },
+        {
+          "default": null,
+          "name": "failed_stage",
+          "not_null": false,
+          "type": "character varying(32)"
+        },
+        {
+          "default": null,
+          "name": "validation_errors",
+          "not_null": false,
+          "type": "json"
+        },
+        {
+          "default": "0",
+          "name": "error_count",
+          "not_null": true,
+          "type": "integer"
+        },
+        {
+          "default": "0",
+          "name": "warning_count",
+          "not_null": true,
+          "type": "integer"
+        },
+        {
+          "default": null,
+          "name": "validated_at",
+          "not_null": false,
+          "type": "character varying"
+        },
+        {
+          "default": null,
+          "name": "original_format",
+          "not_null": false,
+          "type": "character varying(32)"
+        },
+        {
+          "default": null,
+          "name": "current_format",
+          "not_null": false,
+          "type": "character varying(32)"
+        },
+        {
+          "default": null,
+          "name": "converted_from_format",
+          "not_null": false,
+          "type": "character varying(32)"
+        },
+        {
+          "default": null,
+          "name": "source_sbom_id",
+          "not_null": false,
+          "type": "integer"
+        },
+        {
+          "default": null,
+          "name": "sbom_data",
+          "not_null": false,
+          "type": "text"
+        },
+        {
+          "default": null,
+          "name": "converted_sbom_id",
+          "not_null": false,
+          "type": "integer"
+        },
+        {
+          "default": null,
+          "name": "conversion_status",
+          "not_null": false,
+          "type": "character varying(32)"
+        },
+        {
+          "default": null,
+          "name": "conversion_warnings_json",
+          "not_null": false,
+          "type": "json"
+        },
+        {
+          "default": null,
+          "name": "conversion_report_json",
+          "not_null": false,
+          "type": "json"
+        },
+        {
+          "default": null,
+          "name": "converted_at",
+          "not_null": false,
+          "type": "character varying"
+        },
+        {
+          "default": null,
+          "name": "converted_by",
+          "not_null": false,
+          "type": "character varying"
+        },
+        {
+          "default": null,
+          "name": "enrichment_status",
+          "not_null": false,
+          "type": "character varying(32)"
+        },
+        {
+          "default": null,
+          "name": "conversion_started_at",
+          "not_null": false,
+          "type": "character varying"
+        },
+        {
+          "default": null,
+          "name": "conversion_completed_at",
+          "not_null": false,
+          "type": "character varying"
+        },
+        {
+          "default": null,
+          "name": "enrichment_started_at",
+          "not_null": false,
+          "type": "character varying"
+        },
+        {
+          "default": null,
+          "name": "sbom_type",
+          "not_null": false,
+          "type": "integer"
+        },
+        {
+          "default": null,
+          "name": "enrichment_completed_at",
+          "not_null": false,
+          "type": "character varying"
+        },
+        {
+          "default": null,
+          "name": "conversion_error",
+          "not_null": false,
+          "type": "text"
+        },
+        {
+          "default": null,
+          "name": "enrichment_error",
+          "not_null": false,
+          "type": "text"
+        },
+        {
+          "default": null,
+          "name": "component_extraction_status",
+          "not_null": false,
+          "type": "character varying(32)"
+        },
+        {
+          "default": null,
+          "name": "component_extraction_error",
+          "not_null": false,
+          "type": "text"
+        },
+        {
+          "default": null,
+          "name": "component_extraction_attempted_at",
+          "not_null": false,
+          "type": "character varying"
+        },
+        {
+          "default": null,
+          "name": "component_extraction_completed_at",
+          "not_null": false,
+          "type": "character varying"
+        },
+        {
+          "default": "true",
+          "name": "is_active",
+          "not_null": true,
+          "type": "boolean"
+        },
+        {
+          "default": null,
+          "name": "deactivated_at",
+          "not_null": false,
+          "type": "timestamp with time zone"
+        },
+        {
+          "default": null,
+          "name": "deactivated_by",
+          "not_null": false,
+          "type": "character varying(128)"
+        },
+        {
+          "default": null,
+          "name": "projectid",
+          "not_null": false,
+          "type": "integer"
+        },
+        {
+          "default": null,
+          "name": "tenant_id",
+          "not_null": true,
+          "type": "integer"
+        },
+        {
+          "default": "'ACTIVE'::character varying",
+          "name": "lifecycle_status",
+          "not_null": true,
+          "type": "character varying(8)"
+        },
+        {
+          "default": "0",
+          "name": "lifecycle_revision",
+          "not_null": true,
+          "type": "integer"
+        },
+        {
+          "default": "false",
+          "name": "analysis_requires_reanalysis",
+          "not_null": true,
+          "type": "boolean"
+        },
+        {
+          "default": null,
+          "name": "logical_sbom_id",
+          "not_null": true,
+          "type": "integer"
+        },
+        {
+          "default": "gen_random_uuid()",
+          "name": "public_id",
+          "not_null": false,
+          "type": "uuid"
+        },
+        {
+          "default": null,
+          "name": "product_id",
+          "not_null": false,
+          "type": "integer"
+        },
+        {
+          "default": null,
+          "name": "created_on",
+          "not_null": false,
+          "type": "character varying"
+        },
+        {
+          "default": null,
+          "name": "sbom_version",
+          "not_null": false,
+          "type": "character varying"
+        },
+        {
+          "default": null,
+          "name": "created_by",
+          "not_null": false,
+          "type": "character varying"
+        }
+      ],
+      "constraints": [
+        {
+          "definition": "CHECK (public_id IS NULL OR public_id::text ~ '^[0-9a-f]{8}-[0-9a-f]{4}-4[0-9a-f]{3}-[89ab][0-9a-f]{3}-[0-9a-f]{12}$'::text) NOT VALID",
+          "kind": "c",
+          "name": "ck_sbom_source_public_id_v4"
+        },
+        {
+          "definition": "CHECK (lifecycle_status::text = ANY (ARRAY['ACTIVE'::character varying::text, 'INACTIVE'::character varying::text]))",
+          "kind": "c",
+          "name": "ck_sbom_source_sbom_operational_lifecycle"
+        },
+        {
+          "definition": "FOREIGN KEY (converted_sbom_id) REFERENCES public.sbom_source(id)",
+          "kind": "f",
+          "name": "fk_sbom_source_converted_sbom_id_sbom_source"
+        },
+        {
+          "definition": "FOREIGN KEY (logical_sbom_id) REFERENCES public.logical_sbom(id)",
+          "kind": "f",
+          "name": "fk_sbom_source_logical"
+        },
+        {
+          "definition": "FOREIGN KEY (logical_sbom_id, tenant_id, product_id) REFERENCES public.logical_sbom(id, tenant_id, product_id)",
+          "kind": "f",
+          "name": "fk_sbom_source_logical_product"
+        },
+        {
+          "definition": "FOREIGN KEY (logical_sbom_id, tenant_id) REFERENCES public.logical_sbom(id, tenant_id)",
+          "kind": "f",
+          "name": "fk_sbom_source_logical_tenant"
+        },
+        {
+          "definition": "FOREIGN KEY (parent_id) REFERENCES public.sbom_source(id)",
+          "kind": "f",
+          "name": "fk_sbom_source_parent_id_sbom_source"
+        },
+        {
+          "definition": "FOREIGN KEY (product_id) REFERENCES public.products(id)",
+          "kind": "f",
+          "name": "fk_sbom_source_product_id_products"
+        },
+        {
+          "definition": "FOREIGN KEY (projectid) REFERENCES public.projects(id)",
+          "kind": "f",
+          "name": "fk_sbom_source_projectid_projects"
+        },
+        {
+          "definition": "FOREIGN KEY (sbom_type) REFERENCES public.sbom_type(id)",
+          "kind": "f",
+          "name": "fk_sbom_source_sbom_type_sbom_type"
+        },
+        {
+          "definition": "FOREIGN KEY (source_sbom_id) REFERENCES public.sbom_source(id)",
+          "kind": "f",
+          "name": "fk_sbom_source_source_sbom_id_sbom_source"
+        },
+        {
+          "definition": "FOREIGN KEY (tenant_id) REFERENCES public.tenants(id)",
+          "kind": "f",
+          "name": "fk_sbom_source_tenant_id_tenants"
+        },
+        {
+          "definition": "PRIMARY KEY (id)",
+          "kind": "p",
+          "name": "pk_sbom_source"
+        },
+        {
+          "definition": "UNIQUE (logical_sbom_id, sbom_version)",
+          "kind": "u",
+          "name": "uq_sbom_source_logical_version"
+        }
+      ]
+    },
+    "tenants": {
+      "columns": [
+        {
+          "default": "nextval('public.tenants_id_seq'::regclass)",
+          "name": "id",
+          "not_null": true,
+          "type": "integer"
+        },
+        {
+          "default": null,
+          "name": "name",
+          "not_null": true,
+          "type": "character varying(255)"
+        },
+        {
+          "default": null,
+          "name": "slug",
+          "not_null": true,
+          "type": "character varying(128)"
+        },
+        {
+          "default": null,
+          "name": "external_iam_tenant_id",
+          "not_null": false,
+          "type": "character varying(255)"
+        },
+        {
+          "default": null,
+          "name": "status",
+          "not_null": true,
+          "type": "character varying(32)"
+        },
+        {
+          "default": null,
+          "name": "created_at",
+          "not_null": true,
+          "type": "timestamp with time zone"
+        },
+        {
+          "default": null,
+          "name": "updated_at",
+          "not_null": true,
+          "type": "timestamp with time zone"
+        },
+        {
+          "default": "gen_random_uuid()",
+          "name": "public_id",
+          "not_null": false,
+          "type": "uuid"
+        }
+      ],
+      "constraints": [
+        {
+          "definition": "CHECK (public_id IS NULL OR public_id::text ~ '^[0-9a-f]{8}-[0-9a-f]{4}-4[0-9a-f]{3}-[89ab][0-9a-f]{3}-[0-9a-f]{12}$'::text) NOT VALID",
+          "kind": "c",
+          "name": "ck_tenants_public_id_v4"
+        },
+        {
+          "definition": "CHECK (status::text = ANY (ARRAY['ACTIVE'::character varying::text, 'PENDING'::character varying::text, 'DISABLED'::character varying::text]))",
+          "kind": "c",
+          "name": "ck_tenants_tenant_status"
+        },
+        {
+          "definition": "PRIMARY KEY (id)",
+          "kind": "p",
+          "name": "pk_tenants"
+        },
+        {
+          "definition": "UNIQUE (external_iam_tenant_id)",
+          "kind": "u",
+          "name": "uq_tenants_external_iam_tenant_id"
+        },
+        {
+          "definition": "UNIQUE (slug)",
+          "kind": "u",
+          "name": "uq_tenants_slug"
+        }
+      ]
+    }
+  }
+}

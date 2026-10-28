@@ -52,6 +52,7 @@ from app.models import (
 from app.settings import reset_settings
 
 from tests.ai.fixtures import EX1_CRITICAL_KEV_WITH_FIX_BUNDLE
+from tests.public_id_fixture import run_uuid
 
 # ---------------------------------------------------------------------------
 # Test fixtures
@@ -471,7 +472,7 @@ def test_fourth_batch_on_run_returns_409(client, _seeded_two_runs, _enable_ai, _
     finally:
         db.close()
 
-    resp = client.post(f"/api/v1/runs/{run_id}/ai-fixes")
+    resp = client.post(f"/api/v1/runs/{run_uuid(run_id)}/ai-fixes")
     assert resp.status_code == 409, resp.text
     detail = resp.json()["detail"]
     assert detail["error_code"] == "TOO_MANY_ACTIVE_BATCHES"
@@ -494,7 +495,7 @@ def test_empty_scope_returns_400(client, _seeded_two_runs, _enable_ai, _fake_reg
             "search_query": "definitely-no-match-string",
         }
     }
-    resp = client.post(f"/api/v1/runs/{run_id}/ai-fixes", json=body)
+    resp = client.post(f"/api/v1/runs/{run_uuid(run_id)}/ai-fixes", json=body)
     assert resp.status_code == 400, resp.text
     assert resp.json()["detail"]["error_code"] == "EMPTY_SCOPE"
 
@@ -662,7 +663,7 @@ def test_trigger_with_scope_creates_batch_row_and_runs_inline(
             "label": "Critical findings",
         }
     }
-    resp = client.post(f"/api/v1/runs/{run_id}/ai-fixes", json=body)
+    resp = client.post(f"/api/v1/runs/{run_uuid(run_id)}/ai-fixes", json=body)
     assert resp.status_code == 200, resp.text
     body = resp.json()
     assert body["batch_id"]
@@ -692,7 +693,7 @@ def test_estimate_post_with_severity_scope_returns_scoped_count(client, _seeded_
     """POST /estimate with a severity scope reports the resolved count."""
     run_id = _seeded_two_runs["run_a"]
     body = {"scope": {"severities": ["HIGH", "MEDIUM"]}}
-    resp = client.post(f"/api/v1/runs/{run_id}/ai-fixes/estimate", json=body)
+    resp = client.post(f"/api/v1/runs/{run_uuid(run_id)}/ai-fixes/estimate", json=body)
     assert resp.status_code == 200, resp.text
     payload = resp.json()
     assert payload["total_findings_in_scope"] == 2  # a2 + a3
@@ -702,7 +703,7 @@ def test_estimate_post_with_severity_scope_returns_scoped_count(client, _seeded_
 
 def test_estimate_post_no_scope_returns_full_run(client, _seeded_two_runs, _fake_registry):
     run_id = _seeded_two_runs["run_a"]
-    resp = client.post(f"/api/v1/runs/{run_id}/ai-fixes/estimate", json={})
+    resp = client.post(f"/api/v1/runs/{run_uuid(run_id)}/ai-fixes/estimate", json={})
     assert resp.status_code == 200
     payload = resp.json()
     assert payload["total_findings_in_scope"] == 4
@@ -712,7 +713,7 @@ def test_legacy_get_estimate_still_works(client, _seeded_two_runs, _fake_registr
     """The deprecated GET /estimate endpoint must keep working for
     30 days post-rollout."""
     run_id = _seeded_two_runs["run_a"]
-    resp = client.get(f"/api/v1/runs/{run_id}/ai-fixes/estimate")
+    resp = client.get(f"/api/v1/runs/{run_uuid(run_id)}/ai-fixes/estimate")
     assert resp.status_code == 200
     payload = resp.json()
     assert payload["findings_total"] == 4
@@ -726,10 +727,10 @@ def test_legacy_get_estimate_still_works(client, _seeded_two_runs, _fake_registr
 def test_list_batches_endpoint(client, _seeded_two_runs, _enable_ai, _fake_registry, _memory_store):
     run_id = _seeded_two_runs["run_a"]
     client.post(
-        f"/api/v1/runs/{run_id}/ai-fixes",
+        f"/api/v1/runs/{run_uuid(run_id)}/ai-fixes",
         json={"scope": {"severities": ["CRITICAL"], "label": "Critical"}},
     )
-    resp = client.get(f"/api/v1/runs/{run_id}/ai-fixes/batches")
+    resp = client.get(f"/api/v1/runs/{run_uuid(run_id)}/ai-fixes/batches")
     assert resp.status_code == 200
     body = resp.json()
     assert body["total"] == 1
@@ -738,7 +739,7 @@ def test_list_batches_endpoint(client, _seeded_two_runs, _enable_ai, _fake_regis
 
 def test_batch_detail_404_for_unknown_batch(client, _seeded_two_runs, _enable_ai):
     run_id = _seeded_two_runs["run_a"]
-    resp = client.get(f"/api/v1/runs/{run_id}/ai-fixes/batches/00000000-0000-0000-0000-000000000000")
+    resp = client.get(f"/api/v1/runs/{run_uuid(run_id)}/ai-fixes/batches/00000000-0000-0000-0000-000000000000")
     assert resp.status_code == 404
 
 
@@ -768,7 +769,7 @@ def test_per_batch_cancel_endpoint_sets_flag(client, _seeded_two_runs, _enable_a
     finally:
         db.close()
 
-    resp = client.post(f"/api/v1/runs/{run_id}/ai-fixes/batches/{bid}/cancel")
+    resp = client.post(f"/api/v1/runs/{run_uuid(run_id)}/ai-fixes/batches/{bid}/cancel")
     assert resp.status_code == 202
     body = resp.json()
     assert body["batch_id"] == bid
@@ -778,5 +779,5 @@ def test_per_batch_cancel_endpoint_sets_flag(client, _seeded_two_runs, _enable_a
 
 def test_per_batch_stream_404_for_unknown_batch(client, _seeded_two_runs, _enable_ai):
     run_id = _seeded_two_runs["run_a"]
-    resp = client.get(f"/api/v1/runs/{run_id}/ai-fixes/batches/missing-batch/stream")
+    resp = client.get(f"/api/v1/runs/{run_uuid(run_id)}/ai-fixes/batches/missing-batch/stream")
     assert resp.status_code == 404

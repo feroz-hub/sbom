@@ -6,8 +6,8 @@ from datetime import datetime
 from typing import Literal
 
 from fastapi import APIRouter, Depends, HTTPException, Query, Request
-from pydantic import BaseModel
-from sqlalchemy import func, or_
+from pydantic import BaseModel, Field
+from sqlalchemy import func, or_, select
 from sqlalchemy.orm import Session
 
 from ..core.context import CurrentContext
@@ -15,9 +15,10 @@ from ..core.identity_states import (
     IdentityAuditEvent,
     IdentityErrorCode,
 )
+from ..core.native_identity import AccountStatus
 from ..core.security import invalidate_user_contexts, require_platform_permission
 from ..db import get_db
-from ..models import AuthorizationAuditLog, IAMUser, Tenant, TenantUser
+from ..models import AuthorizationAuditLog, IAMUser, PlatformUserRole, Tenant, TenantUser
 from ..schemas_platform import (
     PlatformAdministratorGrantRequest,
     PlatformAdministratorGrantResponse,
@@ -29,13 +30,23 @@ from ..schemas_platform import (
     PlatformUserStatusResponse,
     PlatformUserStatusUpdate,
     PlatformUserSummary,
+    TenantAdministratorDeactivateRequest,
+    TenantAdministratorDirectory,
+    TenantAdministratorGovernanceResponse,
+    TenantAdministratorRevokeRequest,
     TenantMembershipBrief,
+    TenantUserCandidate,
+    TenantUserCandidateResponse,
     UserSearchResponse,
     UserSearchResult,
 )
+from ..schemas_user_management import ProfileUpdate
 from ..services import audit_service, platform_service
 from ..services import tenant_role_assignment_service as tras
+from ..services import user_management_service as ums
 from ..services.email_verification_service import ensure_initial_verification_delivery
+from ..services.identity_verification_policy import verification_complete, verification_complete_clause
+from ..services.tenant_admin_governance_service import administrator_directory, mutate_administrator
 
 router = APIRouter(prefix="/api/platform", tags=["platform-identity"])
 
@@ -94,9 +105,11 @@ def _grant_summary(grant, user) -> PlatformGrantSummary:
     )
 
 
-def _user_summary(user, grant, active_tenant_count: int) -> PlatformUserSummary:
+def _user_summary(db, user, grant, active_tenant_count: int) -> PlatformUserSummary:
     return PlatformUserSummary(
         id=user.id,
+        first_name=user.first_name, last_name=user.last_name, phone=user.phone,
+        providers=ums.providers(db, user), updated_at=user.updated_at, account_status=user.status,
         email=user.email,
         display_name=user.display_name,
         user_principal_name=user.user_principal_name,
@@ -175,8 +188,7 @@ def _platform_tenant_dict(db: Session, tenant: Tenant) -> dict:
             TenantUser.tenant_id == tenant.id,
             TenantUser.status == "ACTIVE",
             IAMUser.status == "ACTIVE",
-            IAMUser.email_verified.is_(True),
-            IAMUser.verification_required.is_(False),
+            verification_complete_clause(),
         )
         .order_by(IAMUser.display_name, IAMUser.email)
         .all()
@@ -186,6 +198,10 @@ def _platform_tenant_dict(db: Session, tenant: Tenant) -> dict:
             current_administrators.append(
                 {
                     "user_id": user.id,
+                    "membership_id": membership.id,
+                    "role_assignment_version": membership.role_assignment_version,
+                    "primary_role": membership.role,
+                    "roles": sorted(tras.effective_role_codes(db, membership)),
                     "display_name": user.display_name,
                     "email": user.email,
                 }
@@ -194,10 +210,145 @@ def _platform_tenant_dict(db: Session, tenant: Tenant) -> dict:
     return item
 
 
+@router.get("/summary")
+def platform_summary(
+    context: CurrentContext = Depends(require_platform_permission("platform:tenant:read")),
+    db: Session = Depends(get_db),
+):
+    from ..services.tenant_service import _active_tenant_admin_count
+
+    # Control-plane aggregates only: never retrieve SBOM or investigation data.
+    statuses = dict(db.query(Tenant.status, func.count(Tenant.id)).group_by(Tenant.status).all())
+    tenant_ids = db.scalars(select(Tenant.id)).all()
+    result = {
+        "total_tenants": sum(statuses.values()),
+        "active_tenants": statuses.get("ACTIVE", 0),
+        "disabled_tenants": statuses.get("DISABLED", 0),
+        "pending_tenants": statuses.get("PENDING", 0),
+        "total_memberships": db.query(func.count(TenantUser.id)).scalar() or 0,
+        "tenants_without_admin": sum(_active_tenant_admin_count(db, tid) == 0 for tid in tenant_ids),
+    }
+    if context.has_permission("platform:administrator:read"):
+        result["platform_admins"] = db.query(func.count(PlatformUserRole.id)).join(IAMUser, IAMUser.id == PlatformUserRole.user_id).filter(
+            PlatformUserRole.status == "ACTIVE", IAMUser.status == "ACTIVE", verification_complete_clause(),
+        ).scalar() or 0
+    return result
+
+
+@router.get("/tenant-admin-candidates", response_model=TenantUserCandidateResponse)
+def tenant_admin_candidates(
+    q: str = Query(min_length=2, max_length=200),
+    page: int = Query(default=1, ge=1),
+    page_size: int = Query(default=20, ge=1, le=50),
+    _context: CurrentContext = Depends(require_platform_permission("platform:tenant:bootstrap_admin")),
+    db: Session = Depends(get_db),
+):
+    """Purpose-limited initial/recovery administrator lookup, not a directory."""
+    if len(q.strip()) < 2:
+        raise HTTPException(422, "Search by name or email using at least 2 characters")
+    pattern = f"%{platform_service._escape_search(q.strip())}%"
+    users = db.scalars(select(IAMUser).where(
+        IAMUser.status == "ACTIVE", verification_complete_clause(),
+        or_(*(column.ilike(pattern, escape="\\") for column in
+              (IAMUser.email, IAMUser.display_name, IAMUser.first_name, IAMUser.last_name))),
+    ).order_by(IAMUser.display_name, IAMUser.id).offset((page - 1) * page_size).limit(page_size))
+    return TenantUserCandidateResponse(items=[TenantUserCandidate(
+        id=user.id, email=user.email, display_name=user.display_name, status=user.status,
+        email_verified=bool(user.email_verified), verification_required=bool(user.verification_required),
+        providers=ums.providers(db, user),
+    ) for user in users])
+
+
+class RecoverTenantAdmin(BaseModel):
+    user_id: int = Field(ge=1)
+
+
+@router.post("/tenants/{tenant_id}/administrators/{membership_id}/revoke", response_model=TenantAdministratorGovernanceResponse)
+def revoke_tenant_administrator(
+    tenant_id: int, membership_id: int, payload: TenantAdministratorRevokeRequest, request: Request,
+    context: CurrentContext = Depends(require_platform_permission("platform:tenant_admin:manage")),
+    db: Session = Depends(get_db),
+):
+    """Revoke TENANT_ADMIN atomically; stale versions/last admin return 409.
+
+    Supply an ordinary replacement primary role when TENANT_ADMIN is primary
+    or the only role. All other active roles are retained.
+    """
+    result = mutate_administrator(db, context=context, tenant_id=tenant_id, membership_id=membership_id,
+        operation="revoke", request=request, **payload.model_dump())
+    invalidate_user_contexts(result["user_id"])
+    return result
+
+
+@router.post("/tenants/{tenant_id}/administrators/{membership_id}/deactivate", response_model=TenantAdministratorGovernanceResponse)
+def deactivate_tenant_administrator(
+    tenant_id: int, membership_id: int, request: Request,
+    payload: TenantAdministratorDeactivateRequest | None = None,
+    context: CurrentContext = Depends(require_platform_permission("platform:tenant_admin:manage")),
+    db: Session = Depends(get_db),
+):
+    """Disable only this membership, preserving its assignments and identity."""
+    result = mutate_administrator(db, context=context, tenant_id=tenant_id, membership_id=membership_id,
+        operation="deactivate", reason=payload.reason if payload else None, request=request)
+    invalidate_user_contexts(result["user_id"])
+    return result
+
+
+@router.delete("/tenants/{tenant_id}/administrators/{membership_id}", status_code=204)
+def remove_tenant_administrator(
+    tenant_id: int, membership_id: int, request: Request,
+    reason: str | None = Query(default=None, max_length=512),
+    context: CurrentContext = Depends(require_platform_permission("platform:tenant_admin:manage")),
+    db: Session = Depends(get_db),
+) -> None:
+    """Remove only this administrator membership; durable audit/history survive."""
+    result = mutate_administrator(db, context=context, tenant_id=tenant_id, membership_id=membership_id,
+        operation="remove", reason=reason, request=request)
+    invalidate_user_contexts(result["user_id"])
+
+
+@router.post("/tenants/{tenant_id}/recover-admin")
+def recover_tenant_admin(
+    tenant_id: int, payload: RecoverTenantAdmin, request: Request,
+    context: CurrentContext = Depends(require_platform_permission("platform:tenant:recover_admin")),
+    db: Session = Depends(get_db),
+):
+    """Dedicated governance: grant TENANT_ADMIN only, never edit generic users."""
+    from datetime import UTC
+
+    from ..services import tenant_service
+
+    tenant = db.scalar(select(Tenant).where(Tenant.id == tenant_id).with_for_update())
+    if tenant is None or tenant.status not in {"ACTIVE", "PENDING"}:
+        raise HTTPException(404, "Active or pending tenant not found")
+    user = db.scalar(select(IAMUser).where(IAMUser.id == payload.user_id).with_for_update())
+    if user is None or user.status != "ACTIVE" or not verification_complete(user):
+        raise HTTPException(422, "Select an active, eligible Tenant Administrator")
+    membership = db.scalar(select(TenantUser).where(TenantUser.tenant_id == tenant_id, TenantUser.user_id == user.id).with_for_update())
+    if membership is None:
+        membership, _ = tenant_service.add_user_to_tenant(db, tenant_id, user_id=user.id,
+            role="TENANT_ADMIN", actor_user_id=context.user_id, assignment_source="PLATFORM_ADMIN", request=request)
+    else:
+        if membership.status != "ACTIVE":
+            raise HTTPException(409, "Select an active member or a new eligible account; existing membership is disabled")
+        if "TENANT_ADMIN" not in tras.effective_role_codes(db, membership):
+            raise HTTPException(409, "Recovery requires a new administrator account, not generic editing of an existing membership")
+    if tenant.status == "PENDING":
+        tenant.status = "ACTIVE"
+        tenant.updated_at = datetime.now(UTC)
+    audit_service.write_authorization_audit(db, action="TENANT_ADMIN_RECOVERED", context=context,
+        tenant_id=tenant_id, target_user_id=user.id, target_membership_id=membership.id, request=request)
+    db.commit()
+    invalidate_user_contexts(user.id)
+    return {"tenant_id": tenant_id, "administrator": {"display_name": user.display_name, "email": user.email}}
+
+
 @router.get("/users/search", response_model=UserSearchResponse)
 def search_platform_users(
     q: str = Query(..., min_length=1, max_length=200),
     tenant_id: int | None = Query(default=None, ge=1),
+    page: int = Query(default=1, ge=1),
+    page_size: int = Query(default=20, ge=1, le=50),
     context: CurrentContext = Depends(
         require_platform_permission("platform:user:read")
     ),
@@ -210,11 +361,14 @@ def search_platform_users(
             or_(
                 IAMUser.email.ilike(pattern, escape="\\"),
                 IAMUser.display_name.ilike(pattern, escape="\\"),
+                IAMUser.first_name.ilike(pattern, escape="\\"),
+                IAMUser.last_name.ilike(pattern, escape="\\"),
                 IAMUser.user_principal_name.ilike(pattern, escape="\\"),
             )
         )
         .order_by(IAMUser.display_name.asc(), IAMUser.email.asc())
-        .limit(20)
+        .offset((page - 1) * page_size)
+        .limit(page_size)
         .all()
     )
 
@@ -267,6 +421,7 @@ def search_platform_users(
                 )
         items.append(
             UserSearchResult(
+                providers=ums.providers(db, user),
                 id=user.id,
                 email=user.email,
                 display_name=user.display_name,
@@ -290,7 +445,11 @@ def list_platform_users(
     page: int = Query(default=1, ge=1),
     page_size: int = Query(default=50, ge=1, le=100),
     search: str | None = Query(default=None, min_length=1, max_length=200),
-    local_status: Literal["ACTIVE", "PENDING", "DISABLED"] | None = None,
+    local_status: AccountStatus | None = None,
+    role: str | None = Query(default=None, max_length=64),
+    provider: Literal["NATIVE", "HCL_CS", "MICROSOFT_ENTRA"] | None = None,
+    sort_by: Literal["name", "email", "created_at", "last_login_at"] = "created_at",
+    sort_order: Literal["asc", "desc"] = "desc",
     email_verified: bool | None = None,
     verification_required: bool | None = None,
     is_platform_admin: bool | None = None,
@@ -318,7 +477,7 @@ def list_platform_users(
         db,
         page=page,
         page_size=page_size,
-        search=search,
+        search=search, role=role, provider=provider, sort_by=sort_by, sort_order=sort_order,
         local_status=local_status,
         email_verified=email_verified,
         verification_required=verification_required,
@@ -358,7 +517,7 @@ def list_platform_users(
     db.commit()
     return PlatformUserPage(
         items=[
-            _user_summary(user, grant, active_count)
+            _user_summary(db, user, grant, active_count)
             for user, grant, active_count in result.items
         ],
         page=result.page,
@@ -388,19 +547,14 @@ def get_platform_user(
         target_user_id=user.id,
     )
     db.commit()
-    summary = _user_summary(user, grant, active_count)
+    summary = _user_summary(db, user, grant, active_count)
     return PlatformUserDetail(
         **summary.model_dump(),
+        security=ums.security_summary(db, user.id),
+        activity=ums.audit_history(db, user.id, page_size=50),
         platform_grant=_grant_summary(grant, user) if grant else None,
         tenant_memberships=[
-            PlatformTenantMembershipSummary(
-                tenant_id=tenant.id,
-                tenant_name=tenant.name,
-                tenant_slug=tenant.slug,
-                membership_status=membership.status,
-                current_role=membership.role,
-                tenant_status=tenant.status,
-            )
+            PlatformTenantMembershipSummary(**ums.membership_summary(db, membership, tenant))
             for membership, tenant in memberships
         ],
     )
@@ -549,7 +703,23 @@ def _change_user_status(
     db: Session,
 ) -> PlatformUserStatusResponse:
     try:
-        mutation = platform_service.update_user_status(db, user_id, payload.status)
+        from ..services.account_state_service import InvalidAccountTransition, transition_account
+        with db.begin_nested():
+            # Preserve legacy approval/idempotence, but centralize actual account
+            # lifecycle transitions and required audit/token invalidation.
+            initial = platform_service.lock_account_for_administration(db, user_id, removing_access=payload.status in {"DISABLED", "SUSPENDED"})
+            if initial is None:
+                raise HTTPException(404, "User not found")
+            if initial.status == "PENDING" or initial.status == payload.status:
+                mutation = platform_service.update_user_status(db, user_id, payload.status)
+            else:
+                old_status = initial.status
+                try:
+                    changed_user = transition_account(db, user_id, payload.status,
+                        actor_user_id=context.user_id, explicitly_authorized=True)
+                except InvalidAccountTransition as exc:
+                    raise HTTPException(409, str(exc)) from None
+                mutation = platform_service.StatusMutation(changed_user, old_status, True)
     except HTTPException as exc:
         error_code = _error_code(exc)
         if error_code in {
@@ -577,7 +747,7 @@ def _change_user_status(
             ("PENDING", "ACTIVE"): IdentityAuditEvent.PLATFORM_USER_ACTIVATED,
             ("ACTIVE", "DISABLED"): IdentityAuditEvent.PLATFORM_USER_DISABLED,
             ("DISABLED", "ACTIVE"): IdentityAuditEvent.PLATFORM_USER_REACTIVATED,
-        }[(mutation.old_status, mutation.user.status)]
+        }.get((mutation.old_status, mutation.user.status), IdentityAuditEvent.PLATFORM_USER_STATUS_CHANGED)
         _audit_platform(
             db,
             event=event,
@@ -604,7 +774,7 @@ def _change_user_status(
     if (
         mutation.changed
         and mutation.user.status == "ACTIVE"
-        and (not mutation.user.email_verified or mutation.user.verification_required)
+        and (not verification_complete(mutation.user))
     ):
         delivery = ensure_initial_verification_delivery(
             db, mutation.user, request=request
@@ -642,6 +812,7 @@ def update_iam_user_status(
     "/users/{user_id}",
     response_model=PlatformUserStatusResponse,
     deprecated=True,
+    include_in_schema=False,
 )
 def update_iam_user_status_compatibility(
     user_id: int,
@@ -658,15 +829,44 @@ def update_iam_user_status_compatibility(
 
 @router.get("/tenants")
 def list_platform_tenants(
+    q: str | None = Query(default=None, max_length=200),
+    page: int = Query(default=1, ge=1),
+    page_size: int = Query(default=50, ge=1, le=100),
     _context: CurrentContext = Depends(
-        require_platform_permission("platform:tenant:create")
+        require_platform_permission("platform:tenant:read")
     ),
     db: Session = Depends(get_db),
 ) -> list[dict]:
+    query = select(Tenant)
+    if q:
+        pattern = f"%{platform_service._escape_search(q.strip())}%"
+        query = query.where(or_(Tenant.name.ilike(pattern, escape="\\"), Tenant.slug.ilike(pattern, escape="\\")))
+    tenants = db.scalars(query.order_by(Tenant.name, Tenant.id).offset((page - 1) * page_size).limit(page_size))
     return [
         _platform_tenant_dict(db, tenant)
-        for tenant in platform_service.list_platform_tenants(db)
+        for tenant in tenants
     ]
+
+
+@router.get("/tenants/{tenant_id}/administrators", response_model=TenantAdministratorDirectory)
+def list_tenant_administrator_memberships(
+    tenant_id: int,
+    context: CurrentContext = Depends(require_platform_permission("platform:tenant_admin:manage")),
+    db: Session = Depends(get_db),
+) -> dict:
+    return administrator_directory(db, context=context, tenant_id=tenant_id)
+
+
+@router.get("/tenants/{tenant_id}")
+def get_platform_tenant(
+    tenant_id: int,
+    _context: CurrentContext = Depends(require_platform_permission("platform:tenant:read")),
+    db: Session = Depends(get_db),
+) -> dict:
+    tenant = db.get(Tenant, tenant_id)
+    if tenant is None:
+        raise HTTPException(404, "Tenant not found")
+    return _platform_tenant_dict(db, tenant)
 
 
 @router.patch("/tenants/{tenant_id}")
@@ -675,7 +875,7 @@ def update_tenant_status(
     payload: TenantStatusUpdate,
     request: Request,
     context: CurrentContext = Depends(
-        require_platform_permission("platform:admin")
+        require_platform_permission("platform:tenant:update_status")
     ),
     db: Session = Depends(get_db),
 ) -> dict:
@@ -706,3 +906,77 @@ def update_tenant_status(
     )
     db.commit()
     return {"tenant_id": tenant.id, "status": tenant.status}
+
+
+@router.patch('/users/{user_id}/profile')
+def edit_user_profile(user_id: int, payload: ProfileUpdate,
+                      context: CurrentContext = Depends(require_platform_permission('platform:user:write')),
+                      db: Session = Depends(get_db)):
+    user = ums.update_profile(db, user_id, payload.model_dump(exclude_unset=True), actor_user_id=context.user_id)
+    db.commit()
+    return ums.profile(db, user)
+
+
+@router.get('/users/{user_id}/audit')
+def user_audit(user_id: int, page: int = Query(default=1, ge=1), page_size: int = Query(default=50, ge=1, le=100),
+               context: CurrentContext = Depends(require_platform_permission('platform:user:read')),
+               db: Session = Depends(get_db)):
+    platform_service.get_platform_user(db, user_id)
+    return ums.audit_history(db, user_id, page=page, page_size=page_size)
+
+
+@router.post('/users/{user_id}/unlock')
+def unlock_user(user_id: int,
+                context: CurrentContext = Depends(require_platform_permission('platform:user:manage_status')),
+                db: Session = Depends(get_db)):
+    return _security_action(db, context, user_id, 'unlock')
+
+
+@router.post('/users/{user_id}/force-password-change')
+def force_password_change(user_id: int,
+                          context: CurrentContext = Depends(require_platform_permission('platform:user:manage_status')),
+                          db: Session = Depends(get_db)):
+    return _security_action(db, context, user_id, 'force-password-change')
+
+
+def _security_action(db, context, user_id, action):
+    from sqlalchemy import select
+
+    from ..models import NativeUserCredential
+    from ..services.account_state_service import InvalidAccountTransition, transition_account
+    try:
+        # Force-change locks follow the central tenant->user order. Eligibility
+        # is checked again by the lifecycle service while holding the user lock.
+        if action == 'unlock':
+            user = db.scalar(select(IAMUser).where(IAMUser.id == user_id).with_for_update()
+                             .execution_options(populate_existing=True))
+            if not user or user.status != 'LOCKED':
+                raise HTTPException(409, 'Only locked accounts may be unlocked')
+            target = 'ACTIVE'
+        else:
+            if not db.scalar(select(NativeUserCredential.id).where(NativeUserCredential.user_id == user_id)):
+                raise HTTPException(409, 'An enrolled native account is required')
+            target = 'FORCE_PASSWORD_CHANGE'
+        user = transition_account(db, user_id, target, actor_user_id=context.user_id, explicitly_authorized=True)
+        db.commit()
+        return {'user_id': user.id, 'status': user.status}
+    except InvalidAccountTransition as exc:
+        db.rollback()
+        raise HTTPException(409, str(exc)) from None
+
+
+@router.get("/iam/operations")
+def iam_operations(context: CurrentContext = Depends(require_platform_permission("platform:health:read")), db: Session = Depends(get_db)):
+    from ..services.native_operations import delivery_health, readiness
+    return {"delivery": delivery_health(db), "readiness": readiness(db)}
+
+
+@router.post("/users/{user_id}/logout-all")
+def revoke_native_sessions(user_id: int, context: CurrentContext = Depends(require_platform_permission("platform:user:manage_status")), db: Session = Depends(get_db)):
+    from ..services.native_password_service import lock_native
+    user, credential, _ = lock_native(db, user_id)
+    credential.security_version += 1
+    audit_service.write_authorization_audit(db, action="ALL_SESSIONS_REVOKED", actor_user_id=context.user_id, target_user_id=user.id)
+    db.commit()
+    invalidate_user_contexts(user.id)
+    return {"success": True}

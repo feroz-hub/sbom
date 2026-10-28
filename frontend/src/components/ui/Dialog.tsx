@@ -1,12 +1,13 @@
 'use client';
 
-import { useCallback, useEffect, useId, useRef, useState, type ReactNode } from 'react';
+import { useCallback, useEffect, useLayoutEffect, useId, useRef, useState, type ReactNode } from 'react';
 import { createPortal } from 'react-dom';
 import { X } from 'lucide-react';
 import { cn } from '@/lib/utils';
 import { Button } from './Button';
 
 interface DialogProps {
+  placement?: 'center' | 'right';
   open: boolean;
   onClose: () => void;
   title: string;
@@ -17,7 +18,7 @@ interface DialogProps {
    * Desktop max-width (≥640px). On mobile the dialog is always a bottom
    * sheet and ignores this. Default: ``md`` (max-w-md).
    */
-  maxWidth?: 'sm' | 'md' | 'lg' | 'xl' | '2xl';
+  maxWidth?: 'sm' | 'md' | 'lg' | 'xl' | '2xl' | '3xl';
   dismissOnBackdrop?: boolean;
   /** id of an element inside the dialog body that summarises its contents (WCAG 2.2 — pairs with aria-labelledby for screen-reader announcement). */
   describedBy?: string;
@@ -29,6 +30,7 @@ const maxWidthClasses: Record<string, string> = {
   lg: 'sm:max-w-lg',
   xl: 'sm:max-w-2xl',
   '2xl': 'sm:max-w-4xl',
+  '3xl': 'sm:max-w-5xl',
 };
 
 const FOCUSABLE = [
@@ -37,6 +39,7 @@ const FOCUSABLE = [
   'textarea:not([disabled])',
   'input:not([disabled]):not([type="hidden"])',
   'select:not([disabled])',
+  'summary',
   '[tabindex]:not([tabindex="-1"])',
 ].join(',');
 
@@ -53,6 +56,7 @@ export function Dialog({
   children,
   footer,
   maxWidth = 'md',
+  placement = 'center',
   dismissOnBackdrop = true,
   describedBy,
 }: DialogProps) {
@@ -126,22 +130,21 @@ export function Dialog({
     };
   }, [open]);
 
-  useEffect(() => {
+  // Focus in the commit phase: a deferred animation frame can otherwise
+  // steal focus after the user has already begun typing in an async form.
+  useLayoutEffect(() => {
     if (open) {
       previouslyFocused.current = (document.activeElement as HTMLElement) ?? null;
-      const raf = requestAnimationFrame(() => {
-        if (panelRef.current) {
-          const focusable = getFocusable(panelRef.current);
-          (focusable[0] ?? panelRef.current).focus();
-          // Initial scroll state once the body has rendered.
-          updateScrollState();
-        }
-      });
-      return () => cancelAnimationFrame(raf);
+      if (panelRef.current) {
+        const focusable = getFocusable(panelRef.current);
+        (focusable[0] ?? panelRef.current).focus();
+        updateScrollState();
+      }
+      return () => {
+        if (previouslyFocused.current?.isConnected) previouslyFocused.current.focus();
+      };
     }
-    if (previouslyFocused.current && previouslyFocused.current.isConnected) {
-      previouslyFocused.current.focus();
-    }
+    if (previouslyFocused.current?.isConnected) previouslyFocused.current.focus();
   }, [open, updateScrollState]);
 
   if (!open) return null;
@@ -163,7 +166,7 @@ export function Dialog({
   const dialogTree = (
     // Outer wrapper: bottom-anchored on mobile (items-end), centered on sm+.
     <div
-      className="fixed inset-0 z-50 flex items-end justify-center sm:items-center sm:p-4"
+      className={cn("fixed inset-0 z-50 flex", placement === "right" ? "items-stretch justify-end" : "items-end justify-center sm:items-center sm:p-4")}
       role="presentation"
     >
       <div
@@ -184,14 +187,14 @@ export function Dialog({
           'dialog-panel-in motion-reduce:animate-none',
           'focus-visible:outline-none',
           // Mobile: bottom sheet — full-width, 90dvh tall, only top corners rounded.
-          'max-h-[90dvh] rounded-t-xl rounded-b-none',
+          placement === 'right' ? 'h-dvh max-h-dvh rounded-none sm:max-w-2xl' : 'max-h-[90dvh] rounded-t-xl rounded-b-none',
           // Desktop: centered card — 92vw bounded by the maxWidth class below,
           // dvh-aware max-height capped at 800px, fully rounded. Width must not be
           // hard-capped here: a literal 720px silently overrode maxWidth="2xl"
           // (max-w-4xl = 896px), so wide forms rendered in a narrow panel.
-          'sm:w-[92vw] sm:max-h-[min(calc(100dvh-4rem),800px)] sm:rounded-xl',
+          placement === 'center' && 'sm:w-[92vw] sm:max-h-[min(calc(100dvh-4rem),800px)] sm:rounded-xl',
           // The maxWidth prop only applies on sm+ (mobile is full-width).
-          maxWidthClasses[maxWidth],
+          placement === 'center' && maxWidthClasses[maxWidth],
         )}
       >
         {/* Sticky title bar — never scrolls. Casts a subtle shadow when
@@ -204,7 +207,7 @@ export function Dialog({
           )}
         >
           <div className="flex min-w-0 items-center gap-2.5">
-            <div className="h-5 w-1 shrink-0 rounded-full bg-gradient-to-b from-hcl-blue to-hcl-cyan" />
+            {placement === "center" && <div className="h-5 w-1 shrink-0 rounded-full bg-gradient-to-b from-hcl-blue to-hcl-cyan" />}
             <h2 id={titleId} className="truncate text-lg font-semibold text-hcl-navy">
               {title}
             </h2>

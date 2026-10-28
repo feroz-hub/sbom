@@ -113,6 +113,10 @@ def test_same_ghsa_from_github_and_osv_dedupes_to_one_finding() -> None:
             "vuln_id": "GHSA-test",
             "aliases": ["CVE-2099-0001"],
             "sources": ["GITHUB"],
+            "component_id": 7,
+            "tenant_id": 1,
+            "sbom_id": 23,
+            "analysis_run_id": 5,
             "component_name": "pillow",
             "component_version": "12.1.0",
             "ecosystem": "pypi",
@@ -122,6 +126,10 @@ def test_same_ghsa_from_github_and_osv_dedupes_to_one_finding() -> None:
             "vuln_id": "OSV-test",
             "aliases": ["GHSA-test", "CVE-2099-0001"],
             "sources": ["OSV"],
+            "component_id": 7,
+            "tenant_id": 1,
+            "sbom_id": 23,
+            "analysis_run_id": 5,
             "component_name": "pillow",
             "component_version": "12.1.0",
             "ecosystem": "pypi",
@@ -131,6 +139,30 @@ def test_same_ghsa_from_github_and_osv_dedupes_to_one_finding() -> None:
     merged = deduplicate_findings(findings)
     assert len(merged) == 1
     assert set(merged[0]["sources"]) == {"GITHUB", "OSV"}
+
+    assert merged[0]["vuln_id"] == "CVE-2099-0001"
+    assert len(merged[0]["source_observations"]) == 2
+
+
+def test_same_name_unidentified_provider_observations_do_not_merge():
+    observations = [
+        {"vuln_id": "CVE-2099-0001", "sources": [provider], "component_name": "pillow",
+         "component_version": "12.1.0", "ecosystem": "pypi"}
+        for provider in ("GITHUB", "OSV")
+    ]
+    merged = deduplicate_findings(observations)
+    assert len(merged) == 2
+    assert all(row["resolution_status"] == "unresolved" for row in merged)
+
+
+@pytest.mark.parametrize("scope_key", ["tenant_id", "sbom_id", "analysis_run_id"])
+def test_verified_component_aliases_never_bridge_different_scopes(scope_key):
+    observation = {"component_id": 7, "tenant_id": 1, "sbom_id": 23, "analysis_run_id": 5,
+                   "vuln_id": "CVE-2099-0001", "sources": ["GITHUB"]}
+    other = {**observation, scope_key: observation[scope_key] + 1, "sources": ["OSV"]}
+    merged = deduplicate_findings([observation, other])
+    assert len(merged) == 2
+    assert all(len(row["source_observations"]) == 1 for row in merged)
 
 
 @pytest.mark.asyncio

@@ -1,3 +1,4 @@
+import { PermissionLink } from '@/components/ui/PermissionLink';
 import Link from 'next/link';
 import { Upload, Activity, FolderPlus, GitCompareArrows } from 'lucide-react';
 import { cn } from '@/lib/utils';
@@ -10,13 +11,13 @@ const linkClass = cn(
 export function DashboardQuickActions() {
   return (
     <div className="flex flex-col gap-3 sm:flex-row sm:flex-wrap sm:items-center">
-      <Link
+      <PermissionLink permission="sbom:upload"
         href="/sboms"
         className={cn(linkClass, 'bg-primary text-white shadow-sm hover:bg-hcl-dark')}
       >
         <Upload className="h-4 w-4" aria-hidden />
         Upload SBOM
-      </Link>
+      </PermissionLink>
       <Link
         href="/analysis?tab=runs"
         className={cn(

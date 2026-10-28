@@ -1,0 +1,16 @@
+{
+  "deletedAdminBffSessionsFromThisRun": 5,
+  "remainingMatchedSessions": 0,
+  "cleanupPasses": [
+    {
+      "deleted": 4,
+      "time": "Earlier scoped cleanup in this recorded run"
+    },
+    {
+      "deleted": 1,
+      "time": "2026-10-19T18:10:51.782840+00:00"
+    }
+  ],
+  "accountRolesStatusPasswordUntouched": true,
+  "scope": "NATIVE subject 1; session createdAt within recorded UAT run; development Redis DB 1 only; no session value/key logged"
+}

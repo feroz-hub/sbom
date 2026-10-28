@@ -1,0 +1,10 @@
+{
+  "time": "2026-10-20T10:33:44.482578+00:00",
+  "processes": "80916     1   1840   0.0 04:55:32 /Users/ferozebasha/.cache/codex-runtimes/codex-primary-runtime/dependencies/node/bin/node\n80918 80916 800176 125.3 04:55:31 next-server (v16.3.4)\n86996 86992   6736   0.0 01:46:30 /Users/ferozebasha/sbom/.venv/bin/python\n92313     1 135248  16.8 01:10:16 /Users/ferozebasha/sbom/.venv/bin/python\n",
+  "vm_stat": "Mach Virtual Memory Statistics: (page size of 16384 bytes)\nPages free:                                     5840.\nPages active:                                  74701.\nPages inactive:                                70305.\nPages speculative:                              2930.\nPages throttled:                                   0.\nPages wired down:                             116392.\nPages purgeable:                                  10.\n\"Translation faults\":                     5027718864.\nPages copy-on-write:                        91624328.\nPages zero filled:                         988282072.\nPages reactivated:                        2143437951.\nPages purged:                               49211376.\nFile-backed pages:                             54831.\nAnonymous pages:                               93105.\nPages stored in compressor:                   462058.\nPages occupied by compressor:                 216560.\nDecompressions:                           2452532339.\nCompressions:                             2552744117.\nPageins:                                   195805929.\nPageouts:                                    2013645.\nSwapins:                                   109230697.\nSwapouts:                                  115772674.\n",
+  "swap": "vm.swapusage: total = 10240.00M  used = 9279.06M  free = 960.94M  (encrypted)\n",
+  "frontendLogBytes": 52870,
+  "frontendMemoryRestartWarnings": 1,
+  "frontendEmptyResponseMentions": 0,
+  "note": "Process RSS in KiB; CPU instantaneous snapshot. Whole private logs are not exported. No OS memory settings changed."
+}

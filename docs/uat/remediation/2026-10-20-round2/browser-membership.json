@@ -1,0 +1,183 @@
+[
+  {
+    "id": "R2-MEMBERSHIP-ADD-UI",
+    "role": "admin",
+    "preconditions": "Clean Chrome context; real Native BFF authentication fixture; TLS validation enabled",
+    "steps": "R2-MEMBERSHIP-ADD-UI",
+    "expected": "Selected disposable member submits from sticky footer",
+    "actual": {
+      "status": 201,
+      "membership": {
+        "membership_id": 15,
+        "user_id": 7,
+        "external_iam_user_id": null,
+        "email": "uat-native-1792423938566@example.test",
+        "display_name": "UAT Native 1792423938566",
+        "user_status": "ACTIVE",
+        "email_verified": true,
+        "verification_required": false,
+        "role": "VIEWER",
+        "roles": [
+          "VIEWER"
+        ],
+        "role_assignment_version": 1,
+        "status": "ACTIVE"
+      }
+    },
+    "result": "PASS"
+  },
+  {
+    "id": "UAT-MEMBERSHIP-PROVIDER-COPY",
+    "role": "admin",
+    "preconditions": "Clean Chrome context; real Native BFF authentication fixture; TLS validation enabled",
+    "steps": "UAT-MEMBERSHIP-PROVIDER-COPY",
+    "expected": "Native confirmation uses provider-neutral copy",
+    "actual": {
+      "text": "Disable tenant membership?\n\nUAT Native 1792423938566 will no longer be able to access Olympus. Their sign-in identity and SBOM user account will remain unchanged. Their tenant membership record and assigned roles will be retained.\n\nCancel\nDisable membership"
+    },
+    "result": "PASS"
+  },
+  {
+    "id": "R2-MEMBERSHIP-Disable",
+    "role": "admin",
+    "preconditions": "Clean Chrome context; real Native BFF authentication fixture; TLS validation enabled",
+    "steps": "R2-MEMBERSHIP-Disable",
+    "expected": "Only membership status changes; account and assigned roles retained",
+    "actual": {
+      "status": 200,
+      "member": {
+        "membership_id": 15,
+        "user_id": 7,
+        "external_iam_user_id": null,
+        "email": "uat-native-1792423938566@example.test",
+        "display_name": "UAT Native 1792423938566",
+        "user_status": "ACTIVE",
+        "email_verified": true,
+        "verification_required": false,
+        "role": "VIEWER",
+        "roles": [
+          "VIEWER"
+        ],
+        "role_assignment_version": 1,
+        "status": "DISABLED"
+      }
+    },
+    "result": "PASS"
+  },
+  {
+    "id": "R2-MEMBERSHIP-Enable",
+    "role": "admin",
+    "preconditions": "Clean Chrome context; real Native BFF authentication fixture; TLS validation enabled",
+    "steps": "R2-MEMBERSHIP-Enable",
+    "expected": "Only membership status changes; account and assigned roles retained",
+    "actual": {
+      "status": 200,
+      "member": {
+        "membership_id": 15,
+        "user_id": 7,
+        "external_iam_user_id": null,
+        "email": "uat-native-1792423938566@example.test",
+        "display_name": "UAT Native 1792423938566",
+        "user_status": "ACTIVE",
+        "email_verified": true,
+        "verification_required": false,
+        "role": "VIEWER",
+        "roles": [
+          "VIEWER"
+        ],
+        "role_assignment_version": 1,
+        "status": "ACTIVE"
+      }
+    },
+    "result": "PASS"
+  },
+  {
+    "id": "R2-REMOVE-PROVIDER-COPY",
+    "role": "admin",
+    "preconditions": "Clean Chrome context; real Native BFF authentication fixture; TLS validation enabled",
+    "steps": "R2-REMOVE-PROVIDER-COPY",
+    "expected": "Removal copy neutral; checkbox confirmation retained",
+    "actual": {
+      "text": "Remove user from tenant?\n\nThis removes UAT Native 1792423938566 from Olympus and removes or deactivates their tenant role assignments according to the existing backend contract.\n\nThis does not delete:\ntheir sign-in identity\ntheir SBOM user account\nmemberships in other tenants\ntheir platform-level role, when present\nI understand this user will lose access to this tenant\nCancel\nRemove from tenant",
+      "disabled": true
+    },
+    "result": "PASS"
+  },
+  {
+    "id": "R2-MEMBERSHIP-REMOVE",
+    "role": "admin",
+    "preconditions": "Clean Chrome context; real Native BFF authentication fixture; TLS validation enabled",
+    "steps": "R2-MEMBERSHIP-REMOVE",
+    "expected": "Remove only newly created membership; original four preserved",
+    "actual": {
+      "status": 204,
+      "members": [
+        {
+          "membership_id": 1,
+          "user_id": 1,
+          "external_iam_user_id": null,
+          "email": "admin@olympus.example.test",
+          "display_name": "Synthetic Olympus admin",
+          "user_status": "ACTIVE",
+          "email_verified": true,
+          "verification_required": false,
+          "role": "TENANT_ADMIN",
+          "roles": [
+            "TENANT_ADMIN"
+          ],
+          "role_assignment_version": 1,
+          "status": "ACTIVE"
+        },
+        {
+          "membership_id": 2,
+          "user_id": 2,
+          "external_iam_user_id": null,
+          "email": "analyst@olympus.example.test",
+          "display_name": "Synthetic Olympus analyst",
+          "user_status": "ACTIVE",
+          "email_verified": true,
+          "verification_required": false,
+          "role": "SECURITY_ANALYST",
+          "roles": [
+            "SECURITY_ANALYST"
+          ],
+          "role_assignment_version": 1,
+          "status": "ACTIVE"
+        },
+        {
+          "membership_id": 3,
+          "user_id": 3,
+          "external_iam_user_id": null,
+          "email": "developer@olympus.example.test",
+          "display_name": "Synthetic Olympus developer",
+          "user_status": "ACTIVE",
+          "email_verified": true,
+          "verification_required": false,
+          "role": "DEVELOPER",
+          "roles": [
+            "DEVELOPER"
+          ],
+          "role_assignment_version": 1,
+          "status": "ACTIVE"
+        },
+        {
+          "membership_id": 4,
+          "user_id": 4,
+          "external_iam_user_id": null,
+          "email": "viewer@olympus.example.test",
+          "display_name": "Synthetic Olympus viewer",
+          "user_status": "ACTIVE",
+          "email_verified": true,
+          "verification_required": false,
+          "role": "VIEWER",
+          "roles": [
+            "VIEWER"
+          ],
+          "role_assignment_version": 1,
+          "status": "ACTIVE"
+        }
+      ]
+    },
+    "result": "PASS"
+  }
+]

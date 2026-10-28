@@ -1,3 +1,6 @@
+from tests.public_id_fixture import public_membership_key
+from tests.tenant_fixture_scope import verified_fixture_tenant
+
 """PR-6 tests — audit completeness, concurrency, RBAC and tenant isolation.
 
 Spec sections 40-43 (VEX-AUD-001/002, VEX-SEC-001/002) plus the manual
@@ -5,8 +8,6 @@ resolution of an unresolved mapping (VEX-MAP-001).
 """
 
 import pytest
-from sqlalchemy import select, text
-
 from app.core.permissions import ROLE_PERMISSIONS, Role
 from app.db import SessionLocal
 from app.models import (
@@ -19,7 +20,12 @@ from app.models import (
     VexOverrideAudit,
     VexStatement,
 )
+from app.services.vex.authorization import membership_key
 from app.services.vex.reconciliation import recompute_for_sbom
+from sqlalchemy import func, select
+
+from tests.test_vex_scoped_authorization import make_member
+from tests.vex_foreign_fixture import foreign_vex_fixture, foreign_vex_snapshot
 
 NOW = "2026-09-24T00:00:00Z"
 BASE = "/api/vex/investigations"
@@ -29,8 +35,10 @@ BASE = "/api/vex/investigations"
 def db():
     session = SessionLocal()
     try:
-        yield session
+        with verified_fixture_tenant(session, 1):
+            yield session
     finally:
+        session.rollback()
         session.close()
 
 
@@ -177,22 +185,23 @@ def test_every_mutation_requires_row_version__VEX_AUD_002(client, seeded, db):
     for path, body in (
         ("decision", {"status": "AFFECTED", "reason": "x"}),
         ("assignment", {"assigned_to": "analyst", "reason": "x"}),
-        ("component", {"component_id": seeded["component"].id, "reason": "x"}),
+        ("component", {"component_id": str(seeded["component"].public_id), "reason": "x"}),
     ):
         response = client.put(f"{BASE}/{context.id}/{path}", json=body)
         assert response.status_code == 422, f"{path} must require row_version"
 
 
 def test_assignment_conflicts_on_a_stale_version__VEX_AUD_002(client, seeded, db):
+    assignee = membership_key(make_member(db, "DEVELOPER"))
     context = context_for(db, "CVE-2026-5001")
     first = client.put(
         f"{BASE}/{context.id}/assignment",
-        json={"assigned_to": "alice", "row_version": context.row_version, "reason": "triage"},
+        json={"assigned_to": public_membership_key(assignee), "row_version": context.row_version, "reason": "triage"},
     )
     assert first.status_code == 200, first.text
     stale = client.put(
         f"{BASE}/{context.id}/assignment",
-        json={"assigned_to": "bob", "row_version": 1, "reason": "triage"},
+        json={"assigned_to": public_membership_key(assignee), "row_version": 1, "reason": "triage"},
     )
     assert stale.status_code == 409
 
@@ -229,25 +238,27 @@ def test_reconciliation_preserves_a_manual_decision__VEX_INV_004(client, seeded,
 
 
 def test_assignment_is_recorded_and_audited(client, seeded, db):
+    assignee = membership_key(make_member(db, "DEVELOPER"))
     context = context_for(db, "CVE-2026-5001")
     response = client.put(
         f"{BASE}/{context.id}/assignment",
-        json={"assigned_to": "alice", "row_version": context.row_version, "reason": "triage"},
+        json={"assigned_to": public_membership_key(assignee), "row_version": context.row_version, "reason": "triage"},
     )
     assert response.status_code == 200, response.text
     db.refresh(context)
-    assert context.assigned_to == "alice"
+    assert context.assigned_to == assignee
 
     entry = [a for a in audits_for(db, context.id) if a.action == "ASSIGNMENT"][0]
     assert entry.old_value_json == {"assigned_to": None}
-    assert entry.new_value_json == {"assigned_to": "alice"}
+    assert entry.new_value_json == {"assigned_to": assignee}
 
 
 def test_unassignment_is_audited(client, seeded, db):
+    assignee = membership_key(make_member(db, "DEVELOPER"))
     context = context_for(db, "CVE-2026-5001")
     client.put(
         f"{BASE}/{context.id}/assignment",
-        json={"assigned_to": "alice", "row_version": context.row_version, "reason": "triage"},
+        json={"assigned_to": public_membership_key(assignee), "row_version": context.row_version, "reason": "triage"},
     )
     db.refresh(context)
     response = client.put(
@@ -273,7 +284,7 @@ def test_analyst_can_bind_an_unresolved_assertion__VEX_MAP_001(client, seeded, d
     response = client.put(
         f"{BASE}/{context.id}/component",
         json={
-            "component_id": seeded["component"].id,
+            "component_id": str(seeded["component"].public_id),
             "row_version": context.row_version,
             "reason": "supplier confirmed this is the 1.1.1 build",
         },
@@ -290,7 +301,7 @@ def test_binding_is_audited_while_component_was_null__VEX_AUD_001(client, seeded
     client.put(
         f"{BASE}/{context.id}/component",
         json={
-            "component_id": seeded["component"].id,
+            "component_id": str(seeded["component"].public_id),
             "row_version": context.row_version,
             "reason": "confirmed",
         },
@@ -306,7 +317,7 @@ def test_binding_a_resolved_context_is_refused(client, seeded, db):
     response = client.put(
         f"{BASE}/{context.id}/component",
         json={
-            "component_id": seeded["other"].id,
+            "component_id": str(seeded["other"].public_id),
             "row_version": context.row_version,
             "reason": "should not be allowed",
         },
@@ -326,7 +337,7 @@ def test_binding_to_a_component_in_another_sbom_is_refused__VEX_CTX_001(client, 
     response = client.put(
         f"{BASE}/{context.id}/component",
         json={
-            "component_id": foreign.id,
+            "component_id": str(foreign.public_id),
             "row_version": context.row_version,
             "reason": "wrong sbom",
         },
@@ -344,70 +355,28 @@ def test_binding_to_a_component_in_another_sbom_is_refused__VEX_CTX_001(client, 
 
 
 def test_reconciliation_never_crosses_tenants__VEX_SEC_002(seeded, db):
-    """Identical PURL and CVE in another tenant must not merge or match."""
-    db.execute(
-        text(
-            "INSERT INTO tenants (id, name, slug, external_iam_tenant_id, status, "
-            "created_at, updated_at) VALUES (3, 'Tenant Three', 'three', 'three', "
-            "'ACTIVE', :now, :now) ON CONFLICT (id) DO NOTHING"
-        ),
-        {"now": NOW},
-    )
-    db.commit()
-
-    # A statement in tenant 3 naming the same CVE and component name.
-    db.execute(
-        text(
-            "INSERT INTO sbom_source (sbom_name, sbom_data, tenant_id, is_active) "
-            "VALUES ('t3', '{}', 3, true)"
-        )
-    )
-    db.commit()
-    t3_sbom = db.execute(
-        text("SELECT id FROM sbom_source WHERE tenant_id = 3 ORDER BY id DESC LIMIT 1")
-    ).scalar()
-
+    foreign = foreign_vex_fixture(db, tenant_id=3)
+    before = foreign_vex_snapshot(db, 3, foreign["context_id"])
     recompute_for_sbom(db, tenant_id=1, sbom_id=seeded["sbom"].id)
     db.commit()
-
-    crossed = db.execute(
-        text(
-            "SELECT COUNT(*) FROM vex_investigation WHERE tenant_id = 1 AND sbom_id = :sid"
-        ),
-        {"sid": t3_sbom},
-    ).scalar()
-    assert crossed == 0, "tenant 1 must never produce a context for another tenant's SBOM"
-
-    db.execute(text("DELETE FROM sbom_source WHERE id = :sid"), {"sid": t3_sbom})
-    db.commit()
+    assert db.scalar(select(func.count()).select_from(VexInvestigation).where(
+        VexInvestigation.sbom_id == foreign["sbom_id"])) == 0
+    assert foreign_vex_snapshot(db, 3, foreign["context_id"]) == before
 
 
 def test_cross_tenant_mutations_are_rejected__VEX_SEC_002(client, seeded, db):
-    db.execute(
-        text(
-            "INSERT INTO tenants (id, name, slug, external_iam_tenant_id, status, "
-            "created_at, updated_at) VALUES (2, 'Other', 'other', 'other', 'ACTIVE', "
-            ":now, :now) ON CONFLICT (id) DO NOTHING"
-        ),
-        {"now": NOW},
-    )
-    context = context_for(db, "CVE-2026-5001")
-    db.execute(
-        text("UPDATE vex_investigation SET tenant_id = 2 WHERE id = :id"), {"id": context.id}
-    )
-    db.commit()
-
+    foreign = foreign_vex_fixture(db)
+    before = foreign_vex_snapshot(db, 2, foreign["context_id"])
+    # Use a valid public local Membership so this tests foreign-context
+    # concealment rather than failing earlier on malformed assignee syntax.
+    assignee = public_membership_key(membership_key(make_member(db, "DEVELOPER")))
     for path, body in (
-        ("decision", {"status": "AFFECTED", "row_version": 1, "reason": "x"}),
-        ("assignment", {"assigned_to": "mallory", "row_version": 1, "reason": "x"}),
-        ("component", {"component_id": seeded["component"].id, "row_version": 1, "reason": "x"}),
+        ("decision", {"status": "AFFECTED", "row_version": foreign["row_version"], "reason": "x"}),
+        ("assignment", {"assigned_to": assignee, "row_version": foreign["row_version"], "reason": "x"}),
+        ("component", {"component_id": str(seeded["component"].public_id), "row_version": foreign["row_version"], "reason": "x"}),
     ):
-        assert client.put(f"{BASE}/{context.id}/{path}", json=body).status_code == 404
-
-    db.execute(
-        text("UPDATE vex_investigation SET tenant_id = 1 WHERE id = :id"), {"id": context.id}
-    )
-    db.commit()
+        assert client.put(f"{BASE}/{foreign['context_id']}/{path}", json=body).status_code == 404
+    assert foreign_vex_snapshot(db, 2, foreign["context_id"]) == before
 
 
 # ---------------------------------------------------------------------------
@@ -426,15 +395,52 @@ def test_role_permissions_match_the_spec__VEX_SEC_001():
     assert "vex:write" in ROLE_PERMISSIONS[Role.TENANT_ADMIN]
 
 
-def test_every_investigation_route_maps_to_a_vex_permission__VEX_SEC_001():
+@pytest.fixture
+def policy_request():
+    from starlette.requests import Request
+
+    def build(method, path, *, route=None):
+        scope = {
+            "type": "http", "http_version": "1.1", "scheme": "http",
+            "method": method, "path": path, "raw_path": path.encode(),
+            "root_path": "", "query_string": b"", "headers": [],
+            "server": ("testserver", 80), "client": ("testclient", 50000),
+        }
+        if route is not None:
+            scope["route"] = route
+        return Request(scope)
+
+    return build
+
+
+def test_every_investigation_route_maps_to_a_vex_permission__VEX_SEC_001(policy_request):
     from app.core.security import permission_for_request
 
-    class _Request:
-        def __init__(self, method, path):
-            self.method = method
-            self.url = type("U", (), {"path": path})()
+    assert permission_for_request(policy_request("GET", BASE)) == "vex:read"
+    assert permission_for_request(policy_request("GET", f"{BASE}/1")) == "vex:read"
+    assert permission_for_request(policy_request("PUT", f"{BASE}/1/decision")) == "vex:read"
+    for path in ("assignment", "component"):
+        assert permission_for_request(policy_request("PUT", f"{BASE}/1/{path}")) == "vex:write"
 
-    assert permission_for_request(_Request("GET", f"{BASE}")) == "vex:read"
-    assert permission_for_request(_Request("GET", f"{BASE}/1")) == "vex:read"
-    for path in ("decision", "assignment", "component"):
-        assert permission_for_request(_Request("PUT", f"{BASE}/1/{path}")) == "vex:write"
+
+@pytest.mark.parametrize("method,path", [
+    ("POST", f"{BASE}/1/decision"), ("DELETE", f"{BASE}/1"), ("GET", f"{BASE}/1/unmapped"),
+])
+def test_real_request_denies_unmapped_vex_operations(policy_request, method, path):
+    from app.core.security import permission_for_request
+    from fastapi import HTTPException
+
+    with pytest.raises(HTTPException) as denied:
+        permission_for_request(policy_request(method, path))
+    assert denied.value.status_code == 403
+
+
+def test_selected_unmapped_route_cannot_inherit_vex_url_permission(policy_request):
+    from app.core.security import permission_for_request
+    from fastapi import HTTPException
+    from fastapi.routing import APIRoute
+
+    route = APIRoute("/future/vex/{id}", endpoint=lambda: None, methods=["GET"])
+    with pytest.raises(HTTPException) as denied:
+        permission_for_request(policy_request("GET", BASE, route=route))
+    assert denied.value.status_code == 403

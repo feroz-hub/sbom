@@ -195,7 +195,7 @@ def _seed_postgres_test_tenant(database_url: str) -> None:
 
 
 def _reset_authorization_catalog(database_url: str) -> None:
-    """Restore the immutable Phase 8 catalogue after test table truncation."""
+    """Restore the versioned catalogue through V2 after test truncation."""
     _assert_safe_test_database(database_url)
     engine = create_engine(database_url)
     migration_path = (
@@ -218,6 +218,41 @@ def _reset_authorization_catalog(database_url: str) -> None:
             connection.execute(text("DELETE FROM authorization_roles"))
             connection.execute(text("DELETE FROM authorization_permissions"))
             module._seed(connection)
+            v2_path = migration_path.with_name("064_platform_tenant_segregation_v2.py")
+            v2_spec = importlib.util.spec_from_file_location("_catalog_v2_migration", v2_path)
+            if v2_spec is None or v2_spec.loader is None:
+                raise RuntimeError("Unable to load V2 authorization seed")
+            v2_module = importlib.util.module_from_spec(v2_spec)
+            v2_spec.loader.exec_module(v2_module)
+            v2_module._seed(connection)
+            scoped_spec = importlib.util.spec_from_file_location("_configuration_permissions", migration_path.with_name("065_scoped_configuration.py"))
+            scoped_module = importlib.util.module_from_spec(scoped_spec)
+            scoped_spec.loader.exec_module(scoped_module)
+            scoped_module._permissions(connection)
+            advisor_spec = importlib.util.spec_from_file_location(
+                "_component_advisor_permissions", migration_path.with_name("067_component_advisor_foundation.py")
+            )
+            advisor_module = importlib.util.module_from_spec(advisor_spec)
+            advisor_spec.loader.exec_module(advisor_module)
+            advisor_module._seed(connection)
+            policy_spec = importlib.util.spec_from_file_location(
+                "_component_advisor_policy_permissions", migration_path.with_name("068_component_advisor_policies.py")
+            )
+            policy_module = importlib.util.module_from_spec(policy_spec)
+            policy_spec.loader.exec_module(policy_module)
+            policy_module._seed(connection)
+            platform_policy_spec = importlib.util.spec_from_file_location(
+                "_platform_advisor_policy_permissions", migration_path.with_name("075_platform_advisor_policies.py")
+            )
+            platform_policy_module = importlib.util.module_from_spec(platform_policy_spec)
+            platform_policy_spec.loader.exec_module(platform_policy_module)
+            platform_policy_module._seed(connection)
+            governance_spec = importlib.util.spec_from_file_location(
+                "_tenant_admin_governance", migration_path.with_name("103_tenant_admin_governance.py")
+            )
+            governance_module = importlib.util.module_from_spec(governance_spec)
+            governance_spec.loader.exec_module(governance_module)
+            governance_module._seed(connection)
     finally:
         engine.dispose()
 
@@ -424,25 +459,25 @@ def sample_sbom_dict() -> dict[str, Any]:
 
 
 @pytest.fixture()
-def seeded_sbom(app, sample_sbom_dict) -> dict[str, Any]:
+def seeded_sbom(client, sample_sbom_dict) -> dict[str, Any]:
     """
     Upload the fixture SBOM exactly once per test session and return the row.
 
     Session scope + deterministic name = stable `sbom_id` and `sbom_name` in
     every snapshot, so the snapshot diff doesn't trip on the upload echo.
     """
-    from fastapi.testclient import TestClient
-
     name = "snapshot-fixture"
     payload = {
         "sbom_name": name,
         "sbom_data": json.dumps(sample_sbom_dict),
         "created_by": "snapshot-test",
     }
-    with TestClient(app) as c:
-        resp = c.post("/api/sboms", json=payload)
-        assert resp.status_code == 201, resp.text
-        return resp.json()
+    # Reuse the running client. A second lifespan can otherwise inherit a
+    # direct-service fixture's tenant context and incorrectly enter internal
+    # startup discovery as an authenticated tenant operation.
+    resp = client.post("/api/sboms", json=payload)
+    assert resp.status_code == 201, resp.text
+    return resp.json()
 
 
 # ---------------------------------------------------------------------------

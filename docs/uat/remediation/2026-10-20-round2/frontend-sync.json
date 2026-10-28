@@ -1,0 +1,26 @@
+[
+  {
+    "file": "frontend/src/components/admin/UserSearchCombobox.tsx",
+    "sha256": "aafa7cd68776be1437a5547ca6a027fe2cd1c8e01d2474e31dce4ff6a291dd74"
+  },
+  {
+    "file": "frontend/src/components/admin/TenantUsersAccess.tsx",
+    "sha256": "2eb11093d1e9802c47637386dad58cb360a8c8090af29518965a456748d70619"
+  },
+  {
+    "file": "frontend/src/components/admin/MembershipConfirmDialogs.tsx",
+    "sha256": "db8de0aa6d4f5dd9d9f59e316e32cf501bc0782e286cf419b0931e1884266ed1"
+  },
+  {
+    "file": "frontend/src/components/admin/PlatformKevSync.tsx",
+    "sha256": "7832f67df0eb0bb5c5d6d7d63e45d08f9f770e3bcfe8bf461d77230928f37d23"
+  },
+  {
+    "file": "frontend/src/app/kev/page.tsx",
+    "sha256": "59ccaea2d0c64c283c96be6c5e0436e0e8bea091b8de9903fccf39625e903cd7"
+  },
+  {
+    "file": "frontend/src/app/platform/page.tsx",
+    "sha256": "9ce107bec29d3580193ceedf95b69c467e24484c9d40db376ea02e61a634f172"
+  }
+]

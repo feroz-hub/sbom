@@ -1,0 +1,136 @@
+[
+  {
+    "schema": "InitialTenantAdministratorResponse",
+    "field": "user_id",
+    "wire": {
+      "title": "User Id",
+      "type": "string",
+      "format": "uuid"
+    }
+  },
+  {
+    "schema": "Membership",
+    "field": "user_id",
+    "wire": {
+      "title": "User Id",
+      "type": "string",
+      "format": "uuid"
+    }
+  },
+  {
+    "schema": "MembershipUpsert",
+    "field": "user_id",
+    "wire": {
+      "title": "User Id",
+      "anyOf": [
+        {
+          "type": "string",
+          "format": "uuid"
+        },
+        {
+          "type": "null"
+        }
+      ]
+    }
+  },
+  {
+    "schema": "PlatformAdministratorGrantRequest",
+    "field": "user_id",
+    "wire": {
+      "title": "User Id",
+      "anyOf": [
+        {
+          "type": "string",
+          "format": "uuid"
+        },
+        {
+          "type": "null"
+        }
+      ]
+    }
+  },
+  {
+    "schema": "PlatformAdministratorGrantResponse",
+    "field": "user_id",
+    "wire": {
+      "title": "User Id",
+      "type": "string",
+      "format": "uuid"
+    }
+  },
+  {
+    "schema": "PlatformAdministratorGrantResponse",
+    "field": "created_by_user_id",
+    "wire": {
+      "title": "Created By User Id",
+      "anyOf": [
+        {
+          "type": "string",
+          "format": "uuid"
+        },
+        {
+          "type": "null"
+        }
+      ]
+    }
+  },
+  {
+    "schema": "PlatformGrantSummary",
+    "field": "user_id",
+    "wire": {
+      "title": "User Id",
+      "type": "string",
+      "format": "uuid"
+    }
+  },
+  {
+    "schema": "PlatformGrantSummary",
+    "field": "created_by_user_id",
+    "wire": {
+      "title": "Created By User Id",
+      "anyOf": [
+        {
+          "type": "string",
+          "format": "uuid"
+        },
+        {
+          "type": "null"
+        }
+      ]
+    }
+  },
+  {
+    "schema": "PlatformUserStatusResponse",
+    "field": "user_id",
+    "wire": {
+      "title": "User Id",
+      "type": "string",
+      "format": "uuid"
+    }
+  },
+  {
+    "schema": "RecoverTenantAdmin",
+    "field": "user_id",
+    "wire": {
+      "title": "User Id",
+      "type": "string",
+      "format": "uuid"
+    }
+  },
+  {
+    "schema": "TenantCreateRequest",
+    "field": "initial_admin_user_id",
+    "wire": {
+      "title": "Initial Admin User Id",
+      "anyOf": [
+        {
+          "type": "string",
+          "format": "uuid"
+        },
+        {
+          "type": "null"
+        }
+      ]
+    }
+  }
+]

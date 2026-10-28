@@ -15,9 +15,10 @@ from ..core.context import CurrentContext
 from ..core.security import get_current_tenant_context
 from ..db import get_db
 from ..metrics._helpers import cves_for_finding
-from ..services.lifecycle.vex_provider import effective_vex_for_sbom
 from ..models import AnalysisFinding, AnalysisRun, SBOMComponent
 from ..schemas_compare import COMPARABLE_RUN_STATUSES
+from ..services.finding_metrics import canonicalize_finding_rows, vex_for_finding
+from ..services.lifecycle.vex_provider import effective_vex_for_sbom
 
 log = logging.getLogger("sbom.api.analysis")
 
@@ -120,6 +121,11 @@ def compare_analysis_runs(
             },
         )
 
+    from ..models import SBOMSource
+    from ..services.sbom_lifecycle import require_processing
+    for run in (run_a_obj, run_b_obj):
+        require_processing(db.get(SBOMSource, run.sbom_id), operation="Comparison")
+
     # B7 patch — both runs must be in a comparable status. Pre-fix v1 happily
     # diffed RUNNING runs and returned nonsense. v2 returns the same envelope.
     for run in (run_a_obj, run_b_obj):
@@ -138,6 +144,9 @@ def compare_analysis_runs(
 
     findings_a = db.execute(select(AnalysisFinding).where(AnalysisFinding.analysis_run_id == run_a)).scalars().all()
     findings_b = db.execute(select(AnalysisFinding).where(AnalysisFinding.analysis_run_id == run_b)).scalars().all()
+
+    findings_a = canonicalize_finding_rows(findings_a)
+    findings_b = canonicalize_finding_rows(findings_b)
 
     ids_a = {f.vuln_id for f in findings_a if f.vuln_id}
     ids_b = {f.vuln_id for f in findings_b if f.vuln_id}
@@ -191,6 +200,8 @@ def export_sarif(
 
     findings = db.execute(select(AnalysisFinding).where(AnalysisFinding.analysis_run_id == run_id)).scalars().all()
 
+    findings = canonicalize_finding_rows(findings)
+
     def _sev_to_level(sev: str) -> str:
         s = (sev or "").upper()
         if s in ("CRITICAL", "HIGH"):
@@ -220,7 +231,7 @@ def export_sarif(
     results = []
     vex = effective_vex_for_sbom(db, tenant_id=run.tenant_id, sbom_id=run.sbom_id)
     for f in findings:
-        decision = vex.get((f.component_id, f.vuln_id.strip().upper()))
+        decision = vex_for_finding(vex, f)
         purl = None
         if f.component_id:
             comp = db.get(SBOMComponent, f.component_id)
@@ -266,6 +277,9 @@ def export_sarif(
                     # JSON null for untagged rows; consumers can
                     # distinguish "no signal" from a real low score.
                     "match_confidence": getattr(f, "match_confidence", None),
+                    "cvss_source": getattr(f, "cvss_source", None),
+                    "cvss_version": f.cvss_version,
+                    "source_observations": getattr(f, "source_observations", []),
                 },
             }
         )
@@ -290,7 +304,7 @@ def export_sarif(
     return Response(
         content=json.dumps(sarif, indent=2),
         media_type="application/json",
-        headers={"Content-Disposition": f'attachment; filename="sbom_findings_{run_id}.sarif"'},
+        headers={"Content-Disposition": f'attachment; filename="sbom_findings_{run.public_id}.sarif"'},
     )
 
 
@@ -317,6 +331,9 @@ def export_csv(
         .all()
     )
 
+    findings = canonicalize_finding_rows(findings)
+    component_ids = {f.component_id for f in findings if f.component_id}
+    purls = dict(db.execute(select(SBOMComponent.id, SBOMComponent.purl).where(SBOMComponent.id.in_(component_ids))).all()) if component_ids else {}
     output = io.StringIO()
     writer = csv.writer(output)
     writer.writerow(
@@ -348,17 +365,17 @@ def export_csv(
             "match_confidence",
             "vex_status",
             "vex_source",
+            "cvss_source",
+            "cvss_version",
+            "rating_disagreement",
+            "provider_observation_count",
         ]
     )
 
     vex = effective_vex_for_sbom(db, tenant_id=run.tenant_id, sbom_id=run.sbom_id)
     for f in findings:
-        decision = vex.get((f.component_id, f.vuln_id.strip().upper()))
-        purl = None
-        if f.component_id:
-            comp = db.get(SBOMComponent, f.component_id)
-            if comp:
-                purl = comp.purl
+        decision = vex_for_finding(vex, f)
+        purl = purls.get(f.component_id)
 
         # Mirror the web UI's alias chips: every CVE id from
         # vuln_id ∪ aliases, minus the primary id. Semicolon-joined
@@ -394,6 +411,10 @@ def export_csv(
                 "" if getattr(f, "match_confidence", None) is None else f"{f.match_confidence:.3f}",
                 decision.status if decision else "",
                 decision.source_name if decision else "",
+                getattr(f, "cvss_source", None) or "",
+                f.cvss_version or "",
+                getattr(f, "rating_disagreement", False),
+                len(getattr(f, "source_observations", [])),
             ]
         )
 
@@ -401,5 +422,5 @@ def export_csv(
     return Response(
         content=content,
         media_type="text/csv",
-        headers={"Content-Disposition": f'attachment; filename="sbom_findings_{run_id}.csv"'},
+        headers={"Content-Disposition": f'attachment; filename="sbom_findings_{run.public_id}.csv"'},
     )

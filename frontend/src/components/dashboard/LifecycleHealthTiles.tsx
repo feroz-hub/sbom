@@ -6,12 +6,14 @@ import { ShieldAlert, AlertTriangle, AlertCircle, Award, FileWarning, HelpCircle
 import { Surface } from '@/components/ui/Surface';
 import { Skeleton } from '@/components/ui/Spinner';
 import { getDashboardLifecycle, getDashboardHealth, getDashboardVex } from '@/lib/api';
+import { useAuth } from '@/hooks/useAuth';
 
 export interface LifecycleHealthTilesProps {
   lifecycle?: any;
   health?: any;
   vex?: any;
   isLoading?: boolean;
+  hasInventory?: boolean;
 }
 
 export function LifecycleHealthTiles({
@@ -19,7 +21,9 @@ export function LifecycleHealthTiles({
   health: propsHealth,
   vex: propsVex,
   isLoading: propsIsLoading,
+  hasInventory,
 }: LifecycleHealthTilesProps = {}) {
+  const { hasPermission } = useAuth();
   const hasProps = propsLifecycle !== undefined && propsHealth !== undefined && propsVex !== undefined;
 
   const lifecycleQuery = useQuery({
@@ -48,9 +52,9 @@ export function LifecycleHealthTiles({
   const lifecycleEmpty = !loading && !lifecycleError && (lifecycle?.total_components ?? 0) === 0;
 
   return (
-    <div className="grid grid-cols-1 gap-6 xl:grid-cols-3">
+    <div className="grid grid-cols-1 gap-6 md:grid-cols-2 xl:grid-cols-3">
       {/* Component Lifecycle Card */}
-      <Surface variant="elevated" className="p-5">
+      <Surface variant="elevated" elevation={1} className="min-w-0 rounded-2xl p-5">
         <div>
           <h3 className="text-base font-semibold text-hcl-navy">Component Lifecycle (EOS/EOL)</h3>
           <p className="mt-0.5 text-xs text-hcl-muted">
@@ -68,7 +72,12 @@ export function LifecycleHealthTiles({
           </div>
         ) : null}
 
-        <div className="mt-4 grid grid-cols-3 gap-3">
+        <div className="mt-4 rounded-xl bg-surface-muted p-3">
+          <p className="text-xs font-medium text-hcl-muted">At risk · End-of-life</p>
+          {loading ? <Skeleton className="mt-2 h-8 w-16" /> : <p className="mt-1 font-metric text-3xl font-bold text-hcl-navy">{lifecycle?.eol_components ?? 0}</p>}
+          <p className="mt-1 text-xs text-hcl-muted">EOL components. Other risk categories below may overlap.</p>
+        </div>
+        <div className="mt-4 grid grid-cols-1 gap-3 sm:grid-cols-2 2xl:grid-cols-3">
           <div className="dashboard-stat-card rounded-xl bg-red-50/70 p-3 dark:bg-red-950/20">
             <div className="flex items-center gap-1.5 text-[10px] font-semibold uppercase tracking-wider text-red-800 dark:text-red-300">
               <ShieldAlert className="h-3.5 w-3.5" />
@@ -81,7 +90,7 @@ export function LifecycleHealthTiles({
                 {lifecycle?.eol_components ?? 0}
               </div>
             )}
-            <div className="mt-0.5 text-[9px] text-red-600/80 dark:text-red-400/80">Active threat (EOL reached)</div>
+            <div className="mt-0.5 text-[9px] text-red-600/80 dark:text-red-400/80">End of life reached</div>
           </div>
 
           <div className="dashboard-stat-card rounded-xl bg-amber-50/70 p-3 dark:bg-amber-950/20">
@@ -115,7 +124,7 @@ export function LifecycleHealthTiles({
           </div>
         </div>
 
-        <div className="mt-3 grid grid-cols-3 gap-3">
+        <div className="mt-3 grid grid-cols-2 gap-3">
           {([
             ['Supported', lifecycle?.supported_count ?? 0, 'text-emerald-700 dark:text-emerald-300'],
             ['Deprecated', lifecycle?.deprecated_count ?? 0, 'text-orange-700 dark:text-orange-300'],
@@ -125,7 +134,7 @@ export function LifecycleHealthTiles({
             ['Possibly Unmaintained', lifecycle?.possibly_unmaintained_count ?? 0, 'text-yellow-700 dark:text-yellow-300'],
             ['Stale Data', lifecycle?.stale_lifecycle_count ?? 0, 'text-slate-700 dark:text-slate-300'],
           ] as const).map(([label, value, color]) => (
-            <div key={label} className="dashboard-stat-card rounded-lg p-2">
+            <div key={label} className="flex items-center justify-between gap-2 border-b border-border-subtle py-2">
               <div className="text-[10px] font-semibold uppercase tracking-wider text-hcl-muted">{label}</div>
               {loading ? (
                 <Skeleton className="mt-2 h-5 w-10" />
@@ -149,10 +158,11 @@ export function LifecycleHealthTiles({
             </div>
           </div>
         ) : null}
+        {hasPermission('sbom:read') && <Link href="/sboms" className="mt-4 inline-block rounded text-xs font-medium text-hcl-blue hover:underline focus-visible:ring-2 focus-visible:ring-hcl-blue">View lifecycle details →</Link>}
       </Surface>
 
       {/* SBOM Health Card */}
-      <Surface variant="elevated" className="p-5">
+      <Surface variant="elevated" elevation={1} className="min-w-0 rounded-2xl p-5">
         <div>
           <h3 className="text-base font-semibold text-hcl-navy">SBOM Quality &amp; Health</h3>
           <p className="mt-0.5 text-xs text-hcl-muted">
@@ -160,8 +170,8 @@ export function LifecycleHealthTiles({
           </p>
         </div>
 
-        <div className="mt-4 grid grid-cols-3 gap-3">
-          <div className="dashboard-stat-card rounded-xl bg-emerald-50/70 p-3 dark:bg-emerald-950/20">
+        {!loading && (hasInventory === false || !Number.isFinite(health?.completeness_score)) ? <p className="mt-4 rounded-xl bg-surface-muted p-4 text-sm text-hcl-muted">No SBOM quality data available yet.</p> : <div className="mt-4 grid grid-cols-2 gap-3">
+          <div className="col-span-2 rounded-xl bg-surface-muted p-4">
             <div className="flex items-center gap-1.5 text-[10px] font-semibold uppercase tracking-wider text-emerald-800 dark:text-emerald-300">
               <Award className="h-3.5 w-3.5" />
               Completeness
@@ -169,7 +179,7 @@ export function LifecycleHealthTiles({
             {loading ? (
               <Skeleton className="mt-2 h-7 w-12" />
             ) : (
-              <div className="mt-1 font-metric text-2xl font-bold text-emerald-700 dark:text-emerald-400">
+              <div className="mt-1 font-metric text-4xl font-bold text-emerald-700 dark:text-emerald-400">
                 {Math.round(health?.completeness_score ?? 0)}%
               </div>
             )}
@@ -179,7 +189,7 @@ export function LifecycleHealthTiles({
           <div className="dashboard-stat-card rounded-xl bg-amber-50/70 p-3 dark:bg-amber-950/20">
             <div className="flex items-center gap-1.5 text-[10px] font-semibold uppercase tracking-wider text-amber-800 dark:text-amber-300">
               <FileWarning className="h-3.5 w-3.5" />
-              Missing Info
+              Missing metadata
             </div>
             {loading ? (
               <Skeleton className="mt-2 h-7 w-12" />
@@ -188,13 +198,13 @@ export function LifecycleHealthTiles({
                 {health?.missing_metadata ?? 0}
               </div>
             )}
-            <div className="mt-0.5 text-[9px] text-amber-600/80 dark:text-amber-400/80">Missing licenses/hashes</div>
+            <div className="mt-0.5 text-xs text-hcl-muted">Missing licenses/hashes</div>
           </div>
 
           <div className="dashboard-stat-card rounded-xl bg-gray-50 p-3 dark:bg-gray-800/40">
             <div className="flex items-center gap-1.5 text-[10px] font-semibold uppercase tracking-wider text-gray-700 dark:text-gray-300">
               <HelpCircle className="h-3.5 w-3.5" />
-              Outdated Pkgs
+              Outdated packages
             </div>
             {loading ? (
               <Skeleton className="mt-2 h-7 w-12" />
@@ -203,13 +213,13 @@ export function LifecycleHealthTiles({
                 {health?.outdated_components ?? 0}
               </div>
             )}
-            <div className="mt-0.5 text-[9px] text-gray-500">Non-latest releases found</div>
+            <div className="mt-0.5 text-xs text-hcl-muted">Lifecycle-outdated components</div>
           </div>
-        </div>
+        </div>}
       </Surface>
 
       {/* VEX Summary Card */}
-      <Surface variant="elevated" className="p-5">
+      <Surface variant="elevated" elevation={1} className="min-w-0 rounded-2xl p-5">
         <div>
           <h3 className="text-base font-semibold text-hcl-navy">VEX Exploitability</h3>
           <p className="mt-0.5 text-xs text-hcl-muted">
@@ -227,16 +237,16 @@ export function LifecycleHealthTiles({
           </div>
         ) : null}
 
-        <div className="mt-4 grid grid-cols-3 gap-3">
+        <div className="mt-4 grid grid-cols-2 gap-3 2xl:grid-cols-3">
           {([
             ['Affected', vex?.affected_count ?? 0, 'text-red-700 dark:text-red-300'],
+            ['Requires Action', vex?.vulnerabilities_requiring_action ?? 0, 'text-rose-700 dark:text-rose-300'],
+            ['Investigating', vex?.under_investigation_count ?? 0, 'text-amber-700 dark:text-amber-300'],
             ['Not Affected', vex?.not_affected_count ?? 0, 'text-emerald-700 dark:text-emerald-300'],
             ['Fixed', vex?.fixed_count ?? 0, 'text-blue-700 dark:text-blue-300'],
-            ['Investigating', vex?.under_investigation_count ?? 0, 'text-amber-700 dark:text-amber-300'],
             ['Unknown', vex?.unknown_count ?? 0, 'text-gray-700 dark:text-gray-300'],
-            ['Requires Action', vex?.vulnerabilities_requiring_action ?? 0, 'text-rose-700 dark:text-rose-300'],
           ] as const).map(([label, value, color]) => (
-            <div key={label} className="dashboard-stat-card rounded-lg p-2">
+            <div key={label} className={`rounded-xl p-3 ${['Affected', 'Requires Action', 'Investigating'].includes(label) ? 'border border-border bg-surface-muted' : ''}`}>
               <div className="flex items-center gap-1 text-[10px] font-semibold uppercase tracking-wider text-hcl-muted">
                 <ShieldCheck className="h-3.5 w-3.5" />
                 {label}
@@ -256,12 +266,12 @@ export function LifecycleHealthTiles({
               <div className="text-[10px] font-semibold uppercase tracking-wider text-hcl-muted">Top Affected</div>
               {/* Spec section 46: this card is a summary and drill-down entry
                   point, not the investigation workflow itself. */}
-              <Link
+              {hasPermission('vex:read') && <Link
                 href="/vex-investigation"
                 className="text-[10px] font-medium text-hcl-blue hover:underline"
               >
                 Investigate →
-              </Link>
+              </Link>}
             </div>
             <div className="mt-2 space-y-1.5">
               {vex?.top_affected_components.slice(0, 3).map((item: any) => (
@@ -273,6 +283,7 @@ export function LifecycleHealthTiles({
             </div>
           </div>
         ) : null}
+        {hasPermission('vex:read') && <Link href="/vex-investigation" className="mt-4 inline-block rounded text-xs font-medium text-hcl-blue hover:underline focus-visible:ring-2 focus-visible:ring-hcl-blue">Open VEX investigations →</Link>}
       </Surface>
     </div>
   );

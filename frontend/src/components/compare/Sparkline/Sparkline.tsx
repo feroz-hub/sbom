@@ -7,9 +7,9 @@ import { cn } from '@/lib/utils';
 
 interface Props {
   /** SBOM whose run history feeds the sparkline. Null = render nothing. */
-  sbomId: number | null;
+  sbomId: (string | number) | null;
   /** Run id of the rightmost point — visually highlighted. */
-  currentRunId?: number;
+  currentRunId?: string;
   /** Title attribute / sr-only description suffix (e.g. SBOM name). */
   contextLabel?: string;
   /** Optional CSS class on the wrapper. */
@@ -58,7 +58,7 @@ export function Sparkline({
     const sortable = data.filter(
       (r) => r.run_status != null && COMPARABLE_STATUSES.has(r.run_status),
     );
-    sortable.sort((a, b) => a.id - b.id);
+    sortable.sort((a, b) => (a.started_on ?? a.completed_on ?? '').localeCompare(b.started_on ?? b.completed_on ?? ''));
     return sortable.map((r) => ({
       id: r.id,
       total: typeof r.total_findings === 'number' ? r.total_findings : 0,

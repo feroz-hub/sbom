@@ -1,0 +1,14 @@
+{
+  "previous_pids": {
+    "redis": 60355,
+    "api": 83744,
+    "frontend": 60357
+  },
+  "resumed_pids": {
+    "redis": 60355,
+    "api": 68301,
+    "frontend": 68302
+  },
+  "main_services_restarted": false,
+  "log_suffix": "20261021T093359Z"
+}

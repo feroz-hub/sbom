@@ -39,12 +39,15 @@ from app.services.lifecycle.types import (
 from app.services.lifecycle.xeol_db_provider import XeolDbProvider, clear_xeol_db_cache
 from sqlalchemy import func, select
 
+from tests.tenant_fixture_scope import verified_fixture_tenant
+
 
 @pytest.fixture()
 def db(client):
     session = SessionLocal()
     try:
-        yield session
+        with verified_fixture_tenant(session, 1):
+            yield session
     finally:
         session.rollback()
         session.close()
@@ -568,6 +571,7 @@ def test_duplicate_components_deduped_before_lookup(db):
     summary = LifecycleEnrichmentService(providers=[provider]).enrich_sbom(db, sbom.id, force_refresh=True)
     assert summary["total_components"] == 3
     assert summary["unique_identities"] == 1
+    assert summary["eol_count"] == 3
     assert provider.lookup.call_count == 1
 
 
@@ -671,7 +675,7 @@ def test_lifecycle_provider_status_endpoint(client):
     response = client.get("/api/lifecycle/provider-status")
     assert response.status_code == 200
     body = response.json()
-    assert body["overall_status"] in {"healthy", "degraded"}
+    assert body["overall_status"] in {"healthy", "degraded", "unknown"}
     assert "providers" in body
 
 
@@ -682,7 +686,7 @@ def test_lifecycle_refresh_returns_summary(client, db):
     db.add(SBOMComponent(sbom_id=sbom.id, name="pkg", version="1.0.0", component_type="library"))
     db.commit()
 
-    response = client.post(f"/api/sboms/{sbom.id}/lifecycle/refresh?force=true")
+    response = client.post(f"/api/sboms/{sbom.public_id}/lifecycle/refresh?force=true")
     assert response.status_code == 200
     body = response.json()
     assert body["total_components"] == 1

@@ -1,0 +1,338 @@
+[
+  {
+    "file": "frontend/src/app/analysis/[id]/page.tsx",
+    "uuid_selector_attributes_preserved": true,
+    "existing_attributes": 3,
+    "new_reviewed_uuid_link": false,
+    "http_urls_unchanged": true
+  },
+  {
+    "file": "frontend/src/app/analysis/compare/_v1/page.tsx",
+    "uuid_selector_attributes_preserved": true,
+    "existing_attributes": 7,
+    "new_reviewed_uuid_link": false,
+    "http_urls_unchanged": true
+  },
+  {
+    "file": "frontend/src/app/analysis/page.tsx",
+    "uuid_selector_attributes_preserved": true,
+    "existing_attributes": 25,
+    "new_reviewed_uuid_link": false,
+    "http_urls_unchanged": true
+  },
+  {
+    "file": "frontend/src/app/component-advisor/components/[key]/page.tsx",
+    "uuid_selector_attributes_preserved": true,
+    "existing_attributes": 10,
+    "new_reviewed_uuid_link": false,
+    "http_urls_unchanged": true
+  },
+  {
+    "file": "frontend/src/app/component-advisor/recommendations/[id]/page.tsx",
+    "uuid_selector_attributes_preserved": true,
+    "existing_attributes": 8,
+    "new_reviewed_uuid_link": false,
+    "http_urls_unchanged": true
+  },
+  {
+    "file": "frontend/src/app/products/[id]/page.tsx",
+    "uuid_selector_attributes_preserved": true,
+    "existing_attributes": 15,
+    "new_reviewed_uuid_link": false,
+    "http_urls_unchanged": true
+  },
+  {
+    "file": "frontend/src/app/schedules/page.tsx",
+    "uuid_selector_attributes_preserved": true,
+    "existing_attributes": 17,
+    "new_reviewed_uuid_link": false,
+    "http_urls_unchanged": true
+  },
+  {
+    "file": "frontend/src/components/admin/TenantMembersTable.tsx",
+    "uuid_selector_attributes_preserved": true,
+    "existing_attributes": 3,
+    "new_reviewed_uuid_link": false,
+    "http_urls_unchanged": true
+  },
+  {
+    "file": "frontend/src/components/admin/TenantUsersAccess.tsx",
+    "uuid_selector_attributes_preserved": true,
+    "existing_attributes": 6,
+    "new_reviewed_uuid_link": false,
+    "http_urls_unchanged": true
+  },
+  {
+    "file": "frontend/src/components/admin/UserSearchCombobox.tsx",
+    "uuid_selector_attributes_preserved": true,
+    "existing_attributes": 5,
+    "new_reviewed_uuid_link": false,
+    "http_urls_unchanged": true
+  },
+  {
+    "file": "frontend/src/components/ai-fixes/GlobalAiBatchProgress/GlobalAiBatchBanner.tsx",
+    "uuid_selector_attributes_preserved": true,
+    "existing_attributes": 2,
+    "new_reviewed_uuid_link": false,
+    "http_urls_unchanged": true
+  },
+  {
+    "file": "frontend/src/components/analysis/AnalysisProgress.tsx",
+    "uuid_selector_attributes_preserved": true,
+    "existing_attributes": 3,
+    "new_reviewed_uuid_link": false,
+    "http_urls_unchanged": true
+  },
+  {
+    "file": "frontend/src/components/analysis/ConsolidatedAnalysisPanel.tsx",
+    "uuid_selector_attributes_preserved": true,
+    "existing_attributes": 6,
+    "new_reviewed_uuid_link": false,
+    "http_urls_unchanged": true
+  },
+  {
+    "file": "frontend/src/components/analysis/FindingsTable.tsx",
+    "uuid_selector_attributes_preserved": true,
+    "existing_attributes": 27,
+    "new_reviewed_uuid_link": false,
+    "http_urls_unchanged": true
+  },
+  {
+    "file": "frontend/src/components/analysis/LiveAnalysisCard.tsx",
+    "uuid_selector_attributes_preserved": true,
+    "existing_attributes": 3,
+    "new_reviewed_uuid_link": false,
+    "http_urls_unchanged": true
+  },
+  {
+    "file": "frontend/src/components/analysis/RunDetailHero.tsx",
+    "uuid_selector_attributes_preserved": true,
+    "existing_attributes": 4,
+    "new_reviewed_uuid_link": false,
+    "http_urls_unchanged": true
+  },
+  {
+    "file": "frontend/src/components/analysis/RunsTable.tsx",
+    "uuid_selector_attributes_preserved": true,
+    "existing_attributes": 13,
+    "new_reviewed_uuid_link": false,
+    "http_urls_unchanged": true
+  },
+  {
+    "file": "frontend/src/components/analysis/SbomPreflightChecklist.tsx",
+    "uuid_selector_attributes_preserved": true,
+    "existing_attributes": 2,
+    "new_reviewed_uuid_link": false,
+    "http_urls_unchanged": true
+  },
+  {
+    "file": "frontend/src/components/analysis/VulnerabilitiesByScope.tsx",
+    "uuid_selector_attributes_preserved": true,
+    "existing_attributes": 8,
+    "new_reviewed_uuid_link": false,
+    "http_urls_unchanged": true
+  },
+  {
+    "file": "frontend/src/components/compare/CompareView.tsx",
+    "uuid_selector_attributes_preserved": true,
+    "existing_attributes": 4,
+    "new_reviewed_uuid_link": false,
+    "http_urls_unchanged": true
+  },
+  {
+    "file": "frontend/src/components/compare/IdenticalRunsCard/IdenticalRunsCard.tsx",
+    "uuid_selector_attributes_preserved": true,
+    "existing_attributes": 0,
+    "new_reviewed_uuid_link": false,
+    "http_urls_unchanged": true
+  },
+  {
+    "file": "frontend/src/components/compare/SelectionBar/RunPicker.tsx",
+    "uuid_selector_attributes_preserved": true,
+    "existing_attributes": 8,
+    "new_reviewed_uuid_link": false,
+    "http_urls_unchanged": true
+  },
+  {
+    "file": "frontend/src/components/compare/__tests__/test-utils.tsx",
+    "uuid_selector_attributes_preserved": true,
+    "existing_attributes": 0,
+    "new_reviewed_uuid_link": false,
+    "http_urls_unchanged": true
+  },
+  {
+    "file": "frontend/src/components/compare/states/CompareStates.tsx",
+    "uuid_selector_attributes_preserved": true,
+    "existing_attributes": 1,
+    "new_reviewed_uuid_link": false,
+    "http_urls_unchanged": true
+  },
+  {
+    "file": "frontend/src/components/dashboard/ActivityFeed.tsx",
+    "uuid_selector_attributes_preserved": true,
+    "existing_attributes": 6,
+    "new_reviewed_uuid_link": false,
+    "http_urls_unchanged": true
+  },
+  {
+    "file": "frontend/src/components/dashboard/PortfolioOverview.tsx",
+    "uuid_selector_attributes_preserved": true,
+    "existing_attributes": 15,
+    "new_reviewed_uuid_link": false,
+    "http_urls_unchanged": true
+  },
+  {
+    "file": "frontend/src/components/layout/CommandPalette.tsx",
+    "uuid_selector_attributes_preserved": true,
+    "existing_attributes": 7,
+    "new_reviewed_uuid_link": false,
+    "http_urls_unchanged": true
+  },
+  {
+    "file": "frontend/src/components/layout/Sidebar.tsx",
+    "uuid_selector_attributes_preserved": true,
+    "existing_attributes": 18,
+    "new_reviewed_uuid_link": false,
+    "http_urls_unchanged": true
+  },
+  {
+    "file": "frontend/src/components/projects/ProjectApplications.tsx",
+    "uuid_selector_attributes_preserved": true,
+    "existing_attributes": 14,
+    "new_reviewed_uuid_link": false,
+    "http_urls_unchanged": true
+  },
+  {
+    "file": "frontend/src/components/projects/ProjectsTable.tsx",
+    "uuid_selector_attributes_preserved": true,
+    "existing_attributes": 10,
+    "new_reviewed_uuid_link": false,
+    "http_urls_unchanged": true
+  },
+  {
+    "file": "frontend/src/components/reports/ReportNotificationsPage.tsx",
+    "uuid_selector_attributes_preserved": true,
+    "existing_attributes": 30,
+    "new_reviewed_uuid_link": false,
+    "http_urls_unchanged": true
+  },
+  {
+    "file": "frontend/src/components/sboms/AnalysisStatusBadge.tsx",
+    "uuid_selector_attributes_preserved": true,
+    "existing_attributes": 1,
+    "new_reviewed_uuid_link": false,
+    "http_urls_unchanged": true
+  },
+  {
+    "file": "frontend/src/components/sboms/ComponentVexManager.tsx",
+    "uuid_selector_attributes_preserved": true,
+    "existing_attributes": 7,
+    "new_reviewed_uuid_link": false,
+    "http_urls_unchanged": true
+  },
+  {
+    "file": "frontend/src/components/sboms/LogicalSbomHistory.tsx",
+    "uuid_selector_attributes_preserved": true,
+    "existing_attributes": 4,
+    "new_reviewed_uuid_link": false,
+    "http_urls_unchanged": true
+  },
+  {
+    "file": "frontend/src/components/sboms/SbomConversionCard.tsx",
+    "uuid_selector_attributes_preserved": true,
+    "existing_attributes": 2,
+    "new_reviewed_uuid_link": false,
+    "http_urls_unchanged": true
+  },
+  {
+    "file": "frontend/src/components/sboms/SbomDetail.tsx",
+    "uuid_selector_attributes_preserved": true,
+    "existing_attributes": 97,
+    "new_reviewed_uuid_link": false,
+    "http_urls_unchanged": true
+  },
+  {
+    "file": "frontend/src/components/sboms/SbomStatusBadge.tsx",
+    "uuid_selector_attributes_preserved": true,
+    "existing_attributes": 1,
+    "new_reviewed_uuid_link": false,
+    "http_urls_unchanged": true
+  },
+  {
+    "file": "frontend/src/components/sboms/SbomsTable.tsx",
+    "uuid_selector_attributes_preserved": true,
+    "existing_attributes": 22,
+    "new_reviewed_uuid_link": true,
+    "http_urls_unchanged": true
+  },
+  {
+    "file": "frontend/src/components/schedules/ScheduleCard.tsx",
+    "uuid_selector_attributes_preserved": true,
+    "existing_attributes": 7,
+    "new_reviewed_uuid_link": false,
+    "http_urls_unchanged": true
+  },
+  {
+    "file": "frontend/src/components/vex/VexDecisionEditor.tsx",
+    "uuid_selector_attributes_preserved": true,
+    "existing_attributes": 10,
+    "new_reviewed_uuid_link": false,
+    "http_urls_unchanged": true
+  },
+  {
+    "file": "frontend/src/components/vex/VexRunHistoryPanel.tsx",
+    "uuid_selector_attributes_preserved": true,
+    "existing_attributes": 6,
+    "new_reviewed_uuid_link": false,
+    "http_urls_unchanged": true
+  },
+  {
+    "file": "frontend/src/hooks/useAnalysisStream.ts",
+    "uuid_selector_attributes_preserved": true,
+    "existing_attributes": 0,
+    "new_reviewed_uuid_link": false,
+    "http_urls_unchanged": true
+  },
+  {
+    "file": "frontend/src/lib/api.ts",
+    "uuid_selector_attributes_preserved": true,
+    "existing_attributes": 0,
+    "new_reviewed_uuid_link": false,
+    "http_urls_unchanged": true
+  },
+  {
+    "file": "frontend/src/lib/reportApi.ts",
+    "uuid_selector_attributes_preserved": true,
+    "existing_attributes": 0,
+    "new_reviewed_uuid_link": false,
+    "http_urls_unchanged": true
+  },
+  {
+    "file": "frontend/src/lib/topVulnerableRuns.ts",
+    "uuid_selector_attributes_preserved": true,
+    "existing_attributes": 0,
+    "new_reviewed_uuid_link": false,
+    "http_urls_unchanged": true
+  },
+  {
+    "file": "frontend/src/types/compare.ts",
+    "uuid_selector_attributes_preserved": true,
+    "existing_attributes": 0,
+    "new_reviewed_uuid_link": false,
+    "http_urls_unchanged": true
+  },
+  {
+    "file": "frontend/src/types/index.ts",
+    "uuid_selector_attributes_preserved": true,
+    "existing_attributes": 0,
+    "new_reviewed_uuid_link": false,
+    "http_urls_unchanged": true
+  },
+  {
+    "file": "frontend/src/types/reports.ts",
+    "uuid_selector_attributes_preserved": true,
+    "existing_attributes": 0,
+    "new_reviewed_uuid_link": false,
+    "http_urls_unchanged": true
+  }
+]

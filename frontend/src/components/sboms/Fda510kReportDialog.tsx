@@ -1,8 +1,9 @@
 'use client';
 
 import { useMemo, useState } from 'react';
+import { sbomEligibility } from '@/lib/sbomEligibility';
 import { Alert } from '@/components/ui/Alert';
-import { Button } from '@/components/ui/Button';
+import { PermissionButton as Button } from '@/components/ui/PermissionButton';
 import { Dialog, DialogBody, DialogFooter } from '@/components/ui/Dialog';
 import { Input } from '@/components/ui/Input';
 import { exportFda510kSbomReport, HttpError } from '@/lib/api';
@@ -57,7 +58,7 @@ function initialMetadata(sboms: SBOMSource[]): Fda510kReportMetadata {
   };
 }
 
-function sameProjectId(sboms: SBOMSource[]): number | null {
+function sameProjectId(sboms: SBOMSource[]): string | number | null {
   const ids = Array.from(new Set(sboms.map((sbom) => sbom.projectid ?? sbom.project_id ?? null)));
   return ids.length === 1 && ids[0] !== null ? ids[0] : null;
 }
@@ -83,7 +84,9 @@ export function Fda510kReportDialog({ open, onClose, sboms }: Fda510kReportDialo
 
   const projectId = useMemo(() => sameProjectId(sboms), [sboms]);
   const requiredMissing = REQUIRED_FIELDS.some((field) => !String(metadata[field] ?? '').trim());
-  const canExport = projectId !== null && sboms.length > 0 && !requiredMissing && !submitting;
+  const processingReason = sboms.find(sbom => !sbomEligibility(sbom).eligible);
+  const unavailableReason = processingReason ? sbomEligibility(processingReason).reason : sboms.some(sbom => sbom.analysis_requires_reanalysis) ? 'Run a new analysis before generating a current report.' : null;
+  const canExport = sboms.every(sbom => sbomEligibility(sbom).eligible && !sbom.analysis_requires_reanalysis) && projectId !== null && sboms.length > 0 && !requiredMissing && !submitting;
 
   const setField = (field: keyof Fda510kReportMetadata, value: string) => {
     setMetadata((current) => ({ ...current, [field]: value }));
@@ -130,13 +133,14 @@ export function Fda510kReportDialog({ open, onClose, sboms }: Fda510kReportDialo
           <Button variant="secondary" onClick={onClose} disabled={submitting}>
             Cancel
           </Button>
-          <Button onClick={handleSubmit} loading={submitting} disabled={!canExport}>
+          <Button permission={"sbom:export"} onClick={handleSubmit} loading={submitting} disabled={!canExport}>
             Export workbook
           </Button>
         </DialogFooter>
       }
     >
       <DialogBody className="space-y-4">
+        {unavailableReason && <Alert variant="warning">{unavailableReason}</Alert>}
         <div className="rounded-lg border border-border bg-surface-muted/50 px-3 py-2 text-sm text-hcl-muted">
           {sboms.length} selected SBOM{sboms.length === 1 ? '' : 's'}
           {projectId === null ? ' across multiple or unassigned projects' : ''}

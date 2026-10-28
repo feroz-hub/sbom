@@ -1,0 +1,8 @@
+{
+  "task_groups_sent_SIGTERM": {
+    "api": 68301,
+    "frontend": 68302
+  },
+  "task_redis_preserved": 60355,
+  "main_service_restart": false
+}

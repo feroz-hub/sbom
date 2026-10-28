@@ -32,9 +32,6 @@ def _correlation_id(request: Request | None) -> str | None:
 def _client_ip(request: Request | None) -> str | None:
     if request is None:
         return None
-    forwarded = request.headers.get("x-forwarded-for")
-    if forwarded:
-        return forwarded.split(",")[0].strip()[:64]
     if request.client:
         return request.client.host[:64]
     return None
@@ -54,12 +51,13 @@ def write_audit_log(
     target_kind: str | None = None,
     target_id: int | None = None,
     metadata_json: dict[str, Any] | None = None,
+    strict: bool = False,
 ) -> None:
     """Append one audit row without committing."""
     try:
         tenant_id = context.tenant_id if context else None
         user_str = context.external_user_id if context else None
-        user_ref = context.user_id if context else None
+        user_ref = (context.user_id or None) if context else None
         entity_id_str = str(entity_id) if entity_id is not None else None
         target_id_val = target_id
         if target_id_val is None and entity_id is not None:
@@ -87,6 +85,8 @@ def write_audit_log(
             )
         )
     except Exception as exc:  # noqa: BLE001
+        if strict:
+            raise
         log.warning("audit.write_failed: action=%s err=%s", action, exc)
 
 

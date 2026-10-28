@@ -4,6 +4,7 @@ from __future__ import annotations
 
 import logging
 from collections.abc import Iterable
+from contextlib import nullcontext
 from dataclasses import dataclass
 from datetime import UTC, datetime
 
@@ -27,11 +28,12 @@ from ..models import (
 )
 from ..settings import get_settings
 from . import audit_service, authorization_catalog_service
+from .identity_verification_policy import verification_complete, verification_complete_clause
 
 log = logging.getLogger("sbom.tenant.roles")
 
 
-@dataclass(frozen=True, slots=True)
+@dataclass
 class AssignmentProblem(Exception):
     code: IdentityErrorCode
     message: str
@@ -53,6 +55,20 @@ def _problem(
 
 def _source(*, is_platform_admin: bool) -> str:
     return "PLATFORM_ADMIN" if is_platform_admin else "TENANT_ADMIN"
+
+
+def validate_role_delegation(role_codes: Iterable[str], *, is_platform_admin: bool) -> None:
+    """Caller supplies verified actor context; catalog scope checks still apply."""
+    # Do not replace the database-authoritative catalog with a static role
+    # allowlist: existing custom assignable tenant roles remain supported.
+    # Catalog validation separately rejects unknown, inactive or platform roles.
+    forbidden = {"PLATFORM_ADMIN"} if is_platform_admin else {"PLATFORM_ADMIN", "TENANT_ADMIN"}
+    if any(normalize_role(code) in forbidden for code in role_codes):
+        raise _problem(
+            IdentityErrorCode.TENANT_ROLE_NOT_ASSIGNABLE,
+            "The administrator cannot delegate the requested role.",
+            403,
+        )
 
 
 def _correlation_id(request: Request | None) -> str | None:
@@ -97,7 +113,7 @@ def _membership(
         TenantUser.user_id == user_id,
     )
     if for_update:
-        statement = statement.with_for_update()
+        statement = statement.with_for_update().execution_options(populate_existing=True)
     membership = db.scalar(statement)
     if membership is None:
         raise _problem(
@@ -116,8 +132,7 @@ def _eligible_user(db: Session, user_id: int, *, for_update: bool = False) -> IA
     if (
         user is None
         or user.status != "ACTIVE"
-        or not user.email_verified
-        or user.verification_required
+        or not verification_complete(user)
     ):
         raise _problem(
             IdentityErrorCode.USER_STATUS_INVALID,
@@ -296,6 +311,10 @@ def create_initial_assignments(
     token = bind_context(minimal_background_context(membership.tenant_id))
     try:
         catalog = _catalog_roles(db, normalized)
+        # SYSTEM/MIGRATION/TENANT_CREATION are internal bootstrap paths.
+        # Request-driven initial assignments always carry actor source.
+        if source not in {"SYSTEM", "MIGRATION", "TENANT_CREATION"}:
+            validate_role_delegation(normalized, is_platform_admin=source == "PLATFORM_ADMIN")
         now = datetime.now(UTC)
         assignments: list[TenantUserRoleAssignment] = []
         membership.role = primary
@@ -366,12 +385,15 @@ def list_assignments(
     return membership, rows
 
 
-def database_role_codes(
+def assigned_role_codes(
     db: Session,
     membership: TenantUser,
 ) -> frozenset[str]:
-    if membership.status != "ACTIVE":
-        return frozenset()
+    """Active catalogue assignments, including on a disabled membership.
+
+    Lifecycle governance must protect preserved administrator assignments too.
+    Authorization callers use database_role_codes, which also checks status.
+    """
     token = bind_context(minimal_background_context(membership.tenant_id))
     try:
         return frozenset(
@@ -392,6 +414,12 @@ def database_role_codes(
         )
     finally:
         reset_context(token)
+
+
+def database_role_codes(db: Session, membership: TenantUser) -> frozenset[str]:
+    if membership.status != "ACTIVE":
+        return frozenset()
+    return assigned_role_codes(db, membership)
 
 
 def effective_role_codes(
@@ -502,7 +530,7 @@ def _locks_for_mutation(
     tenant_id: int,
     user_id: int,
 ) -> tuple[TenantUser, IAMUser, list[TenantUserRoleAssignment]]:
-    tenant = db.scalar(select(Tenant).where(Tenant.id == tenant_id).with_for_update())
+    tenant = db.scalar(select(Tenant).where(Tenant.id == tenant_id).with_for_update().execution_options(populate_existing=True))
     if tenant is None or tenant.status != "ACTIVE":
         raise _problem(
             IdentityErrorCode.UNAUTHORIZED_TENANT,
@@ -554,8 +582,7 @@ def _protect_last_admin(
                 TenantUser.tenant_id == membership.tenant_id,
                 TenantUser.status == "ACTIVE",
                 IAMUser.status == "ACTIVE",
-                IAMUser.email_verified.is_(True),
-                IAMUser.verification_required.is_(False),
+                verification_complete_clause(),
                 TenantUserRoleAssignment.status == "ACTIVE",
                 AuthorizationRole.code == "TENANT_ADMIN",
                 AuthorizationRole.scope == "TENANT",
@@ -623,6 +650,7 @@ def grant_role(
         membership, _user, assignments = _locks_for_mutation(db, tenant_id, user_id)
         _check_version(membership, expected_version)
         role = _catalog_roles(db, [role_code], for_update=True)[normalize_role(role_code)]
+        validate_role_delegation([role.code], is_platform_admin=is_platform_admin)
         roles_by_id = {
             item.id: item
             for item in db.scalars(
@@ -781,6 +809,7 @@ def replace_roles(
     actor_user_id: int,
     is_platform_admin: bool,
     request: Request | None = None,
+    caller_owns_transaction: bool = False,
 ) -> TenantUser:
     _require_database_mutation_mode()
     reason = _bounded_reason(reason)
@@ -792,9 +821,9 @@ def replace_roles(
             409,
         )
     codes = sorted(requested_codes)
-    if db.in_transaction():
+    if not caller_owns_transaction and db.in_transaction():
         db.rollback()
-    with db.begin():
+    with nullcontext() if caller_owns_transaction else db.begin():
         membership, _user, assignments = _locks_for_mutation(db, tenant_id, user_id)
         _check_version(membership, expected_version)
         if not codes and membership.status == "ACTIVE":
@@ -804,6 +833,7 @@ def replace_roles(
                 409,
             )
         catalog = _catalog_roles(db, codes, for_update=True)
+        validate_role_delegation(codes, is_platform_admin=is_platform_admin)
         existing_roles = {
             role.id: role
             for role in db.scalars(
@@ -837,6 +867,7 @@ def replace_roles(
 
         removed_admin = "TENANT_ADMIN" in old_codes and "TENANT_ADMIN" not in codes
         if removed_admin:
+            validate_role_delegation(["TENANT_ADMIN"], is_platform_admin=is_platform_admin)
             _protect_last_admin(db, membership, assignments, existing_roles)
 
         before = membership.role_assignment_version
@@ -991,13 +1022,18 @@ def revoke_role(
     actor_user_id: int,
     is_platform_admin: bool,
     request: Request | None = None,
+    caller_owns_transaction: bool = False,
+    grant_replacement_role: bool = False,
 ) -> TenantUser:
     _require_database_mutation_mode()
     reason = _bounded_reason(reason)
     code = normalize_role(role_code)
-    if db.in_transaction():
+    validate_role_delegation([code], is_platform_admin=is_platform_admin)
+    if grant_replacement_role and (not is_platform_admin or code != "TENANT_ADMIN"):
+        raise _problem(IdentityErrorCode.TENANT_ROLE_NOT_ASSIGNABLE, "Replacement grants require administrator governance.", 403)
+    if not caller_owns_transaction and db.in_transaction():
         db.rollback()
-    with db.begin():
+    with nullcontext() if caller_owns_transaction else db.begin():
         membership, _user, assignments = _locks_for_mutation(db, tenant_id, user_id)
         _check_version(membership, expected_version)
         roles = {
@@ -1022,7 +1058,52 @@ def revoke_role(
         if target.status == "REVOKED":
             return membership
         active = _active(assignments)
+        old_codes = {roles[item.role_id].code for item in active if item.role_id in roles}
         remaining = [item for item in active if item.id != target.id]
+        if code == "TENANT_ADMIN":
+            _protect_last_admin(db, membership, [target], roles)
+        before = membership.role_assignment_version
+        after = before + 1
+        source = _source(is_platform_admin=is_platform_admin)
+        now = datetime.now(UTC)
+        if grant_replacement_role and replacement_primary_role_code:
+            # A governance demotion may explicitly supply the ordinary role
+            # needed to retain tenant access. Keep unrelated assignments intact,
+            # including roles no longer assignable in the catalogue.
+            replacement_code = normalize_role(replacement_primary_role_code)
+            validate_role_delegation([replacement_code], is_platform_admin=False)
+            replacement_role = _catalog_roles(db, [replacement_code], for_update=True)[replacement_code]
+            roles[replacement_role.id] = replacement_role
+            approved = next((item for item in assignments if item.role_id == replacement_role.id), None)
+            previous_status = approved.status if approved else None
+            if approved is None:
+                approved = TenantUserRoleAssignment(
+                    tenant_id=tenant_id, tenant_user_id=membership.id, role_id=replacement_role.id,
+                    status="ACTIVE", is_primary=False, assignment_source=source,
+                    assigned_by_user_id=actor_user_id, assigned_at=now, version=1,
+                    created_at=now, updated_at=now,
+                )
+                db.add(approved)
+                db.flush()
+            elif approved.status == "REVOKED":
+                approved.status = "ACTIVE"
+                approved.revoked_at = None
+                approved.revoked_by_user_id = None
+                approved.revocation_reason = None
+                approved.assigned_by_user_id = actor_user_id
+                approved.assigned_at = now
+                approved.assignment_source = source
+                approved.version += 1
+                approved.updated_at = now
+            if previous_status != "ACTIVE":
+                remaining.append(approved)
+                _history(
+                    db, membership=membership, assignment=approved, role=replacement_role,
+                    role_code=replacement_code, event_type="GRANTED" if previous_status is None else "REACTIVATED",
+                    source=source, actor_user_id=actor_user_id, before_version=before, after_version=after,
+                    request=request, reason=reason, previous_status=previous_status,
+                    new_status="ACTIVE", previous_primary=False, new_primary=target.is_primary,
+                )
         if not remaining and membership.status == "ACTIVE":
             raise _problem(
                 IdentityErrorCode.ACTIVE_MEMBERSHIP_REQUIRES_ROLE,
@@ -1053,12 +1134,6 @@ def revoke_role(
                     "The replacement primary role is not active.",
                     409,
                 )
-        if code == "TENANT_ADMIN":
-            _protect_last_admin(db, membership, [target], roles)
-        before = membership.role_assignment_version
-        after = before + 1
-        source = _source(is_platform_admin=is_platform_admin)
-        now = datetime.now(UTC)
         was_primary = target.is_primary
         target.status = "REVOKED"
         target.is_primary = False
@@ -1068,6 +1143,9 @@ def revoke_role(
         target.version += 1
         target.updated_at = now
         if replacement is not None:
+            # Release the partial unique primary index before selecting an
+            # earlier assignment as primary (ORM update order is by row id).
+            db.flush()
             replacement.is_primary = True
             membership.role = roles[replacement.role_id].code
         membership.role_assignment_version = after
@@ -1136,7 +1214,7 @@ def revoke_role(
             membership=membership,
             actor_user_id=actor_user_id,
             request=request,
-            old_roles=new_codes | {code},
+            old_roles=old_codes,
             new_roles=new_codes,
             reason=reason,
         )
@@ -1171,13 +1249,21 @@ def get_history(
 
 
 def active_assignment_count(db: Session, membership_id: int) -> int:
-    return len(
-        list(
-            db.scalars(
-                select(TenantUserRoleAssignment.id).where(
-                    TenantUserRoleAssignment.tenant_user_id == membership_id,
-                    TenantUserRoleAssignment.status == "ACTIVE",
+    from ..core.context import get_bound_context, minimal_background_context, tenant_scope
+    membership = db.get(TenantUser, membership_id)
+    if membership is None:
+        return 0
+    context = get_bound_context()
+    if context is not None and context.tenant_id != membership.tenant_id and not context.is_platform_admin:
+        raise RuntimeError("Cross-tenant authorization metadata access blocked")
+    with tenant_scope(minimal_background_context(membership.tenant_id)):
+        return len(
+            list(
+                db.scalars(
+                    select(TenantUserRoleAssignment.id).where(
+                        TenantUserRoleAssignment.tenant_user_id == membership_id,
+                        TenantUserRoleAssignment.status == "ACTIVE",
+                    )
                 )
             )
         )
-    )

@@ -8,7 +8,7 @@ are stubbed at the module level so the tests don't hit external APIs.
 
 from __future__ import annotations
 
-from datetime import UTC
+from datetime import UTC, datetime
 
 import pytest
 from app.models import (
@@ -23,21 +23,31 @@ from app.services import risk_score
 from app.services.risk_score import score_findings
 from sqlalchemy.orm import Session
 
+from tests.tenant_fixture_scope import verified_fixture_tenant
+
 # ---------------------------------------------------------------------
 # Helpers
 # ---------------------------------------------------------------------
 
 
-def _new_db() -> Session:
-    """Build an in-memory SQLite database with the project schema."""
-    import app.models  # noqa: F401  ensures models are registered
+@pytest.fixture
+def db():
     from app.db import Base
+    from app.models import Tenant
     from sqlalchemy import create_engine
-    from sqlalchemy.orm import sessionmaker
+    from sqlalchemy.orm import Session
 
     engine = create_engine("sqlite:///:memory:")
     Base.metadata.create_all(engine)
-    return sessionmaker(bind=engine)()
+    try:
+        with Session(engine) as session:
+            now = datetime.now(UTC)
+            session.add(Tenant(id=1, name="Dataset owner", slug="dataset-owner", status="ACTIVE", created_at=now, updated_at=now))
+            session.flush()
+            with verified_fixture_tenant(session, 1):
+                yield session
+    finally:
+        engine.dispose()
 
 
 def _seed_run(db: Session) -> AnalysisRun:
@@ -94,8 +104,7 @@ def _stub_external(monkeypatch):
 # ---------------------------------------------------------------------
 
 
-def test_empty_findings_returns_zero_low():
-    db = _new_db()
+def test_empty_findings_returns_zero_low(db):
     summary = score_findings(db, [])
     assert summary["total_risk_score"] == 0.0
     assert summary["risk_band"] == "LOW"
@@ -105,9 +114,8 @@ def test_empty_findings_returns_zero_low():
     assert summary["methodology"]["version"] == "2.0.0"
 
 
-def test_single_high_no_epss_no_kev_uses_raw_cvss():
+def test_single_high_no_epss_no_kev_uses_raw_cvss(db):
     """One CVSS-7.5 finding, no EPSS, no KEV → score == 7.5."""
-    db = _new_db()
     run = _seed_run(db)
     f = _make_finding(run_id=run.id, vuln_id="CVE-2024-0001", cvss=7.5, severity="HIGH")
     db.add(f)
@@ -122,9 +130,8 @@ def test_single_high_no_epss_no_kev_uses_raw_cvss():
     assert summary["kev_count"] == 0
 
 
-def test_severity_fallback_when_score_missing():
+def test_severity_fallback_when_score_missing(db):
     """A CRITICAL with score=NULL falls back to 9.5 in the formula."""
-    db = _new_db()
     run = _seed_run(db)
     f = _make_finding(run_id=run.id, vuln_id="CVE-2024-0002", cvss=None, severity="CRITICAL")
     db.add(f)
@@ -134,9 +141,8 @@ def test_severity_fallback_when_score_missing():
     assert summary["total_risk_score"] == 9.5  # severity-mapped fallback
 
 
-def test_epss_amplifies(monkeypatch):
+def test_epss_amplifies(monkeypatch, db):
     """CVSS=8.0, EPSS=0.5 → 8.0 * (1 + 5*0.5) = 8.0 * 3.5 = 28.0."""
-    db = _new_db()
     run = _seed_run(db)
     f = _make_finding(run_id=run.id, vuln_id="CVE-2024-0003", cvss=8.0, severity="HIGH")
     db.add(f)
@@ -149,9 +155,8 @@ def test_epss_amplifies(monkeypatch):
     assert summary["risk_band"] == "MEDIUM"
 
 
-def test_kev_doubles_and_critical_band(monkeypatch):
+def test_kev_doubles_and_critical_band(monkeypatch, db):
     """CVSS=9.0 + KEV → 9.0 * 1 * 2 = 18.0; KEV+CVSS>=9 forces CRITICAL band."""
-    db = _new_db()
     run = _seed_run(db)
     f = _make_finding(run_id=run.id, vuln_id="CVE-2024-0004", cvss=9.0, severity="CRITICAL")
     db.add(f)
@@ -166,9 +171,8 @@ def test_kev_doubles_and_critical_band(monkeypatch):
     assert summary["kev_count"] == 1
 
 
-def test_kev_and_epss_compound(monkeypatch):
+def test_kev_and_epss_compound(monkeypatch, db):
     """CVSS=10, EPSS=0.9, KEV → 10 * (1+5*0.9) * 2 = 10 * 5.5 * 2 = 110."""
-    db = _new_db()
     run = _seed_run(db)
     f = _make_finding(run_id=run.id, vuln_id="CVE-2021-44228", cvss=10.0, severity="CRITICAL")
     db.add(f)
@@ -181,9 +185,8 @@ def test_kev_and_epss_compound(monkeypatch):
     assert summary["risk_band"] == "CRITICAL"
 
 
-def test_aliases_are_searched_for_cves(monkeypatch):
+def test_aliases_are_searched_for_cves(monkeypatch, db):
     """A GHSA finding whose KEV-listed CVE lives in `aliases` still gets boosted."""
-    db = _new_db()
     run = _seed_run(db)
     # vuln_id is a GHSA, not a CVE — KEV is only keyed on CVE.
     f = _make_finding(
@@ -203,9 +206,8 @@ def test_aliases_are_searched_for_cves(monkeypatch):
     assert summary["worst_finding"]["in_kev"] is True
 
 
-def test_per_component_aggregation_and_sort():
+def test_per_component_aggregation_and_sort(db):
     """Multiple findings on the same component sum; sort by component_score desc."""
-    db = _new_db()
     run = _seed_run(db)
     findings = [
         _make_finding(run_id=run.id, vuln_id="CVE-2024-1001", cvss=8.0, severity="HIGH", component="A"),
@@ -223,8 +225,7 @@ def test_per_component_aggregation_and_sort():
     assert summary["total_risk_score"] == 21.0
 
 
-def test_methodology_is_returned():
-    db = _new_db()
+def test_methodology_is_returned(db):
     summary = score_findings(db, [])
     m = summary["methodology"]
     assert m["version"] == "2.0.0"
@@ -235,9 +236,8 @@ def test_methodology_is_returned():
     assert m["sources"]["epss"].startswith("FIRST.org")
 
 
-def test_band_thresholds_at_boundaries(monkeypatch):
+def test_band_thresholds_at_boundaries(monkeypatch, db):
     """Boundary check on the worst-finding-driven band."""
-    db = _new_db()
     run = _seed_run(db)
 
     # CVE IDs must match CVE-YYYY-NNNN[N..] regex to be picked up by the EPSS
@@ -264,7 +264,7 @@ def test_band_thresholds_at_boundaries(monkeypatch):
 # ---------------------------------------------------------------------
 
 
-def test_kev_lookup_with_seeded_table():
+def test_kev_lookup_with_seeded_table(db):
     """
     The lookup helper should match against whatever's in the local mirror,
     independent of the network. Refresh-if-stale is short-circuited by
@@ -274,7 +274,6 @@ def test_kev_lookup_with_seeded_table():
 
     from app.sources.kev import lookup_kev_set
 
-    db = _new_db()
     db.add(
         KevEntry(
             cve_id="CVE-2021-44228",
@@ -289,7 +288,7 @@ def test_kev_lookup_with_seeded_table():
     assert result == {"CVE-2021-44228"}
 
 
-def test_epss_falls_back_to_zero_on_cache_miss(monkeypatch):
+def test_epss_falls_back_to_zero_on_cache_miss(monkeypatch, db):
     """
     A CVE with no row in `epss_score` and a network-disabled fetcher
     should be returned as 0.0 (no row inserted).
@@ -297,7 +296,6 @@ def test_epss_falls_back_to_zero_on_cache_miss(monkeypatch):
     from app.sources import epss as epss_mod
 
     monkeypatch.setattr(epss_mod, "_fetch_batch", lambda ids: {})
-    db = _new_db()
     result = epss_mod.get_epss_scores(db, ["CVE-2024-FAKE"])
     assert result == {"CVE-2024-FAKE": 0.0}
     # Nothing got cached — no junk row written.

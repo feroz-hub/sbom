@@ -1,0 +1,1 @@
+<?xml version="1.0" encoding="utf-8"?><testsuites name="pytest tests"><testsuite name="pytest" errors="0" failures="0" skipped="0" tests="1" time="6.001" timestamp="2026-10-21T12:38:20.720132+05:30" hostname="Ferozes-MacBook-Air.local"><testcase classname="tests.ai.test_ai_fixes_router" name="test_progress_endpoint_round_trips" time="3.751" /></testsuite></testsuites>

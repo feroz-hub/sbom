@@ -81,7 +81,7 @@ def upsert_tenant_schedule(payload: ScheduleUpsert, tenant_id: int, context: Cur
     if row is None:
         row = AnalysisSchedule(tenant_id=tenant_id, scope="TENANT", created_on=to_iso(_now()), created_by=context.actor_label())
         db.add(row)
-    _apply_payload(row, payload, partial=False)
+    _apply_payload(row, payload, partial=False, context=context)
     _validate_or_422(_spec_from_row(row))
     _refresh_next_run_at(row)
     row.modified_on = to_iso(_now())
@@ -132,13 +132,17 @@ def _spec_from_row(row: AnalysisSchedule) -> ScheduleSpec:
     )
 
 
-def _apply_payload(row: AnalysisSchedule, payload: ScheduleUpsert, *, partial: bool) -> None:
+def _apply_payload(row: AnalysisSchedule, payload: ScheduleUpsert, *, partial: bool, context: CurrentContext | None = None) -> None:
     """Copy non-None fields from payload onto the ORM row.
 
     For PATCH (``partial=True``) we treat unset fields as "leave alone";
     for POST (``partial=False``) all fields are written so the result is
     fully derived from the payload.
     """
+    from ..core.context import get_bound_context
+    context = context or get_bound_context()
+    if context is None:
+        raise HTTPException(403, "Authenticated schedule actor is required")
     data = payload.model_dump(exclude_unset=partial)
     for field in (
         "cadence",
@@ -154,8 +158,7 @@ def _apply_payload(row: AnalysisSchedule, payload: ScheduleUpsert, *, partial: b
     ):
         if field in data:
             setattr(row, field, data[field])
-    if data.get("modified_by"):
-        row.modified_by = data["modified_by"]
+    row.modified_by = context.actor_label()
     if row.scope == "SBOM":
         row.target_version_policy = "CURRENT_ONLY"
     if row.mode == "EXCLUDED":
@@ -366,7 +369,7 @@ def upsert_project_schedule(
         )
         db.add(existing)
 
-    _apply_payload(existing, payload, partial=False)
+    _apply_payload(existing, payload, partial=False, context=context)
     existing.modified_on = to_iso(_now())
     _refresh_next_run_at(existing)
 
@@ -415,7 +418,7 @@ def patch_project_schedule(
     if row is None:
         raise HTTPException(status_code=404, detail="No schedule configured for this project")
 
-    _apply_payload(row, payload, partial=True)
+    _apply_payload(row, payload, partial=True, context=context)
     _validate_or_422(_spec_from_row(row))
     row.modified_on = to_iso(_now())
     _refresh_next_run_at(row)
@@ -506,7 +509,7 @@ def upsert_product_schedule(
             created_by=context.actor_label(),
         )
         db.add(existing)
-    _apply_payload(existing, payload, partial=False)
+    _apply_payload(existing, payload, partial=False, context=context)
     existing.modified_on = to_iso(_now())
     _refresh_next_run_at(existing)
     db.flush()
@@ -600,7 +603,7 @@ def patch_product_schedule(
     ).scalar_one_or_none()
     if row is None:
         raise HTTPException(status_code=404, detail="No schedule configured for this product")
-    _apply_payload(row, payload, partial=True)
+    _apply_payload(row, payload, partial=True, context=context)
     _validate_or_422(_spec_from_row(row))
     row.modified_on = to_iso(_now())
     _refresh_next_run_at(row)
@@ -684,7 +687,7 @@ def upsert_sbom_schedule(
         )
         db.add(existing)
 
-    _apply_payload(existing, payload, partial=False)
+    _apply_payload(existing, payload, partial=False, context=context)
     existing.modified_on = to_iso(_now())
     _refresh_next_run_at(existing)
 
@@ -777,7 +780,7 @@ def patch_sbom_schedule(
             detail=("No SBOM-level schedule. POST a new override or rely on the project-level cascade."),
         )
 
-    _apply_payload(row, payload, partial=True)
+    _apply_payload(row, payload, partial=True, context=context)
     _validate_or_422(_spec_from_row(row))
     row.modified_on = to_iso(_now())
     _refresh_next_run_at(row)
@@ -956,6 +959,10 @@ def run_schedule_now(
     if row.scope == "TENANT":
         _tenant_schedule(db, row.tenant_id, context)
 
+    from ..services.sbom_lifecycle import analysis_task_id, require_processing
+    if row.scope == "SBOM":
+        require_processing(db.get(SBOMSource, row.sbom_id), operation="Scheduled analysis")
+
     from ..services.schedule_resolver import preview_targets_for_schedule
     preview = preview_targets_for_schedule(db, row)
     target_sbom_ids = [int(item.sbom_id) for item in preview if item.included and item.sbom_id is not None]
@@ -978,7 +985,13 @@ def run_schedule_now(
     last_error: str | None = None
     for sid in target_sbom_ids:
         try:
-            analyze_sbom_async.delay(sbom_id=sid, schedule_id=row.id, **({"report_cycle": report_cycle} if report_cycle else {}))
+            target = db.get(SBOMSource, sid)
+            require_processing(target, operation="Scheduled analysis")
+            analyze_sbom_async.apply_async(
+                kwargs={"sbom_id": sid, "schedule_id": row.id, "lifecycle_revision": target.lifecycle_revision,
+                        **({"report_cycle": report_cycle} if report_cycle else {})},
+                task_id=analysis_task_id(target.tenant_id, sid, target.lifecycle_revision),
+            )
             enqueued.append(sid)
         except Exception as exc:
             last_error = f"{type(exc).__name__}: {exc}"

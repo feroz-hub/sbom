@@ -1,0 +1,984 @@
+[
+  {
+    "id": "UAT-ACCOUNT-SUSPENDED-AUTHORIZATION",
+    "role": "platform",
+    "preconditions": "Verified isolated Greenfield UUID; task-owned fixtures; credentials kept in memory",
+    "stepsExecuted": "Seeded platform requests status on newly activated disposable account",
+    "expected": "403; current V5 intentionally excludes platform:user:manage_status",
+    "actual": {
+      "status": 403,
+      "data": {
+        "detail": {
+          "code": "IAM_PLATFORM_PERMISSION_DENIED",
+          "message": "Platform permission is required for this action."
+        }
+      },
+      "request_id": "f378a652a0a2"
+    },
+    "result": "PASS",
+    "time": "2026-10-20T09:33:46.343323+00:00"
+  },
+  {
+    "id": "UAT-ACCOUNT-DISABLED-AUTHORIZATION",
+    "role": "platform",
+    "preconditions": "Verified isolated Greenfield UUID; task-owned fixtures; credentials kept in memory",
+    "stepsExecuted": "Seeded platform requests status on newly activated disposable account",
+    "expected": "403; current V5 intentionally excludes platform:user:manage_status",
+    "actual": {
+      "status": 403,
+      "data": {
+        "detail": {
+          "code": "IAM_PLATFORM_PERMISSION_DENIED",
+          "message": "Platform permission is required for this action."
+        }
+      },
+      "request_id": "270c649be89b"
+    },
+    "result": "PASS",
+    "time": "2026-10-20T09:33:46.375921+00:00"
+  },
+  {
+    "id": "UAT-ACCOUNT-ACTIVE-AUTHORIZATION",
+    "role": "platform",
+    "preconditions": "Verified isolated Greenfield UUID; task-owned fixtures; credentials kept in memory",
+    "stepsExecuted": "Seeded platform requests status on newly activated disposable account",
+    "expected": "403; current V5 intentionally excludes platform:user:manage_status",
+    "actual": {
+      "status": 403,
+      "data": {
+        "detail": {
+          "code": "IAM_PLATFORM_PERMISSION_DENIED",
+          "message": "Platform permission is required for this action."
+        }
+      },
+      "request_id": "6ad9b9c77b4d"
+    },
+    "result": "PASS",
+    "time": "2026-10-20T09:33:46.403084+00:00"
+  },
+  {
+    "id": "R3-PLATFORM-NO-INHERITED-TENANT",
+    "role": "platform",
+    "preconditions": "Verified isolated Greenfield UUID; task-owned fixtures; credentials kept in memory",
+    "stepsExecuted": "Read seeded platform auth context without header",
+    "expected": "Platform authority; no tenant; no status capability",
+    "actual": {
+      "status": 200,
+      "data": {
+        "user_id": 6,
+        "external_user_id": null,
+        "email": "platform@olympus.example.test",
+        "display_name": "Synthetic Greenfield Platform Administrator",
+        "tenant_id": null,
+        "external_tenant_id": null,
+        "roles": [
+          "PLATFORM_ADMIN"
+        ],
+        "identity_roles": [],
+        "permissions": [
+          "platform:admin",
+          "platform:administrator:grant",
+          "platform:administrator:read",
+          "platform:administrator:revoke",
+          "platform:advisor-policy:read",
+          "platform:advisor-policy:update",
+          "platform:ai:read",
+          "platform:ai:test",
+          "platform:ai:update",
+          "platform:authorization:manage",
+          "platform:authorization:read",
+          "platform:health:read",
+          "platform:lifecycle-provider:read",
+          "platform:lifecycle-provider:sync",
+          "platform:lifecycle-provider:test",
+          "platform:lifecycle-provider:update",
+          "platform:tenant:bootstrap_admin",
+          "platform:tenant:create",
+          "platform:tenant:read",
+          "platform:tenant:recover_admin",
+          "platform:tenant:update_status"
+        ],
+        "is_platform_admin": true,
+        "authenticated": true,
+        "role": "PLATFORM_ADMIN",
+        "auth_context": {
+          "status": "READY",
+          "next_action": "OPEN_PLATFORM_ADMIN",
+          "user": {
+            "id": 6,
+            "email": "platform@olympus.example.test",
+            "display_name": "Synthetic Greenfield Platform Administrator",
+            "user_principal_name": "",
+            "employee_id": null,
+            "department": null,
+            "local_status": "ACTIVE",
+            "email_verified": true,
+            "verification_required": false
+          },
+          "platform": {
+            "is_platform_admin": true,
+            "permissions": [
+              "platform:admin",
+              "platform:administrator:grant",
+              "platform:administrator:read",
+              "platform:administrator:revoke",
+              "platform:advisor-policy:read",
+              "platform:advisor-policy:update",
+              "platform:ai:read",
+              "platform:ai:test",
+              "platform:ai:update",
+              "platform:authorization:manage",
+              "platform:authorization:read",
+              "platform:health:read",
+              "platform:lifecycle-provider:read",
+              "platform:lifecycle-provider:sync",
+              "platform:lifecycle-provider:test",
+              "platform:lifecycle-provider:update",
+              "platform:tenant:bootstrap_admin",
+              "platform:tenant:create",
+              "platform:tenant:read",
+              "platform:tenant:recover_admin",
+              "platform:tenant:update_status"
+            ]
+          },
+          "tenant_context": {
+            "selection_required": false,
+            "selection_source": null,
+            "active_tenant": null,
+            "available_tenants": []
+          },
+          "support": {
+            "platform_admin_email": null
+          },
+          "verification": {
+            "delivery_status": null,
+            "last_sent_at": null,
+            "resend_available_at": null,
+            "expires_at": null
+          }
+        }
+      },
+      "request_id": "16bc8ee6f50e"
+    },
+    "result": "PASS",
+    "time": "2026-10-20T09:33:46.422174+00:00"
+  },
+  {
+    "id": "R3-PLATFORM-FORGED-HEADER",
+    "role": "platform",
+    "preconditions": "Verified isolated Greenfield UUID; task-owned fixtures; credentials kept in memory",
+    "stepsExecuted": "Seeded platform supplies Olympus UUID without membership",
+    "expected": "403 membership boundary remains enforced",
+    "actual": {
+      "status": 403,
+      "data": {
+        "detail": {
+          "code": "IAM_UNAUTHORIZED_TENANT",
+          "message": "The requested tenant is not available to this account."
+        }
+      },
+      "request_id": "a2996e6671b8"
+    },
+    "result": "PASS",
+    "time": "2026-10-20T09:33:46.434763+00:00"
+  },
+  {
+    "id": "R3-DELEGATION-VIEWER-DENIED",
+    "role": "viewer",
+    "preconditions": "Verified isolated Greenfield UUID; task-owned fixtures; credentials kept in memory",
+    "stepsExecuted": "Viewer attempts platform grant on disposable user",
+    "expected": "403",
+    "actual": {
+      "status": 403,
+      "data": {
+        "detail": {
+          "code": "IAM_PLATFORM_PERMISSION_DENIED",
+          "message": "Platform permission is required for this action."
+        }
+      },
+      "request_id": "10df2f818158"
+    },
+    "result": "PASS",
+    "time": "2026-10-20T09:33:46.664540+00:00"
+  },
+  {
+    "id": "R3-DELEGATION-BEFORE",
+    "role": "disposable tenant admin",
+    "preconditions": "Verified isolated Greenfield UUID; task-owned fixtures; credentials kept in memory",
+    "stepsExecuted": "Disposable tenant admin calls platform directory before delegation",
+    "expected": "403",
+    "actual": {
+      "status": 403,
+      "data": {
+        "detail": {
+          "code": "IAM_PLATFORM_PERMISSION_DENIED",
+          "message": "Platform permission is required for this action."
+        }
+      },
+      "request_id": "8bc853f99fcc"
+    },
+    "result": "PASS",
+    "time": "2026-10-20T09:33:46.690505+00:00"
+  },
+  {
+    "id": "R3-DELEGATION-GRANT",
+    "role": "platform",
+    "preconditions": "Verified isolated Greenfield UUID; task-owned fixtures; credentials kept in memory",
+    "stepsExecuted": "Policy-authorized seeded platform grants only new disposable principal",
+    "expected": "201 effective platform grant",
+    "actual": {
+      "status": 201,
+      "data": {
+        "grant_id": 4,
+        "user_id": 17,
+        "email": "uat-r3-1792488816710826000@example.test",
+        "display_name": "UAT Round Three",
+        "local_status": "ACTIVE",
+        "email_verified": true,
+        "verification_required": false,
+        "role": "PLATFORM_ADMIN",
+        "grant_status": "ACTIVE",
+        "is_effective": true,
+        "created_at": "2026-10-20T09:33:46.714689Z",
+        "created_by_user_id": 6,
+        "updated_at": "2026-10-20T09:33:46.714689Z",
+        "action": "CREATED"
+      },
+      "request_id": "4435a5f0ac66"
+    },
+    "result": "PASS",
+    "time": "2026-10-20T09:33:46.731000+00:00"
+  },
+  {
+    "id": "R3-OWNED-PLATFORM-BROWSER-COMPLETE",
+    "role": "disposable platform administrator",
+    "preconditions": "Verified isolated Greenfield UUID; task-owned fixtures; credentials kept in memory",
+    "stepsExecuted": "Real Chrome Native Login and membership switcher on disposable platform principal",
+    "expected": "Browser case assertions complete",
+    "actual": {
+      "exitCode": 0
+    },
+    "result": "PASS",
+    "time": "2026-10-20T09:34:27.395055+00:00"
+  },
+  {
+    "id": "R3-DELEGATION-LIVE-REFRESH",
+    "role": "disposable platform admin",
+    "preconditions": "Verified isolated Greenfield UUID; task-owned fixtures; credentials kept in memory",
+    "stepsExecuted": "Use same pre-grant Native token after grant",
+    "expected": "200 current DB authority, no token reissue required",
+    "actual": {
+      "status": 200,
+      "data": {
+        "items": [
+          {
+            "grant_id": 4,
+            "user_id": 17,
+            "email": "uat-r3-1792488816710826000@example.test",
+            "display_name": "UAT Round Three",
+            "local_status": "ACTIVE",
+            "email_verified": true,
+            "verification_required": false,
+            "role": "PLATFORM_ADMIN",
+            "grant_status": "ACTIVE",
+            "is_effective": true,
+            "created_at": "2026-10-20T09:33:46.714689Z",
+            "created_by_user_id": 6,
+            "updated_at": "2026-10-20T09:33:46.714689Z"
+          },
+          {
+            "grant_id": 3,
+            "user_id": 16,
+            "email": "uat-r3-1792488618156640000@example.test",
+            "display_name": "UAT Round Three",
+            "local_status": "ACTIVE",
+            "email_verified": true,
+            "verification_required": false,
+            "role": "PLATFORM_ADMIN",
+            "grant_status": "DISABLED",
+            "is_effective": false,
+            "created_at": "2026-10-20T09:30:26.669842Z",
+            "created_by_user_id": 6,
+            "updated_at": "2026-10-20T09:31:34.694548Z"
+          },
+          {
+            "grant_id": 2,
+            "user_id": 11,
+            "email": "uat-r3-1792486266340662000@example.test",
+            "display_name": "UAT Round Three",
+            "local_status": "ACTIVE",
+            "email_verified": true,
+            "verification_required": false,
+            "role": "PLATFORM_ADMIN",
+            "grant_status": "DISABLED",
+            "is_effective": false,
+            "created_at": "2026-10-20T08:51:17.703092Z",
+            "created_by_user_id": 6,
+            "updated_at": "2026-10-20T08:51:17.923254Z"
+          },
+          {
+            "grant_id": 1,
+            "user_id": 6,
+            "email": "platform@olympus.example.test",
+            "display_name": "Synthetic Greenfield Platform Administrator",
+            "local_status": "ACTIVE",
+            "email_verified": true,
+            "verification_required": false,
+            "role": "PLATFORM_ADMIN",
+            "grant_status": "ACTIVE",
+            "is_effective": true,
+            "created_at": "2026-10-19T12:49:26.929124Z",
+            "created_by_user_id": null,
+            "updated_at": "2026-10-19T12:49:26.929124Z"
+          }
+        ],
+        "page": 1,
+        "page_size": 50,
+        "total": 4,
+        "total_pages": 1
+      },
+      "request_id": "552e507a3714"
+    },
+    "result": "PASS",
+    "time": "2026-10-20T09:34:27.520267+00:00"
+  },
+  {
+    "id": "R3-DELEGATION-DUPLICATE",
+    "role": "platform",
+    "preconditions": "Verified isolated Greenfield UUID; task-owned fixtures; credentials kept in memory",
+    "stepsExecuted": "Repeat supported grant for same owned user",
+    "expected": "409 IAM_PLATFORM_ADMIN_ALREADY_GRANTED; existing authority unchanged",
+    "actual": {
+      "status": 409,
+      "data": {
+        "detail": {
+          "code": "IAM_PLATFORM_ADMIN_ALREADY_GRANTED",
+          "message": "The user already has an active Platform Administrator grant."
+        }
+      },
+      "request_id": "8b68f47ae544"
+    },
+    "result": "PASS",
+    "time": "2026-10-20T09:34:27.586954+00:00"
+  },
+  {
+    "id": "R3-WORKING-CONTEXT-PLATFORM-LANDING",
+    "role": "disposable platform admin",
+    "preconditions": "Verified isolated Greenfield UUID; task-owned fixtures; credentials kept in memory",
+    "stepsExecuted": "Newly authorized platform principal reads context with no header",
+    "expected": "200 platform context, no inherited tenant",
+    "actual": {
+      "status": 200,
+      "data": {
+        "user_id": 17,
+        "external_user_id": null,
+        "email": "uat-r3-1792488816710826000@example.test",
+        "display_name": "UAT Round Three",
+        "tenant_id": null,
+        "external_tenant_id": null,
+        "roles": [
+          "PLATFORM_ADMIN"
+        ],
+        "identity_roles": [],
+        "permissions": [
+          "platform:admin",
+          "platform:administrator:grant",
+          "platform:administrator:read",
+          "platform:administrator:revoke",
+          "platform:advisor-policy:read",
+          "platform:advisor-policy:update",
+          "platform:ai:read",
+          "platform:ai:test",
+          "platform:ai:update",
+          "platform:authorization:manage",
+          "platform:authorization:read",
+          "platform:health:read",
+          "platform:lifecycle-provider:read",
+          "platform:lifecycle-provider:sync",
+          "platform:lifecycle-provider:test",
+          "platform:lifecycle-provider:update",
+          "platform:tenant:bootstrap_admin",
+          "platform:tenant:create",
+          "platform:tenant:read",
+          "platform:tenant:recover_admin",
+          "platform:tenant:update_status"
+        ],
+        "is_platform_admin": true,
+        "authenticated": true,
+        "role": "PLATFORM_ADMIN",
+        "auth_context": {
+          "status": "READY",
+          "next_action": "OPEN_PLATFORM_ADMIN",
+          "user": {
+            "id": 17,
+            "email": "uat-r3-1792488816710826000@example.test",
+            "display_name": "UAT Round Three",
+            "user_principal_name": "",
+            "employee_id": null,
+            "department": null,
+            "local_status": "ACTIVE",
+            "email_verified": true,
+            "verification_required": false
+          },
+          "platform": {
+            "is_platform_admin": true,
+            "permissions": [
+              "platform:admin",
+              "platform:administrator:grant",
+              "platform:administrator:read",
+              "platform:administrator:revoke",
+              "platform:advisor-policy:read",
+              "platform:advisor-policy:update",
+              "platform:ai:read",
+              "platform:ai:test",
+              "platform:ai:update",
+              "platform:authorization:manage",
+              "platform:authorization:read",
+              "platform:health:read",
+              "platform:lifecycle-provider:read",
+              "platform:lifecycle-provider:sync",
+              "platform:lifecycle-provider:test",
+              "platform:lifecycle-provider:update",
+              "platform:tenant:bootstrap_admin",
+              "platform:tenant:create",
+              "platform:tenant:read",
+              "platform:tenant:recover_admin",
+              "platform:tenant:update_status"
+            ]
+          },
+          "tenant_context": {
+            "selection_required": false,
+            "selection_source": null,
+            "active_tenant": null,
+            "available_tenants": [
+              {
+                "id": "8dd329e3-d481-4d4d-8c64-7fb94bc51982",
+                "name": "UAT R3 1792488816710826000",
+                "slug": "uat-r3-1792488816710826000",
+                "external_iam_tenant_id": null,
+                "identity_mapping": {
+                  "state": "NOT_CONFIGURED",
+                  "mode": "NOT_CONFIGURED",
+                  "provider": null,
+                  "display_status": "Not configured",
+                  "external_tenant_id": null,
+                  "verified": false,
+                  "is_legacy": false
+                },
+                "membership_status": "ACTIVE",
+                "current_role": "TENANT_ADMIN",
+                "primary_role": "TENANT_ADMIN",
+                "roles": [
+                  "TENANT_ADMIN"
+                ],
+                "role_assignment_version": 1,
+                "effective_permissions": [
+                  "analysis:read",
+                  "analysis:run",
+                  "component:read",
+                  "component:update",
+                  "component_advisor:audit:read",
+                  "component_advisor:read",
+                  "component_advisor:recommendation:accept",
+                  "component_advisor:recommendation:create",
+                  "component_advisor:recommendation:review",
+                  "dashboard:read",
+                  "lifecycle:override",
+                  "lifecycle:read",
+                  "lifecycle:vendor-record:delete",
+                  "lifecycle:vendor-record:read",
+                  "lifecycle:vendor-record:write",
+                  "product:assign_sbom",
+                  "product:create",
+                  "product:delete",
+                  "product:manage_schedule",
+                  "product:read",
+                  "product:update",
+                  "project:create",
+                  "project:delete",
+                  "project:read",
+                  "project:update",
+                  "remediation:close",
+                  "remediation:read",
+                  "remediation:write",
+                  "sbom:delete",
+                  "sbom:export",
+                  "sbom:read",
+                  "sbom:repair:download",
+                  "sbom:repair:read",
+                  "sbom:repair:revalidate",
+                  "sbom:repair:search",
+                  "sbom:repair:update",
+                  "sbom:update",
+                  "sbom:upload",
+                  "schedule:read",
+                  "schedule:write",
+                  "tenant:advisor-policy:read",
+                  "tenant:advisor-policy:update",
+                  "tenant:ai:read",
+                  "tenant:ai:test",
+                  "tenant:ai:update",
+                  "tenant:lifecycle-provider:read",
+                  "tenant:lifecycle-provider:sync",
+                  "tenant:lifecycle-provider:test",
+                  "tenant:lifecycle-provider:update",
+                  "tenant:settings:update",
+                  "tenant:user:invite",
+                  "tenant:user:read",
+                  "tenant:user:update",
+                  "vex:read",
+                  "vex:write"
+                ]
+              }
+            ]
+          },
+          "support": {
+            "platform_admin_email": null
+          },
+          "verification": {
+            "delivery_status": null,
+            "last_sent_at": null,
+            "resend_available_at": null,
+            "expires_at": null
+          }
+        }
+      },
+      "request_id": "695db8c98295"
+    },
+    "result": "PASS",
+    "time": "2026-10-20T09:34:27.658531+00:00"
+  },
+  {
+    "id": "R3-WORKING-CONTEXT-EXPLICIT-SELECTION",
+    "role": "disposable platform admin",
+    "preconditions": "Verified isolated Greenfield UUID; task-owned fixtures; credentials kept in memory",
+    "stepsExecuted": "Select only own preexisting active tenant membership using supported UUID header",
+    "expected": "200 tenant context and existing TENANT_ADMIN authority",
+    "actual": {
+      "status": 200,
+      "data": {
+        "user_id": 17,
+        "external_user_id": null,
+        "email": "uat-r3-1792488816710826000@example.test",
+        "display_name": "UAT Round Three",
+        "tenant_id": "8dd329e3-d481-4d4d-8c64-7fb94bc51982",
+        "external_tenant_id": null,
+        "roles": [
+          "TENANT_ADMIN"
+        ],
+        "identity_roles": [],
+        "permissions": [
+          "analysis:read",
+          "analysis:run",
+          "component:read",
+          "component:update",
+          "component_advisor:audit:read",
+          "component_advisor:read",
+          "component_advisor:recommendation:accept",
+          "component_advisor:recommendation:create",
+          "component_advisor:recommendation:review",
+          "dashboard:read",
+          "lifecycle:override",
+          "lifecycle:read",
+          "lifecycle:vendor-record:delete",
+          "lifecycle:vendor-record:read",
+          "lifecycle:vendor-record:write",
+          "product:assign_sbom",
+          "product:create",
+          "product:delete",
+          "product:manage_schedule",
+          "product:read",
+          "product:update",
+          "project:create",
+          "project:delete",
+          "project:read",
+          "project:update",
+          "remediation:close",
+          "remediation:read",
+          "remediation:write",
+          "sbom:delete",
+          "sbom:export",
+          "sbom:read",
+          "sbom:repair:download",
+          "sbom:repair:read",
+          "sbom:repair:revalidate",
+          "sbom:repair:search",
+          "sbom:repair:update",
+          "sbom:update",
+          "sbom:upload",
+          "schedule:read",
+          "schedule:write",
+          "tenant:advisor-policy:read",
+          "tenant:advisor-policy:update",
+          "tenant:ai:read",
+          "tenant:ai:test",
+          "tenant:ai:update",
+          "tenant:lifecycle-provider:read",
+          "tenant:lifecycle-provider:sync",
+          "tenant:lifecycle-provider:test",
+          "tenant:lifecycle-provider:update",
+          "tenant:settings:update",
+          "tenant:user:invite",
+          "tenant:user:read",
+          "tenant:user:update",
+          "vex:read",
+          "vex:write"
+        ],
+        "is_platform_admin": true,
+        "authenticated": true,
+        "role": "TENANT_ADMIN",
+        "auth_context": {
+          "status": "READY",
+          "next_action": "OPEN_DASHBOARD",
+          "user": {
+            "id": 17,
+            "email": "uat-r3-1792488816710826000@example.test",
+            "display_name": "UAT Round Three",
+            "user_principal_name": "",
+            "employee_id": null,
+            "department": null,
+            "local_status": "ACTIVE",
+            "email_verified": true,
+            "verification_required": false
+          },
+          "platform": {
+            "is_platform_admin": true,
+            "permissions": [
+              "platform:admin",
+              "platform:administrator:grant",
+              "platform:administrator:read",
+              "platform:administrator:revoke",
+              "platform:advisor-policy:read",
+              "platform:advisor-policy:update",
+              "platform:ai:read",
+              "platform:ai:test",
+              "platform:ai:update",
+              "platform:authorization:manage",
+              "platform:authorization:read",
+              "platform:health:read",
+              "platform:lifecycle-provider:read",
+              "platform:lifecycle-provider:sync",
+              "platform:lifecycle-provider:test",
+              "platform:lifecycle-provider:update",
+              "platform:tenant:bootstrap_admin",
+              "platform:tenant:create",
+              "platform:tenant:read",
+              "platform:tenant:recover_admin",
+              "platform:tenant:update_status"
+            ]
+          },
+          "tenant_context": {
+            "selection_required": false,
+            "selection_source": "HEADER",
+            "active_tenant": {
+              "id": "8dd329e3-d481-4d4d-8c64-7fb94bc51982",
+              "name": "UAT R3 1792488816710826000",
+              "slug": "uat-r3-1792488816710826000",
+              "external_iam_tenant_id": null,
+              "identity_mapping": {
+                "state": "NOT_CONFIGURED",
+                "mode": "NOT_CONFIGURED",
+                "provider": null,
+                "display_status": "Not configured",
+                "external_tenant_id": null,
+                "verified": false,
+                "is_legacy": false
+              },
+              "membership_status": "ACTIVE",
+              "current_role": "TENANT_ADMIN",
+              "primary_role": "TENANT_ADMIN",
+              "roles": [
+                "TENANT_ADMIN"
+              ],
+              "role_assignment_version": 1,
+              "effective_permissions": [
+                "analysis:read",
+                "analysis:run",
+                "component:read",
+                "component:update",
+                "component_advisor:audit:read",
+                "component_advisor:read",
+                "component_advisor:recommendation:accept",
+                "component_advisor:recommendation:create",
+                "component_advisor:recommendation:review",
+                "dashboard:read",
+                "lifecycle:override",
+                "lifecycle:read",
+                "lifecycle:vendor-record:delete",
+                "lifecycle:vendor-record:read",
+                "lifecycle:vendor-record:write",
+                "product:assign_sbom",
+                "product:create",
+                "product:delete",
+                "product:manage_schedule",
+                "product:read",
+                "product:update",
+                "project:create",
+                "project:delete",
+                "project:read",
+                "project:update",
+                "remediation:close",
+                "remediation:read",
+                "remediation:write",
+                "sbom:delete",
+                "sbom:export",
+                "sbom:read",
+                "sbom:repair:download",
+                "sbom:repair:read",
+                "sbom:repair:revalidate",
+                "sbom:repair:search",
+                "sbom:repair:update",
+                "sbom:update",
+                "sbom:upload",
+                "schedule:read",
+                "schedule:write",
+                "tenant:advisor-policy:read",
+                "tenant:advisor-policy:update",
+                "tenant:ai:read",
+                "tenant:ai:test",
+                "tenant:ai:update",
+                "tenant:lifecycle-provider:read",
+                "tenant:lifecycle-provider:sync",
+                "tenant:lifecycle-provider:test",
+                "tenant:lifecycle-provider:update",
+                "tenant:settings:update",
+                "tenant:user:invite",
+                "tenant:user:read",
+                "tenant:user:update",
+                "vex:read",
+                "vex:write"
+              ]
+            },
+            "available_tenants": [
+              {
+                "id": "8dd329e3-d481-4d4d-8c64-7fb94bc51982",
+                "name": "UAT R3 1792488816710826000",
+                "slug": "uat-r3-1792488816710826000",
+                "external_iam_tenant_id": null,
+                "identity_mapping": {
+                  "state": "NOT_CONFIGURED",
+                  "mode": "NOT_CONFIGURED",
+                  "provider": null,
+                  "display_status": "Not configured",
+                  "external_tenant_id": null,
+                  "verified": false,
+                  "is_legacy": false
+                },
+                "membership_status": "ACTIVE",
+                "current_role": "TENANT_ADMIN",
+                "primary_role": "TENANT_ADMIN",
+                "roles": [
+                  "TENANT_ADMIN"
+                ],
+                "role_assignment_version": 1,
+                "effective_permissions": [
+                  "analysis:read",
+                  "analysis:run",
+                  "component:read",
+                  "component:update",
+                  "component_advisor:audit:read",
+                  "component_advisor:read",
+                  "component_advisor:recommendation:accept",
+                  "component_advisor:recommendation:create",
+                  "component_advisor:recommendation:review",
+                  "dashboard:read",
+                  "lifecycle:override",
+                  "lifecycle:read",
+                  "lifecycle:vendor-record:delete",
+                  "lifecycle:vendor-record:read",
+                  "lifecycle:vendor-record:write",
+                  "product:assign_sbom",
+                  "product:create",
+                  "product:delete",
+                  "product:manage_schedule",
+                  "product:read",
+                  "product:update",
+                  "project:create",
+                  "project:delete",
+                  "project:read",
+                  "project:update",
+                  "remediation:close",
+                  "remediation:read",
+                  "remediation:write",
+                  "sbom:delete",
+                  "sbom:export",
+                  "sbom:read",
+                  "sbom:repair:download",
+                  "sbom:repair:read",
+                  "sbom:repair:revalidate",
+                  "sbom:repair:search",
+                  "sbom:repair:update",
+                  "sbom:update",
+                  "sbom:upload",
+                  "schedule:read",
+                  "schedule:write",
+                  "tenant:advisor-policy:read",
+                  "tenant:advisor-policy:update",
+                  "tenant:ai:read",
+                  "tenant:ai:test",
+                  "tenant:ai:update",
+                  "tenant:lifecycle-provider:read",
+                  "tenant:lifecycle-provider:sync",
+                  "tenant:lifecycle-provider:test",
+                  "tenant:lifecycle-provider:update",
+                  "tenant:settings:update",
+                  "tenant:user:invite",
+                  "tenant:user:read",
+                  "tenant:user:update",
+                  "vex:read",
+                  "vex:write"
+                ]
+              }
+            ]
+          },
+          "support": {
+            "platform_admin_email": null
+          },
+          "verification": {
+            "delivery_status": null,
+            "last_sent_at": null,
+            "resend_available_at": null,
+            "expires_at": null
+          }
+        }
+      },
+      "request_id": "35b6c46a9298"
+    },
+    "result": "PASS",
+    "time": "2026-10-20T09:34:27.731583+00:00"
+  },
+  {
+    "id": "R3-WORKING-CONTEXT-TENANT-READ",
+    "role": "disposable platform admin",
+    "preconditions": "Verified isolated Greenfield UUID; task-owned fixtures; credentials kept in memory",
+    "stepsExecuted": "Read projects in explicitly selected authorized tenant",
+    "expected": "200 own tenant",
+    "actual": {
+      "status": 200,
+      "data": [],
+      "request_id": "7f2582a2cc80"
+    },
+    "result": "PASS",
+    "time": "2026-10-20T09:34:27.810534+00:00"
+  },
+  {
+    "id": "R3-WORKING-CONTEXT-FOREIGN-DENY",
+    "role": "disposable platform admin",
+    "preconditions": "Verified isolated Greenfield UUID; task-owned fixtures; credentials kept in memory",
+    "stepsExecuted": "Attempt Olympus context without membership",
+    "expected": "403",
+    "actual": {
+      "status": 403,
+      "data": {
+        "detail": {
+          "code": "IAM_UNAUTHORIZED_TENANT",
+          "message": "The requested tenant is not available to this account."
+        }
+      },
+      "request_id": "509d9738463b"
+    },
+    "result": "PASS",
+    "time": "2026-10-20T09:34:27.851556+00:00"
+  },
+  {
+    "id": "R3-DELEGATION-REVOKE",
+    "role": "platform",
+    "preconditions": "Verified isolated Greenfield UUID; task-owned fixtures; credentials kept in memory",
+    "stepsExecuted": "Revoke only created disposable grant",
+    "expected": "204",
+    "actual": {
+      "status": 204,
+      "data": {
+        "bytes": 0,
+        "contentType": "application/json"
+      },
+      "request_id": "318cb1362f57"
+    },
+    "result": "PASS",
+    "time": "2026-10-20T09:34:27.954153+00:00"
+  },
+  {
+    "id": "R3-DELEGATION-IMMEDIATE-REVOCATION",
+    "role": "disposable former platform admin",
+    "preconditions": "Verified isolated Greenfield UUID; task-owned fixtures; credentials kept in memory",
+    "stepsExecuted": "Replay same Native token after revocation",
+    "expected": "403 authority revoked immediately",
+    "actual": {
+      "status": 403,
+      "data": {
+        "detail": {
+          "code": "IAM_PLATFORM_PERMISSION_DENIED",
+          "message": "Platform permission is required for this action."
+        }
+      },
+      "request_id": "ec9615c8fb70"
+    },
+    "result": "PASS",
+    "time": "2026-10-20T09:34:28.011482+00:00"
+  },
+  {
+    "id": "R3-SESSION-OWNED-LOGOUT-ALL",
+    "role": "disposable user",
+    "preconditions": "Verified isolated Greenfield UUID; task-owned fixtures; credentials kept in memory",
+    "stepsExecuted": "Two native tokens; revoke owned user sessions via supported logout-all",
+    "expected": "200; both previous tokens rejected",
+    "actual": {
+      "status": 200,
+      "data": {
+        "success": true
+      },
+      "request_id": "6c7bbec710d8"
+    },
+    "result": "PASS",
+    "time": "2026-10-20T09:34:28.437513+00:00"
+  },
+  {
+    "id": "R3-SESSION-OLD-first",
+    "role": "disposable user",
+    "preconditions": "Verified isolated Greenfield UUID; task-owned fixtures; credentials kept in memory",
+    "stepsExecuted": "Replay first token after owned logout-all",
+    "expected": "401",
+    "actual": {
+      "status": 401,
+      "data": {
+        "detail": "Authentication required"
+      },
+      "request_id": "5ca01ce12000"
+    },
+    "result": "PASS",
+    "time": "2026-10-20T09:34:28.455085+00:00"
+  },
+  {
+    "id": "R3-SESSION-OLD-second",
+    "role": "disposable user",
+    "preconditions": "Verified isolated Greenfield UUID; task-owned fixtures; credentials kept in memory",
+    "stepsExecuted": "Replay second token after owned logout-all",
+    "expected": "401",
+    "actual": {
+      "status": 401,
+      "data": {
+        "detail": "Authentication required"
+      },
+      "request_id": "848cd0a797fa"
+    },
+    "result": "PASS",
+    "time": "2026-10-20T09:34:28.472389+00:00"
+  },
+  {
+    "id": "R3-GOVERNANCE-CLEANUP",
+    "role": "platform",
+    "preconditions": "Verified isolated Greenfield UUID; task-owned fixtures; credentials kept in memory",
+    "stepsExecuted": "Disable only new owned tenant; no seed authority changed",
+    "expected": "200 disabled",
+    "actual": {
+      "status": 200,
+      "data": {
+        "tenant_id": "8dd329e3-d481-4d4d-8c64-7fb94bc51982",
+        "status": "DISABLED"
+      },
+      "request_id": "f831e140173d"
+    },
+    "result": "PASS",
+    "time": "2026-10-20T09:34:28.532436+00:00"
+  }
+]

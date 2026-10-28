@@ -5,7 +5,7 @@ import { AlertTriangle, ArrowRightLeft, CheckCircle2, Download, FileJson, Loader
 import { useMutation, useQuery, useQueryClient } from '@tanstack/react-query';
 import { useEffect, useState } from 'react';
 
-import { Button } from '@/components/ui/Button';
+import { PermissionButton as Button } from '@/components/ui/PermissionButton';
 import { Card, CardContent, CardHeader, CardTitle } from '@/components/ui/Card';
 import {
   convertSbomToCycloneDX,
@@ -41,7 +41,7 @@ export function SbomConversionCard({ sbom, formatLabel }: SbomConversionCardProp
   const { showSuccess, showError } = useNotifications();
   const [message, setMessage] = useState<string | null>(null);
   const [showReport, setShowReport] = useState(false);
-  const [convertedId, setConvertedId] = useState<number | null>(sbom.converted_sbom_id ?? null);
+  const [convertedId, setConvertedId] = useState<string | number | null>(sbom.converted_sbom_id ?? null);
   const [enrichmentStatus, setEnrichmentStatus] = useState<string | null>(
     sbom.enrichment_status ?? null,
   );
@@ -205,7 +205,7 @@ export function SbomConversionCard({ sbom, formatLabel }: SbomConversionCardProp
       </CardHeader>
       <CardContent className="space-y-4">
         <div className="flex flex-wrap gap-2">
-          <Button
+          <Button permission={"sbom:update"}
             size="sm"
             onClick={() => convertMutation.mutate()}
             loading={convertMutation.isPending}
@@ -213,7 +213,7 @@ export function SbomConversionCard({ sbom, formatLabel }: SbomConversionCardProp
           >
             Convert to CycloneDX
           </Button>
-          <Button
+          <Button permission={"sbom:export"}
             size="sm"
             variant="outline"
             onClick={() =>
@@ -226,7 +226,7 @@ export function SbomConversionCard({ sbom, formatLabel }: SbomConversionCardProp
           </Button>
           {convertedId && (
             <>
-              <Button
+              <Button permission={"sbom:export"}
                 size="sm"
                 variant="outline"
                 onClick={() =>
@@ -237,7 +237,7 @@ export function SbomConversionCard({ sbom, formatLabel }: SbomConversionCardProp
               >
                 <Download className="h-3.5 w-3.5" /> Export Converted CycloneDX
               </Button>
-              <Button
+              <Button permission={"sbom:export"}
                 size="sm"
                 variant="outline"
                 onClick={() =>
@@ -248,7 +248,7 @@ export function SbomConversionCard({ sbom, formatLabel }: SbomConversionCardProp
               >
                 <Download className="h-3.5 w-3.5" /> Export Enriched CycloneDX
               </Button>
-              <Button
+              <Button permission={"sbom:export"}
                 size="sm"
                 variant="outline"
                 onClick={() =>
@@ -269,7 +269,7 @@ export function SbomConversionCard({ sbom, formatLabel }: SbomConversionCardProp
               <dt className="text-xs font-medium text-hcl-muted uppercase">Converted SBOM</dt>
               <dd className="mt-1 font-medium text-hcl-navy">
                 <Link href={`/sboms/${convertedId}`} className="text-hcl-blue hover:underline">
-                  #{convertedId}
+                  Converted SBOM
                 </Link>
               </dd>
             </div>

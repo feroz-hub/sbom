@@ -1,0 +1,27 @@
+{
+  "observations": [
+    {
+      "batch_id": "7fb66bf7-1d77-4989-be54-ff4f37c3a017",
+      "key": "ai:fix:progress:1:7fb66bf7-1d77-4989-be54-ff4f37c3a017",
+      "exists": true,
+      "status": "failed",
+      "ttl_seconds": 85459
+    },
+    {
+      "batch_id": "c64f9bdd-6bbb-4fbd-8767-e256a8868c03",
+      "key": "ai:fix:progress:1:c64f9bdd-6bbb-4fbd-8767-e256a8868c03",
+      "exists": true,
+      "status": "failed",
+      "ttl_seconds": 85461
+    },
+    {
+      "batch_id": "8a1c12e5-2646-4584-b1cf-54da01afd022",
+      "key": "ai:fix:progress:1:8a1c12e5-2646-4584-b1cf-54da01afd022",
+      "exists": true,
+      "status": "failed",
+      "ttl_seconds": 85471
+    }
+  ],
+  "mutations_performed_by_reconciliation": 0,
+  "cleanup": "Not attempted; existing application Redis is outside task-owned cleanup scope."
+}

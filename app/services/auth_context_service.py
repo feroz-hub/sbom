@@ -6,7 +6,6 @@ import logging
 from dataclasses import dataclass
 
 from fastapi import Request
-from sqlalchemy import or_, select
 from sqlalchemy.orm import Session
 
 from ..core.identity_states import (
@@ -33,6 +32,7 @@ from . import (
     tenant_role_assignment_service,
     tenant_service,
 )
+from .identity_verification_policy import verification_complete
 
 log = logging.getLogger(__name__)
 
@@ -84,13 +84,14 @@ def _audit_state(
 
 
 def _tenant_matches(tenant: Tenant, value: str) -> bool:
-    return value in {str(tenant.id), tenant.slug, tenant.external_iam_tenant_id}
+    return value.lower() == str(tenant.public_id) or value in {str(tenant.id), tenant.slug, tenant.external_iam_tenant_id}
 
 
 def resolve_authorization_state(
     db: Session,
     user: IAMUser,
     *,
+    provider: str | None = None,
     selected_tenant: str | None = None,
     selector_hint: str | None = None,
     allow_platform_context: bool = True,
@@ -99,6 +100,9 @@ def resolve_authorization_state(
 ) -> ResolvedAuthorizationState:
     """Resolve authorization state in the required security precedence."""
     requested = (selected_tenant or "").strip()
+    if requested and request is not None:
+        from ..public_api import canonical
+        canonical(requested)
     hinted = (selector_hint or "").strip()
 
     if user.status == "DISABLED":
@@ -110,16 +114,21 @@ def resolve_authorization_state(
             frozenset(),
             (),
         )
+    elif user.status == "SUSPENDED":
+        result = ResolvedAuthorizationState(
+            AuthorizationState.USER_SUSPENDED, NextAction.CONTACT_SUPPORT,
+            user, False, frozenset(), (),
+        )
     elif user.status == "PENDING":
         result = ResolvedAuthorizationState(
-            AuthorizationState.ACCOUNT_PENDING_APPROVAL,
+            AuthorizationState.USER_ACCESS_PENDING if provider == "MICROSOFT_ENTRA" else AuthorizationState.ACCOUNT_PENDING_APPROVAL,
             NextAction.WAIT_FOR_APPROVAL,
             user,
             False,
             frozenset(),
             (),
         )
-    elif not user.email_verified or user.verification_required:
+    elif user.status == "PENDING_EMAIL_VERIFICATION" or not verification_complete(user):
         result = ResolvedAuthorizationState(
             AuthorizationState.VERIFICATION_REQUIRED,
             NextAction.VERIFY_EMAIL,
@@ -127,6 +136,13 @@ def resolve_authorization_state(
             False,
             frozenset(),
             (),
+        )
+    elif user.status != "ACTIVE":
+        # Native security states (including future unknown states) cannot
+        # fall through to membership/permission resolution.
+        result = ResolvedAuthorizationState(
+            AuthorizationState.ACCOUNT_DISABLED, NextAction.CONTACT_SUPPORT,
+            user, False, frozenset(), (),
         )
     else:
         is_platform_admin = (
@@ -152,17 +168,6 @@ def resolve_authorization_state(
                 if _tenant_matches(tenant, requested):
                     selected, membership = tenant, member
                     break
-            if selected is None and is_platform_admin:
-                selected = db.execute(
-                    select(Tenant).where(
-                        Tenant.status == "ACTIVE",
-                        or_(
-                            Tenant.slug == requested,
-                            Tenant.external_iam_tenant_id == requested,
-                            Tenant.id == int(requested) if requested.isdigit() else False,
-                        ),
-                    )
-                ).scalar_one_or_none()
             if selected is None:
                 _audit_state(
                     db,
@@ -178,9 +183,6 @@ def resolve_authorization_state(
                 )
             selection_source = "HEADER"
         if selected is not None:
-            roles = {membership.role} if membership else set()
-            if is_platform_admin:
-                roles.add("PLATFORM_ADMIN")
             result = ResolvedAuthorizationState(
                 AuthorizationState.READY,
                 NextAction.OPEN_DASHBOARD,
@@ -276,9 +278,9 @@ def _available_tenant(
     db: Session,
     tenant: Tenant,
     membership: TenantUser | None,
-    *,
-    is_platform_admin: bool,
 ) -> AvailableTenant:
+    if membership is None:
+        raise ValueError("A tenant projection requires explicit membership")
     roles = (
         set(
             tenant_role_assignment_service.effective_role_codes(
@@ -301,18 +303,10 @@ def _available_tenant(
         if membership
         else set()
     )
-    if is_platform_admin:
-        permissions.update(
-            authorization_catalog_service.resolve_permissions_for_roles(
-                db,
-                frozenset({"PLATFORM_ADMIN"}),
-                actor_user_id=membership.user_id if membership else None,
-            )
-        )
     from .identity_mapping_service import build_identity_mapping
 
     return AvailableTenant(
-        id=tenant.id,
+        id=str(tenant.public_id),
         name=tenant.name,
         slug=tenant.slug,
         external_iam_tenant_id=tenant.external_iam_tenant_id,
@@ -321,9 +315,9 @@ def _available_tenant(
             is_legacy=getattr(tenant, "is_legacy", False),
         ),
         membership_status=membership.status if membership else None,
-        current_role=membership.role if membership else "PLATFORM_ADMIN",
-        primary_role=membership.role if membership else "PLATFORM_ADMIN",
-        roles=sorted(roles | ({"PLATFORM_ADMIN"} if is_platform_admin else set())),
+        current_role=membership.role,
+        primary_role=membership.role,
+        roles=sorted(roles),
         role_assignment_version=(
             membership.role_assignment_version if membership else None
         ),
@@ -344,7 +338,6 @@ def build_auth_context_response(
             db,
             tenant,
             membership,
-            is_platform_admin=state.is_platform_admin,
         )
         for membership, tenant in state.memberships
     ]
@@ -353,7 +346,6 @@ def build_auth_context_response(
             db,
             state.active_tenant,
             state.active_membership,
-            is_platform_admin=state.is_platform_admin,
         )
         if state.active_tenant
         else None

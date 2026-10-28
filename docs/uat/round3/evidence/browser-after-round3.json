@@ -1,0 +1,313 @@
+[
+  {
+    "id": "UAT-USER-014-after-round3",
+    "role": "admin",
+    "preconditions": "Clean Chrome context; real Native BFF authentication fixture; TLS validation enabled",
+    "steps": "UAT-USER-014-after-round3",
+    "expected": "Normal pointer Cancel closes dialog",
+    "actual": {
+      "candidateStatus": 200,
+      "normalPointerCancel": true
+    },
+    "result": "PASS"
+  },
+  {
+    "id": "R2-CANDIDATE-empty-1440",
+    "role": "admin",
+    "preconditions": "Clean Chrome context; real Native BFF authentication fixture; TLS validation enabled",
+    "steps": "R2-CANDIDATE-empty-1440",
+    "expected": "Cancel remains reachable in every results state",
+    "actual": {
+      "viewport": {
+        "width": 1440,
+        "height": 1000
+      },
+      "cancelBounds": {
+        "x": 745.453125,
+        "y": 637,
+        "width": 77.484375,
+        "height": 40
+      },
+      "closed": true,
+      "controlledResponse": false
+    },
+    "result": "PASS"
+  },
+  {
+    "id": "R2-CANDIDATE-populated-1440",
+    "role": "admin",
+    "preconditions": "Clean Chrome context; real Native BFF authentication fixture; TLS validation enabled",
+    "steps": "R2-CANDIDATE-populated-1440",
+    "expected": "Cancel remains reachable in every results state",
+    "actual": {
+      "viewport": {
+        "width": 1440,
+        "height": 1000
+      },
+      "cancelBounds": {
+        "x": 745.453125,
+        "y": 736,
+        "width": 77.484375,
+        "height": 40
+      },
+      "closed": true,
+      "controlledResponse": false
+    },
+    "result": "PASS"
+  },
+  {
+    "id": "R2-CANDIDATE-loading-1440",
+    "role": "admin",
+    "preconditions": "Clean Chrome context; real Native BFF authentication fixture; TLS validation enabled",
+    "steps": "R2-CANDIDATE-loading-1440",
+    "expected": "Cancel remains reachable in every results state",
+    "actual": {
+      "viewport": {
+        "width": 1440,
+        "height": 1000
+      },
+      "cancelBounds": {
+        "x": 745.453125,
+        "y": 637,
+        "width": 77.484375,
+        "height": 40
+      },
+      "closed": true,
+      "controlledResponse": true
+    },
+    "result": "PASS"
+  },
+  {
+    "id": "R2-CANDIDATE-error-1440",
+    "role": "admin",
+    "preconditions": "Clean Chrome context; real Native BFF authentication fixture; TLS validation enabled",
+    "steps": "R2-CANDIDATE-error-1440",
+    "expected": "Cancel remains reachable in every results state",
+    "actual": {
+      "viewport": {
+        "width": 1440,
+        "height": 1000
+      },
+      "cancelBounds": {
+        "x": 745.453125,
+        "y": 637,
+        "width": 77.484375,
+        "height": 40
+      },
+      "closed": true,
+      "controlledResponse": true
+    },
+    "result": "PASS"
+  },
+  {
+    "id": "R2-CANDIDATE-empty-800",
+    "role": "admin",
+    "preconditions": "Clean Chrome context; real Native BFF authentication fixture; TLS validation enabled",
+    "steps": "R2-CANDIDATE-empty-800",
+    "expected": "Cancel remains reachable in every results state",
+    "actual": {
+      "viewport": {
+        "width": 800,
+        "height": 500
+      },
+      "cancelBounds": {
+        "x": 425.453125,
+        "y": 387,
+        "width": 77.484375,
+        "height": 40
+      },
+      "closed": true,
+      "controlledResponse": false
+    },
+    "result": "PASS"
+  },
+  {
+    "id": "R2-CANDIDATE-populated-800",
+    "role": "admin",
+    "preconditions": "Clean Chrome context; real Native BFF authentication fixture; TLS validation enabled",
+    "steps": "R2-CANDIDATE-populated-800",
+    "expected": "Cancel remains reachable in every results state",
+    "actual": {
+      "viewport": {
+        "width": 800,
+        "height": 500
+      },
+      "cancelBounds": {
+        "x": 425.453125,
+        "y": 411,
+        "width": 77.484375,
+        "height": 40
+      },
+      "closed": true,
+      "controlledResponse": false
+    },
+    "result": "PASS"
+  },
+  {
+    "id": "R2-CANDIDATE-loading-800",
+    "role": "admin",
+    "preconditions": "Clean Chrome context; real Native BFF authentication fixture; TLS validation enabled",
+    "steps": "R2-CANDIDATE-loading-800",
+    "expected": "Cancel remains reachable in every results state",
+    "actual": {
+      "viewport": {
+        "width": 800,
+        "height": 500
+      },
+      "cancelBounds": {
+        "x": 425.453125,
+        "y": 387,
+        "width": 77.484375,
+        "height": 40
+      },
+      "closed": true,
+      "controlledResponse": true
+    },
+    "result": "PASS"
+  },
+  {
+    "id": "R2-CANDIDATE-error-800",
+    "role": "admin",
+    "preconditions": "Clean Chrome context; real Native BFF authentication fixture; TLS validation enabled",
+    "steps": "R2-CANDIDATE-error-800",
+    "expected": "Cancel remains reachable in every results state",
+    "actual": {
+      "viewport": {
+        "width": 800,
+        "height": 500
+      },
+      "cancelBounds": {
+        "x": 425.453125,
+        "y": 387,
+        "width": 77.484375,
+        "height": 40
+      },
+      "closed": true,
+      "controlledResponse": true
+    },
+    "result": "PASS"
+  },
+  {
+    "id": "R2-CANDIDATE-empty-390",
+    "role": "admin",
+    "preconditions": "Clean Chrome context; real Native BFF authentication fixture; TLS validation enabled",
+    "steps": "R2-CANDIDATE-empty-390",
+    "expected": "Cancel remains reachable in every results state",
+    "actual": {
+      "viewport": {
+        "width": 390,
+        "height": 844
+      },
+      "cancelBounds": {
+        "x": 159.453125,
+        "y": 787,
+        "width": 77.484375,
+        "height": 40
+      },
+      "closed": true,
+      "controlledResponse": false
+    },
+    "result": "PASS"
+  },
+  {
+    "id": "R2-CANDIDATE-populated-390",
+    "role": "admin",
+    "preconditions": "Clean Chrome context; real Native BFF authentication fixture; TLS validation enabled",
+    "steps": "R2-CANDIDATE-populated-390",
+    "expected": "Cancel remains reachable in every results state",
+    "actual": {
+      "viewport": {
+        "width": 390,
+        "height": 844
+      },
+      "cancelBounds": {
+        "x": 159.453125,
+        "y": 787,
+        "width": 77.484375,
+        "height": 40
+      },
+      "closed": true,
+      "controlledResponse": false
+    },
+    "result": "PASS"
+  },
+  {
+    "id": "R2-CANDIDATE-loading-390",
+    "role": "admin",
+    "preconditions": "Clean Chrome context; real Native BFF authentication fixture; TLS validation enabled",
+    "steps": "R2-CANDIDATE-loading-390",
+    "expected": "Cancel remains reachable in every results state",
+    "actual": {
+      "viewport": {
+        "width": 390,
+        "height": 844
+      },
+      "cancelBounds": {
+        "x": 159.453125,
+        "y": 787,
+        "width": 77.484375,
+        "height": 40
+      },
+      "closed": true,
+      "controlledResponse": true
+    },
+    "result": "PASS"
+  },
+  {
+    "id": "R2-CANDIDATE-error-390",
+    "role": "admin",
+    "preconditions": "Clean Chrome context; real Native BFF authentication fixture; TLS validation enabled",
+    "steps": "R2-CANDIDATE-error-390",
+    "expected": "Cancel remains reachable in every results state",
+    "actual": {
+      "viewport": {
+        "width": 390,
+        "height": 844
+      },
+      "cancelBounds": {
+        "x": 159.453125,
+        "y": 787,
+        "width": 77.484375,
+        "height": 40
+      },
+      "closed": true,
+      "controlledResponse": true
+    },
+    "result": "PASS"
+  },
+  {
+    "id": "R2-CANDIDATE-KEYBOARD-SELECT",
+    "role": "admin",
+    "preconditions": "Clean Chrome context; real Native BFF authentication fixture; TLS validation enabled",
+    "steps": "R2-CANDIDATE-KEYBOARD-SELECT",
+    "expected": "Arrow and Enter select an eligible member without submitting",
+    "actual": {
+      "selected": true
+    },
+    "result": "PASS"
+  },
+  {
+    "id": "R2-CANDIDATE-ESCAPE",
+    "role": "admin",
+    "preconditions": "Clean Chrome context; real Native BFF authentication fixture; TLS validation enabled",
+    "steps": "R2-CANDIDATE-ESCAPE",
+    "expected": "First Escape dismisses popup and retains input focus",
+    "actual": {
+      "dialogOpen": 1,
+      "popupCount": 0,
+      "focus": true
+    },
+    "result": "PASS"
+  },
+  {
+    "id": "R2-CANDIDATE-DIALOG-ESCAPE",
+    "role": "admin",
+    "preconditions": "Clean Chrome context; real Native BFF authentication fixture; TLS validation enabled",
+    "steps": "R2-CANDIDATE-DIALOG-ESCAPE",
+    "expected": "Second Escape closes dialog",
+    "actual": {
+      "closed": true
+    },
+    "result": "PASS"
+  }
+]

@@ -17,6 +17,8 @@ from app.db import SessionLocal
 from app.metrics.cache import reset_cache
 from app.models import AnalysisFinding, AnalysisRun, Product, Projects, SBOMSource
 
+from tests.tenant_fixture_scope import verified_fixture_tenant
+
 
 def _now() -> str:
     return datetime.now(UTC).isoformat()
@@ -26,7 +28,8 @@ def _now() -> str:
 def db(client):
     session = SessionLocal()
     try:
-        yield session
+        with verified_fixture_tenant(session, 1):
+            yield session
     finally:
         session.rollback()
         session.close()

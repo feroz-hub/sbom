@@ -10,6 +10,7 @@ import { ToastProvider } from '@/hooks/useToast';
 const api = vi.hoisted(() => ({
   getProduct: vi.fn(),
   getProductSboms: vi.fn(),
+  getLogicalSboms: vi.fn(),
   updateProduct: vi.fn(),
 }));
 
@@ -32,11 +33,11 @@ vi.mock('@/hooks/useAnalysisStream', () => ({
 
 import ProductDetailPage from './page';
 
-const routeParams = Promise.resolve({ id: '22' });
+const routeParams = Promise.resolve({ id: "00000000-0000-4000-8000-000000000016" });
 const product = {
-  id: 22,
-  tenant_id: 1,
-  project_id: 3,
+  id: "00000000-0000-4000-8000-000000000016",
+  tenant_id: "00000000-0000-4000-8000-000000000001",
+  project_id: "00000000-0000-4000-8000-000000000003",
   name: 'Infusion Pump Controller',
   normalized_name: 'infusion pump controller',
   slug: 'infusion-pump-controller',
@@ -46,7 +47,7 @@ const product = {
   category: null,
   status: 'active',
   latest_version: '2.0',
-  current_sbom_id: 81,
+  current_sbom_id: "00000000-0000-4000-8000-000000000051",
   current_sbom_name: 'controller.cdx',
   current_sbom_version: '2.0',
   metadata_json: {},
@@ -58,8 +59,8 @@ const product = {
   latest_sbom_version: '2.0',
 };
 const sboms = [
-  { id: 80, tenant_id: 1, projectid: 3, product_id: 22, sbom_name: 'controller.cdx', sbom_version: '1.0', productver: '1.0', created_on: '2026-08-01T00:00:00Z' },
-  { id: 81, tenant_id: 1, projectid: 3, product_id: 22, sbom_name: 'controller.cdx', sbom_version: '2.0', productver: '2.0', created_on: '2026-09-01T00:00:00Z' },
+  { id: "00000000-0000-4000-8000-000000000050", tenant_id: "00000000-0000-4000-8000-000000000001", projectid: "00000000-0000-4000-8000-000000000003", product_id: "00000000-0000-4000-8000-000000000016", sbom_name: 'controller.cdx', sbom_version: '1.0', productver: '1.0', created_on: '2026-08-01T00:00:00Z' },
+  { id: "00000000-0000-4000-8000-000000000051", tenant_id: "00000000-0000-4000-8000-000000000001", projectid: "00000000-0000-4000-8000-000000000003", product_id: "00000000-0000-4000-8000-000000000016", sbom_name: 'controller.cdx', sbom_version: '2.0', productver: '2.0', created_on: '2026-09-01T00:00:00Z' },
 ];
 
 async function renderPage() {
@@ -82,15 +83,18 @@ describe('ProductDetailPage scheduler hierarchy', () => {
     vi.clearAllMocks();
     api.getProduct.mockResolvedValue(product);
     api.getProductSboms.mockResolvedValue(sboms);
+    api.getLogicalSboms.mockResolvedValue({ items: [{ id: "00000000-0000-4000-8000-00000000000b", name: 'Backend SBOM', version_count: 2, latest_version: sboms[0] }], total: 1, page: 1, page_size: 50 });
     api.updateProduct.mockResolvedValue(product);
   });
+
+  it('groups logical SBOMs and links to their version history', async () => { await renderPage(); expect(await screen.findByRole('link', { name: 'Backend SBOM' })).toHaveAttribute('href', '/sboms/logical/00000000-0000-4000-8000-00000000000b'); expect(screen.getByRole('link', { name: 'Version history' })).toHaveAttribute('href', '/sboms/logical/00000000-0000-4000-8000-00000000000b'); });
 
   it('shows the explicit current SBOM and Product schedule controls', async () => {
     await renderPage();
 
     const select = await screen.findByLabelText(/current version used by current_only schedules/i);
-    expect(select).toHaveValue('81');
-    expect(screen.getByTestId('schedule-card')).toHaveTextContent('PRODUCT:22');
+    expect(select).toHaveValue('00000000-0000-4000-8000-000000000051');
+    expect(screen.getByTestId('schedule-card')).toHaveTextContent("PRODUCT:00000000-0000-4000-8000-000000000016");
   });
 
   it('changes current SBOM through the Product API', async () => {
@@ -98,9 +102,17 @@ describe('ProductDetailPage scheduler hierarchy', () => {
     const user = userEvent.setup();
     await user.selectOptions(
       await screen.findByLabelText(/current version used by current_only schedules/i),
-      '80',
+      "00000000-0000-4000-8000-000000000050",
     );
 
-    await waitFor(() => expect(api.updateProduct).toHaveBeenCalledWith(22, { current_sbom_id: 80 }));
+    await waitFor(() => expect(api.updateProduct).toHaveBeenCalledWith("00000000-0000-4000-8000-000000000016", { current_sbom_id: "00000000-0000-4000-8000-000000000050" }));
+  });
+
+  it('changes selection mode through the authorized Product API', async () => {
+    await renderPage();
+    await userEvent.selectOptions(await screen.findByLabelText('Current SBOM selection policy'), 'AUTO');
+    await waitFor(() => expect(api.updateProduct).toHaveBeenCalledWith("00000000-0000-4000-8000-000000000016", {current_sbom_mode: 'AUTO'}));
   });
 });
+
+vi.mock('@/hooks/useAuth', async () => ({ useAuth: (await import('@/test/authorizedAuth')).authorizedAuth }));

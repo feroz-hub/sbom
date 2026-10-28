@@ -1,0 +1,230 @@
+[
+  {
+    "file": "app/public_api.py",
+    "beforeSha256": "8a1f7b6005f1cf2cc55ec3e49fc49bef616abbbee3f147fe052b8c1084e64055",
+    "afterSha256": "e438d631770cc16ad10e08379ed4aba68821bd945e7ae5e87fd84e599ef415c5",
+    "beforeCopy": "before/public_api.py"
+  },
+  {
+    "file": "tests/test_native_iam_phase5.py",
+    "beforeSha256": "f36e35c030860be8fb6f92fdb054cfeb4a0b2fdf515846471c2209028549f1c9",
+    "afterSha256": "e39ea4f6aeb0cbfd101634cdeec8e1dcdb3ff57061b2004fb7bd03df9b74a9a9",
+    "beforeCopy": "before/tests/test_native_iam_phase5.py"
+  },
+  {
+    "file": "tests/test_validation_repair_workspace.py",
+    "beforeSha256": "6698aceaff5dc07e211502a5fdf4f4d3a63a4db149b1470ed3e9dc60bf1c267a",
+    "afterSha256": "6bb476117b43015662046591b927ca3b6cd925777e4e86d3e7d5bf0c1fb8de0e",
+    "beforeCopy": "before/tests/test_validation_repair_workspace.py"
+  },
+  {
+    "file": "tests/test_component_advisor_classification.py",
+    "beforeSha256": "f2583e5bdaa225e23dde5ae990df1799c75793dd48e27614d45c8b155f7c3ee0",
+    "afterSha256": "660e01fbf98fe6a1727dc6b525b4f21ab0d2d75ec5d770b5e17a4231ab7a1c25",
+    "beforeCopy": "before/tests/test_component_advisor_classification.py"
+  },
+  {
+    "file": "tests/test_component_advisor_policy.py",
+    "beforeSha256": "9ee915718b57d4d9f37a4fa093a71fcb332e579e2850db7350c241ce8ecff656",
+    "afterSha256": "5f2e38170cc520bd54ea205d115045752df2618ae3704a14a5155b459bc76e62",
+    "beforeCopy": "before/tests/test_component_advisor_policy.py"
+  },
+  {
+    "file": "app/validation/schemas/cyclonedx/SOURCE.md",
+    "beforeSha256": "706839950e41d41d3408e25ce695eec6223a92ffd104ad1277b734582e29b0ad",
+    "afterSha256": "479a58a21a27206763caa088adb761636a53ff36a6d1029bacd90d33f5776615",
+    "beforeCopy": "before/app/validation/schemas/cyclonedx/SOURCE.md"
+  },
+  {
+    "file": "tests/test_analysis_domain_logging.py",
+    "beforeSha256": "50a8a2a2c1fff34057493476dedb55e77bd549ccc68504df0ba8a378e40a1ea5",
+    "afterSha256": "c76619dd5364afce73e9af1e317377b2b82efcd3dac89ccd81d37cae1aa534eb",
+    "beforeCopy": "before/tests/test_analysis_domain_logging.py"
+  },
+  {
+    "file": "tests/test_sbom_auto_repair.py",
+    "beforeSha256": "f3311f46712cfc02ea742530aac7b6cf215178938f2d76b5420d24a0ad077127",
+    "afterSha256": "e46e6d3288f57363876291ec080b37f3cd799218754c122333664b1c89184fa5",
+    "beforeCopy": "before/tests/test_sbom_auto_repair.py"
+  },
+  {
+    "file": "app/core/permissions.py",
+    "beforeSha256": "da9b0c61409b98ce1f9def390e8ba0f940acaca727ef3d20638b4527410ba28a",
+    "afterSha256": "0a29e8518abb51e662f0ffb22a30726c293da4630eccdd0186aa83bde35460e5",
+    "beforeCopy": "before/app/core/permissions.py"
+  },
+  {
+    "file": "tests/test_user_search.py",
+    "beforeSha256": "ffc569a14f04d1bddbd29816ffe78078babbdc6073a41c6868e11ec88b3e4d26",
+    "afterSha256": "004e191f8a7c18629525f654cad50068304b43d68b7d0145fb07acf564010237",
+    "beforeCopy": "before/tests/test_user_search.py"
+  },
+  {
+    "file": "tests/test_component_advisor_scoring.py",
+    "beforeSha256": "364ba2b62549d6569f0f3d3d4e64cb5884e97b7cf15530fe3d8f8f82ab0a46ef",
+    "afterSha256": "db71d6218ecbdb031a4333a6cd4bf72cdba8666431b05080513d2c6c507ac359",
+    "beforeCopy": "before/tests/test_component_advisor_scoring.py"
+  },
+  {
+    "file": "pyproject.toml",
+    "beforeSha256": "90c2a561e67d8fc6784b5e5f86df6593ae4de1e5cba99d5ecbc4ca9a3ecce8a1",
+    "afterSha256": "1593de70e4c075132ed316dd9368268fffedc100955799ae6cd803c454a14d3e",
+    "beforeCopy": "before/pyproject.toml"
+  },
+  {
+    "file": "tests/test_analyze_endpoints_snapshot.py",
+    "beforeSha256": "b48ea7893238e9a4a2fb3eda865e27ee585e495a0e8dce2610dceeb97007934c",
+    "afterSha256": "90103e0d19568ff4a23fcea4026034d1c2fdf0734712737dabca2e71a700261d",
+    "beforeCopy": "before/tests/test_analyze_endpoints_snapshot.py"
+  },
+  {
+    "file": "tests/test_scheduling_service.py",
+    "beforeSha256": "76207398384d13240efd43319fe5d69d448af105ca43b027fb51e6bcf7414679",
+    "afterSha256": "d6f3a3fe8e1bd484dcd92bf274ef0a06e4b378a4185cf437ef608d33a65d8c69",
+    "beforeCopy": "before/tests/test_scheduling_service.py"
+  },
+  {
+    "file": "frontend/src/hooks/useAuth.test.tsx",
+    "beforeSha256": "deaca988b0a3e018f765ccd0c17387d48f646f6df23de9ce3a606920a94fdd1c",
+    "afterSha256": "060b061682be82ecb49ad5ee461ab4992b9eff6b0f35a9f3c907d631adb1dc10",
+    "beforeCopy": "before/frontend/src/hooks/useAuth.test.tsx"
+  },
+  {
+    "file": "tests/test_sbom_spdx_cyclonedx_conversion.py",
+    "beforeSha256": "c96fbecf632861563c80390d6fe124e8fdf4b9bec9fecb20d8a7faf838c105f6",
+    "afterSha256": "e5fae7ee12303a89c88c306318959414a21592eb02badc0c6a44172ba1d9223c",
+    "beforeCopy": "before/tests/test_sbom_spdx_cyclonedx_conversion.py"
+  },
+  {
+    "file": "requirements.txt",
+    "beforeSha256": "f234107b69bb17758d6f0fb93002d6ff7aa5d3d67022f7afad3a514b655341be",
+    "afterSha256": "8d506b2d2e18b955e1ec52d077691d6534281dfce69352f59d4be05d9b4b6ec3",
+    "beforeCopy": "before/requirements.txt"
+  },
+  {
+    "file": "app/services/scheduling.py",
+    "beforeSha256": "efd25ae4c25a434abc1be65ef8c14799f0173bb28bfff9a62d1ac36232bc3216",
+    "afterSha256": "ffe1a833eb4bf4d842fe5cbf0e7e83f7ed7fd94e41156d8817da59a28a7ea3a5",
+    "beforeCopy": "before/app/services/scheduling.py"
+  },
+  {
+    "file": "app/services/component_advisor/recommendations/service.py",
+    "beforeSha256": "0e6bc1ee1d8eaa355be197ca49d344291dd0ac77b9ce030ebed0f14738f64e70",
+    "afterSha256": "578280802060f301798f6e46c899f0ae23ed1cd0258c15212467e747d5efca2a",
+    "beforeCopy": "before/app/services/component_advisor/recommendations/service.py"
+  },
+  {
+    "file": "tests/test_dev_lifecycle.py",
+    "beforeSha256": "c7449c969c1fa4353a681365e3a07697dd56b064983ec9b9f5b5ba936b0ca19e",
+    "afterSha256": "a1e8cf5bc59aad2d3c552a85ee9569def197bba77ca9ccec86dfb80c64b1edec",
+    "beforeCopy": "before/tests/test_dev_lifecycle.py"
+  },
+  {
+    "file": "tests/test_phase9_fresh_database_bootstrap.py",
+    "beforeSha256": "eaaa1c06ad71b80011bc851f1c21c2947c9321212cd4e3446f8a844c1adc1635",
+    "afterSha256": "9b626c13ba4af93828836283454744181057e0ce225988d94ac16f45969cc516",
+    "beforeCopy": "before/tests/test_phase9_fresh_database_bootstrap.py"
+  },
+  {
+    "file": "tests/test_identity_mapping_service.py",
+    "beforeSha256": "7b6ace832967c18f951b90ffc41c884abaaeb190de8fb14ce2a8823bd793a6bd",
+    "afterSha256": "e2e80501cafb2acab3930891cc6886514049e42602a0a4dc9568902140e7778f",
+    "beforeCopy": "before/tests/test_identity_mapping_service.py"
+  },
+  {
+    "file": "tests/sources/test_provider_applicability.py",
+    "beforeSha256": "71b5c0e50c17d68f57d14571ff90d48ce979e27f4b5fc14838e886a175500139",
+    "afterSha256": "27db48a99b151995f596367af5298ab0fa949ae16cfef634c7143ddea2146351",
+    "beforeCopy": "before/tests/sources/test_provider_applicability.py"
+  },
+  {
+    "file": "tests/test_alembic_metadata_commands.py",
+    "beforeSha256": "9007c13190d9f28a0a8e5bff7a9e04ef1fab183f340535dd664529d465514861",
+    "afterSha256": "d8013e8a4795372b3256d91aa22080d3fcba439841cd36486e48de1e024a7574",
+    "beforeCopy": "before/tests/test_alembic_metadata_commands.py"
+  },
+  {
+    "file": "tests/test_native_session_lifetime.py",
+    "beforeSha256": "4380d7223aa1f6486de10f98f1a2e33f2ee3e656ed169487f01174171514b9f5",
+    "afterSha256": "93a68a387f68e0c566040d0b5fa7bdf761538b3ff1076d020493200e3a639ca8",
+    "beforeCopy": "before/tests/test_native_session_lifetime.py"
+  },
+  {
+    "file": "tests/test_permission_ui_catalogue.py",
+    "beforeSha256": "04d2680871da25ed5e901402479981712e84b8055511d5397f33921ac24a1733",
+    "afterSha256": "da37993e05cdd768a1e8170abf6f17fc63f591e2a08252b29b2fba5fb316729c",
+    "beforeCopy": "before/tests/test_permission_ui_catalogue.py"
+  },
+  {
+    "file": "tests/test_component_advisor_bench.py",
+    "beforeSha256": "c31d98c7f0a923ec34ec6907d3e11bdab9cf7c73d91e67c201b7e617b0b090b3",
+    "afterSha256": "a8b1b8d776a920deb32ce8266172eb2cc0703165a69037c63e2e2617c04262d8",
+    "beforeCopy": "before/tests/test_component_advisor_bench.py"
+  },
+  {
+    "file": "tests/test_platform_advisor_policies.py",
+    "beforeSha256": "31c9acd5dde94af1c6ab4401d4f0533a93e9bdfb33c1779234d083bb3dba7feb",
+    "afterSha256": "89d66d3a25daa4ca7e242ae67c9bf18fa1747fc4e566b2fd03c0be18894989c3",
+    "beforeCopy": "before/tests/test_platform_advisor_policies.py"
+  },
+  {
+    "file": "frontend/src/hooks/useAuth.tsx",
+    "beforeSha256": "86e79d95f07dd1fd2d06c59ee4d68bf51b65d51c6dc0e9f4e220a72244440e43",
+    "afterSha256": "917d9944c6b61806cb472544a5e9138c2a5d598a41cf44230f1e6c6f6cc386e8",
+    "beforeCopy": "before/frontend/src/hooks/useAuth.tsx"
+  },
+  {
+    "file": "tests/test_platform_tenant_v2.py",
+    "beforeSha256": "e58b9305df5fc5b902b4e54a571f01c21d7a928aacbf6a9bd18fa3190114d29e",
+    "afterSha256": "ee293d66111dfdb1c9ab8f3b8b6f8f5d40beaee723d1b13b04366db7d7a5715d",
+    "beforeCopy": "before/tests/test_platform_tenant_v2.py"
+  },
+  {
+    "file": "app/metrics/component_advisor.py",
+    "beforeSha256": "2edfd90a70d82ae2ebf1e6ee97c7cd79bf4e5b7c9856e1b4db8eda120e9994f6",
+    "afterSha256": "ebf5358d79d6b63a6525debc1d4bd8de7aea91177352ad71e5ce5a69ce3365f5",
+    "beforeCopy": "before/app/metrics/component_advisor.py"
+  },
+  {
+    "file": "app/validation/stages/schema.py",
+    "beforeSha256": "b7cc146ca337015a05f1a715740350988f107bc272bd2f6b6fc64968b0e6111a",
+    "afterSha256": "27c2235868bdaa3b4cd6cdf4d1c840c61adbd81c74fe41c252ada76ac46f3c02",
+    "beforeCopy": "before/app/validation/stages/schema.py"
+  },
+  {
+    "file": "app/schemas.py",
+    "beforeSha256": "d77ff6c5b7d72126dadfa611e50331f3a9dece7f6a968c2007f836ed8fbf61c0",
+    "afterSha256": "c21f147c795f511dd4a98d2223fdba3f33fb097242f5ba1ff61de73b3160a388",
+    "beforeCopy": "before/app/schemas.py"
+  },
+  {
+    "file": "app/validation/schemas/cyclonedx/jsf-0.82.schema.json",
+    "newInRound3": true,
+    "afterSha256": "8bae002c25e723db7ee1f26afde680ae1a2b1a8f6b4b4b0fd65dc3becb090aae"
+  },
+  {
+    "file": "tests/test_repair_candidate_public_boundary.py",
+    "newInRound3": true,
+    "afterSha256": "0e5dd6650e27bbee2ab056d040d1803e1a61c3a44ffb2766834c38b96ecd0c71"
+  },
+  {
+    "file": "tests/test_round3_native_expiry.py",
+    "newInRound3": true,
+    "afterSha256": "7724f7736f90559367d43ea1a21f9758b9cf46d673b3c3f75d907bc3d63a66d4"
+  },
+  {
+    "file": "tests/validation/test_signed_schema_dependency.py",
+    "newInRound3": true,
+    "afterSha256": "6b73b87d3f1ed100b7baa1657747a58994f1b0cae8fed57fb83a04f0b23f0edf"
+  },
+  {
+    "file": "tests/public_id_fixture.py",
+    "newInRound3": true,
+    "afterSha256": "005cad63fd8eebda65c6f2394c4ff078da096f31bc1226abd68431eab94e5e48"
+  },
+  {
+    "file": "tests/test_legacy_analysis_public_identity.py",
+    "newInRound3": true,
+    "afterSha256": "ac826cea0bdec8af286302e488d3c9eb2335f95d07c0d5005aa217b28ac3908c"
+  }
+]

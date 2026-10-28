@@ -1,7 +1,8 @@
 # Scheduled report notifications — implementation and operations
 
-Implemented on `feat/sbom-version-lineage-vex-import`; migrations are
+Implemented on `feat/sbom-version-lineage-vex-import`; the feature migrations were
 `051_report_subscription` → `052_report_delivery_artifact` → `053_tenant_analysis_schedule` → `054_hierarchical_scheduler` → `055_ai_model_registry`.
+The current repository head is `079_lifecycle_provider_verification`.
 The feature is opt-in. Existing analysis, verification mail and env-only local workflows remain available with it disabled.
 
 ## Product decisions confirmed on 2026-09-07
@@ -15,7 +16,7 @@ The feature is opt-in. Existing analysis, verification mail and env-only local w
 
 ## Setup
 
-1. Back up the deployment database using your normal backup procedure, then activate the backend environment and run `alembic upgrade head`. This adds three tables and extends schedule constraints; it does not replace inventory, users or findings. Never run the test suite against a production database.
+1. Back up the deployment database using your normal backup procedure, then activate the backend environment and run `alembic upgrade head`. This applies all pending revisions through `079_lifecycle_provider_verification`; the original reporting migrations add three tables and extend schedule constraints. Never run the test suite against a production database.
 2. Create a directory outside the checkout, owned by the API/report-worker OS account and mode `0700`. Files are created `0600`. Mount the same directory at the same path in both processes/containers. Configure a durable volume; do not use ephemeral container storage.
 3. Configure the existing `EMAIL_DELIVERY_ENABLED`, `EMAIL_FROM_ADDRESS`, `EMAIL_FROM_NAME`, `SMTP_*` settings through the deployment secret/configuration mechanism. TLS certificate validation stays enabled. Do not put passwords into source control.
 4. Configure these additional **environment-controlled operational settings**:

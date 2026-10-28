@@ -16,7 +16,7 @@ from sqlalchemy import literal, select
 from sqlalchemy.orm import Session
 
 from ..analysis import get_analysis_settings_multi
-from ..auth import require_auth
+from ..core.security import enforce_request_access
 from ..db import get_db
 from ..models import SBOMType
 from ..schemas import SBOMTypeOut
@@ -71,7 +71,10 @@ def public_analysis_config() -> dict:
         )
         ai_enabled = False
         ai_settings_source = "unavailable"
+    from ..ai.availability import effective_ai_status
+
     return {
+        "ai_status": effective_ai_status(),
         # Legacy-ish keys still useful in UI
         "source_name": getattr(s, "source_name", "NVD"),
         "http_user_agent": getattr(s, "http_user_agent", "SBOM-Analyzer/enterprise-2.0"),
@@ -201,7 +204,7 @@ def _nvd_mirror_health(db: Session) -> dict:
 # Finding A: `/api/analysis/config` and `/api/types` carry route-level
 # auth so they are protected while the sibling `/` and `/health` routes
 # in this same router stay open for liveness probes and FastAPI `/docs`.
-@router.get("/api/analysis/config", dependencies=[Depends(require_auth)])
+@router.get("/api/analysis/config", dependencies=[Depends(enforce_request_access)])
 def get_analysis_config() -> dict:
     return public_analysis_config()
 
@@ -209,8 +212,19 @@ def get_analysis_config() -> dict:
 @router.get(
     "/api/types",
     response_model=list[SBOMTypeOut],
-    dependencies=[Depends(require_auth)],
+    dependencies=[Depends(enforce_request_access)],
 )
 def list_sbom_types(db: Session = Depends(get_db)):
     """List SBOM types (e.g. CycloneDX, SPDX) for upload/edit dropdowns."""
     return db.execute(select(SBOMType).order_by(SBOMType.typename.asc())).scalars().all()
+
+
+@router.get("/ready/iam")
+def iam_readiness(db: Session = Depends(get_db)):
+    from fastapi.responses import JSONResponse
+
+    from ..services.native_operations import readiness
+    if not get_settings().native_auth_enabled:
+        return {"ready": True, "enabled": False}
+    result = readiness(db)
+    return JSONResponse(result, status_code=200 if result["ready"] else 503)

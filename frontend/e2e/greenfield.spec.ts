@@ -1,0 +1,55 @@
+import { test, expect } from '@playwright/test';
+import { readFileSync } from 'node:fs';
+import { homedir } from 'node:os';
+import { validSbom } from './fixtures';
+const users = JSON.parse(readFileSync(`${homedir()}/.sbom-greenfield-uuid/users.json`, 'utf8'));
+const uuid = /^[0-9a-f]{8}-[0-9a-f]{4}-4[0-9a-f]{3}-[89ab][0-9a-f]{3}-[0-9a-f]{12}$/;
+
+test('Olympus native login, UUID project/application selection, SBOM upload and results', async ({ page }) => {
+  const errors: string[]=[];
+  page.on('pageerror',error=>errors.push(error.message));
+  await page.goto('/native-sign-in');
+  await page.getByLabel('Email address').fill(users.admin.email);
+  await page.getByLabel('Password',{exact:true}).fill(users.admin.password);
+  await page.getByRole('button',{name:'Sign in',exact:true}).click();
+  await expect(page.getByRole('heading',{name:'Dashboard',exact:true}).or(page.getByRole('heading',{name:'Select tenant',exact:true}))).toBeVisible();
+  if (await page.getByRole('heading',{name:'Select tenant',exact:true}).isVisible()) {
+    await page.getByRole('button',{name:'Olympus Tenant Admin',exact:true}).click();
+  }
+  await expect(page.getByRole('heading',{name:'Dashboard',exact:true})).toBeVisible();
+  await page.getByRole('link',{name:'SBOMs',exact:true}).click();
+  await expect(page.getByRole('heading',{name:'SBOMs',exact:true})).toBeVisible();
+  await page.getByRole('button',{name:'Upload SBOM',exact:true}).click();
+  const dialog=page.getByRole('dialog');
+  await dialog.getByLabel('SBOM Name').fill('Olympus Browser Acceptance '+Date.now());
+  await dialog.locator('input[type="file"]').setInputFiles({name:'olympus.cdx.json',mimeType:'application/json',buffer:Buffer.from(JSON.stringify(validSbom()))});
+  const project=dialog.getByRole('combobox',{name:'Project',exact:true});
+  await expect(project.locator('option').filter({hasText:'Olympus Release'})).toHaveCount(1);
+  const projectId=await project.locator('option').filter({hasText:'Olympus Release'}).getAttribute('value');
+  expect(projectId).toMatch(uuid);await project.selectOption(projectId!);
+  const product=dialog.getByRole('combobox',{name:'Application',exact:true});
+  await expect(product.locator('option').filter({hasText:'Olympus Gateway'})).toHaveCount(1);
+  const productId=await product.locator('option').filter({hasText:'Olympus Gateway'}).getAttribute('value');
+  expect(productId).toMatch(uuid);await product.selectOption(productId!);
+  const uploaded=page.waitForResponse(r=>r.url().includes('/api/sboms/upload')&&r.request().method()==='POST');
+  await dialog.getByRole('button',{name:'Upload SBOM',exact:true}).click();
+  const response=await uploaded;
+  expect(response.status()).toBe(202);
+  const body=await response.json();expect(body.sbom_id).toMatch(uuid);
+  await page.goto(`/sboms/${body.sbom_id}`);
+  await page.getByRole('button',{name:'Components List',exact:true}).click();
+  await expect(page.getByText('release-app',{exact:true}).first()).toBeVisible();
+  await page.getByRole('button',{name:'Overview & Risk',exact:true}).click();
+  const analyzed=page.waitForResponse(r=>r.url().includes(`/api/sboms/${body.sbom_id}/analyze/stream`)&&r.request().method()==='POST');
+  await page.getByRole('button',{name:'Run Analysis',exact:true}).click();
+  const result=await analyzed;
+  expect(result.status()).toBe(200);
+  const stream=await result.text();
+  const complete=stream.split('\n\n').find(block=>block.includes('event: complete'))!;
+  const outcome=JSON.parse(complete.split('\n').find(line=>line.startsWith('data: '))!.slice(6));
+  expect(outcome.errors).toBe(0);
+  expect(['OK','FINDINGS']).toContain(outcome.status);
+  await page.getByRole('button',{name:'Analysis Runs',exact:true}).click();
+  await expect(page.getByRole('table',{name:'Analysis runs for this SBOM'}).getByText(`#${outcome.runId}`,{exact:true})).toBeVisible();
+  expect(errors).toEqual([]);
+});

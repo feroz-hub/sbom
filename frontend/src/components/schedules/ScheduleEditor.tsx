@@ -1,8 +1,10 @@
 'use client';
 
+import { invalidateScheduleLists } from '@/lib/queryInvalidation';
 import { useEffect, useMemo, useState } from 'react';
 import { useMutation, useQueryClient } from '@tanstack/react-query';
 import { Dialog, DialogBody, DialogFooter } from '@/components/ui/Dialog';
+import { PermissionFields } from '@/components/ui/PermissionGate';
 import { Button } from '@/components/ui/Button';
 import { Select } from '@/components/ui/Select';
 import { Input } from '@/components/ui/Input';
@@ -36,7 +38,7 @@ interface ScheduleEditorProps {
   open: boolean;
   onClose: () => void;
   scope: 'TENANT' | 'PROJECT' | 'PRODUCT' | 'SBOM';
-  targetId: number;          // project_id or sbom_id depending on scope
+  targetId: (string | number);          // project_id or sbom_id depending on scope
   existing?: AnalysisSchedule | null;
 }
 
@@ -121,11 +123,10 @@ export function ScheduleEditor({
       scope === 'TENANT' || scope === 'PRODUCT' ? upsertScopedSchedule(scope, targetId, payload) : scope === 'PROJECT'
         ? upsertProjectSchedule(targetId, payload)
         : upsertSbomSchedule(targetId, payload),
-    onSuccess: () => {
+    onSuccess: async () => {
       // Invalidate both project + sbom schedule queries; cheaper than
       // computing the precise key for every dependent panel.
-      queryClient.invalidateQueries({ queryKey: ['schedule'] });
-      queryClient.invalidateQueries({ queryKey: ['schedules'] });
+      await invalidateScheduleLists(queryClient);
       showToast(existing ? 'Schedule updated' : 'Schedule created', 'success');
       onClose();
     },
@@ -146,7 +147,7 @@ export function ScheduleEditor({
       title={existing ? 'Edit schedule' : 'Create schedule'}
       maxWidth="lg"
     >
-      <form onSubmit={handleSubmit}>
+      <PermissionFields permission={["schedule:write", "product:manage_schedule"]}><form onSubmit={handleSubmit}>
         <DialogBody className="space-y-5">
           {/* Cadence preset chips */}
           <div>
@@ -322,7 +323,7 @@ export function ScheduleEditor({
             {existing ? 'Save changes' : 'Create schedule'}
           </Button>
         </DialogFooter>
-      </form>
+      </form></PermissionFields>
     </Dialog>
   );
 }

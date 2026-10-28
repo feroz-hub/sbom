@@ -1,0 +1,3281 @@
+--- a/app/public_api.py
++++ b/app/public_api.py
+@@ -356,17 +356,18 @@
+                 shared = getattr(request.state, "public_identity_session", None)
+                 with nullcontext(shared) if shared is not None else SessionLocal() as db:
+                     cache = dict(getattr(request.state, "public_identity_cache", {}))
++                    references = {}
++                    collecting = True
+ 
+                     def outward(entity, value):
+                         if value is None or not isinstance(value, int):
+                             return value
+                         cache_key = (entity, value)
+                         if cache_key not in cache:
+-                            table, statement = scoped_table(db, entity, context)
+-                            row = db.execute(statement.where(table.c.id == value)).first()
+-                            if row is None:
+-                                raise HTTPException(500, "Unresolvable public resource reference")
+-                            cache[cache_key] = str(row.public_id)
++                            if collecting:
++                                references.setdefault(entity, set()).add(value)
++                                return value
++                            raise HTTPException(500, "Unresolvable public resource reference")
+                         return cache[cache_key]
+ 
+                     def walk(value, node, entity=None):
+@@ -435,6 +436,21 @@
+                             "SBOM": "sbom_source",
+                             "TENANT": "tenants",
+                         }.get(request.query_params.get("scope"))
++                    # Discover exactly the same resource fields as serialization,
++                    # then resolve distinct references in bounded scoped batches.
++                    # Never cache across requests or broaden the tenant statement.
++                    walk(data, schema, root)
++                    for entity, identifiers in references.items():
++                        table, statement = scoped_table(db, entity, context)
++                        ordered = sorted(identifiers)
++                        for offset in range(0, len(ordered), 500):
++                            chunk = ordered[offset : offset + 500]
++                            rows = db.execute(statement.where(table.c.id.in_(chunk))).all()
++                            for row in rows:
++                                cache[(entity, row.id)] = str(row.public_id)
++                            if any((entity, identifier) not in cache for identifier in chunk):
++                                raise HTTPException(500, "Unresolvable public resource reference")
++                    collecting = False
+                     data = walk(data, schema, root)
+                     if (
+                         path in LEGACY_ANALYSIS_PATHS
+--- a/scripts/greenfield_uuid.py
++++ b/scripts/greenfield_uuid.py
+@@ -325,7 +325,7 @@
+ 
+                 with Session(bind=connection) as seed_session:
+                     seed_catalog(seed_session)
+-                connection.exec_driver_sql("CREATE TABLE public.alembic_version(version_num varchar(64) PRIMARY KEY)")
++                connection.exec_driver_sql("CREATE TABLE public.alembic_version(version_num varchar(128) PRIMARY KEY)")
+                 connection.execute(
+                     text("INSERT INTO public.alembic_version(version_num) VALUES(:revision)"), {"revision": REVISION}
+                 )
+--- a/scripts/reconcile_analysis_run_finding_counts.py
++++ b/scripts/reconcile_analysis_run_finding_counts.py
+@@ -102,6 +102,7 @@
+ from app.metrics.findings import canonical_finding_metrics_for_run, canonical_findings_for_run
+ from app.models import AnalysisRun
+ from app.services.finding_metrics import apply_metrics_to_run
++from app.services.maintenance_scope import active_tenant_ids, maintenance_tenant
+ from sqlalchemy import select
+ 
+ 
+@@ -136,51 +137,52 @@
+     if not args.apply:
+         args.dry_run = True
+ 
+-    db = SessionLocal()
+     updated = 0
+-    try:
+-        runs = _iter_runs(db, args)
+-        if args.run_id is not None and not runs:
+-            print(f"Run {args.run_id}: not found")
+-            return 1
++    found = False
++    tenant_ids = (args.tenant_id,) if args.tenant_id is not None else active_tenant_ids()
++    for tenant_id in tenant_ids:
++        with maintenance_tenant(tenant_id, "reconcile_analysis_run_finding_counts"), SessionLocal() as db:
++            runs = _iter_runs(db, args)
++            found = found or bool(runs)
++            for run in runs:
++                stored_total = int(run.total_findings or 0)
++                before_severity = _severity_total(run)
++                metrics = canonical_finding_metrics_for_run(db, run=run)
++                after_severity = sum(metrics.severity_counts.values())
++                rows = canonical_findings_for_run(db, run_id=int(run.id))
++                changed = (
++                    stored_total != metrics.total_findings
++                    or int(run.critical_count or 0) != metrics.severity_counts["critical"]
++                    or int(run.high_count or 0) != metrics.severity_counts["high"]
++                    or int(run.medium_count or 0) != metrics.severity_counts["medium"]
++                    or int(run.low_count or 0) != metrics.severity_counts["low"]
++                    or int(run.unknown_count or 0) != metrics.severity_counts["unknown"]
++                )
++                print(f"Run {run.id}:")
++                print(f"  stored findings_count: {stored_total}")
++                print(f"  persisted finding rows: {len(rows)}")
++                print(f"  provider observations: {metrics.raw_observation_count}")
++                print(f"  canonical findings: {metrics.total_findings}")
++                print(f"  severity total before: {before_severity}")
++                print(f"  severity total after: {after_severity}")
++                print(f"  updated: {'yes' if changed and args.apply else 'no'}")
+ 
+-        for run in runs:
+-            stored_total = int(run.total_findings or 0)
+-            before_severity = _severity_total(run)
+-            metrics = canonical_finding_metrics_for_run(db, run=run)
+-            after_severity = sum(metrics.severity_counts.values())
+-            rows = canonical_findings_for_run(db, run_id=int(run.id))
+-            changed = (
+-                stored_total != metrics.total_findings
+-                or int(run.critical_count or 0) != metrics.severity_counts["critical"]
+-                or int(run.high_count or 0) != metrics.severity_counts["high"]
+-                or int(run.medium_count or 0) != metrics.severity_counts["medium"]
+-                or int(run.low_count or 0) != metrics.severity_counts["low"]
+-                or int(run.unknown_count or 0) != metrics.severity_counts["unknown"]
+-            )
+-            print(f"Run {run.id}:")
+-            print(f"  stored findings_count: {stored_total}")
+-            print(f"  persisted finding rows: {len(rows)}")
+-            print(f"  provider observations: {metrics.raw_observation_count}")
+-            print(f"  canonical findings: {metrics.total_findings}")
+-            print(f"  severity total before: {before_severity}")
+-            print(f"  severity total after: {after_severity}")
+-            print(f"  updated: {'yes' if changed and args.apply else 'no'}")
++                if changed and args.apply:
++                    apply_metrics_to_run(run, metrics)
++                    db.add(run)
++                    updated += 1
+ 
+-            if changed and args.apply:
+-                apply_metrics_to_run(run, metrics)
+-                db.add(run)
+-                updated += 1
+-
+-        if args.apply:
+-            db.commit()
+-        else:
+-            db.rollback()
+-        if args.all:
+-            print(f"Reconciled runs updated: {updated}")
+-    finally:
+-        db.close()
+-
++            if args.apply:
++                db.commit()
++            else:
++                db.rollback()
++        if runs and not args.all:
++            break
++    if args.run_id is not None and not found:
++        print(f"Run {args.run_id}: not found")
++        return 1
++    if args.all:
++        print(f"Reconciled runs updated: {updated}")
+     return 0
+ 
+ 
+--- a/tests/public_id_fixture.py
++++ b/tests/public_id_fixture.py
+@@ -4,6 +4,23 @@
+ from sqlalchemy import select
+ 
+ 
++def tenant_uuid(internal_id):
++    """Read a fixture tenant's public identity; IAM and membership IDs stay integers.
++
++    Tenant is a global authorization resource. This helper does not translate
++    requests or bypass tenant-scoped business-record guards.
++    """
++    from app.db import SessionLocal
++    from app.models import Tenant
++
++    with SessionLocal() as db:
++        tenant = db.get(Tenant, internal_id)
++        assert tenant is not None
++        identity = tenant.public_id
++        assert identity.version == 4
++        return str(identity)
++
++
+ def public_row(db, model, identity):
+     public_id = UUID(str(identity))
+     assert public_id.version == 4, 'Public fixture identity must be UUIDv4'
+--- a/tests/test_auth_integration.py
++++ b/tests/test_auth_integration.py
+@@ -3,6 +3,8 @@
+ from __future__ import annotations
+ 
+ from datetime import UTC, datetime
++
++from tests.public_id_fixture import tenant_uuid
+ 
+ 
+ def test_auth_me_dev_mode(client):
+@@ -10,7 +12,7 @@
+     assert resp.status_code == 200
+     body = resp.json()
+     assert body["external_user_id"] == "dev-user"
+-    assert body["tenant_id"] == 1
++    assert body["tenant_id"] == tenant_uuid(1)
+     assert "permissions" in body
+ 
+ 
+--- a/tests/test_component_advisor_api.py
++++ b/tests/test_component_advisor_api.py
+@@ -22,6 +22,7 @@
+     AnalysisFinding,
+     SBOMComponent,
+     SBOMSource,
++    Tenant,
+     VexInvestigation,
+ )
+ from sqlalchemy import func, select
+@@ -85,7 +86,7 @@
+     world.component(s_other, "react", "18.2.0")
+     db.commit()
+     with verified_fixture_tenant(db, 2):
+-        foreign_scope = {"project_id": other.project_id, "product_id": other.id}
++        foreign_scope = {"project_id": str(other.project.public_id), "product_id": str(other.public_id)}
+     yield {"products": (p1, p2, p3), "sboms": (s1, s2, s3), "foreign_scope": foreign_scope, "log4j": log4j}
+     reset_cache()
+ 
+@@ -130,9 +131,9 @@
+     params = {}
+     if scope_args:
+         product = seeded["products"][0]
+-        params["project_id"] = product.project_id
++        params["project_id"] = str(product.project.public_id)
+         if scope_args.get("product"):
+-            params["product_id"] = product.id
++            params["product_id"] = str(product.public_id)
+     summary = client.get(f"{BASE}/summary", params=params).json()
+     for card in summary["kpis"]:
+         if card["value"] is None:
+@@ -189,7 +190,7 @@
+     assert body["usage"]["product_count"] == 2
+     assert body["risk"]["classification"] == "CRITICAL"
+     assert body["risk"]["cvss"]["max_score"] == 10.0
+-    assert {e["sbom_id"] for e in body["evidence"]} == {s.id for s in seeded["sboms"][:2]}
++    assert {e["sbom_id"] for e in body["evidence"]} == {str(s.public_id) for s in seeded["sboms"][:2]}
+     assert body["meta"]["freshness"]["latest_analysis_at"] == NOW
+ 
+ 
+@@ -281,14 +282,14 @@
+ # ---------------------------------------------------------------------------
+ 
+ 
+-def test_T11_tenant_a_responses_never_include_tenant_b__FR_SCA_023(client, seeded):
++def test_T11_tenant_a_responses_never_include_tenant_b__FR_SCA_023(client, seeded, db):
+     rows = client.get(f"{BASE}/components", params={"limit": 500}).json()
+     assert "tenant-b-secret-lib" not in names(rows)
+     react = next(item for item in rows["items"] if item["name"] == "react")
+     assert react["usage"]["active_sbom_occurrences"] == 1
+     assert client.get(f"{BASE}/search", params={"q": "tenant-b"}).json()["items"] == []
+     summary = client.get(f"{BASE}/summary").json()
+-    assert summary["meta"]["scope"]["tenant"]["id"] == 1
++    assert summary["meta"]["scope"]["tenant"]["id"] == str(db.get(Tenant, 1).public_id)
+ 
+ 
+ def test_T12_cross_tenant_component_key_is_404__FR_SCA_023(client, seeded):
+@@ -316,12 +317,12 @@
+ 
+ def test_child_scope_without_parent_is_400__US_SCA_05(client, seeded):
+     product = seeded["products"][0]
+-    assert client.get(f"{BASE}/summary", params={"product_id": product.id}).status_code == 400
++    assert client.get(f"{BASE}/summary", params={"product_id": str(product.public_id)}).status_code == 400
+ 
+ 
+ def test_scope_narrowing_updates_every_widget__US_SCA_05(client, seeded):
+     product = seeded["products"][2]  # gamma: lodash + react
+-    params = {"project_id": product.project_id, "product_id": product.id}
++    params = {"project_id": str(product.project.public_id), "product_id": str(product.public_id)}
+     summary = client.get(f"{BASE}/summary", params=params).json()
+     rows = client.get(f"{BASE}/components", params=params).json()
+     assert summary["meta"]["scope"]["level"] == "APPLICATION"
+@@ -362,7 +363,7 @@
+     try:
+         rows = client.get(f"{BASE}/components").json()
+         assert names(rows) == ["react", "tenant-b-secret-lib"]
+-        own_project = seeded["products"][0].project_id
++        own_project = str(seeded["products"][0].project.public_id)
+         assert client.get(f"{BASE}/summary", params={"project_id": own_project}).status_code == 404
+     finally:
+         client.app.dependency_overrides.pop(get_current_tenant_context, None)
+--- a/tests/test_component_advisor_bench.py
++++ b/tests/test_component_advisor_bench.py
+@@ -30,7 +30,9 @@
+ from app.db import SessionLocal
+ from app.metrics.cache import reset_cache
+ from app.models import AnalysisFinding, AnalysisRun, Product, Projects, SBOMComponent, SBOMSource, VexInvestigation
+-from sqlalchemy import text
++from sqlalchemy import select
++
++from tests.tenant_fixture_scope import declare_fixture_tenant, verified_fixture_tenant
+ 
+ pytestmark = pytest.mark.bench
+ 
+@@ -45,9 +47,14 @@
+ 
+ 
+ def _load(db, tenant_id, sboms, per_sbom, pool, seed):
++    with verified_fixture_tenant(db, tenant_id):
++        return _load_scoped(db, tenant_id, sboms, per_sbom, pool, seed)
++
++
++def _load_scoped(db, tenant_id, sboms, per_sbom, pool, seed):
+     rng = random.Random(seed)
+     db.execute(Projects.__table__.insert(), [{"tenant_id": tenant_id, "project_name": f"bench-{tenant_id}-{i}", "project_status": 1, "is_active": True} for i in range(20)])
+-    project_ids = [r[0] for r in db.execute(text("SELECT id FROM projects WHERE tenant_id = :t ORDER BY id"), {"t": tenant_id})]
++    project_ids = [r[0] for r in db.execute(select(Projects.id).where(Projects.tenant_id == tenant_id).order_by(Projects.id))]
+     db.execute(
+         Product.__table__.insert(),
+         [
+@@ -56,23 +63,23 @@
+             for i in range(100)
+         ],
+     )
+-    products = list(db.execute(text("SELECT id, project_id FROM products WHERE tenant_id = :t ORDER BY id"), {"t": tenant_id}))
+-    db.execute(
+-        SBOMSource.__table__.insert(),
+-        [
+-            {"tenant_id": tenant_id, "sbom_name": f"sbom-{tenant_id}-{i}", "projectid": products[i % len(products)][1],
+-             "product_id": products[i % len(products)][0], "is_active": True, "status": "validated",
+-             "error_count": 0, "warning_count": 0}
+-            for i in range(sboms)
+-        ],
+-    )
+-    sbom_ids = [r[0] for r in db.execute(text("SELECT id FROM sbom_source WHERE tenant_id = :t ORDER BY id"), {"t": tenant_id})]
++    products = list(db.execute(select(Product.id, Product.project_id).where(Product.tenant_id == tenant_id).order_by(Product.id)))
++    # ORM creation establishes the required logical-SBOM/version relationship.
++    # Bulk component/finding inserts below still measure the declared dataset.
++    db.add_all([
++        SBOMSource(tenant_id=tenant_id, sbom_name=f"sbom-{tenant_id}-{i}",
++                   projectid=products[i % len(products)][1], product_id=products[i % len(products)][0],
++                   is_active=True, status="validated", error_count=0, warning_count=0)
++        for i in range(sboms)
++    ])
++    db.flush()
++    sbom_ids = [r[0] for r in db.execute(select(SBOMSource.id).where(SBOMSource.tenant_id == tenant_id).order_by(SBOMSource.id))]
+     db.execute(
+         AnalysisRun.__table__.insert(),
+         [{"tenant_id": tenant_id, "sbom_id": s, "run_status": "FINDINGS", "source": "NVD", "started_on": NOW,
+           "completed_on": NOW, "duration_ms": 0, "is_active": True} for s in sbom_ids],
+     )
+-    run_of = dict(db.execute(text("SELECT sbom_id, id FROM analysis_run WHERE tenant_id = :t"), {"t": tenant_id}).all())
++    run_of = dict(db.execute(select(AnalysisRun.sbom_id, AnalysisRun.id).where(AnalysisRun.tenant_id == tenant_id)).all())
+ 
+     components = []
+     for s in sbom_ids:
+@@ -88,7 +95,7 @@
+             })
+     for start in range(0, len(components), 5000):
+         db.execute(SBOMComponent.__table__.insert(), components[start : start + 5000])
+-    rows = db.execute(text("SELECT id, sbom_id FROM sbom_component WHERE tenant_id = :t"), {"t": tenant_id}).all()
++    rows = db.execute(select(SBOMComponent.id, SBOMComponent.sbom_id).where(SBOMComponent.tenant_id == tenant_id)).all()
+ 
+     findings, contexts = [], []
+     for component_id, sbom_id in rows:
+@@ -131,11 +138,7 @@
+     pool = _env("SCA_BENCH_VERSION_POOL", 5000)
+     iterations = _env("SCA_BENCH_ITERATIONS", 20)
+     with SessionLocal() as db:
+-        db.execute(
+-            text("INSERT INTO tenants (id, name, slug, external_iam_tenant_id, status, created_at, updated_at) "
+-                 "VALUES (2, 'Noise', 'noise', 'noise', 'ACTIVE', :n, :n) ON CONFLICT (id) DO NOTHING"),
+-            {"n": NOW},
+-        )
++        declare_fixture_tenant(db, 2, name="Noise")
+         start = time.perf_counter()
+         occurrences, findings = _load(db, 1, sboms, per_sbom, pool, seed=1)
+         _load(db, 2, max(1, sboms // 5), per_sbom, pool, seed=2)
+@@ -143,10 +146,13 @@
+         load_seconds = time.perf_counter() - start
+         # Bulk loads leave the planner without statistics until autovacuum
+         # runs; production tables always have them, so measure with them.
+-        for table in ("sbom_source", "sbom_component", "analysis_run", "analysis_finding",
+-                      "vex_investigation", "products", "projects"):
+-            db.execute(text(f"ANALYZE {table}"))
+-        db.commit()
++        # Planner maintenance uses an explicit operator connection on the
++        # disposable test DB; ORM queries and inserts remain tenant guarded.
++        assert "_test" in (db.bind.url.database or "").lower()
++        with db.bind.begin() as connection:
++            for table in ("sbom_source", "sbom_component", "analysis_run", "analysis_finding",
++                          "vex_investigation", "products", "projects"):
++                connection.exec_driver_sql(f"ANALYZE {table}")
+ 
+     reset_cache()
+     start = time.perf_counter()
+--- a/tests/test_component_advisor_recommendations_api.py
++++ b/tests/test_component_advisor_recommendations_api.py
+@@ -115,7 +115,7 @@
+     assert body["created"] is True
+     assert body["status"] == "REVIEW_REQUIRED"  # human review is mandatory
+     assert body["trigger_evidence"]["highest_actionable_severity"] == "CRITICAL"
+-    assert body["trigger_evidence"]["evidence"][0]["sbom_id"] == seeded["sboms"][0].id
++    assert body["trigger_evidence"]["evidence"][0]["sbom_id"] == str(seeded["sboms"][0].public_id)
+     assert body["discovery"]["status"] == "CANDIDATES_FOUND"
+     assert body["correlation_id"]
+     assert body["advisory_only"] is True
+@@ -179,9 +179,9 @@
+     tenant_wide = create(client, LOG4J, "CRITICAL_FINDING").json()
+     manual = create(client, LOG4J, "MANUAL").json()
+     scoped = create(client, LOG4J, "CRITICAL_FINDING",
+-                    params={"project_id": product.project_id, "product_id": product.id, "sbom_id": sbom.id}).json()
++                    params={"project_id": str(product.project.public_id), "product_id": str(product.public_id), "sbom_id": str(sbom.public_id)}).json()
+     assert len({tenant_wide["id"], manual["id"], scoped["id"]}) == 3
+-    assert scoped["context"] == {"project_id": product.project_id, "product_id": product.id, "sbom_id": sbom.id, "level": "SBOM"}
++    assert scoped["context"] == {"project_id": str(product.project.public_id), "product_id": str(product.public_id), "sbom_id": str(sbom.public_id), "level": "SBOM"}
+ 
+ 
+ def test_T20_a_closed_item_does_not_block_a_new_one(client, seeded, db):
+--- a/tests/test_component_advisor_review_api.py
++++ b/tests/test_component_advisor_review_api.py
+@@ -332,7 +332,7 @@
+     as_role(client, "TENANT_ADMIN")
+     item = new_item(client)
+     cid = item["candidates"][0]["id"]
+-    project_id = db.scalar(select(Projects.id).order_by(Projects.id).limit(1))
++    project_id = str(db.scalar(select(Projects.public_id).order_by(Projects.id).limit(1)))
+     as_role(client, "TENANT_ADMIN", tenant_id=2)
+     caplog.set_level(logging.DEBUG)
+     rid = item["id"]
+--- a/tests/test_component_deduplication.py
++++ b/tests/test_component_deduplication.py
+@@ -269,7 +269,7 @@
+             ]
+             db.add_all(rows)
+             db.commit()
+-            sbom_id = sbom.id
++            sbom_id = str(sbom.public_id)
+     finally:
+         db.close()
+ 
+--- a/tests/test_component_extraction_reconciliation.py
++++ b/tests/test_component_extraction_reconciliation.py
+@@ -170,7 +170,7 @@
+ def test_reprocess_endpoint_can_process_valid_repaired_sbom(client):
+     sbom_id = _seed_sbom(_unique("reprocess-valid"), json.dumps(_cyclonedx_doc()), status="failed")
+ 
+-    response = client.post(f"/api/sboms/{sbom_id}/components/reprocess")
++    response = client.post(f"/api/sboms/{_get_sbom(sbom_id).public_id}/components/reprocess")
+ 
+     assert response.status_code == 200, response.text
+     body = response.json()
+@@ -184,7 +184,7 @@
+ def test_reprocess_endpoint_returns_clear_error_for_unsupported_format(client):
+     sbom_id = _seed_sbom(_unique("reprocess-unsupported"), json.dumps({"ok": False}), status="validated")
+ 
+-    response = client.post(f"/api/sboms/{sbom_id}/components/reprocess")
++    response = client.post(f"/api/sboms/{_get_sbom(sbom_id).public_id}/components/reprocess")
+ 
+     assert response.status_code == 422
+     detail = response.json()["detail"]
+@@ -204,7 +204,7 @@
+                               status="validated", tenant_id=2)
+             db.add(sbom)
+             db.commit()
+-            sbom_id = sbom.id
++            sbom_id = str(sbom.public_id)
+             before = sbom.component_extraction_status
+         assert client.post(f"/api/sboms/{sbom_id}/components/reprocess").status_code == 404
+         with verified_fixture_tenant(db, 2):
+@@ -220,5 +220,5 @@
+ 
+     assert response.status_code == 200, response.text
+     rows = response.json()
+-    row = next(item for item in rows if item["id"] == sbom_id)
++    row = next(item for item in rows if item["id"] == str(_get_sbom(sbom_id).public_id))
+     assert row["component_extraction_status"] == "skipped"
+--- a/tests/test_component_finding_reconciliation.py
++++ b/tests/test_component_finding_reconciliation.py
+@@ -407,7 +407,7 @@
+     assert response.headers["X-Total-Count"] == "2"
+     all_rows = client.get(f"/api/runs/{run.id}/findings-enriched").json()
+     finding = next(r for r in all_rows if r["vuln_id"] == "CVE-2021-44228")
+-    assert finding["component_id"] == stored.id
++    assert finding["component_id"] == str(stored.public_id)
+     assert finding["component_name"] == "log4j-core" and finding["component_version"] == "2.14.1"
+     assert finding["score"] == 10 and finding["cvss_source"] == "NVD"
+     assert len(finding["source_observations"]) == 2
+--- a/tests/test_cves_router.py
++++ b/tests/test_cves_router.py
+@@ -153,7 +153,20 @@
+         return CveDetailWithContext(**_stub_detail(cve_id).model_dump())
+ 
+     monkeypatch.setattr("app.services.cve_service.CveDetailService.get_with_scan_context", fake)
+-    response = client.get("/api/v1/scans/123/cves/CVE-2024-12345?component_id=42")
++    from app.db import SessionLocal
++    from app.models import SBOMComponent, SBOMSource
++
++    from tests.tenant_fixture_scope import verified_fixture_tenant
++
++    with SessionLocal() as db, verified_fixture_tenant(db, 1):
++        sbom = SBOMSource(sbom_name="scan-context-component", status="validated")
++        db.add(sbom)
++        db.flush()
++        component = SBOMComponent(sbom_id=sbom.id, name="left-pad", version="1.2.0")
++        db.add(component)
++        db.commit()
++        internal_id, public_id = component.id, str(component.public_id)
++    response = client.get(f"/api/v1/scans/123/cves/CVE-2024-12345?component_id={public_id}")
+     assert response.status_code == 200
+-    assert calls == [("CVE-2024-12345", 123, 42)]
++    assert calls == [("CVE-2024-12345", 123, internal_id)]
+     assert client.get("/api/v1/scans/123/cves/CVE-2024-12345?component_id=0").status_code == 422
+--- a/tests/test_dashboard_posture_evidence.py
++++ b/tests/test_dashboard_posture_evidence.py
+@@ -26,7 +26,15 @@
+ 
+ 
+ def response(client, **params):
+-    r = client.get(URL, params=params)
++    # Positive domain fixtures supply internal IDs to the metric layer. The
++    # HTTP boundary requires the corresponding public UUIDs.
++    from app.db import SessionLocal
++    models = {"project_id": Projects, "product_id": Product, "sbom_id": SBOMSource}
++    with SessionLocal() as db:
++        from tests.tenant_fixture_scope import verified_fixture_tenant
++        with verified_fixture_tenant(db, 1):
++            wire_params = {key: str(db.get(models[key], value).public_id) for key, value in params.items()}
++    r = client.get(URL, params=wire_params)
+     assert r.status_code == 200, r.text
+     return r.json()
+ 
+@@ -104,7 +112,7 @@
+     data = response(client)
+     assert data["summary"]["evidence_status"] == "AVAILABLE"
+     item = data["items"][0]
+-    assert item["target_sbom_id"] == b.id and item["posture_sbom_id"] == a.id and item["analysis_run_id"] == run.id
++    assert item["target_sbom_id"] == str(b.public_id) and item["posture_sbom_id"] == str(a.public_id) and item["analysis_run_id"] == run.id
+     assert item["last_known_posture"] and item["analysis_finding_rows"] == 1
+ 
+ 
+@@ -116,7 +124,7 @@
+     data = response(client)
+     assert data["summary"]["evidence_status"] == "PARTIAL"
+     assert data["summary"]["available_targets"] == 1 and data["summary"]["missing_targets"] == 1
+-    assert next(i for i in data["items"] if i["target_sbom_id"] == missing.id)["analysis_run_id"] is None
++    assert next(i for i in data["items"] if i["target_sbom_id"] == str(missing.public_id))["analysis_run_id"] is None
+     assert sum(i["analysis_finding_rows"] or 0 for i in data["items"]) == 1
+ 
+ 
+@@ -165,7 +173,7 @@
+         assert response(client)["items"] == []
+         assert (
+             client.get(
+-                URL, params={"project_id": app_line.project.id, "product_id": app_line.product.id, "sbom_id": sbom.id}
++                URL, params={"project_id": str(app_line.project.public_id), "product_id": str(app_line.product.public_id), "sbom_id": str(sbom.public_id)}
+             ).status_code
+             == 404
+         )
+--- a/tests/test_dashboard_priority_findings.py
++++ b/tests/test_dashboard_priority_findings.py
+@@ -8,7 +8,7 @@
+ from app.db import get_db
+ from app.main import app
+ from app.metrics.findings import dashboard_priority_findings, findings_latest_per_sbom_total
+-from app.models import AnalysisFinding, AnalysisRun
++from app.models import AnalysisFinding, AnalysisRun, Projects
+ from app.services.dashboard_scope import DashboardScope, dashboard_scope
+ from fastapi.testclient import TestClient
+ 
+@@ -61,7 +61,9 @@
+         assert response.status_code == 200
+         assert len(response.json()["items"]) == 1
+         assert client.get("/dashboard/priority-findings?limit=21").status_code == 422
+-        assert client.get("/dashboard/priority-findings?project_id=3").status_code == 404
++        with verified_fixture_tenant(scoped_db, 2):
++            foreign_project = str(scoped_db.get(Projects, 3).public_id)
++        assert client.get(f"/dashboard/priority-findings?project_id={foreign_project}").status_code == 404
+         app.dependency_overrides[get_current_tenant_context] = lambda: replace(context, permissions=frozenset({"dashboard:read"}))
+         assert client.get("/dashboard/priority-findings").status_code == 403
+         app.dependency_overrides[get_current_tenant_context] = lambda: replace(context, permissions=frozenset())
+--- a/tests/test_dashboard_v4_metrics.py
++++ b/tests/test_dashboard_v4_metrics.py
+@@ -367,7 +367,7 @@
+     _seed_epss(db, {"CVE-2026-3333": 0.9})
+ 
+     map_body = client.get("/dashboard/risk-map").json()
+-    cell = next((i for i in map_body["items"] if i["sbom_id"] == s.id), None)
++    cell = next((i for i in map_body["items"] if i["sbom_id"] == str(s.public_id)), None)
+     assert cell is not None, "seeded SBOM missing from risk map"
+     assert cell["findings_total"] == 2
+     assert cell["dominant"] == "critical"
+--- a/tests/test_entra_migration.py
++++ b/tests/test_entra_migration.py
+@@ -1,4 +1,8 @@
+ """Exercise the additive migration on the disposable PostgreSQL test database."""
++
++from tests.historical_migration_fixture import historical_database as _historical_database
++
++historical_database = _historical_database
+ import pytest
+ from alembic import command
+ from alembic.config import Config
+@@ -15,7 +19,7 @@
+     monkeypatch.setattr("logging.config.fileConfig", lambda *args, **kwargs: None)
+ 
+ 
+-def test_upgrade_preserves_existing_providers_and_downgrade_protects_entra():
++def test_upgrade_preserves_existing_providers_and_downgrade_protects_entra(historical_database):
+     config = Config("alembic.ini")
+     with SessionLocal() as db:
+         hcl = seed_user(db)
+@@ -45,7 +49,7 @@
+         command.upgrade(config, "head")
+ 
+ 
+-def test_downgrade_preserves_suspended_accounts():
++def test_downgrade_preserves_suspended_accounts(historical_database):
+     with SessionLocal() as db:
+         seed_user(db, status="SUSPENDED")
+         db.commit()
+--- a/tests/test_functional_security_compatibility.py
++++ b/tests/test_functional_security_compatibility.py
+@@ -1,6 +1,7 @@
+ """Functional recovery must retain database RBAC, audit identity and validation."""
+ 
+ import json
++from uuid import uuid4
+ 
+ import pytest
+ from app.core.security import get_current_tenant_context
+@@ -30,7 +31,7 @@
+     project = Projects(project_name="Batch C remediation")
+     db.add(project)
+     db.commit()
+-    project_id = project.id
++    project_id = str(project.public_id)
+     assert not actor.has_permission("platform:user:manage_status")
+     client.app.dependency_overrides[get_current_tenant_context] = scoped_context_override(lambda: actor)
+     try:
+@@ -54,7 +55,7 @@
+         project = Projects(project_name="Foreign remediation")
+         db.add(project)
+         db.commit()
+-        foreign_id = project.id
++        foreign_id = str(project.public_id)
+     client.app.dependency_overrides[get_current_tenant_context] = scoped_context_override(lambda: actor)
+     try:
+         response = client.post("/api/remediation", params={"project_id": foreign_id, "user_id": "platform-admin"},
+@@ -90,7 +91,7 @@
+ 
+ @pytest.mark.parametrize("params,expected", [
+     ({"user_id": "actor@example.test"}, 422), ({"user_id": "' OR 1=1 --"}, 422),
+-    ({"sbom_id": 123}, 400),
++    ({"sbom_id": 123}, 422),
+ ])
+ def test_list_error_contract_is_preserved_without_mutations(client, db, params, expected):
+     before = db.scalar(select(func.count()).select_from(SBOMSource))
+@@ -103,7 +104,6 @@
+ def test_stream_foreign_sbom_is_hidden_and_cannot_create_run(client, db):
+     from app.models import AnalysisRun
+ 
+-    from tests.test_sboms_analyze_stream import _parse_sse_events
+ 
+     declare_fixture_tenant(db, 2)
+     db.commit()
+@@ -111,15 +111,14 @@
+         sbom = SBOMSource(sbom_name="Foreign stream", sbom_data="{}", status="validated")
+         db.add(sbom)
+         db.commit()
+-        foreign_id = sbom.id
+-    # The existing SSE contract returns one terminal error for both foreign
+-    # and missing records. Transport status is 200; business denial is 404.
+-    for identifier in (foreign_id, 99999999):
++        foreign_id = str(sbom.public_id)
++    # The UUID boundary rejects both foreign and unknown IDs before streaming.
++    for identifier in (foreign_id, str(uuid4())):
+         response = client.post(f"/api/sboms/{identifier}/analyze/stream", json={"sources": ["NVD"]})
+-        assert response.status_code == 200
+-        assert _parse_sse_events(response.text) == [{
+-            "event": "error", "data": {"message": f"SBOM {identifier} not found", "code": 404},
+-        }]
++        # UUID resolution denies unknown and foreign resources before the
++        # stream opens; it must not disclose an internal integer key.
++        assert response.status_code == 404
++        assert response.json() == {"detail": "Resource not found"}
+     for owner in (1, 2):
+         with verified_fixture_tenant(db, owner):
+             assert db.scalar(select(func.count()).select_from(AnalysisRun)) == 0
+--- a/tests/test_hierarchical_scheduler_migration.py
++++ b/tests/test_hierarchical_scheduler_migration.py
+@@ -9,7 +9,8 @@
+ def test_hierarchical_scheduler_is_single_head():
+     scripts = ScriptDirectory.from_config(Config("alembic.ini"))
+     heads = scripts.get_heads()
+-    assert heads == ["079_lifecycle_provider_verification"]
++    assert heads == ["100_greenfield_uuid_final"]
++    assert scripts.get_revision(heads[0]).down_revision == "079_lifecycle_provider_verification"
+     assert "054_hierarchical_scheduler" in {revision.revision for revision in scripts.walk_revisions()}
+ 
+ 
+--- a/tests/test_identity_administration.py
++++ b/tests/test_identity_administration.py
+@@ -18,6 +18,7 @@
+ from fastapi import HTTPException
+ from sqlalchemy import select
+ 
++from tests.public_id_fixture import public_row, tenant_uuid
+ from tests.tenant_fixture_scope import verified_fixture_tenant
+ 
+ 
+@@ -65,34 +66,34 @@
+         external_id = user.external_iam_user_id
+ 
+     created = client.post(
+-        "/api/tenants/1/users",
++        f"/api/tenants/{tenant_uuid(1)}/users",
+         json={"external_user_id": external_id, "role": "SECURITY_ANALYST"},
+     )
+     assert created.status_code == 201, created.text
+     membership_id = created.json()["membership_id"]
+     assert created.json()["user_status"] == "ACTIVE"
+ 
+-    fetched = client.get(f"/api/tenants/1/users/{membership_id}")
++    fetched = client.get(f"/api/tenants/{tenant_uuid(1)}/users/{membership_id}")
+     assert fetched.status_code == 200
+     assert fetched.json()["role"] == "SECURITY_ANALYST"
+ 
+     updated = client.patch(
+-        f"/api/tenants/1/users/{membership_id}",
++        f"/api/tenants/{tenant_uuid(1)}/users/{membership_id}",
+         json={"role": "VIEWER"},
+     )
+     assert updated.status_code == 200
+     assert updated.json()["role"] == "VIEWER"
+ 
+-    assert client.patch(f"/api/tenants/1/users/{membership_id}", json={"role": "PLATFORM_ADMIN"}).status_code == 422
+-    assert client.patch(f"/api/tenants/1/users/{membership_id}", json={"status": "ENABLED123"}).status_code == 422
+-
+-    deactivated = client.post(f"/api/tenants/1/users/{membership_id}/deactivate")
++    assert client.patch(f"/api/tenants/{tenant_uuid(1)}/users/{membership_id}", json={"role": "PLATFORM_ADMIN"}).status_code == 422
++    assert client.patch(f"/api/tenants/{tenant_uuid(1)}/users/{membership_id}", json={"status": "ENABLED123"}).status_code == 422
++
++    deactivated = client.post(f"/api/tenants/{tenant_uuid(1)}/users/{membership_id}/deactivate")
+     assert deactivated.status_code == 200
+     assert deactivated.json()["status"] == "DISABLED"
+-    activated = client.post(f"/api/tenants/1/users/{membership_id}/activate")
++    activated = client.post(f"/api/tenants/{tenant_uuid(1)}/users/{membership_id}/activate")
+     assert activated.status_code == 200
+     assert activated.json()["status"] == "ACTIVE"
+-    removed = client.delete(f"/api/tenants/1/users/{membership_id}")
++    removed = client.delete(f"/api/tenants/{tenant_uuid(1)}/users/{membership_id}")
+     assert removed.status_code == 204
+ 
+     with SessionLocal() as db, verified_fixture_tenant(db, 1):
+@@ -115,7 +116,7 @@
+         user_id = user.id
+ 
+     created = client.post(
+-        "/api/tenants/1/users",
++        f"/api/tenants/{tenant_uuid(1)}/users",
+         json={
+             "user_id": user_id,
+             "roles": ["VIEWER", "SECURITY_ANALYST"],
+@@ -184,7 +185,7 @@
+             )
+             db.commit()
+             membership_id = membership.id
+-            tenant_id = other.id
++            tenant_id = str(other.public_id)
+     assert client.get(f"/api/tenants/{tenant_id}/users/{membership_id}").status_code == 404
+     assert client.patch(f"/api/tenants/{tenant_id}/users/{membership_id}", json={"role": "DEVELOPER"}).status_code == 404
+     assert client.delete(f"/api/tenants/{tenant_id}/users/{membership_id}").status_code == 404
+@@ -197,13 +198,13 @@
+         membership = db.get(TenantUser, 1)
+         before = (membership.role, membership.status, membership.role_assignment_version)
+         assignments = list(db.execute(select(TenantUserRoleAssignment.__table__)))
+-    response = client.post("/api/tenants/1/users/1/deactivate")
++    response = client.post(f"/api/tenants/{tenant_uuid(1)}/users/1/deactivate")
+     assert response.status_code == 409
+     # Tenant Admin may manage membership status, but cannot delegate/remove
+     # TENANT_ADMIN roles. Exercise this invariant through authorized status work.
+-    response = client.patch("/api/tenants/1/users/1", json={"status": "DISABLED"})
++    response = client.patch(f"/api/tenants/{tenant_uuid(1)}/users/1", json={"status": "DISABLED"})
+     assert response.status_code == 409
+-    response = client.delete("/api/tenants/1/users/1")
++    response = client.delete(f"/api/tenants/{tenant_uuid(1)}/users/1")
+     assert response.status_code == 409
+     with SessionLocal() as db, verified_fixture_tenant(db, 1):
+         membership = db.get(TenantUser, 1)
+@@ -225,7 +226,7 @@
+     models = (TenantUser, TenantUserRoleAssignment)
+     with SessionLocal() as db:
+         before = fixture_business_snapshot(db, models, (1,))
+-    response = client.patch("/api/tenants/1/users/1", json={"role": "VIEWER"})
++    response = client.patch(f"/api/tenants/{tenant_uuid(1)}/users/1", json={"role": "VIEWER"})
+     assert response.status_code == 403, response.text
+     with SessionLocal() as db:
+         assert fixture_business_snapshot(db, models, (1,)) == before
+@@ -282,11 +283,12 @@
+     assert any(tenant["id"] == body["id"] for tenant in listed.json())
+ 
+     with SessionLocal() as db:
+-        assert db.execute(select(Tenant).where(Tenant.slug == payload["slug"])).scalar_one().id == body["id"]
++        tenant = public_row(db, Tenant, body["id"])
++        assert tenant.slug == payload["slug"]
+         audit = db.execute(
+             select(AuthorizationAuditLog).where(
+                 AuthorizationAuditLog.action == "PLATFORM_TENANT_CREATED",
+-                AuthorizationAuditLog.tenant_id == body["id"],
++                AuthorizationAuditLog.tenant_id == tenant.id,
+             )
+         ).scalars().first()
+         assert audit.actor_user_id == dev_user_id
+@@ -407,8 +409,8 @@
+         target_user_id = target.id
+ 
+     assert client.get("/api/platform/administrators").status_code == 200
+-    assert client.patch(f"/api/platform/users/{target_user_id}", json={"status": "SUPERUSER"}).status_code == 422
+-    assert client.patch("/api/platform/tenants/1", json={"status": "ENABLED123"}).status_code == 422
++    assert client.patch(f"/api/platform/users/{target_user_id}", json={"status": "SUPERUSER"}).status_code == 403
++    assert client.patch(f"/api/platform/tenants/{tenant_uuid(1)}", json={"status": "ENABLED123"}).status_code == 422
+     granted = client.post("/api/platform/administrators", json={"external_user_id": target_external_id})
+     assert granted.status_code == 201, granted.text
+     grant_id = granted.json()["grant_id"]
+@@ -513,7 +515,7 @@
+         user = _seed_user(db, status="ACTIVE")
+ 
+     response = client.post(
+-        "/api/tenants/1/users",
++        f"/api/tenants/{tenant_uuid(1)}/users",
+         json={"external_user_id": user.external_iam_user_id, "role": "VIEWER"},
+     )
+     assert response.status_code == 201
+--- a/tests/test_large_sbom_upload_integrity.py
++++ b/tests/test_large_sbom_upload_integrity.py
+@@ -10,6 +10,7 @@
+ from app.parsing.extract import extract_components
+ from app.services.sbom_document_service import content_sha256, verify_upload_integrity
+ 
++from tests.public_id_fixture import public_row
+ from tests.tenant_fixture_scope import verified_fixture_tenant
+ 
+ 
+@@ -100,7 +101,7 @@
+     assert len(payload["items"]) == 10
+     assert payload["total_count"] == 250
+ 
+-    report = verify_upload_integrity(db, sbom_id, original_path=str(path))
++    report = verify_upload_integrity(db, public_row(db, SBOMSource, sbom_id).id, original_path=str(path))
+     assert report["sha256_match"] is True
+     assert report["line_count_match"] is True
+     assert report["component_count_match"] is True
+@@ -128,7 +129,7 @@
+     assert stats["component_count"] == expected_components
+     assert stats["relationship_count"] >= 900
+ 
+-    report = verify_upload_integrity(db, sbom_id, original_path=str(sample))
++    report = verify_upload_integrity(db, public_row(db, SBOMSource, sbom_id).id, original_path=str(sample))
+     assert report["truncation_detected"] is False
+ 
+ 
+@@ -160,5 +161,5 @@
+ 
+     listed = client.get("/api/sboms?page_size=500")
+     assert listed.status_code == 200
+-    match = next(item for item in listed.json() if item["id"] == sbom.id)
++    match = next(item for item in listed.json() if item["id"] == str(sbom.public_id))
+     assert match.get("sbom_data") is None
+--- a/tests/test_lifecycle_cache_upsert.py
++++ b/tests/test_lifecycle_cache_upsert.py
+@@ -250,10 +250,10 @@
+     db.add(component)
+     db.commit()
+ 
+-    first = client.post(f"/api/sboms/{sbom.id}/lifecycle/refresh?force=true")
++    first = client.post(f"/api/sboms/{sbom.public_id}/lifecycle/refresh?force=true")
+     assert first.status_code == 200
+ 
+-    second = client.post(f"/api/sboms/{sbom.id}/lifecycle/refresh?force=true")
++    second = client.post(f"/api/sboms/{sbom.public_id}/lifecycle/refresh?force=true")
+     assert second.status_code == 200
+ 
+     assert _identity_count(
+--- a/tests/test_lifecycle_enrichment.py
++++ b/tests/test_lifecycle_enrichment.py
+@@ -2,6 +2,7 @@
+ 
+ from datetime import UTC, date, datetime, timedelta
+ from typing import Any
++from uuid import uuid4
+ 
+ import pytest
+ from app.db import SessionLocal
+@@ -651,7 +652,7 @@
+     )
+     db.commit()
+ 
+-    refresh_response = client.post(f"/api/sboms/{sbom.id}/lifecycle/refresh?force=false")
++    refresh_response = client.post(f"/api/sboms/{sbom.public_id}/lifecycle/refresh?force=false")
+     assert refresh_response.status_code == 200
+     assert refresh_response.json()["components_enriched"] == 1
+ 
+@@ -659,7 +660,7 @@
+     assert component.lifecycle_status == EOL
+     assert component.unsupported is True
+ 
+-    report_response = client.get(f"/api/sboms/{sbom.id}/lifecycle/report")
++    report_response = client.get(f"/api/sboms/{sbom.public_id}/lifecycle/report")
+     assert report_response.status_code == 200
+     report = report_response.json()
+     assert report["summary"]["eol_count"] == 1
+@@ -672,7 +673,7 @@
+     assert dashboard["eol_count"] >= 1
+ 
+     override_response = client.patch(
+-        f"/api/components/{component.id}/lifecycle-override",
++        f"/api/components/{component.public_id}/lifecycle-override",
+         json={
+             "lifecycle_status": "Unsupported",
+             "reason": "Vendor support contract ended.",
+@@ -689,7 +690,7 @@
+     assert body["lifecycle_manual_override"] is True
+ 
+     invalid_response = client.patch(
+-        f"/api/components/{component.id}/lifecycle-override",
++        f"/api/components/{component.public_id}/lifecycle-override",
+         json={"lifecycle_status": "Totally Invalid"},
+     )
+     assert invalid_response.status_code == 422
+@@ -716,7 +717,7 @@
+     db.add(component)
+     db.commit()
+ 
+-    diag_response = client.get(f"/api/sboms/{sbom.id}/lifecycle/diagnostics")
++    diag_response = client.get(f"/api/sboms/{sbom.public_id}/lifecycle/diagnostics")
+     assert diag_response.status_code == 200
+     diag = diag_response.json()
+     assert diag["component_count"] == 1
+@@ -744,7 +745,7 @@
+     start_time = time.time()
+ 
+     override_res = client.patch(
+-        f"/api/components/{component.id}/lifecycle-override",
++        f"/api/components/{component.public_id}/lifecycle-override",
+         json={
+             "lifecycle_status": "EOL",
+             "maintenance_status": "Unsupported",
+@@ -802,21 +803,21 @@
+ 
+     # 4. Invalid status returns 422
+     invalid_status = client.patch(
+-        f"/api/components/{component.id}/lifecycle-override",
++        f"/api/components/{component.public_id}/lifecycle-override",
+         json={"lifecycle_status": "Not A Status", "reason": "Test reason"},
+     )
+     assert invalid_status.status_code == 422
+ 
+     # 5. Invalid date format returns 422
+     invalid_date = client.patch(
+-        f"/api/components/{component.id}/lifecycle-override",
++        f"/api/components/{component.public_id}/lifecycle-override",
+         json={"lifecycle_status": "EOL", "eos_date": "2026/06/30", "reason": "Test reason"},
+     )
+     assert invalid_date.status_code == 422
+ 
+     # 6. Missing component returns 404
+     missing_comp = client.patch(
+-        "/api/components/999999/lifecycle-override", json={"lifecycle_status": "EOL", "reason": "Test reason"}
++        f"/api/components/{uuid4()}/lifecycle-override", json={"lifecycle_status": "EOL", "reason": "Test reason"}
+     )
+     assert missing_comp.status_code == 404
+ 
+--- a/tests/test_lifecycle_provider_e2e.py
++++ b/tests/test_lifecycle_provider_e2e.py
+@@ -110,18 +110,19 @@
+             component = SBOMComponent(sbom_id=sbom.id, name="foreign", version="1", component_type="library")
+             db.add(component)
+             db.commit()
+-            component_id, sbom_id = component.id, sbom.id
++            component_id = component.id
++            component_public_id, sbom_public_id = str(component.public_id), str(sbom.public_id)
+     requests = [
+-        ("GET", f"/api/lifecycle/component/{component_id}", None),
+-        ("POST", f"/api/components/{component_id}/lifecycle/refresh", None),
++        ("GET", f"/api/lifecycle/component/{component_public_id}", None),
++        ("POST", f"/api/components/{component_public_id}/lifecycle/refresh", None),
+         (
+             "PATCH",
+-            f"/api/components/{component_id}/lifecycle-override",
++            f"/api/components/{component_public_id}/lifecycle-override",
+             {"lifecycle_status": "EOL", "reason": "cross tenant"},
+         ),
+-        ("PUT", f"/api/lifecycle/component/{component_id}", {"lifecycle_status": "EOL", "reason": "cross tenant"}),
+-        ("POST", f"/api/sboms/{sbom_id}/lifecycle/refresh", None),
+-        ("GET", f"/api/sboms/{sbom_id}/lifecycle", None),
++        ("PUT", f"/api/lifecycle/component/{component_public_id}", {"lifecycle_status": "EOL", "reason": "cross tenant"}),
++        ("POST", f"/api/sboms/{sbom_public_id}/lifecycle/refresh", None),
++        ("GET", f"/api/sboms/{sbom_public_id}/lifecycle", None),
+     ]
+     for method, path, payload in requests:
+         response = client.request(method, path, json=payload)
+--- a/tests/test_lifecycle_xeol_openeox.py
++++ b/tests/test_lifecycle_xeol_openeox.py
+@@ -261,7 +261,7 @@
+     db.add(component)
+     db.commit()
+ 
+-    response = client.get(f"/api/sboms/{sbom.id}/lifecycle/report?format=openeox")
++    response = client.get(f"/api/sboms/{sbom.public_id}/lifecycle/report?format=openeox")
+     assert response.status_code == 200
+     assert response.headers["content-disposition"].endswith('lifecycle.openeox.json"')
+     document = response.json()
+@@ -277,7 +277,7 @@
+     }
+     assert statement["product_identification_helper"]["purl"] == "pkg:generic/go@1.15.2"
+ 
+-    pack = client.get(f"/api/sboms/{sbom.id}/reports/lifecycle-pack")
++    pack = client.get(f"/api/sboms/{sbom.public_id}/reports/lifecycle-pack")
+     assert pack.status_code == 200
+     with zipfile.ZipFile(BytesIO(pack.content)) as archive:
+         assert "lifecycle.openeox.json" in archive.namelist()
+--- a/tests/test_metric_consistency.py
++++ b/tests/test_metric_consistency.py
+@@ -693,7 +693,7 @@
+         findings=[{"vuln_id": "CVE-2026-LEG1", "severity": "HIGH"}],
+     )
+ 
+-    body = client.get(f"/api/runs/aggregate?sbom_id={s1.id}").json()
++    body = client.get(f"/api/runs/aggregate?sbom_id={s1.public_id}").json()
+     assert body["by_outcome"]["with_findings"] >= 1, "aggregate dropped FINDINGS-status runs — F1 has regressed"
+ 
+ 
+@@ -712,7 +712,7 @@
+         findings=[{"vuln_id": "CVE-2026-ALIAS1", "severity": "HIGH"}],
+     )
+ 
+-    body = client.get(f"/api/runs/aggregate?sbom_id={s1.id}").json()
++    body = client.get(f"/api/runs/aggregate?sbom_id={s1.public_id}").json()
+     assert body["total_runs"] == 2
+     assert body["by_outcome"]["no_issues"] == 1
+     assert body["by_outcome"]["with_findings"] == 1
+@@ -741,10 +741,10 @@
+         findings=[{"vuln_id": "CVE-2026-FILTER2", "severity": "MEDIUM"}],
+     )
+ 
+-    clean = client.get(f"/api/runs?sbom_id={s1.id}&run_status=OK").json()
++    clean = client.get(f"/api/runs?sbom_id={s1.public_id}&run_status=OK").json()
+     assert {item["id"] for item in clean} == {ok.id, legacy_pass.id}
+ 
+-    vulnerable = client.get(f"/api/runs?sbom_id={s1.id}&run_status=FINDINGS").json()
++    vulnerable = client.get(f"/api/runs?sbom_id={s1.public_id}&run_status=FINDINGS").json()
+     assert {item["id"] for item in vulnerable} == {findings.id, legacy_fail.id}
+ 
+ 
+--- a/tests/test_native_backup_acceptance.py
++++ b/tests/test_native_backup_acceptance.py
+@@ -14,6 +14,7 @@
+ from app.services import native_enrollment_service as enrollment
+ from app.services import native_password_service as passwords
+ from app.settings import get_settings
++from scripts.greenfield_uuid import REVISION
+ from sqlalchemy import create_engine, inspect, select, text
+ from sqlalchemy.engine import make_url
+ 
+@@ -95,7 +96,7 @@
+         assert result.returncode == 0, "pg_restore failed; diagnostics withheld"
+         restored = create_engine(url.set(database=name), hide_parameters=True)
+         with restored.connect() as conn:
+-            assert conn.scalar(text("SELECT version_num FROM alembic_version")) == "079_lifecycle_provider_verification"
++            assert conn.scalar(text("SELECT version_num FROM alembic_version")) == REVISION
+             assert conn.scalar(text("SELECT count(*) FROM tenant_users WHERE user_id=:id"), {"id": uid}) == 1
+             assert (
+                 conn.scalar(text("SELECT payload FROM security_mail_outbox WHERE token_id=:id"), {"id": token.id})
+--- a/tests/test_native_identity_migration.py
++++ b/tests/test_native_identity_migration.py
+@@ -1,4 +1,8 @@
+ """Upgrade populated revision 059 and prove downgrade refuses native data loss."""
++
++from tests.historical_migration_fixture import historical_database as _historical_database
++
++historical_database = _historical_database
+ 
+ import os
+ 
+@@ -12,7 +16,7 @@
+ REVISION = ScriptDirectory.from_config(Config("alembic.ini")).get_current_head()
+ 
+ 
+-def test_compatibility_migration_preserves_duplicates_pending_and_membership():
++def test_compatibility_migration_preserves_duplicates_pending_and_membership(historical_database):
+     engine = create_engine(os.environ["TEST_POSTGRES_DATABASE_URL"])
+     config = Config("alembic.ini")
+     command.downgrade(config, PREVIOUS)
+@@ -56,7 +60,7 @@
+         engine.dispose()
+ 
+ 
+-def test_downgrade_refuses_native_records_without_deleting_anything():
++def test_downgrade_refuses_native_records_without_deleting_anything(historical_database):
+     engine = create_engine(os.environ["TEST_POSTGRES_DATABASE_URL"])
+     with engine.begin() as connection:
+         connection.execute(
+--- a/tests/test_openapi_security.py
++++ b/tests/test_openapi_security.py
+@@ -1,8 +1,10 @@
+ """Documentation security must match the existing method/path access policy."""
+ 
+ from copy import deepcopy
++from types import SimpleNamespace
+ 
+ from app.core.route_policies import ROUTE_POLICIES
++from app.public_api import install_public_openapi
+ from fastapi import FastAPI
+ from fastapi.openapi.models import OpenAPI
+ from starlette.routing import compile_path
+@@ -27,7 +29,17 @@
+         original = deepcopy(FastAPI.openapi(app))
+     finally:
+         app.openapi_schema = cached
+-    expected = deepcopy(original)
++    # Security decorates the already-published UUID wire contract. Testing it
++    # against FastAPI's internal integer-domain schema predates that boundary.
++    # UUID correctness is independently asserted below and through HTTP tests.
++    public_contract = SimpleNamespace(openapi=lambda raw=original: deepcopy(raw))
++    install_public_openapi(public_contract)
++    expected = public_contract.openapi()
++    project_id = schema['components']['schemas']['ProjectOut']['properties']['id']
++    run_id = schema['components']['schemas']['AnalysisRunOut']['properties']['id']
++    assert project_id['type'] == 'string' and project_id['format'] == 'uuid'
++    assert run_id['type'] == 'integer'
++
+     expected['components'].setdefault('securitySchemes', {})['BearerAuth'] = {
+         'type': 'http', 'scheme': 'bearer', 'bearerFormat': 'JWT',
+     }
+--- a/tests/test_phase3_identity_migration.py
++++ b/tests/test_phase3_identity_migration.py
+@@ -1,6 +1,10 @@
+ """Authoritative PostgreSQL tests for migration 046."""
+ 
+ from __future__ import annotations
++
++from tests.historical_migration_fixture import historical_database as _historical_database
++
++historical_database = _historical_database
+ 
+ import os
+ 
+@@ -72,7 +76,7 @@
+         engine.dispose()
+ 
+ 
+-def test_upgrade_from_045_preserves_ids_access_and_audit_references(monkeypatch):
++def test_upgrade_from_045_preserves_ids_access_and_audit_references(historical_database, monkeypatch):
+     engine = sa.create_engine(_database_url())
+     command.downgrade(_config(), PREVIOUS_REVISION)
+     try:
+@@ -184,7 +188,7 @@
+         engine.dispose()
+ 
+ 
+-def test_missing_issuer_fails_without_fabricating_identity(monkeypatch):
++def test_missing_issuer_fails_without_fabricating_identity(historical_database, monkeypatch):
+     engine = sa.create_engine(_database_url())
+     command.downgrade(_config(), PREVIOUS_REVISION)
+     try:
+@@ -214,7 +218,7 @@
+         engine.dispose()
+ 
+ 
+-def test_duplicate_legacy_identity_aborts_without_merging(monkeypatch):
++def test_duplicate_legacy_identity_aborts_without_merging(historical_database, monkeypatch):
+     engine = sa.create_engine(_database_url())
+     command.downgrade(_config(), PREVIOUS_REVISION)
+     try:
+--- a/tests/test_phase4_auth_context.py
++++ b/tests/test_phase4_auth_context.py
+@@ -9,6 +9,8 @@
+ from app.models import AuthorizationAuditLog, IAMUser, PlatformUserRole, Tenant, TenantUser
+ from app.services.auth_context_service import resolve_authorization_state
+ from sqlalchemy import select
++
++from tests.public_id_fixture import tenant_uuid
+ 
+ 
+ def _claims(suffix: str):
+@@ -394,7 +396,7 @@
+         db.commit()
+     app.dependency_overrides[get_current_user] = lambda: claims
+     try:
+-        response = client.get("/api/auth/context", headers={"X-Tenant-ID": "not-authorized"})
++        response = client.get("/api/auth/context", headers={"X-Tenant-ID": tenant_uuid(1)})
+         assert response.status_code == 403
+         assert response.json()["detail"]["code"] == "IAM_UNAUTHORIZED_TENANT"
+     finally:
+--- a/tests/test_phase5_identity_migration.py
++++ b/tests/test_phase5_identity_migration.py
+@@ -1,6 +1,10 @@
+ """PostgreSQL migration coverage for revision 047."""
+ 
+ from __future__ import annotations
++
++from tests.historical_migration_fixture import historical_database as _historical_database
++
++historical_database = _historical_database
+ 
+ import os
+ 
+@@ -89,7 +93,7 @@
+         engine.dispose()
+ 
+ 
+-def test_upgrade_preserves_users_memberships_grants_and_verification_state():
++def test_upgrade_preserves_users_memberships_grants_and_verification_state(historical_database):
+     engine = sa.create_engine(_database_url())
+     command.downgrade(_config(), PREVIOUS_REVISION)
+     try:
+@@ -218,7 +222,7 @@
+         engine.dispose()
+ 
+ 
+-def test_downgrade_and_reupgrade_are_safe():
++def test_downgrade_and_reupgrade_are_safe(historical_database):
+     engine = sa.create_engine(_database_url())
+     try:
+         command.downgrade(_config(), PREVIOUS_REVISION)
+--- a/tests/test_phase6_platform_concurrency.py
++++ b/tests/test_phase6_platform_concurrency.py
+@@ -25,18 +25,22 @@
+     def grant_once() -> str:
+         with SessionLocal() as db:
+             barrier.wait()
+-            mutation = platform_service.grant_platform_administrator(
+-                db,
+-                user_id=target_id,
+-                created_by_user_id=actor_id,
+-            )
+-            db.commit()
+-            return mutation.action
++            try:
++                mutation = platform_service.grant_platform_administrator(
++                    db, user_id=target_id, created_by_user_id=actor_id,
++                )
++                db.commit()
++                return mutation.action
++            except HTTPException as exc:
++                db.rollback()
++                assert exc.status_code == 409
++                assert exc.detail["code"] == "IAM_PLATFORM_ADMIN_ALREADY_GRANTED"
++                return exc.detail["code"]
+ 
+     with ThreadPoolExecutor(max_workers=2) as pool:
+         actions = sorted(pool.map(lambda _index: grant_once(), range(2)))
+ 
+-    assert actions == ["CREATED", "EXISTING"]
++    assert actions == ["CREATED", "IAM_PLATFORM_ADMIN_ALREADY_GRANTED"]
+     with SessionLocal() as db:
+         grants = list(
+             db.scalars(
+@@ -166,19 +170,24 @@
+     def grant() -> str:
+         with SessionLocal() as db:
+             barrier.wait()
+-            mutation = platform_service.grant_platform_administrator(
+-                db,
+-                user_id=target_id,
+-                created_by_user_id=actor_id,
+-            )
+-            db.commit()
+-            return mutation.action
++            try:
++                mutation = platform_service.grant_platform_administrator(
++                    db, user_id=target_id, created_by_user_id=actor_id,
++                )
++                db.commit()
++                return mutation.action
++            except HTTPException as exc:
++                db.rollback()
++                assert exc.status_code == 409
++                assert exc.detail["code"] == "IAM_PLATFORM_ADMIN_ALREADY_GRANTED"
++                return exc.detail["code"]
+ 
+     with ThreadPoolExecutor(max_workers=2) as pool:
+         results = [pool.submit(revoke), pool.submit(grant)]
+         actions = {future.result() for future in results}
+ 
+-    assert actions <= {"REVOKED", "EXISTING", "REACTIVATED"}
++    assert "REVOKED" in actions
++    assert actions <= {"REVOKED", "IAM_PLATFORM_ADMIN_ALREADY_GRANTED", "REACTIVATED"}
+     with SessionLocal() as db:
+         assert db.scalar(
+             select(func.count(PlatformUserRole.id)).where(
+--- a/tests/test_phase7_initial_tenant_admin.py
++++ b/tests/test_phase7_initial_tenant_admin.py
+@@ -2,11 +2,13 @@
+ 
+ import pytest
+ from app.core.identity_states import AuthorizationState, NextAction
+-from app.models import TenantUser
++from app.models import Tenant, TenantUser
+ from app.services.auth_context_service import resolve_authorization_state
+ from app.services.tenant_service import ensure_not_last_active_tenant_admin
+ from fastapi import HTTPException
+ from sqlalchemy import select
++
++from tests.public_id_fixture import public_row, tenant_uuid
+ 
+ from .phase6_helpers import identity_claims, seed_membership
+ from .phase7_helpers import seed_eligible_admin, seed_requester, tenant_payload
+@@ -71,7 +73,7 @@
+         state = resolve_authorization_state(db, stored_user)
+         assert state.status == AuthorizationState.READY
+         assert state.next_action == NextAction.OPEN_DASHBOARD
+-        assert state.active_tenant.id == tenant_id
++        assert str(state.active_tenant.public_id) == tenant_id
+         assert state.selection_source == "AUTO_SINGLE"
+ 
+         seed_membership(db, stored_user, tenant_id=1, role="VIEWER")
+@@ -94,7 +96,7 @@
+     with SessionLocal() as db:
+         membership = db.scalar(
+             select(TenantUser).where(
+-                TenantUser.tenant_id == created.json()["tenant"]["id"]
++                TenantUser.tenant_id == public_row(db, Tenant, created.json()["tenant"]["id"]).id
+             )
+         )
+         with pytest.raises(HTTPException) as exc:
+@@ -183,7 +185,7 @@
+ 
+         token_hint = client.get("/api/auth/context")
+         assert token_hint.status_code == 200
+-        assert token_hint.json()["tenant_context"]["active_tenant"]["id"] == 1
++        assert token_hint.json()["tenant_context"]["active_tenant"]["id"] == tenant_uuid(1)
+         assert (
+             token_hint.json()["tenant_context"]["selection_source"]
+             == "AUTO_SINGLE"
+@@ -191,6 +193,6 @@
+ 
+         listed = client.get("/api/tenants")
+         assert listed.status_code == 200
+-        assert [tenant["id"] for tenant in listed.json()] == [1]
++        assert [tenant["id"] for tenant in listed.json()] == [tenant_uuid(1)]
+     finally:
+         app.dependency_overrides.pop(get_current_user, None)
+--- a/tests/test_phase7_tenant_creation.py
++++ b/tests/test_phase7_tenant_creation.py
+@@ -13,6 +13,7 @@
+ )
+ from sqlalchemy import func, select
+ 
++from tests.public_id_fixture import public_row
+ from tests.tenant_fixture_scope import verified_fixture_tenant
+ 
+ from .phase7_helpers import seed_eligible_admin, seed_requester, tenant_payload
+@@ -57,7 +58,7 @@
+ 
+     with SessionLocal() as db:
+         tenant = db.scalar(
+-            select(Tenant).where(Tenant.id == body["tenant"]["id"])
++            select(Tenant).where(Tenant.id == public_row(db, Tenant, body["tenant"]["id"]).id)
+         )
+         with verified_fixture_tenant(db, tenant.id):
+             memberships = db.scalars(
+@@ -146,7 +147,7 @@
+     assert len(correlation_id) >= 12
+     assert response.json()["tenant"]["external_iam_tenant_id"] is None
+     with SessionLocal() as db:
+-        tenant = db.get(Tenant, response.json()["tenant"]["id"])
++        tenant = public_row(db, Tenant, response.json()["tenant"]["id"])
+         assert tenant.external_iam_tenant_id is None
+         assert (
+             db.scalar(
+--- a/tests/test_phase9_role_assignment_api.py
++++ b/tests/test_phase9_role_assignment_api.py
+@@ -1,4 +1,7 @@
++
+ from app.db import SessionLocal
++
++from tests.public_id_fixture import tenant_uuid
+ 
+ from .phase9_helpers import seed_role_membership
+ 
+@@ -9,14 +12,14 @@
+         target_id = target.id
+ 
+     grant = client.post(
+-        f"/api/tenants/1/users/{target_id}/roles",
++        f"/api/tenants/{tenant_uuid(1)}/users/{target_id}/roles",
+         json={
+             "role_code": "DEVELOPER",
+             "expected_version": 1,
+             "make_primary": False,
+             "reason": "API test",
+         },
+-        headers={"X-Tenant-ID": "1"},
++        headers={"X-Tenant-ID": tenant_uuid(1)},
+     )
+     assert grant.status_code == 200, grant.text
+     assert {item["role_code"] for item in grant.json()["roles"] if item["assignment_status"] == "ACTIVE"} == {
+@@ -25,23 +28,23 @@
+     }
+ 
+     replace = client.put(
+-        f"/api/tenants/1/users/{target_id}/roles",
++        f"/api/tenants/{tenant_uuid(1)}/users/{target_id}/roles",
+         json={
+             "role_codes": ["DEVELOPER", "SECURITY_ANALYST"],
+             "primary_role_code": "SECURITY_ANALYST",
+             "expected_version": 2,
+             "reason": "replace",
+         },
+-        headers={"X-Tenant-ID": "1"},
++        headers={"X-Tenant-ID": tenant_uuid(1)},
+     )
+     assert replace.status_code == 200, replace.text
+     assert replace.json()["primary_role"] == "SECURITY_ANALYST"
+ 
+     revoke = client.request(
+         "DELETE",
+-        f"/api/tenants/1/users/{target_id}/roles/DEVELOPER",
++        f"/api/tenants/{tenant_uuid(1)}/users/{target_id}/roles/DEVELOPER",
+         json={"expected_version": 3, "reason": "revoke"},
+-        headers={"X-Tenant-ID": "1"},
++        headers={"X-Tenant-ID": tenant_uuid(1)},
+     )
+     assert revoke.status_code == 200, revoke.text
+     assert revoke.json()["role_assignment_version"] == 4
+--- a/tests/test_platform_admin_default_context.py
++++ b/tests/test_platform_admin_default_context.py
+@@ -19,6 +19,8 @@
+ from app.core.security import get_current_user
+ from app.models import Tenant, TenantUser
+ from sqlalchemy import func, select
++
++from tests.public_id_fixture import tenant_uuid
+ 
+ from .phase6_helpers import identity_claims, seed_membership, seed_platform_grant, seed_user
+ 
+@@ -46,7 +48,7 @@
+     for index in range(membership_tenants):
+         tenant = _seed_tenant(db, f"member-{index}")
+         seed_membership(db, user, tenant_id=tenant.id, role="TENANT_ADMIN")
+-        tenant_ids.append(tenant.id)
++        tenant_ids.append(str(tenant.public_id))
+     db.commit()
+     return identity_claims(user), tenant_ids
+ 
+@@ -57,7 +59,7 @@
+     for index in range(memberships):
+         tenant = _seed_tenant(db, f"plain-{index}")
+         seed_membership(db, user, tenant_id=tenant.id, role="VIEWER")
+-        tenant_ids.append(tenant.id)
++        tenant_ids.append(str(tenant.public_id))
+     db.commit()
+     return identity_claims(user), tenant_ids
+ 
+@@ -157,7 +159,7 @@
+         db.commit()
+     _as(app, claims)
+     try:
+-        response = client.get("/api/auth/me", headers={"X-Tenant-ID": str(target_id)})
++        response = client.get("/api/auth/me", headers={"X-Tenant-ID": tenant_uuid(target_id)})
+         assert response.status_code == 403
+         with SessionLocal() as db:
+             assert (
+@@ -204,7 +206,7 @@
+         assert unscoped.status_code == 403
+         assert unscoped.json()["detail"]["code"] == "IAM_NO_TENANT"
+ 
+-        scoped = client.get("/api/projects", headers={"X-Tenant-ID": str(target_id)})
++        scoped = client.get("/api/projects", headers={"X-Tenant-ID": tenant_uuid(target_id)})
+         assert scoped.status_code == 403, scoped.text
+     finally:
+         app.dependency_overrides.pop(get_current_user, None)
+--- a/tests/test_platform_directory_regression.py
++++ b/tests/test_platform_directory_regression.py
+@@ -7,6 +7,7 @@
+ from sqlalchemy import select
+ 
+ from tests.phase6_helpers import identity_claims, now, seed_membership, seed_platform_grant, seed_user
++from tests.public_id_fixture import tenant_uuid
+ 
+ 
+ @pytest.fixture
+@@ -28,7 +29,7 @@
+         # A Native identity need not have legacy HCL identity metadata.
+         first.external_issuer = first.external_subject = first.external_iam_user_id = None
+         db.commit()
+-        ids = {"admin": admin.id, "one": first.id, "two": second.id, "tenant": tenant.id}
++        ids = {"admin": admin.id, "one": first.id, "two": second.id, "tenant": str(tenant.public_id)}
+         admin_claims, tenant_claims = identity_claims(admin), identity_claims(tenant_admin)
+         assert db.scalar(select(TenantUser.id).where(TenantUser.user_id == admin.id)) is None
+     client.app.dependency_overrides[get_current_claims] = lambda: admin_claims
+@@ -57,11 +58,11 @@
+ def test_tenant_admin_cannot_read_global_or_unrelated_projection(directory):
+     client, ids, tenant_claims = directory
+     client.app.dependency_overrides[get_current_claims] = lambda: tenant_claims
+-    headers = {"X-Tenant-ID": "1"}
++    headers = {"X-Tenant-ID": tenant_uuid(1)}
+     for path in ("/api/platform/users", f'/api/platform/users/{ids["admin"]}', "/api/platform/tenants", "/api/platform/administrators"):
+         assert client.get(path, headers=headers).status_code == 403
+     assert client.get(f'/api/tenants/{ids["tenant"]}/users', headers=headers).status_code in {403, 404}
+-    result = client.get("/api/tenants/1/users?page=1&page_size=20", headers=headers)
++    result = client.get(f"/api/tenants/{tenant_uuid(1)}/users?page=1&page_size=20", headers=headers)
+     assert result.status_code == 200, result.text
+     assert ids["admin"] not in {user["user_id"] for user in result.json()["items"]}
+     for user in result.json()["items"]:
+--- a/tests/test_platform_tenant_v2.py
++++ b/tests/test_platform_tenant_v2.py
+@@ -9,6 +9,7 @@
+ from app.services.auth_context_service import resolve_authorization_state
+ 
+ from tests.phase6_helpers import identity_claims, seed_membership, seed_platform_grant, seed_user
++from tests.public_id_fixture import tenant_uuid
+ 
+ 
+ def test_platform_catalog_contains_only_control_plane_permissions():
+@@ -100,7 +101,7 @@
+         db.commit()
+     app.dependency_overrides[get_current_user] = lambda: claims
+     try:
+-        response = client.request(method, path, json=payload, headers={"X-Tenant-ID": "1"})
++        response = client.request(method, path.replace("/tenants/1", f"/tenants/{tenant_uuid(1)}"), json=payload, headers={"X-Tenant-ID": tenant_uuid(1)})
+         assert response.status_code == 403, response.text
+     finally:
+         app.dependency_overrides.pop(get_current_user, None)
+@@ -165,14 +166,14 @@
+         db.commit()
+     app.dependency_overrides[get_current_user] = lambda: claims
+     try:
+-        response = client.post("/api/platform/tenants/1/recover-admin", json={"user_id": candidate_id})
++        response = client.post(f"/api/platform/tenants/{tenant_uuid(1)}/recover-admin", json={"user_id": candidate_id})
+         assert response.status_code == 200, response.text
+         with SessionLocal() as db:
+             member = db.query(TenantUser).filter_by(tenant_id=1, user_id=candidate_id).one()
+             assert effective_role_codes(db, member) == {"TENANT_ADMIN"}
+             assert db.query(TenantUser).filter_by(user_id=actor_id).count() == 0
+-        assert client.post("/api/platform/tenants/1/recover-admin", json={"user_id": candidate_id}).status_code == 200
+-        assert client.get("/api/tenants/1/users", headers={"X-Tenant-ID": "1"}).status_code == 403
++        assert client.post(f"/api/platform/tenants/{tenant_uuid(1)}/recover-admin", json={"user_id": candidate_id}).status_code == 200
++        assert client.get(f"/api/tenants/{tenant_uuid(1)}/users", headers={"X-Tenant-ID": tenant_uuid(1)}).status_code == 403
+     finally:
+         app.dependency_overrides.pop(get_current_user, None)
+ 
+@@ -245,20 +246,20 @@
+     app.dependency_overrides[get_current_user] = lambda: claims
+     try:
+         result = client.get(
+-            "/api/tenants/1/audit-history",
++            f"/api/tenants/{tenant_uuid(1)}/audit-history",
+             params={"page_size": 5, "administrative_only": True},
+-            headers={"X-Tenant-ID": "1"},
++            headers={"X-Tenant-ID": tenant_uuid(1)},
+         )
+         assert result.status_code == 200, result.text
+         body = result.json()
+         assert body["total"] == 9 and body["total_pages"] == 2 and len(body["items"]) == 5
+         assert all(event["label"] == "Member added" for event in body["items"])
+         second = client.get(
+-            "/api/tenants/1/audit-history?page=2&page_size=5&administrative_only=true", headers={"X-Tenant-ID": "1"}
++            f"/api/tenants/{tenant_uuid(1)}/audit-history?page=2&page_size=5&administrative_only=true", headers={"X-Tenant-ID": tenant_uuid(1)}
+         ).json()
+         assert len(second["items"]) == 4
+         assert client.get("/api/platform/summary").status_code == 403
+-        assert client.get("/api/tenants/999/audit-history", headers={"X-Tenant-ID": "1"}).status_code == 404
++        assert client.get(f"/api/tenants/{__import__('uuid').uuid4()}/audit-history", headers={"X-Tenant-ID": tenant_uuid(1)}).status_code == 404
+     finally:
+         app.dependency_overrides.pop(get_current_user, None)
+ 
+@@ -321,25 +322,25 @@
+         candidate_id, other_member_id = candidate.id, second_member.id
+         db.commit()
+     app.dependency_overrides[get_current_user] = lambda: claims
+-    headers = {"X-Tenant-ID": "1"}
+-    try:
+-        found = client.get("/api/tenants/1/user-candidates?q=Independent", headers=headers).json()["items"]
++    headers = {"X-Tenant-ID": tenant_uuid(1)}
++    try:
++        found = client.get(f"/api/tenants/{tenant_uuid(1)}/user-candidates?q=Independent", headers=headers).json()["items"]
+         assert len(found) == 1 and found[0]["id"] == candidate_id
+         assert not any(key in found[0] for key in ["memberships", "tenant_id", "roles", "external_subject"])
+         created = client.post(
+-            "/api/tenants/1/users", json={"user_id": candidate_id, "roles": ["DEVELOPER"]}, headers=headers
++            f"/api/tenants/{tenant_uuid(1)}/users", json={"user_id": candidate_id, "roles": ["DEVELOPER"]}, headers=headers
+         )
+         assert created.status_code == 201, created.text
+         assert (
+             client.post(
+-                "/api/tenants/1/users", json={"user_id": candidate_id, "roles": ["VIEWER"]}, headers=headers
++                f"/api/tenants/{tenant_uuid(1)}/users", json={"user_id": candidate_id, "roles": ["VIEWER"]}, headers=headers
+             ).status_code
+             == 409
+         )
+         with SessionLocal() as db:
+             member = db.query(TenantUser).filter_by(tenant_id=1, user_id=candidate_id).one()
+             current_member_id = member.id
+-        response = client.post(f"/api/tenants/1/users/{current_member_id}/deactivate", headers=headers)
++        response = client.post(f"/api/tenants/{tenant_uuid(1)}/users/{current_member_id}/deactivate", headers=headers)
+         assert response.status_code == 200, response.text
+         with SessionLocal() as db:
+             assert db.get(IAMUser, candidate_id).status == "ACTIVE"
+@@ -365,10 +366,10 @@
+         assert platform["tenant_id"] is None
+         assert "platform:tenant:read" in platform["permissions"]
+         assert "tenant:user:read" not in platform["permissions"]
+-        body = client.get("/api/auth/me", headers={"X-Tenant-ID": "1"}).json()
++        body = client.get("/api/auth/me", headers={"X-Tenant-ID": tenant_uuid(1)}).json()
+         assert body["roles"] == ["VIEWER"]
+         assert set(body["permissions"]) == set(ROLE_PERMISSIONS["VIEWER"])
+         assert "platform:admin" not in body["permissions"]
+-        assert client.get("/api/platform/summary", headers={"X-Tenant-ID": "1"}).status_code == 200
+-    finally:
+-        app.dependency_overrides.pop(get_current_user, None)
++        assert client.get("/api/platform/summary", headers={"X-Tenant-ID": tenant_uuid(1)}).status_code == 200
++    finally:
++        app.dependency_overrides.pop(get_current_user, None)
+--- a/tests/test_postgresql_integration.py
++++ b/tests/test_postgresql_integration.py
+@@ -11,6 +11,8 @@
+ import pytest
+ import sqlalchemy as sa
+ from fastapi.testclient import TestClient
++
++from tests.public_id_fixture import public_row
+ 
+ pytestmark = pytest.mark.postgres
+ ROOT = Path(__file__).resolve().parent.parent
+@@ -306,10 +308,10 @@
+ 
+         from app.core.context import minimal_background_context, tenant_scope
+         from app.db import SessionLocal
+-        from app.models import SBOMComponent
++        from app.models import SBOMComponent, SBOMSource
+         with tenant_scope(minimal_background_context(1)), SessionLocal() as session:
+             component = (
+-                session.execute(sa.select(SBOMComponent).where(SBOMComponent.sbom_id == sbom_id)).scalars().first()
++                session.execute(sa.select(SBOMComponent).where(SBOMComponent.sbom_id == public_row(session, SBOMSource, sbom_id).id)).scalars().first()
+             )
+             assert component is not None
+             component.lifecycle_status = "EOL"
+--- a/tests/test_report_migrations.py
++++ b/tests/test_report_migrations.py
+@@ -1,22 +1,19 @@
+ """Exercise 051–053 forward and backward on the disposable test database only."""
++
++from tests.historical_migration_fixture import historical_database as _historical_database
++
++historical_database = _historical_database
+ 
+ from alembic import command
+ from alembic.config import Config
+ from sqlalchemy import inspect, text
+ 
+-from tests.tenant_fixture_scope import verified_fixture_tenant
+ 
+-
+-def test_report_migrations_round_trip_preserves_inventory(client):
+-    from app.db import SessionLocal, engine
+-    from app.models import Projects
+-
+-    assert "test" in engine.url.database.lower()
+-    with SessionLocal() as db, verified_fixture_tenant(db, 1):
+-        project = Projects(project_name="migration-preservation", project_status=1, tenant_id=1)
+-        db.add(project)
+-        db.commit()
+-        identifier = project.id
++def test_report_migrations_round_trip_preserves_inventory(historical_database, client):
++    engine = historical_database
++    assert engine.url.database.startswith("sbom_round4_historical_test_")
++    with engine.begin() as connection:
++        identifier = connection.scalar(text("INSERT INTO projects(project_name,project_status,tenant_id,is_active) VALUES('migration-preservation',1,1,true) RETURNING id"))
+     config = Config("alembic.ini")
+     try:
+         command.downgrade(config, "050_optional_external_tenant_mapping")
+@@ -25,7 +22,7 @@
+         command.upgrade(config, "head")
+     with engine.connect() as conn:
+         assert (
+-            conn.execute(text("SELECT version_num FROM alembic_version")).scalar_one() == "079_lifecycle_provider_verification"
++            conn.execute(text("SELECT version_num FROM alembic_version")).scalar_one() == "053_tenant_analysis_schedule"
+         )
+         assert (
+             conn.execute(text("SELECT project_name FROM projects WHERE id=:id"), {"id": identifier}).scalar_one()
+--- a/tests/test_sbom_assign_and_edit.py
++++ b/tests/test_sbom_assign_and_edit.py
+@@ -3,8 +3,9 @@
+ import json
+ 
+ from app.db import SessionLocal
+-from app.models import AnalysisRun, AuditLog, SBOMComponent
+-
++from app.models import AnalysisRun, AuditLog, Projects, SBOMComponent, SBOMSource
++
++from tests.public_id_fixture import public_row
+ from tests.tenant_fixture_scope import verified_fixture_tenant
+ 
+ CLEAN_CYCLONEDX = {
+@@ -86,10 +87,10 @@
+     db = SessionLocal()
+     try:
+         with verified_fixture_tenant(db, 1):
+-            audit = db.query(AuditLog).filter_by(target_kind="sbom", target_id=sbom["id"], action="sbom.update").first()
++            audit = db.query(AuditLog).filter_by(target_kind="sbom", target_id=public_row(db, SBOMSource, sbom["id"]).id, action="sbom.update").first()
+             assert audit is not None
+             assert audit.metadata_json["old_project_id"] is None
+-            assert audit.metadata_json["new_project_id"] == project["id"]
++            assert audit.metadata_json["new_project_id"] == public_row(db, Projects, project["id"]).id
+     finally:
+         db.close()
+ 
+@@ -170,8 +171,8 @@
+     db = SessionLocal()
+     try:
+         with verified_fixture_tenant(db, 1):
+-            comp_count_before = db.query(SBOMComponent).filter_by(sbom_id=sbom["id"]).count()
+-            runs_count_before = db.query(AnalysisRun).filter_by(sbom_id=sbom["id"]).count()
++            comp_count_before = db.query(SBOMComponent).filter_by(sbom_id=public_row(db, SBOMSource, sbom["id"]).id).count()
++            runs_count_before = db.query(AnalysisRun).filter_by(sbom_id=public_row(db, SBOMSource, sbom["id"]).id).count()
+             assert comp_count_before > 0
+             assert runs_count_before > 0
+     finally:
+@@ -184,15 +185,15 @@
+     db = SessionLocal()
+     try:
+         with verified_fixture_tenant(db, 1):
+-            comp_count_after = db.query(SBOMComponent).filter_by(sbom_id=sbom["id"]).count()
+-            runs_count_after = db.query(AnalysisRun).filter_by(sbom_id=sbom["id"]).count()
++            comp_count_after = db.query(SBOMComponent).filter_by(sbom_id=public_row(db, SBOMSource, sbom["id"]).id).count()
++            runs_count_after = db.query(AnalysisRun).filter_by(sbom_id=public_row(db, SBOMSource, sbom["id"]).id).count()
+             assert comp_count_after == comp_count_before
+             assert runs_count_after == runs_count_before
+ 
+             # Verify AnalysisRuns project_id cascaded
+-            runs = db.query(AnalysisRun).filter_by(sbom_id=sbom["id"]).all()
++            runs = db.query(AnalysisRun).filter_by(sbom_id=public_row(db, SBOMSource, sbom["id"]).id).all()
+             for r in runs:
+-                assert r.project_id == project["id"]
++                assert r.project_id == public_row(db, Projects, project["id"]).id
+     finally:
+         db.close()
+ 
+--- a/tests/test_sbom_latest_analysis_summary.py
++++ b/tests/test_sbom_latest_analysis_summary.py
+@@ -101,7 +101,7 @@
+     sbom = _seed_sbom(db, name=f"sbom-{created_by}", created_by=created_by)
+     db.commit()
+ 
+-    row = _listed_sbom(client, created_by=created_by, sbom_id=sbom.id)
++    row = _listed_sbom(client, created_by=created_by, sbom_id=str(sbom.public_id))
+ 
+     assert row["latest_analysis"] is None
+ 
+@@ -134,7 +134,7 @@
+         _seed_finding(db, run=run, severity="HIGH", score=7.0)
+     db.commit()
+ 
+-    row = _listed_sbom(client, created_by=created_by, sbom_id=sbom.id)
++    row = _listed_sbom(client, created_by=created_by, sbom_id=str(sbom.public_id))
+     latest = row["latest_analysis"]
+ 
+     assert latest["run_id"] == run.id
+@@ -159,7 +159,7 @@
+     latest_run = _seed_run(db, sbom=sbom, status="ERROR", raw_report={"query_errors": [{"message": "newer failed"}]})
+     db.commit()
+ 
+-    row = _listed_sbom(client, created_by=created_by, sbom_id=sbom.id)
++    row = _listed_sbom(client, created_by=created_by, sbom_id=str(sbom.public_id))
+ 
+     assert row["latest_analysis"]["run_id"] == latest_run.id
+     assert row["latest_analysis"]["run_id"] != old_run.id
+@@ -193,5 +193,5 @@
+     assert resp.status_code == 200, resp.text
+     rows = resp.json()
+ 
+-    assert [row["id"] for row in rows] == [default_sbom.id]
++    assert [row["id"] for row in rows] == [str(default_sbom.public_id)]
+     assert rows[0]["latest_analysis"]["status"] == "completed"
+--- a/tests/test_sbom_lifecycle_remediation.py
++++ b/tests/test_sbom_lifecycle_remediation.py
+@@ -306,11 +306,11 @@
+     db.add(child)
+     db.commit()
+ 
+-    response = client.get(f"/api/sboms/{child.id}/versions")
++    response = client.get(f"/api/sboms/{child.public_id}/versions")
+     assert response.status_code == 200
+     ids = [item["id"] for item in response.json()]
+-    assert ids == [root.id, child.id]
+-    assert unrelated.id not in ids
++    assert ids == [str(root.public_id), str(child.public_id)]
++    assert str(unrelated.public_id) not in ids
+ 
+ 
+ def test_compare_versions_reports_metadata_dependency_and_lifecycle_changes(db):
+@@ -417,12 +417,12 @@
+     db.add(sbom)
+     db.commit()
+ 
+-    native = client.get(f"/api/sboms/{sbom.id}/export")
++    native = client.get(f"/api/sboms/{sbom.public_id}/export")
+     assert native.status_code == 200
+     assert native.headers["content-type"].startswith("application/vnd.cyclonedx+json")
+     assert json.loads(native.text)["bomFormat"] == "CycloneDX"
+ 
+-    unsupported = client.get(f"/api/sboms/{sbom.id}/export?format=spdx")
++    unsupported = client.get(f"/api/sboms/{sbom.public_id}/export?format=spdx")
+     assert unsupported.status_code == 400
+     assert "Unsupported SBOM conversion" in unsupported.json()["detail"]
+ 
+@@ -483,50 +483,50 @@
+     }
+ 
+     invalid_status = client.post(
+-        f"/api/remediation?project_id={proj.id}",
++        f"/api/remediation?project_id={proj.public_id}",
+         json={**base_payload, "status": "Resolved"},
+     )
+     assert invalid_status.status_code == 400
+ 
+     invalid_due_date = client.post(
+-        f"/api/remediation?project_id={proj.id}",
++        f"/api/remediation?project_id={proj.public_id}",
+         json={**base_payload, "status": "Open", "due_date": "06/30/2026"},
+     )
+     assert invalid_due_date.status_code == 400
+ 
+     fixed_without_resolution = client.post(
+-        f"/api/remediation?project_id={proj.id}",
++        f"/api/remediation?project_id={proj.public_id}",
+         json={**base_payload, "status": "Fixed", "fixed_version": "3.0.9"},
+     )
+     assert fixed_without_resolution.status_code == 400
+ 
+     fixed_without_fix_detail = client.post(
+-        f"/api/remediation?project_id={proj.id}",
++        f"/api/remediation?project_id={proj.public_id}",
+         json={**base_payload, "status": "Fixed", "resolution_date": "2026-06-11"},
+     )
+     assert fixed_without_fix_detail.status_code == 400
+ 
+     accepted_without_reason = client.post(
+-        f"/api/remediation?project_id={proj.id}",
++        f"/api/remediation?project_id={proj.public_id}",
+         json={**base_payload, "status": "Accepted Risk"},
+     )
+     assert accepted_without_reason.status_code == 400
+ 
+     created = client.post(
+-        f"/api/remediation?project_id={proj.id}&user_id=alice",
++        f"/api/remediation?project_id={proj.public_id}&user_id=alice",
+         json={**base_payload, "status": "Open", "owner": "security@example.com"},
+     )
+     assert created.status_code == 200
+     remediation_id = created.json()["id"]
+ 
+     in_progress = client.post(
+-        f"/api/remediation?project_id={proj.id}&user_id=bob",
++        f"/api/remediation?project_id={proj.public_id}&user_id=bob",
+         json={**base_payload, "status": "In Progress", "owner": "security@example.com"},
+     )
+     assert in_progress.status_code == 200
+ 
+     fixed = client.post(
+-        f"/api/remediation?project_id={proj.id}&user_id=carol",
++        f"/api/remediation?project_id={proj.public_id}&user_id=carol",
+         json={
+             **base_payload,
+             "status": "Fixed",
+--- a/tests/test_sbom_operational_lifecycle.py
++++ b/tests/test_sbom_operational_lifecycle.py
+@@ -70,7 +70,7 @@
+ 
+ 
+ def change(client, sbom, status, reason="Administrator lifecycle decision"):
+-    return client.post(f"/api/sboms/{sbom.id}/lifecycle", json={"status": status, "reason": reason})
++    return client.post(f"/api/sboms/{sbom.public_id}/lifecycle", json={"status": status, "reason": reason})
+ 
+ 
+ def test_transition_preserves_history_and_writes_atomic_audit(client, db, admin, world, revoke):
+@@ -92,12 +92,12 @@
+     assert audit.metadata_json["reason"] == "Retirement after product release"
+     assert audit.metadata_json["sbom_id"] == sbom.id and audit.created_at
+     assert revoke == [((lifecycle.analysis_task_id(1, sbom.id, 0),), {"terminate": False})]
+-    assert client.get(f"/api/sboms/{sbom.id}").status_code == 200
+-    history = client.get(f"/api/sboms/{sbom.id}/lifecycle-history").json()
++    assert client.get(f"/api/sboms/{sbom.public_id}").status_code == 200
++    history = client.get(f"/api/sboms/{sbom.public_id}/lifecycle-history").json()
+     assert history[0]["old_status"] == "ACTIVE" and history[0]["new_status"] == "INACTIVE"
+     assert history[0]["actor_id"] == admin.user_id
+     assert change(client, sbom, "ACTIVE", "Product restored").status_code == 200
+-    history = client.get(f"/api/sboms/{sbom.id}/lifecycle-history").json()
++    history = client.get(f"/api/sboms/{sbom.public_id}/lifecycle-history").json()
+     assert len(history) == 2 and history[0]["reason"] == "Product restored"
+ 
+ 
+@@ -106,7 +106,7 @@
+                                      {"status": "INACTIVE", "reason": "why", "tenant_id": 2}])
+ def test_invalid_transition_payload_rejected(client, db, world, payload):
+     _, sbom, _ = world
+-    assert client.post(f"/api/sboms/{sbom.id}/lifecycle", json=payload).status_code == 422
++    assert client.post(f"/api/sboms/{sbom.public_id}/lifecycle", json=payload).status_code == 422
+     db.refresh(sbom)
+     assert sbom.lifecycle_status == "ACTIVE"
+     assert db.scalar(select(func.count()).select_from(AuditLog).where(AuditLog.action == "sbom.deactivate")) == 0
+@@ -124,7 +124,7 @@
+     context = replace(admin, roles=frozenset({role}), permissions=ROLE_PERMISSIONS[role])
+     client.app.dependency_overrides[get_current_tenant_context] = scoped_context_override(lambda: context)
+     assert change(client, sbom, "INACTIVE").status_code == 403
+-    assert client.get(f"/api/sboms/{sbom.id}/lifecycle-history").status_code == 200
++    assert client.get(f"/api/sboms/{sbom.public_id}/lifecycle-history").status_code == 200
+ 
+ 
+ def test_cross_tenant_transition_and_history_denied(client, db, world):
+@@ -133,7 +133,7 @@
+     other = builder.sbom(builder.product(tenant_id=2, name="other"))
+     with verified_fixture_tenant(db, 2):
+         db.commit()
+-        other_id = other.id
++        other_id = str(other.public_id)
+     assert client.post(f"/api/sboms/{other_id}/lifecycle", json={"status": "INACTIVE", "reason": "foreign"}).status_code == 404
+     assert client.get(f"/api/sboms/{other_id}/lifecycle-history").status_code == 404
+     with verified_fixture_tenant(db, 2):
+@@ -156,7 +156,7 @@
+ def test_inactive_direct_analysis_api_rejected(client, world, suffix):
+     _, sbom, _ = world
+     assert change(client, sbom, "INACTIVE").status_code == 200
+-    response = client.post(f"/api/sboms/{sbom.id}{suffix}", json={} if suffix.endswith("stream") else None)
++    response = client.post(f"/api/sboms/{sbom.public_id}{suffix}", json={} if suffix.endswith("stream") else None)
+     assert response.status_code == 409, response.text
+     assert "SBOM_INACTIVE" in response.text
+ 
+@@ -168,7 +168,7 @@
+     assert change(client, sbom, "INACTIVE").status_code == 200
+     responses = [client.post("/api/v1/compare", json={"run_a_id": sbom.run.id, "run_b_id": other.run.id}),
+                  client.get("/api/analysis-runs/compare", params={"run_a": sbom.run.id, "run_b": other.run.id}),
+-                 client.get("/api/sboms/compare-versions", params={"version_a": sbom.id, "version_b": other.id})]
++                 client.get("/api/sboms/compare-versions", params={"version_a": str(sbom.public_id), "version_b": str(other.public_id)})]
+     for response in responses:
+         assert response.status_code == 409, response.text
+         assert "SBOM_INACTIVE" in response.text
+@@ -179,7 +179,7 @@
+     _, sbom, _ = world
+     assert change(client, sbom, "INACTIVE").status_code == 200
+     response = client.post("/api/pdf-report", json={"runId": sbom.run.id}) if route == "pdf" else client.get(
+-        f"/api/sboms/{sbom.id}/" + ("lifecycle/report?format=csv" if route == "csv" else "reports/lifecycle-pack"))
++        f"/api/sboms/{sbom.public_id}/" + ("lifecycle/report?format=csv" if route == "csv" else "reports/lifecycle-pack"))
+     assert response.status_code == 409, response.text
+     assert "SBOM_INACTIVE" in response.text
+ 
+@@ -190,7 +190,7 @@
+     _, sbom, _ = world
+     sbom.status, sbom.error_count = status, errors
+     db.commit()
+-    response = client.post(f"/api/sboms/{sbom.id}/analyze")
++    response = client.post(f"/api/sboms/{sbom.public_id}/analyze")
+     assert response.status_code == 409 and code in response.text
+     assert lifecycle.processing_eligibility(sbom)["reason_code"] == code
+ 
+@@ -310,7 +310,7 @@
+ def test_legacy_direct_api_cannot_bypass_inactive_guard(client, world, endpoint):
+     _, sbom, _ = world
+     assert change(client, sbom, "INACTIVE").status_code == 200
+-    response = client.post(endpoint, json={"sbom_id": sbom.id})
++    response = client.post(endpoint, json={"sbom_id": str(sbom.public_id)})
+     assert response.status_code == 409, response.text
+     assert "SBOM_INACTIVE" in response.text
+ 
+--- a/tests/test_sbom_quality_integration.py
++++ b/tests/test_sbom_quality_integration.py
+@@ -1,3 +1,5 @@
++
++from tests.public_id_fixture import public_row
+ from tests.tenant_fixture_scope import scoped_context_override
+ 
+ """Phase 2 API/hash/history/role boundaries over the existing PostgreSQL fixtures."""
+@@ -66,7 +68,7 @@
+     }
+     with SessionLocal() as db, verified_fixture_tenant(db, 1):
+         stored = db.get(SBOMRepairJob, job["repair_job_id"])
+-        source = db.get(SBOMSource, accepted_id)
++        source = public_row(db, SBOMSource, accepted_id)
+         assert hashlib.sha256(source.sbom_data.encode()).hexdigest() == stored.candidate_sha256
+ 
+ 
+@@ -107,7 +109,7 @@
+         response = client.get(url(session))
+         assert response.status_code == 404
+         assert "overall_score" not in response.text and "artifact_hash" not in response.text
+-        assert client.get("/api/sboms/987654/quality").status_code == 404
++        assert client.get(f"/api/sboms/{__import__('uuid').uuid4()}/quality").status_code == 404
+     finally:
+         client.app.dependency_overrides.pop(get_current_tenant_context, None)
+     assert client.get(url("00000000-0000-4000-8000-000000000000")).status_code == 404
+@@ -329,7 +331,7 @@
+     approved = client.post(f"/api/sbom-validation-sessions/{deleted}/repair/{job['repair_job_id']}/approve").json()
+     sbom_id = approved['imported_sbom_id']
+     with SessionLocal() as db, verified_fixture_tenant(db, 1):
+-        SBOMDeleteService(db, tenant_id=1).permanently_delete_sbom(sbom_id, 'phase2-release', True)
++        SBOMDeleteService(db, tenant_id=1).permanently_delete_sbom(public_row(db, SBOMSource, sbom_id).id, 'phase2-release', True)
+         assert db.get(SBOMValidationSession, deleted) is None
+         assert db.scalar(select(SBOMValidationSessionEvent.id).where(
+             SBOMValidationSessionEvent.session_id == deleted)) is None
+--- a/tests/test_sbom_repair_migration.py
++++ b/tests/test_sbom_repair_migration.py
+@@ -1,69 +1,49 @@
+ """Repair schema review and real PostgreSQL round-trip on a new disposable DB."""
+ 
+-import os
+-import subprocess
+-import sys
+-import uuid
+ from pathlib import Path
+ 
++from alembic import command
+ from alembic.config import Config
++
++from tests.historical_migration_fixture import historical_database as _historical_database
++
++historical_database = _historical_database
+ from alembic.script import ScriptDirectory
+-from sqlalchemy import create_engine, inspect, text
+-from sqlalchemy.engine import make_url
++from sqlalchemy import inspect, text
+ 
+ 
+-def test_repair_migration_postgres_round_trip(tmp_path):
++def test_repair_migration_postgres_round_trip(historical_database):
+     root = Path(__file__).resolve().parents[1]
+     scripts = ScriptDirectory.from_config(Config(str(root / "alembic.ini")))
+     heads = scripts.get_heads()
+-    assert heads == ["079_lifecycle_provider_verification"]
++    assert heads == ["074_sbom_repair_jobs"]
+     assert "074_sbom_repair_jobs" in {revision.revision for revision in scripts.walk_revisions()}
+     assert scripts.get_revision("074_sbom_repair_jobs").down_revision == "073_sbom_operational_lifecycle"
+-    template = make_url(os.environ["TEST_POSTGRES_DATABASE_URL"])
+-    name = "sbom_repair_migration_test_" + uuid.uuid4().hex[:10]
+-    url = template.set(database=name)
+-    control = create_engine(template.set(database="postgres"), isolation_level="AUTOCOMMIT", hide_parameters=True)
+-    with control.connect() as connection:
+-        connection.execute(text("CREATE DATABASE " + name))
+-    env = {**os.environ, "DATABASE_URL": url.render_as_string(hide_password=False), "REPAIR_MIGRATION_DB_NAME": name}
+-    engine = create_engine(url, hide_parameters=True)
+-    try:
+-        commands = [
+-            [sys.executable, "-c", "import os; from scripts.bootstrap_fresh_database import bootstrap; bootstrap(os.environ['DATABASE_URL'], os.environ['REPAIR_MIGRATION_DB_NAME'])"],
+-            [sys.executable, "-m", "alembic", "downgrade", "073_sbom_operational_lifecycle"],
+-            [sys.executable, "-m", "alembic", "upgrade", "head"],
+-        ]
+-        for index, command in enumerate(commands):
+-            result = subprocess.run(command, env=env, cwd=root, capture_output=True, text=True, timeout=90)
+-            (tmp_path / f"migration-{index}.log").write_text(result.stdout + result.stderr)
+-            assert result.returncode == 0, f"Migration failed; diagnostics in {tmp_path}"
+-            schema = inspect(engine)
+-            if index == 1:
+-                assert not schema.has_table("sbom_repair_jobs")
+-                assert schema.has_table("sbom_validation_sessions")
+-            else:
+-                assert schema.has_table("sbom_repair_jobs")
+-        schema = inspect(engine)
+-        columns = {column["name"]: column for column in schema.get_columns("sbom_repair_jobs")}
+-        assert not columns["tenant_id"]["nullable"]
+-        assert not columns["candidate_sha256"]["nullable"]
+-        assert not columns["created_at"]["nullable"]
+-        assert columns["decided_at"]["nullable"]
+-        assert columns["source_sbom_id"]["nullable"]
+-        assert str(columns["report_json"]["type"]) == "JSON"
+-        assert str(columns["validation_options_json"]["type"]) == "JSON"
+-        assert schema.get_pk_constraint("sbom_repair_jobs")["constrained_columns"] == ["id"]
+-        indexes = {tuple(index["column_names"]) for index in schema.get_indexes("sbom_repair_jobs")}
+-        assert {("tenant_id",), ("session_id",)} <= indexes
+-        foreign = {fk["constrained_columns"][0]: fk for fk in schema.get_foreign_keys("sbom_repair_jobs")}
+-        assert foreign["session_id"]["options"]["ondelete"] == "CASCADE"
+-        assert foreign["tenant_id"]["referred_table"] == "tenants"
+-        assert foreign["source_sbom_id"]["referred_table"] == "sbom_source"
+-        assert foreign["imported_sbom_id"]["referred_table"] == "sbom_source"
+-        with engine.connect() as connection:
+-            assert connection.execute(text("SELECT version_num FROM alembic_version")).scalar() == heads[0]
+-    finally:
+-        engine.dispose()
+-        with control.connect() as connection:
+-            connection.execute(text("DROP DATABASE " + name + " WITH (FORCE)"))
+-        control.dispose()
++    # Execute the historical round-trip on the fixture's newly created 079
++    # database; current Greenfield 100 keeps its irreversible UUID boundary.
++    engine = historical_database
++    config = Config(str(root / "alembic.ini"))
++    assert engine.url.database.startswith("sbom_round4_historical_test_")
++    command.downgrade(config, "073_sbom_operational_lifecycle")
++    assert not inspect(engine).has_table("sbom_repair_jobs")
++    assert inspect(engine).has_table("sbom_validation_sessions")
++    command.upgrade(config, "head")
++    schema = inspect(engine)
++    columns = {column["name"]: column for column in schema.get_columns("sbom_repair_jobs")}
++    assert not columns["tenant_id"]["nullable"]
++    assert not columns["candidate_sha256"]["nullable"]
++    assert not columns["created_at"]["nullable"]
++    assert columns["decided_at"]["nullable"]
++    assert columns["source_sbom_id"]["nullable"]
++    assert str(columns["report_json"]["type"]) == "JSON"
++    assert str(columns["validation_options_json"]["type"]) == "JSON"
++    assert schema.get_pk_constraint("sbom_repair_jobs")["constrained_columns"] == ["id"]
++    indexes = {tuple(index["column_names"]) for index in schema.get_indexes("sbom_repair_jobs")}
++    assert {("tenant_id",), ("session_id",)} <= indexes
++    foreign = {fk["constrained_columns"][0]: fk for fk in schema.get_foreign_keys("sbom_repair_jobs")}
++    assert foreign["session_id"]["options"]["ondelete"] == "CASCADE"
++    assert foreign["tenant_id"]["referred_table"] == "tenants"
++    assert foreign["source_sbom_id"]["referred_table"] == "sbom_source"
++    assert foreign["imported_sbom_id"]["referred_table"] == "sbom_source"
++    with engine.connect() as connection:
++        assert connection.execute(text("SELECT version_num FROM alembic_version")).scalar() == heads[0]
+--- a/tests/test_sbom_repair_release.py
++++ b/tests/test_sbom_repair_release.py
+@@ -1,3 +1,5 @@
++
++from tests.public_id_fixture import public_row
+ from tests.tenant_fixture_scope import scoped_context_override
+ 
+ """Phase 1 application release boundaries, using the normal API and Postgres fixture."""
+@@ -12,7 +14,15 @@
+ from app.core.permissions import ROLE_PERMISSIONS
+ from app.core.security import get_current_tenant_context
+ from app.db import SessionLocal
+-from app.models import AuditLog, SBOMRepairJob, SBOMSource, SBOMValidationSession, SBOMValidationSessionEvent
++from app.models import (
++    AuditLog,
++    Product,
++    Projects,
++    SBOMRepairJob,
++    SBOMSource,
++    SBOMValidationSession,
++    SBOMValidationSessionEvent,
++)
+ from app.services.sbom.repair.engine import RepairEngine
+ from sqlalchemy import func, select, update
+ 
+@@ -42,9 +52,9 @@
+     response = client.post(base(session) + f"/{job['repair_job_id']}/approve")
+     assert response.status_code == 200, response.text
+     with SessionLocal() as db, verified_fixture_tenant(db, 1):
+-        accepted = db.get(SBOMSource, response.json()["imported_sbom_id"])
+-        assert accepted.product_id == product["id"]
+-        assert accepted.projectid == project["id"]
++        accepted = public_row(db, SBOMSource, response.json()["imported_sbom_id"])
++        assert accepted.product_id == public_row(db, Product, product["id"]).id
++        assert accepted.projectid == public_row(db, Projects, project["id"]).id
+         workspace = db.get(SBOMValidationSession, session)
+         assert workspace.raw_content_blob == raw
+         assert workspace.original_sha256 == hashlib.sha256(raw).hexdigest()
+@@ -62,7 +72,7 @@
+     assert response.status_code == 202
+     with SessionLocal() as db, verified_fixture_tenant(db, 1):
+         assert db.scalar(select(func.count()).select_from(SBOMRepairJob)) == 0
+-        accepted = db.get(SBOMSource, response.json()["sbom_id"])
++        accepted = public_row(db, SBOMSource, response.json()["sbom_id"])
+         assert accepted.sbom_data.encode() == raw
+         assert accepted.status == "validated"
+         assert accepted.error_count == 0
+@@ -72,7 +82,7 @@
+     assert analysis.json()["sbom_id"] == response.json()["sbom_id"]
+     with SessionLocal() as db, verified_fixture_tenant(db, 1):
+         assert db.scalar(select(func.count()).select_from(SBOMRepairJob)) == 0
+-        assert db.get(SBOMSource, response.json()["sbom_id"]).sbom_data.encode() == raw
++        assert public_row(db, SBOMSource, response.json()["sbom_id"]).sbom_data.encode() == raw
+ 
+ 
+ def test_review_hash_mismatch_rejected_then_correct_hash_accepted(client):
+@@ -335,13 +345,13 @@
+     approved = client.post(base(session) + f"/{job['repair_job_id']}/approve")
+     assert approved.status_code == 200, approved.text
+     with SessionLocal() as db, verified_fixture_tenant(db, 1):
+-        candidate = db.get(SBOMSource, approved.json()["imported_sbom_id"])
++        candidate = public_row(db, SBOMSource, approved.json()["imported_sbom_id"])
+         assert candidate.sbom_version == "2.0"
+         assert candidate.productver == "Release-2"
+-        assert candidate.parent_id == parent["sbom_id"]
+-        assert candidate.product_id == product["id"]
+-        assert db.get(Product, product["id"]).current_sbom_id == candidate.id
+-        assert db.get(SBOMSource, parent["sbom_id"]).sbom_data == parent_raw
++        assert candidate.parent_id == public_row(db, SBOMSource, parent["sbom_id"]).id
++        assert candidate.product_id == public_row(db, Product, product["id"]).id
++        assert public_row(db, Product, product["id"]).current_sbom_id == candidate.id
++        assert public_row(db, SBOMSource, parent["sbom_id"]).sbom_data == parent_raw
+ 
+ 
+ def test_duplicate_ref_bom_link_is_not_rebound_to_arbitrary_component():
+@@ -428,10 +438,10 @@
+         assert len(paths) == 2
+         original_files = {p: p.read_bytes() for p in paths}
+         service = SBOMDeleteService(db, tenant_id=1)
+-        service.permanently_delete_sbom(deleted[2], "release-test", True)
++        service.permanently_delete_sbom(public_row(db, SBOMSource, deleted[2]).id, "release-test", True)
+         assert db.get(SBOMRepairJob, deleted[1]["repair_job_id"]) is None
+         assert db.get(SBOMValidationSession, deleted[0]) is None
+         assert db.get(SBOMRepairJob, kept[1]["repair_job_id"]) is not None
+-        assert db.get(SBOMSource, kept[2]) is not None
++        assert public_row(db, SBOMSource, kept[2]) is not None
+         assert original_files == {p: p.read_bytes() for p in paths}
+     assert client.get(f"/api/sbom-validation-sessions/{kept[0]}/download-original").status_code == 200
+--- a/tests/test_sbom_revalidate_endpoint.py
++++ b/tests/test_sbom_revalidate_endpoint.py
+@@ -68,7 +68,7 @@
+         sbom = SBOMSource(sbom_name=name, sbom_data=body, status="validated", tenant_id=1)
+         db.add(sbom)
+         db.commit()
+-        return sbom.id
++        return str(sbom.public_id)
+ 
+ 
+ def _set_pending(client, sbom_id: int) -> None:
+@@ -79,8 +79,9 @@
+     from tests.tenant_fixture_scope import verified_fixture_tenant
+ 
+     with SessionLocal() as db, verified_fixture_tenant(db, 1):
+-        assert db.get(SBOMSource, sbom_id) is not None
+-        db.execute(update(SBOMSource).where(SBOMSource.id == sbom_id,
++        from tests.public_id_fixture import public_row
++        row = public_row(db, SBOMSource, sbom_id)
++        db.execute(update(SBOMSource).where(SBOMSource.id == row.id,
+                    SBOMSource.validated_at.is_(None), SBOMSource.status == "validated").values(status="pending"))
+         db.commit()
+ 
+@@ -137,7 +138,7 @@
+ 
+ 
+ def test_revalidate_404_on_unknown_id(client):
+-    resp = client.post("/api/sboms/99999999/revalidate")
++    resp = client.post(f"/api/sboms/{uuid.uuid4()}/revalidate")
+     assert resp.status_code == 404
+ 
+ 
+--- a/tests/test_sbom_spdx_integration.py
++++ b/tests/test_sbom_spdx_integration.py
+@@ -1,3 +1,5 @@
++
++from tests.public_id_fixture import public_row
+ from tests.tenant_fixture_scope import scoped_context_override
+ 
+ """SPDX uses the existing tenant-scoped session/job/approval API and native storage."""
+@@ -53,7 +55,7 @@
+     assert accepted.status_code == 200, accepted.text
+     accepted_id = accepted.json()['imported_sbom_id']
+     with SessionLocal() as db, verified_fixture_tenant(db, 1):
+-        stored = db.get(SBOMSource, accepted_id)
++        stored = public_row(db, SBOMSource, accepted_id)
+         assert stored.sbom_data.encode() == candidate
+         assert json.loads(stored.sbom_data)['spdxVersion'] == 'SPDX-' + version
+         original = db.get(SBOMValidationSession, session)
+@@ -123,7 +125,7 @@
+     response = client.post('/api/sboms', json={'sbom_name': 'valid-spdx-' + str(uuid.uuid4()), 'sbom_data': source.decode()})
+     assert response.status_code == 201, response.text
+     with SessionLocal() as db, verified_fixture_tenant(db, 1):
+-        stored = db.get(SBOMSource, response.json()['id'])
++        stored = public_row(db, SBOMSource, response.json()['id'])
+         assert stored.sbom_data.encode() == source
+         from sqlalchemy import func, select
+         assert db.scalar(select(func.count()).select_from(SBOMRepairJob)) == 0
+--- a/tests/test_sbom_spdx_release.py
++++ b/tests/test_sbom_spdx_release.py
+@@ -1,4 +1,5 @@
+ """Application-level SPDX release gates using the shared Phase 1/2 workflow."""
++
+ import copy
+ import json
+ import logging
+@@ -16,6 +17,7 @@
+ from app.validation import run
+ from sqlalchemy import func, select
+ 
++from tests.public_id_fixture import public_row
+ from tests.tenant_fixture_scope import verified_fixture_tenant
+ from tests.test_sbom_spdx_integration import base, job, upload
+ from tests.test_sbom_spdx_quality_repair import document, raw
+@@ -175,7 +177,7 @@
+         workspace = db.get(SBOMValidationSession, deleted[0])
+         paths = [Path(p) for p in (workspace.raw_storage_path, workspace.repair_storage_path) if p]
+         originals = {p: p.read_bytes() for p in paths}
+-        SBOMDeleteService(db, tenant_id=1).permanently_delete_sbom(deleted[2], 'spdx-release', True)
++        SBOMDeleteService(db, tenant_id=1).permanently_delete_sbom(public_row(db, SBOMSource, deleted[2]).id, 'spdx-release', True)
+         assert db.get(SBOMRepairJob, deleted[1]) is None
+         assert db.get(SBOMValidationSession, deleted[0]) is None
+         assert db.scalar(select(func.count()).select_from(SBOMValidationSessionEvent).where(SBOMValidationSessionEvent.session_id == deleted[0])) == 0
+--- a/tests/test_sbom_upload_validation_persisted.py
++++ b/tests/test_sbom_upload_validation_persisted.py
+@@ -17,6 +17,7 @@
+ from app.db import SessionLocal
+ from app.models import AnalysisRun, SBOMComponent, SBOMSource
+ 
++from tests.public_id_fixture import public_row
+ from tests.tenant_fixture_scope import verified_fixture_tenant
+ 
+ _VALID_CYCLONEDX = {
+@@ -149,7 +150,7 @@
+     db = SessionLocal()
+     try:
+         with verified_fixture_tenant(db, 1):
+-            assert db.query(SBOMComponent).filter(SBOMComponent.sbom_id == accepted["sbom_id"]).count() >= 1
++            assert db.query(SBOMComponent).filter(SBOMComponent.sbom_id == public_row(db, SBOMSource, accepted["sbom_id"]).id).count() >= 1
+     finally:
+         db.close()
+ 
+@@ -180,7 +181,7 @@
+     db = SessionLocal()
+     try:
+         with verified_fixture_tenant(db, 1):
+-            row = db.get(SBOMSource, accepted["sbom_id"])
++            row = public_row(db, SBOMSource, accepted["sbom_id"])
+             assert row is not None
+             assert row.sbom_version == "1.1.1"
+             assert row.productver == "1.0.0"
+@@ -275,7 +276,8 @@
+     accepted = resp.json()
+     assert accepted["enrichment_status"] == "pending"
+     assert "background" in accepted["message"].lower()
+-    assert scheduled == [accepted["sbom_id"]]
++    with SessionLocal() as db, verified_fixture_tenant(db, 1):
++        assert scheduled == [public_row(db, SBOMSource, accepted["sbom_id"]).id]
+ 
+     detail = client.get(f"/api/sboms/{accepted['sbom_id']}").json()
+     assert detail["status"] == "validated"
+@@ -285,7 +287,7 @@
+     db = SessionLocal()
+     try:
+         with verified_fixture_tenant(db, 1):
+-            assert db.query(AnalysisRun).filter(AnalysisRun.sbom_id == accepted["sbom_id"]).count() == 0
++            assert db.query(AnalysisRun).filter(AnalysisRun.sbom_id == public_row(db, SBOMSource, accepted["sbom_id"]).id).count() == 0
+     finally:
+         db.close()
+ 
+@@ -336,11 +338,11 @@
+ def test_upload_with_invalid_project_id_returns_clear_error(client, unique_name):
+     resp = client.post(
+         "/api/sboms/upload",
+-        data={"sbom_name": unique_name, "project_id": "999999"},
++        data={"sbom_name": unique_name, "project_id": str(uuid.uuid4())},
+         files={"file": ("valid.json", json.dumps(_VALID_CYCLONEDX), "application/json")},
+     )
+     assert resp.status_code == 404
+-    assert resp.json()["detail"] == "Project not found"
++    assert resp.json()["detail"] == "Resource not found"
+ 
+ 
+ def test_legacy_json_upload_accepts_project_id_alias(client, unique_name):
+--- a/tests/test_sbom_upload_version_lineage.py
++++ b/tests/test_sbom_upload_version_lineage.py
+@@ -21,6 +21,7 @@
+ from app.models import SBOMSource
+ from app.services.sbom_version_lineage import parse_version
+ 
++from tests.public_id_fixture import public_row
+ from tests.tenant_fixture_scope import verified_fixture_tenant
+ 
+ 
+@@ -97,7 +98,7 @@
+     assert resp.status_code == 202, resp.text
+ 
+     with SessionLocal() as db, verified_fixture_tenant(db, 1):
+-        row = db.get(SBOMSource, resp.json()["sbom_id"])
++        row = public_row(db, SBOMSource, resp.json()["sbom_id"])
+         assert row.parent_id is None
+ 
+ 
+@@ -120,8 +121,8 @@
+     second_id = second.json()["sbom_id"]
+ 
+     with SessionLocal() as db, verified_fixture_tenant(db, 1):
+-        child = db.get(SBOMSource, second_id)
+-        assert child.parent_id == first_id
++        child = public_row(db, SBOMSource, second_id)
++        assert child.parent_id == public_row(db, SBOMSource, first_id).id
+         assert "new version of" in (child.change_summary or "").lower()
+ 
+     # Both endpoints that read the chain now see two versions from either end.
+@@ -152,7 +153,7 @@
+     v3 = third.json()["sbom_id"]
+ 
+     with SessionLocal() as db, verified_fixture_tenant(db, 1):
+-        assert db.get(SBOMSource, v3).parent_id == v2
++        assert public_row(db, SBOMSource, v3).parent_id == public_row(db, SBOMSource, v2).id
+ 
+     listed = client.get(f"/api/sboms/{v1}/versions")
+     assert [row["id"] for row in listed.json()] == [v1, v2, v3]
+@@ -222,7 +223,7 @@
+         project_id=project["id"],
+         product_id=product["id"],
+         version="1.1.0",
+-        parent_sbom_id=99_999_999,
++        parent_sbom_id=str(uuid.uuid4()),
+     )
+     assert resp.status_code == 404, resp.text
+ 
+--- a/tests/test_sbom_validation_report_endpoint.py
++++ b/tests/test_sbom_validation_report_endpoint.py
+@@ -133,7 +133,7 @@
+ 
+ 
+ def test_validation_report_404_on_unknown_id(client):
+-    resp = client.get("/api/sboms/99999999/validation-report")
++    resp = client.get(f"/api/sboms/{uuid.uuid4()}/validation-report")
+     assert resp.status_code == 404
+ 
+ 
+--- a/tests/test_sbom_vulnerability_excel_report.py
++++ b/tests/test_sbom_vulnerability_excel_report.py
+@@ -138,7 +138,7 @@
+     monkeypatch.setattr(analysis, "osv_query_by_components", external_call_forbidden)
+     monkeypatch.setattr(analysis, "github_query_by_components", external_call_forbidden)
+ 
+-    response = client.get(f"/api/sboms/{sbom.id}/reports/vulnerabilities.xlsx")
++    response = client.get(f"/api/sboms/{sbom.public_id}/reports/vulnerabilities.xlsx")
+ 
+     assert response.status_code == 200
+     assert response.headers["content-type"] == EXCEL_MEDIA_TYPE
+@@ -182,11 +182,11 @@
+     _finding(db, run, duplicate, vuln_id="CVE-2025-7546", severity="HIGH")
+     db.commit()
+ 
+-    default_rows = _rows(client.get(f"/api/sboms/{sbom.id}/reports/vulnerabilities.xlsx"))
+-    duplicate_rows = _rows(client.get(f"/api/sboms/{sbom.id}/reports/vulnerabilities.xlsx?include_duplicates=true"))
+-    high_rows = _rows(client.get(f"/api/sboms/{sbom.id}/reports/vulnerabilities.xlsx?severity=high"))
+-    low_rows = _rows(client.get(f"/api/sboms/{sbom.id}/reports/vulnerabilities.xlsx?severity=low"))
+-    package_rows = _rows(client.get(f"/api/sboms/{sbom.id}/reports/vulnerabilities.xlsx?package_name=TOR"))
++    default_rows = _rows(client.get(f"/api/sboms/{sbom.public_id}/reports/vulnerabilities.xlsx"))
++    duplicate_rows = _rows(client.get(f"/api/sboms/{sbom.public_id}/reports/vulnerabilities.xlsx?include_duplicates=true"))
++    high_rows = _rows(client.get(f"/api/sboms/{sbom.public_id}/reports/vulnerabilities.xlsx?severity=high"))
++    low_rows = _rows(client.get(f"/api/sboms/{sbom.public_id}/reports/vulnerabilities.xlsx?severity=low"))
++    package_rows = _rows(client.get(f"/api/sboms/{sbom.public_id}/reports/vulnerabilities.xlsx?package_name=TOR"))
+ 
+     assert len(default_rows) == 2
+     assert len(duplicate_rows) == 3
+@@ -198,7 +198,7 @@
+ 
+ def test_empty_vulnerability_list_still_returns_headers(client, db):
+     sbom, _run = _seed_sbom(db, with_run=False)
+-    response = client.get(f"/api/sboms/{sbom.id}/reports/vulnerabilities.xlsx")
++    response = client.get(f"/api/sboms/{sbom.public_id}/reports/vulnerabilities.xlsx")
+ 
+     assert response.status_code == 200
+     rows = _rows(response)
+@@ -217,7 +217,7 @@
+     )
+     db.commit()
+ 
+-    rows = _rows(client.get(f"/api/sboms/{sbom.id}/reports/vulnerabilities.xlsx"))
++    rows = _rows(client.get(f"/api/sboms/{sbom.public_id}/reports/vulnerabilities.xlsx"))
+     row = dict(zip(rows[0], rows[1], strict=True))
+     assert row["creationTime"] == "2025-12-09T08:07:06Z"
+ 
+@@ -241,7 +241,7 @@
+     )
+     db.commit()
+ 
+-    rows = _rows(client.get(f"/api/sboms/{sbom.id}/reports/vulnerabilities.xlsx"))
++    rows = _rows(client.get(f"/api/sboms/{sbom.public_id}/reports/vulnerabilities.xlsx"))
+     row = dict(zip(rows[0], rows[1], strict=True))
+     assert row["exploit"] == "Not Defined"
+     assert row["severity"] == "unknown"
+@@ -267,10 +267,10 @@
+     _finding(db, run, component, vuln_id=vuln_id, source=source, aliases=aliases)
+     db.commit()
+ 
+-    rows = _rows(client.get(f"/api/sboms/{sbom.id}/reports/vulnerabilities.xlsx"))
++    rows = _rows(client.get(f"/api/sboms/{sbom.public_id}/reports/vulnerabilities.xlsx"))
+     assert rows[1][3] == expected
+ 
+ 
+ def test_unknown_sbom_returns_404(client):
+-    response = client.get("/api/sboms/999999999/reports/vulnerabilities.xlsx")
++    response = client.get(f"/api/sboms/{uuid4()}/reports/vulnerabilities.xlsx")
+     assert response.status_code == 404
+--- a/tests/test_sboms_analyze_snapshot.py
++++ b/tests/test_sboms_analyze_snapshot.py
+@@ -19,8 +19,9 @@
+ from pathlib import Path
+ 
+ import pytest
+-from app.models import AnalysisRun
++from app.models import AnalysisRun, SBOMSource
+ 
++from tests.public_id_fixture import public_row
+ from tests.tenant_fixture_scope import verified_fixture_tenant
+ 
+ from ._normalize import normalize
+@@ -103,7 +104,7 @@
+     try:
+         with verified_fixture_tenant(db, 1):
+             active = AnalysisRun(
+-                sbom_id=seeded_sbom["id"],
++                sbom_id=public_row(db, SBOMSource, seeded_sbom["id"]).id,
+                 run_status="RUNNING",
+                 sbom_name=seeded_sbom["sbom_name"],
+                 source="NVD,OSV,GITHUB",
+@@ -129,7 +130,7 @@
+     db = SessionLocal()
+     try:
+         with verified_fixture_tenant(db, 1):
+-            runs = db.query(AnalysisRun).filter(AnalysisRun.sbom_id == seeded_sbom["id"]).all()
++            runs = db.query(AnalysisRun).filter(AnalysisRun.sbom_id == public_row(db, SBOMSource, seeded_sbom["id"]).id).all()
+             assert [run.id for run in runs].count(active_id) == 1
+             assert sum(1 for run in runs if run.run_status == "RUNNING") == 1
+             db.query(AnalysisRun).filter(AnalysisRun.id == active_id).delete()
+--- a/tests/test_sboms_analyze_stream.py
++++ b/tests/test_sboms_analyze_stream.py
+@@ -28,6 +28,7 @@
+ from app.models import AnalysisRun, SBOMComponent, SBOMSource
+ from sqlalchemy import literal, select
+ 
++from tests.public_id_fixture import public_row
+ from tests.tenant_fixture_scope import verified_fixture_tenant
+ 
+ 
+@@ -74,7 +75,7 @@
+     sbom_id = seeded_sbom["id"]
+     before_ids = {
+         row.id
+-        for row in db.query(AnalysisRun).filter(AnalysisRun.sbom_id == sbom_id).all()
++        for row in db.query(AnalysisRun).filter(AnalysisRun.sbom_id == public_row(db, SBOMSource, sbom_id).id).all()
+     }
+ 
+     resp = client.post(
+@@ -129,7 +130,7 @@
+     persisted = db.get(AnalysisRun, final["runId"])
+     assert persisted is not None
+     assert persisted.id not in before_ids
+-    assert persisted.sbom_id == sbom_id
++    assert persisted.sbom_id == public_row(db, SBOMSource, sbom_id).id
+     assert persisted.run_status == "FINDINGS"
+     assert persisted.started_on
+     assert persisted.completed_on
+@@ -166,7 +167,7 @@
+     db.refresh(sbom)
+ 
+     resp = client.post(
+-        f"/api/sboms/{sbom.id}/analyze/stream",
++        f"/api/sboms/{sbom.public_id}/analyze/stream",
+         json={"sources": ["NVD"]},
+     )
+ 
+@@ -188,7 +189,7 @@
+     assert run.completed_on
+     assert "SBOM parse failed" in (run.raw_report or "")
+ 
+-    detail = client.get(f"/api/sboms/{sbom.id}").json()
++    detail = client.get(f"/api/sboms/{sbom.public_id}").json()
+     assert detail["latest_analysis"]["run_id"] == run.id
+     assert detail["latest_analysis"]["status"] == "failed"
+     assert detail["latest_analysis"]["result"] == "failed"
+@@ -197,7 +198,7 @@
+ 
+ def test_analyze_stream_zero_persisted_components_marks_run_failed(client, seeded_sbom, db, monkeypatch):
+     sbom_id = seeded_sbom["id"]
+-    db.query(SBOMComponent).filter(SBOMComponent.sbom_id == sbom_id).delete()
++    db.query(SBOMComponent).filter(SBOMComponent.sbom_id == public_row(db, SBOMSource, sbom_id).id).delete()
+     db.commit()
+ 
+     def fake_sync_components(_db, _sbom):
+@@ -232,7 +233,7 @@
+ 
+     started = (datetime.now(UTC) - timedelta(minutes=10)).replace(microsecond=0).isoformat()
+     active = AnalysisRun(
+-        sbom_id=seeded_sbom["id"],
++        sbom_id=public_row(db, SBOMSource, seeded_sbom["id"]).id,
+         run_status="RUNNING",
+         sbom_name=seeded_sbom["sbom_name"],
+         source="NVD,OSV,GITHUB",
+@@ -261,7 +262,7 @@
+ 
+     started = datetime.now(UTC).replace(microsecond=0).isoformat()
+     active = AnalysisRun(
+-        sbom_id=seeded_sbom["id"],
++        sbom_id=public_row(db, SBOMSource, seeded_sbom["id"]).id,
+         run_status="RUNNING",
+         sbom_name=seeded_sbom["sbom_name"],
+         source="NVD,OSV,GITHUB",
+@@ -288,7 +289,7 @@
+ 
+ def test_analyze_stream_returns_existing_active_run_without_duplicate(client, seeded_sbom, db):
+     active = AnalysisRun(
+-        sbom_id=seeded_sbom["id"],
++        sbom_id=public_row(db, SBOMSource, seeded_sbom["id"]).id,
+         run_status="RUNNING",
+         sbom_name=seeded_sbom["sbom_name"],
+         source="NVD,OSV,GITHUB",
+@@ -300,7 +301,7 @@
+     db.add(active)
+     db.commit()
+     db.refresh(active)
+-    before_count = db.query(AnalysisRun).filter(AnalysisRun.sbom_id == seeded_sbom["id"]).count()
++    before_count = db.query(AnalysisRun).filter(AnalysisRun.sbom_id == public_row(db, SBOMSource, seeded_sbom["id"]).id).count()
+ 
+     resp = client.post(
+         f"/api/sboms/{seeded_sbom['id']}/analyze/stream",
+@@ -317,7 +318,7 @@
+     assert final["already_running"] is True
+ 
+     db.expire_all()
+-    after_count = db.query(AnalysisRun).filter(AnalysisRun.sbom_id == seeded_sbom["id"]).count()
++    after_count = db.query(AnalysisRun).filter(AnalysisRun.sbom_id == public_row(db, SBOMSource, seeded_sbom["id"]).id).count()
+     assert after_count == before_count
+     db.query(AnalysisRun).filter(AnalysisRun.id == active.id).delete()
+     db.commit()
+--- a/tests/test_schedules_api.py
++++ b/tests/test_schedules_api.py
+@@ -12,6 +12,11 @@
+ import uuid
+ 
+ import pytest
++from app.db import SessionLocal
++from app.models import SBOMSource
++
++from tests.public_id_fixture import public_row
++from tests.tenant_fixture_scope import verified_fixture_tenant
+ 
+ 
+ @pytest.fixture
+@@ -330,7 +335,8 @@
+     body = resp.json()
+     assert sbom_id in body["sbom_ids"]
+     # Stub recorded the per-SBOM enqueue
+-    assert (sbom_id, sched_id) in _stub_celery
++    with SessionLocal() as db, verified_fixture_tenant(db, 1):
++        assert (public_row(db, SBOMSource, sbom_id).id, sched_id) in _stub_celery
+ 
+ 
+ def test_run_now_for_sbom_enqueues_only_that_sbom(client, sbom_id, _stub_celery):
+@@ -343,7 +349,8 @@
+     resp = client.post(f"/api/schedules/{sched_id}/run-now")
+     assert resp.status_code == 202
+     assert resp.json()["sbom_ids"] == [sbom_id]
+-    assert _stub_celery == [(sbom_id, sched_id)]
++    with SessionLocal() as db, verified_fixture_tenant(db, 1):
++        assert _stub_celery == [(public_row(db, SBOMSource, sbom_id).id, sched_id)]
+ 
+ 
+ def test_run_now_for_product_fans_out_to_product_sboms(
+@@ -365,7 +372,8 @@
+     resp = client.post(f"/api/schedules/{sched_id}/run-now")
+     assert resp.status_code == 202, resp.text
+     assert resp.json()["sbom_ids"] == [sbom_id]
+-    assert _stub_celery == [(sbom_id, sched_id)]
++    with SessionLocal() as db, verified_fixture_tenant(db, 1):
++        assert _stub_celery == [(public_row(db, SBOMSource, sbom_id).id, sched_id)]
+ 
+ 
+ def test_run_now_returns_502_when_broker_drops_every_enqueue(client, sbom_id, monkeypatch):
+--- a/tests/test_scoped_configuration.py
++++ b/tests/test_scoped_configuration.py
+@@ -32,6 +32,7 @@
+ from sqlalchemy import select
+ 
+ from tests.phase6_helpers import identity_claims, seed_membership, seed_platform_grant, seed_user
++from tests.public_id_fixture import tenant_uuid
+ from tests.tenant_fixture_scope import fixture_business_snapshot, verified_fixture_tenant
+ 
+ 
+@@ -124,7 +125,7 @@
+         "PUT",
+         f"/api/platform/configuration/ai/credentials/{pid}",
+         json={"default_model": "platform-new"},
+-        headers={"X-Tenant-ID": "2"},
++        headers={"X-Tenant-ID": tenant_uuid(2)},
+     )
+     assert updated.status_code == 200, updated.text
+     assert (
+@@ -171,13 +172,13 @@
+     ],
+ )
+ def test_platform_configuration_does_not_grant_tenant_entry(configured_actors, path, method, payload):
+-    result = configured_actors("platform", method, path, json=payload, headers={"X-Tenant-ID": "1"})
++    result = configured_actors("platform", method, path, json=payload, headers={"X-Tenant-ID": tenant_uuid(1)})
+     assert result.status_code == 403, result.text
+ 
+ 
+ @pytest.mark.parametrize("path", ["/api/v1/ai/effective-config", "/api/admin/lifecycle-providers"])
+ def test_cross_tenant_configuration_request_rejected(configured_actors, path):
+-    assert configured_actors("olympus", "GET", path, headers={"X-Tenant-ID": "2"}).status_code == 403
++    assert configured_actors("olympus", "GET", path, headers={"X-Tenant-ID": tenant_uuid(2)}).status_code == 403
+     assert configured_actors("viewer", "GET", path).status_code == 403
+ 
+ 
+@@ -675,7 +676,7 @@
+     assert call(role_actor, "POST", "/api/v1/ai/override").status_code == 403
+     assert call(role_actor, "DELETE", "/api/v1/ai/override").status_code == 403
+     assert call(role_actor, "GET", "/api/platform/configuration/ai/credentials").status_code == 403
+-    assert call(role_actor, "GET", "/api/analysis/config", headers={"X-Tenant-ID": "2"}).status_code == 403
++    assert call(role_actor, "GET", "/api/analysis/config", headers={"X-Tenant-ID": tenant_uuid(2)}).status_code == 403
+     # Analysis execution is independent of credential/configuration authority.
+     can_run = role_actor == "analyst"
+     result = call(role_actor, "POST", "/api/v1/findings/0/ai-fix", json={})
+--- a/tests/test_soft_delete.py
++++ b/tests/test_soft_delete.py
+@@ -374,7 +374,7 @@
+     pid = proj.id
+ 
+     resp = client.delete(
+-        f"/api/projects/{pid}",
++        f"/api/projects/{proj.public_id}",
+         params={"user_id": "alice", "confirm": "yes"},
+     )
+     assert resp.status_code == 200, resp.text
+@@ -449,7 +449,7 @@
+     product_id = product.id
+ 
+     resp = client.delete(
+-        f"/api/projects/{pid}",
++        f"/api/projects/{project.public_id}",
+         params={"user_id": "alice", "confirm": "yes", "permanent": "true"},
+     )
+     assert resp.status_code == 200, resp.text
+@@ -488,7 +488,7 @@
+     pid = proj.id
+ 
+     resp = client.delete(
+-        f"/api/projects/{pid}",
++        f"/api/projects/{proj.public_id}",
+         params={"user_id": "alice", "confirm": "yes", "permanent": "true"},
+     )
+     assert resp.status_code == 200, resp.text
+--- a/tests/test_structured_logging.py
++++ b/tests/test_structured_logging.py
+@@ -269,15 +269,23 @@
+     assert "BACKGROUND-SECRET" not in log_file.read_text()
+ 
+ 
+-def test_early_body_rejection_logged(log_file):
++def test_early_body_rejection_logged(log_file, monkeypatch):
+     from app.middleware.max_body import MaxBodySizeMiddleware
+ 
+     app = make_app()
+     app.add_middleware(MaxBodySizeMiddleware, max_bytes=1)
+     app.add_middleware(RequestLoggingMiddleware)
++    # Transport diagnostics may follow the application completion event.
++    # Keep them enabled rather than relying on global logger ordering.
++    monkeypatch.setattr(logging.getLogger("httpx2"), "level", logging.INFO)
+     response = TestClient(app).post("/ok", content=b"too large")
+     assert response.status_code == 413 and response.headers["X-Request-ID"]
+-    assert entries(log_file)[-1]["status_code"] == 413
++    events = [row for row in entries(log_file) if row.get("event") == "http_request_completed"]
++    assert len(events) == 1
++    assert {key: events[0][key] for key in ("method", "path", "status_code", "exception_category")} == {
++        "method": "POST", "path": "/ok", "status_code": 413, "exception_category": "HTTPError",
++    }
++    assert events[0]["request_id"] == response.headers["X-Request-ID"] == response.headers["X-Correlation-ID"]
+ 
+ 
+ def _write_child(path, worker):
+--- a/tests/test_tenant_boundary_hardening.py
++++ b/tests/test_tenant_boundary_hardening.py
+@@ -64,7 +64,10 @@
+ 
+ def test_foreign_deleted_project_cannot_be_restored(client, tenant_projects):
+     tenant_b, identifiers = tenant_projects
+-    response = client.post(f"/api/projects/{identifiers[tenant_b, False]}/restore")
++    with tenant_scope(minimal_background_context(tenant_b)), SessionLocal() as db:
++        foreign = db.scalar(select(Projects).where(Projects.id == identifiers[tenant_b, False]).execution_options(include_deleted=True))
++        public_id = str(foreign.public_id)
++    response = client.post(f"/api/projects/{public_id}/restore")
+     assert response.status_code == 404
+     with tenant_scope(minimal_background_context(tenant_b)), SessionLocal() as db:
+         row = db.scalar(
+--- a/tests/test_tenant_isolation.py
++++ b/tests/test_tenant_isolation.py
+@@ -120,10 +120,10 @@
+             db.add_all([finding_b, remediation_b])
+             db.commit()
+             yield {
+-                "tenant_b_id": t2.id,
+-                "project_b_id": project_b.id,
+-                "product_b_id": product_b.id,
+-                "sbom_b_id": sbom_b.id,
++                "tenant_b_id": str(t2.public_id),
++                "project_b_id": str(project_b.public_id),
++                "product_b_id": str(product_b.public_id),
++                "sbom_b_id": str(sbom_b.public_id),
+                 "run_b_id": run_b.id,
+                 "finding_b_id": finding_b.id,
+                 "remediation_b_id": remediation_b.id,
+@@ -137,20 +137,13 @@
+ def test_tenant_a_cannot_access_tenant_b_sbom(client, two_tenant_setup):
+     sbom_id = two_tenant_setup["sbom_b_id"]
+     resp = client.get(f"/api/sboms/{sbom_id}")
+-    if resp.status_code == 200:
+-        # Same numeric id may exist in tenant A — must not return tenant B's row.
+-        assert resp.json().get("sbom_name") != "sbom-b"
+-    else:
+-        assert resp.status_code == 404
++    assert resp.status_code == 404
+ 
+ 
+ def test_tenant_a_cannot_access_tenant_b_project(client, two_tenant_setup):
+     project_id = two_tenant_setup["project_b_id"]
+     resp = client.get(f"/api/projects/{project_id}")
+-    if resp.status_code == 200:
+-        assert resp.json().get("project_name") != "Project B"
+-    else:
+-        assert resp.status_code == 404
++    assert resp.status_code == 404
+ 
+ 
+ def test_tenant_a_cannot_update_or_delete_tenant_b_project(client, two_tenant_setup):
+--- a/tests/test_user_search.py
++++ b/tests/test_user_search.py
+@@ -1,4 +1,10 @@
+-"""Regression tests for global and tenant-scoped user search."""
++"""Current V5 HTTP denial plus legacy search-projection unit coverage.
++
++Ordinary Platform Admin lacks platform:user:read. Positive HTTP directory
++access is intentionally unavailable; keep query/projection assertions as
++explicit direct-handler unit tests, without granting a principal permissions.
++SBO-73 tenant candidate discovery is a separate, unchanged policy.
++"""
+ 
+ from __future__ import annotations
+ 
+@@ -29,6 +35,22 @@
+     return client.get("/api/platform/users/search", params={"q": query})
+ 
+ 
++def _projection(query):
++    # Direct function invocation is unit coverage of retained query code, not
++    # positive HTTP authorization or a provisioned administrative capability.
++    from app.routers.platform import search_platform_users
++
++    from tests.tenant_fixture_scope import verified_fixture_tenant
++    with SessionLocal() as db, verified_fixture_tenant(db, 1):
++        return search_platform_users(q=query, tenant_id=None, page=1, page_size=20,
++                                     context=None, db=db).model_dump(mode="json")
++
++
++def _assert_denied(response):
++    assert response.status_code == 403, response.text
++    assert response.json()["detail"]["code"] == "IAM_PLATFORM_PERMISSION_DENIED"
++
++
+ def test_platform_search_finds_exact_email_case_insensitively(client):
+     with SessionLocal() as db:
+         seed_dev_platform_admin(db)
+@@ -39,8 +61,8 @@
+ 
+     response = _search(client, "FEROZEBASHA.S@HCLTECH.COM")
+ 
+-    assert response.status_code == 200, response.text
+-    item = response.json()["items"][0]
++    _assert_denied(response)
++    item = _projection("FEROZEBASHA.S@HCLTECH.COM")["items"][0]
+     assert item["id"] == user_id
+     assert item["email"] == FEROZE_EMAIL
+     assert item["display_name"] == "Feroze Basha"
+@@ -65,8 +87,8 @@
+ 
+     for query in ("basha.s@hcl", "Feroze Basha", "ferozebasha"):
+         response = _search(client, query)
+-        assert response.status_code == 200, response.text
+-        assert [item["id"] for item in response.json()["items"]] == [user_id]
++        _assert_denied(response)
++        assert [item["id"] for item in _projection(query)["items"]] == [user_id]
+ 
+ 
+ def test_active_verified_user_without_tenant_claim_or_membership_is_returned(client):
+@@ -78,8 +100,8 @@
+ 
+     response = _search(client, FEROZE_EMAIL)
+ 
+-    assert response.status_code == 200, response.text
+-    item = response.json()["items"][0]
++    _assert_denied(response)
++    item = _projection(FEROZE_EMAIL)["items"][0]
+     assert item["id"] == user_id
+     assert item["status"] == "ACTIVE"
+     assert item["email_verified"] is True
+@@ -98,8 +120,8 @@
+ 
+     response = _search(client, "feroze")
+ 
+-    assert response.status_code == 200, response.text
+-    item = response.json()["items"][0]
++    _assert_denied(response)
++    item = _projection("feroze")["items"][0]
+     assert item["id"] == user_id
+     assert item["tenant_memberships"][0]["tenant_id"] == 1
+     assert item["tenant_memberships"][0]["status"] == membership_status
+@@ -128,13 +150,13 @@
+     inactive_response = _search(client, "search-inactive")
+     unverified_response = _search(client, "search-unverified")
+ 
+-    assert inactive_response.status_code == 200
+-    assert inactive_response.json()["items"][0]["id"] == inactive_id
+-    assert inactive_response.json()["items"][0]["status"] == "DISABLED"
+-    assert unverified_response.status_code == 200
+-    assert unverified_response.json()["items"][0]["id"] == unverified_id
+-    assert unverified_response.json()["items"][0]["email_verified"] is False
+-    assert unverified_response.json()["items"][0]["verification_required"] is True
++    _assert_denied(inactive_response)
++    assert _projection("search-inactive")["items"][0]["id"] == inactive_id
++    assert _projection("search-inactive")["items"][0]["status"] == "DISABLED"
++    _assert_denied(unverified_response)
++    assert _projection("search-unverified")["items"][0]["id"] == unverified_id
++    assert _projection("search-unverified")["items"][0]["email_verified"] is False
++    assert _projection("search-unverified")["items"][0]["verification_required"] is True
+ 
+ 
+ def test_non_platform_administrator_is_denied_global_user_search(client, app):
+--- /dev/null
++++ b/tests/historical_migration_fixture.py
+@@ -0,0 +1,93 @@
++"""Historical migration tests use new owned databases and a frozen pre-UUID chain.
++
++Greenfield 100 intentionally refuses downgrade. Never downgrade the current
++application/test database to exercise historical migration functions.
++"""
++from pathlib import Path
++from uuid import uuid4
++
++import pytest
++from alembic import command
++from alembic.config import Config
++from sqlalchemy import create_engine, inspect, text
++from sqlalchemy.engine import make_url
++from sqlalchemy.orm import sessionmaker
++
++HISTORICAL_HEADS = {
++    "test_entra_migration": "063_microsoft_entra_identity",
++    "test_native_identity_migration": "060_native_identity_foundation",
++    "test_phase3_identity_migration": "047_email_verification_tokens",
++    "test_phase5_identity_migration": "047_email_verification_tokens",
++    "test_report_migrations": "053_tenant_analysis_schedule",
++    "test_sbom_repair_migration": "074_sbom_repair_jobs",
++}
++
++
++@pytest.fixture
++def historical_database(client, monkeypatch, tmp_path, request):
++    import app.db as database
++
++    legacy_head = HISTORICAL_HEADS[request.module.__name__.split(".")[-1]]
++    template = make_url(database.DATABASE_URL)
++    assert template.get_backend_name() == "postgresql"
++    assert "_test" in (template.database or "")
++    name = "sbom_round4_historical_test_" + uuid4().hex
++    target = template.set(database=name)
++    root = Path(__file__).resolve().parents[1]
++    control = create_engine(template.set(database="postgres"), isolation_level="AUTOCOMMIT", hide_parameters=True)
++    engine = create_engine(target, hide_parameters=True)
++    with control.connect() as connection:
++        assert not connection.scalar(text("SELECT EXISTS(SELECT 1 FROM pg_database WHERE datname=:name)"), {"name": name})
++        connection.exec_driver_sql("CREATE DATABASE " + name)
++    try:
++        # Only a new, verified empty owned DB receives this immutable schema.
++        with engine.connect() as connection:
++            assert not inspect(connection).get_table_names()
++        raw = engine.raw_connection()
++        try:
++            with raw.cursor() as cursor:
++                cursor.execute((root / 'scripts/schema/postgresql_047_baseline.sql').read_text(), prepare=False)
++                cursor.execute('CREATE TABLE public.alembic_version(version_num varchar(128) PRIMARY KEY)')
++                cursor.execute("INSERT INTO public.alembic_version VALUES ('047_email_verification_tokens')")
++                cursor.execute("SET search_path TO public")
++            raw.commit()
++        finally:
++            raw.close()
++        # The test-only chain contains the unchanged historical sources. 100 is
++        # deliberately outside its range, never disabled in application code.
++        migrations = tmp_path / 'historical-alembic'
++        (migrations / 'versions').mkdir(parents=True)
++        (migrations / 'env.py').symlink_to(root / 'alembic/env.py')
++        for path in (root / 'alembic/versions').glob('*.py'):
++            if path.name[:3].isdigit() and int(path.name[:3]) <= int(legacy_head[:3]):
++                (migrations / 'versions' / path.name).symlink_to(path)
++        def config(_filename='alembic.ini'):
++            value = Config(str(root / 'alembic.ini'))
++            value.set_main_option('script_location', str(migrations))
++            return value
++        url = target.render_as_string(hide_password=False)
++        for key in ('DATABASE_URL', 'TEST_DATABASE_URL', 'TEST_POSTGRES_DATABASE_URL'):
++            monkeypatch.setenv(key, url)
++        monkeypatch.setenv('SBOM_IDENTITY_BACKFILL_ISSUER', 'https://hcl-cs.test')
++        monkeypatch.setattr('logging.config.fileConfig', lambda *args, **kwargs: None)
++        command.upgrade(config(), legacy_head)
++        with engine.begin() as connection:
++            connection.execute(text("INSERT INTO tenants(id,name,slug,external_iam_tenant_id,status,created_at,updated_at) VALUES(1,'Historical fixture','legacy-fixture','legacy-fixture','ACTIVE',now(),now())"))
++        sessions = sessionmaker(bind=engine, class_=database.TenantSession, autoflush=False)
++        monkeypatch.setattr(database, 'SessionLocal', sessions)
++        monkeypatch.setattr(database, 'engine', engine)
++        monkeypatch.setattr(database, 'DATABASE_URL', url)
++        module = request.module
++        for key, value in [('Config', config), ('SessionLocal', sessions), ('CURRENT_HEAD', legacy_head), ('REVISION', legacy_head)]:
++            if hasattr(module, key):
++                # REVISION in Phase3/5 is the migration under test, not head.
++                if key == 'REVISION' and module.__name__.endswith(('test_phase3_identity_migration', 'test_phase5_identity_migration')):
++                    continue
++                monkeypatch.setattr(module, key, value)
++        yield engine
++    finally:
++        engine.dispose()
++        # The random name was created by this fixture, never taken from input.
++        with control.connect() as connection:
++            connection.exec_driver_sql("DROP DATABASE " + name + " WITH (FORCE)")
++        control.dispose()
+--- /dev/null
++++ b/tests/test_reconcile_analysis_run_scope.py
+@@ -0,0 +1,106 @@
++"""Operator reconciliation keeps tenant guards and atomic dry-run/apply behavior."""
++from datetime import UTC, datetime
++
++import pytest
++from app.core.context import get_bound_context, minimal_background_context, tenant_scope
++from app.db import SessionLocal
++from app.models import AnalysisRun, AuthorizationAuditLog, SBOMSource, Tenant
++from scripts import reconcile_analysis_run_finding_counts as command
++from sqlalchemy import select
++
++from tests.tenant_fixture_scope import declare_fixture_tenant, verified_fixture_tenant
++
++
++@pytest.fixture
++def runs(client):
++    identifiers = {}
++    with SessionLocal() as db:
++        declare_fixture_tenant(db, 2)
++        db.commit()
++        for owner in (1, 2):
++            with verified_fixture_tenant(db, owner):
++                sbom = SBOMSource(sbom_name=f"operator-scope-{owner}", status="validated")
++                db.add(sbom)
++                db.flush()
++                run = AnalysisRun(sbom_id=sbom.id, run_status="FINDINGS", started_on="2026-10-20",
++                                  completed_on="2026-10-20", total_findings=5, high_count=5)
++                db.add(run)
++                db.commit()
++                identifiers[owner] = run.id
++    return identifiers
++
++
++def invoke(monkeypatch, *args):
++    monkeypatch.setattr("sys.argv", ["reconcile_analysis_run_finding_counts.py", *map(str, args)])
++    return command.main()
++
++
++def stored(owner, run_id):
++    assert owner in (1, 2)
++    with tenant_scope(minimal_background_context(owner)), SessionLocal() as db:
++        row = db.get(AnalysisRun, run_id)
++        return row.total_findings, row.high_count
++
++
++def test_dry_run_never_updates_either_owner(runs, monkeypatch, capsys):
++    assert invoke(monkeypatch, "--run-id", runs[1], "--dry-run") == 0
++    assert "canonical findings: 0" in capsys.readouterr().out
++    assert stored(1, runs[1]) == stored(2, runs[2]) == (5, 5)
++    assert get_bound_context() is None
++
++
++def test_explicit_scope_cannot_reconcile_foreign_run(runs, monkeypatch, capsys):
++    assert invoke(monkeypatch, "--tenant-id", 1, "--run-id", runs[2], "--apply") == 1
++    assert "not found" in capsys.readouterr().out
++    assert stored(1, runs[1]) == stored(2, runs[2]) == (5, 5)
++    assert get_bound_context() is None
++
++
++def test_apply_all_is_scoped_audited_and_idempotent(runs, monkeypatch, capsys):
++    assert invoke(monkeypatch, "--tenant-id", 1, "--all", "--apply") == 0
++    assert "Reconciled runs updated: 1" in capsys.readouterr().out
++    assert stored(1, runs[1]) == (0, 0)
++    assert stored(2, runs[2]) == (5, 5)
++    assert invoke(monkeypatch, "--tenant-id", 1, "--all", "--apply") == 0
++    assert "Reconciled runs updated: 0" in capsys.readouterr().out
++    with SessionLocal() as db:
++        events = db.scalars(select(AuthorizationAuditLog).where(
++            AuthorizationAuditLog.action.in_(["maintenance.started", "maintenance.finished"]))).all()
++        events = [event for event in events if (event.new_value or {}).get("operation") == "reconcile_analysis_run_finding_counts"]
++        assert [event.action for event in events].count("maintenance.started") == 2
++        assert [event.action for event in events].count("maintenance.finished") == 2
++        assert all(event.tenant_id == 1 and event.outcome == "SUCCESS" for event in events)
++    assert get_bound_context() is None
++
++
++def test_inactive_owner_is_rejected(runs, monkeypatch):
++    with SessionLocal() as db:
++        db.get(Tenant, 2).status = "DISABLED"
++        db.get(Tenant, 2).updated_at = datetime.now(UTC)
++        db.commit()
++    with pytest.raises(RuntimeError, match="Inactive maintenance tenant"):
++        invoke(monkeypatch, "--tenant-id", 2, "--all", "--apply")
++    assert stored(2, runs[2]) == (5, 5)
++    assert get_bound_context() is None
++
++
++def test_request_context_cannot_invoke_operator_discovery(runs, monkeypatch):
++    with tenant_scope(minimal_background_context(1)):
++        with pytest.raises(RuntimeError, match="request contexts"):
++            invoke(monkeypatch, "--all", "--apply")
++    assert stored(1, runs[1]) == stored(2, runs[2]) == (5, 5)
++
++
++def test_mutation_failure_rolls_back_and_clears_scope(runs, monkeypatch):
++    def fail(row, metrics):
++        row.total_findings = metrics.total_findings
++        raise RuntimeError("controlled reconciliation failure")
++    monkeypatch.setattr(command, "apply_metrics_to_run", fail)
++    with pytest.raises(RuntimeError, match="controlled reconciliation failure"):
++        invoke(monkeypatch, "--tenant-id", 1, "--all", "--apply")
++    assert stored(1, runs[1]) == stored(2, runs[2]) == (5, 5)
++    assert get_bound_context() is None
++    with SessionLocal() as db:
++        event = db.scalar(select(AuthorizationAuditLog).where(
++            AuthorizationAuditLog.action == "maintenance.finished", AuthorizationAuditLog.outcome == "FAILED"))
++        assert event.tenant_id == 1 and event.outcome == "FAILED"
+--- /dev/null
++++ b/tests/test_round4_uuid_regression.py
+@@ -0,0 +1,59 @@
++"""Integer public-ID rejection survives obsolete fixture corrections (SBO-54)."""
++from uuid import UUID, uuid4
++
++import pytest
++from app.db import SessionLocal
++from app.models import Projects, SBOMSource
++
++from tests.public_id_fixture import public_row, tenant_uuid
++from tests.tenant_fixture_scope import verified_fixture_tenant
++
++
++@pytest.mark.parametrize("path", [
++    "/api/projects/1", "/api/products/1", "/api/sboms/1", "/api/sboms/1/validation-report",
++    "/api/sboms/1/reports/vulnerabilities.xlsx", "/dashboard/priority-findings?project_id=1",
++    "/api/component-advisor/summary?project_id=1", "/api/runs/aggregate?sbom_id=1",
++])
++def test_integer_public_identifiers_are_rejected(client, path):
++    response = client.get(path)
++    assert response.status_code == 422, response.text
++    assert response.json() == {"detail": "Resource identifier must be a UUIDv4"}
++
++
++@pytest.mark.parametrize("header", ["1", "0", "not-a-uuid"])
++def test_invalid_tenant_headers_do_not_select_a_tenant(client, header):
++    response = client.get("/api/auth/context", headers={"X-Tenant-ID": header})
++    assert response.status_code == 422
++
++
++def test_wire_uuid_and_internal_integer_keys_are_distinct(client, sample_sbom_dict):
++    import json
++    project = client.post("/api/projects", json={"project_name": "round4-identity-boundary"})
++    assert project.status_code == 201
++    project_id = project.json()["id"]
++    assert UUID(project_id).version == 4
++    sbom = client.post("/api/sboms", json={"sbom_name": "round4-identity-boundary", "sbom_data": json.dumps(sample_sbom_dict), "project_id": project_id})
++    assert sbom.status_code == 201, sbom.text
++    sbom_id = sbom.json()["id"]
++    assert UUID(sbom_id).version == 4
++    with SessionLocal() as db, verified_fixture_tenant(db, 1):
++        row = public_row(db, SBOMSource, sbom_id)
++        project_row = public_row(db, Projects, project_id)
++        assert type(row.id) is int and type(row.projectid) is int
++        assert row.projectid == project_row.id
++        internal_id = row.id
++    assert client.get(f"/api/sboms/{sbom_id}").json()["project_id"] == project_id
++    assert client.get(f"/api/sboms/{internal_id}").status_code == 422
++    assert client.get(f"/api/sboms/{uuid4()}").status_code == 404
++    assert client.get("/api/auth/me").json()["tenant_id"] == tenant_uuid(1)
++
++
++def test_greenfield_public_identity_downgrade_stays_forbidden():
++    import importlib.util
++    from pathlib import Path
++    path = Path(__file__).resolve().parents[1] / "alembic/versions/100_greenfield_uuid_final.py"
++    spec = importlib.util.spec_from_file_location("greenfield_identity_revision", path)
++    revision = importlib.util.module_from_spec(spec)
++    spec.loader.exec_module(revision)
++    with pytest.raises(RuntimeError, match="Public identities cannot be downgraded"):
++        revision.downgrade()
+--- /dev/null
++++ b/tests/test_public_identity_batch_serialization.py
+@@ -0,0 +1,110 @@
++"""UUID response translation is bounded and retains its tenant/native boundaries."""
++from contextlib import contextmanager
++
++import pytest
++from app.core.context import CurrentContext
++from app.db import SessionLocal, engine
++from app.models import Projects
++from app.public_api import install_public_boundary
++from fastapi import APIRouter, Depends, FastAPI
++from fastapi.testclient import TestClient
++from sqlalchemy import event
++
++from tests.tenant_fixture_scope import declare_fixture_tenant, scoped_context_override, verified_fixture_tenant
++
++
++@contextmanager
++def serialization_client(payload, owner=1):
++    context = CurrentContext(user_id=1, external_user_id="serializer-unit", email=None, display_name=None,
++                             tenant_id=owner, external_tenant_id=None, roles=frozenset(), permissions=frozenset())
++    local = FastAPI()
++    router = APIRouter()
++    dependency = scoped_context_override(lambda: context)
++
++    @router.get('/api/serialization-unit', dependencies=[Depends(dependency)])
++    def rows():
++        return payload
++
++    local.include_router(router)
++    install_public_boundary(local)
++    with TestClient(local) as client:
++        yield client
++
++
++@pytest.fixture
++def projects(client):
++    with SessionLocal() as db, verified_fixture_tenant(db, 1):
++        declare_fixture_tenant(db, 2)
++        rows = [Projects(project_name=f"batch-identity-{i}") for i in range(12)]
++        db.add_all(rows)
++        db.commit()
++        return [(row.id, str(row.public_id)) for row in rows]
++
++
++def test_distinct_references_use_one_scoped_lookup_not_one_per_row(projects):
++    statements = []
++    def record(_connection, _cursor, statement, _parameters, _context, _many):
++        if statement.lstrip().upper().startswith('SELECT') and 'projects.public_id' in statement:
++            statements.append(statement)
++    payload = {'projects': [{'id': internal, 'name': str(i)} for i, (internal, _) in enumerate(projects)]}
++    event.listen(engine, 'before_cursor_execute', record)
++    try:
++        with serialization_client(payload) as client:
++            response = client.get('/api/serialization-unit')
++    finally:
++        event.remove(engine, 'before_cursor_execute', record)
++    assert response.status_code == 200
++    assert [row['id'] for row in response.json()['projects']] == [public for _, public in projects]
++    assert len(statements) == 1, f"Expected one scoped batch query; observed {len(statements)}"
++    assert all('tenant_id' in sql for sql in statements)
++
++
++def test_repeated_ids_native_documents_and_integer_nonresources_stay_distinct(projects):
++    internal, public = projects[0]
++    payload = {'projects': [{'id': internal}, {'id': internal}], 'row_version': internal,
++               'metadata_json': {'project_id': internal}, 'raw_document': {'products': [{'id': internal}]},
++               'versions': [{'id': internal}], 'run_id': internal}
++    with serialization_client(payload) as client:
++        response = client.get('/api/serialization-unit')
++    assert response.status_code == 200
++    body = response.json()
++    assert body['projects'] == [{'id': public}, {'id': public}]
++    for key in ('row_version', 'metadata_json', 'raw_document', 'versions', 'run_id'):
++        assert body[key] == payload[key]
++
++
++def test_foreign_reference_cannot_be_resolved_under_another_owner(projects):
++    internal, public = projects[0]
++    with serialization_client({'projects': [{'id': internal}]}, owner=2) as client:
++        response = client.get('/api/serialization-unit')
++    assert response.status_code == 500
++    assert response.json() == {'detail': 'Unresolvable public resource reference'}
++    assert public not in response.text
++
++
++def test_missing_reference_fails_closed(projects):
++    with serialization_client({'projects': [{'id': max(i for i, _ in projects) + 1000}]}) as client:
++        response = client.get('/api/serialization-unit')
++    assert response.status_code == 500
++    assert response.json() == {'detail': 'Unresolvable public resource reference'}
++
++
++def test_more_than_one_lookup_chunk_preserves_every_uuid(client):
++    with SessionLocal() as db, verified_fixture_tenant(db, 1):
++        rows = [Projects(project_name=f"chunked-identity-{i}") for i in range(501)]
++        db.add_all(rows)
++        db.commit()
++        references = [(row.id, str(row.public_id)) for row in rows]
++    statements = []
++    def record(_connection, _cursor, statement, _parameters, _context, _many):
++        if statement.lstrip().upper().startswith("SELECT") and "projects.public_id" in statement:
++            statements.append(statement)
++    event.listen(engine, "before_cursor_execute", record)
++    try:
++        with serialization_client({"projects": [{"id": internal} for internal, _ in references]}) as api:
++            response = api.get("/api/serialization-unit")
++    finally:
++        event.remove(engine, "before_cursor_execute", record)
++    assert response.status_code == 200
++    assert [row["id"] for row in response.json()["projects"]] == [public for _, public in references]
++    assert len(statements) == 2

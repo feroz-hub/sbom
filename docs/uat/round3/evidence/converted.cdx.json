@@ -1,0 +1,113 @@
+{
+  "bomFormat": "CycloneDX",
+  "specVersion": "1.6",
+  "serialNumber": "urn:uuid:ac45945c-de77-4be8-bd4d-20427b562020",
+  "version": 1,
+  "metadata": {
+    "timestamp": "2026-04-30T12:00:00Z",
+    "component": {
+      "type": "application",
+      "bom-ref": "SPDXRef-DOCUMENT",
+      "name": "minimal-spdx-2.3"
+    },
+    "properties": [
+      {
+        "name": "spdx:documentNamespace",
+        "value": "https://round3.example.test/9ba05b54-fe7b-4a23-b2e7-ad774822cf7c"
+      },
+      {
+        "name": "spdx:spdxVersion",
+        "value": "SPDX-2.3"
+      },
+      {
+        "name": "spdx:sourceSPDXID",
+        "value": "SPDXRef-DOCUMENT"
+      },
+      {
+        "name": "conversion:sourceFormat",
+        "value": "SPDX"
+      },
+      {
+        "name": "conversion:targetFormat",
+        "value": "CycloneDX"
+      },
+      {
+        "name": "conversion:convertedAt",
+        "value": "2026-10-20T09:47:44+00:00"
+      },
+      {
+        "name": "conversion:tool",
+        "value": "SBOM Analyzer"
+      }
+    ],
+    "tools": [
+      {
+        "name": "sbom-analyzer-tests-1.0",
+        "vendor": "SPDX"
+      }
+    ]
+  },
+  "components": [
+    {
+      "type": "library",
+      "bom-ref": "SPDXRef-Package-foo",
+      "name": "foo",
+      "version": "1.0.0",
+      "purl": "pkg:npm/foo@1.0.0",
+      "supplier": {
+        "name": "ACME"
+      },
+      "licenses": [
+        {
+          "expression": "Apache-2.0"
+        }
+      ],
+      "properties": [
+        {
+          "name": "spdx:SPDXID",
+          "value": "SPDXRef-Package-foo"
+        },
+        {
+          "name": "spdx:licenseConcluded",
+          "value": "Apache-2.0"
+        },
+        {
+          "name": "spdx:licenseDeclared",
+          "value": "Apache-2.0"
+        },
+        {
+          "name": "spdx:filesAnalyzed",
+          "value": "False"
+        },
+        {
+          "name": "conversion:sourceFormat",
+          "value": "SPDX"
+        },
+        {
+          "name": "conversion:targetFormat",
+          "value": "CycloneDX"
+        },
+        {
+          "name": "lifecycle:status",
+          "value": "Unknown"
+        },
+        {
+          "name": "lifecycle:confidence",
+          "value": "Unknown"
+        },
+        {
+          "name": "lifecycle:checkedAt",
+          "value": "2026-10-20T09:17:24+00:00"
+        }
+      ]
+    }
+  ],
+  "dependencies": [
+    {
+      "ref": "SPDXRef-DOCUMENT",
+      "dependsOn": [
+        "SPDXRef-Package-foo"
+      ]
+    }
+  ]
+}

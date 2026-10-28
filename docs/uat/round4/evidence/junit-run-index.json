@@ -1,0 +1,272 @@
+[
+  {
+    "file": "pytest-advisor-benchmark-batched.xml",
+    "JUnitTestcasesIncludingSubtests": 1,
+    "PASS": 1,
+    "FAIL": 0,
+    "ERROR": 0,
+    "SKIP": 0,
+    "runtimeSeconds": 94.939,
+    "qualification": "Overlapping selections; never add to unique totals. JUnit may include subtests separately."
+  },
+  {
+    "file": "pytest-advisor-benchmark.xml",
+    "JUnitTestcasesIncludingSubtests": 1,
+    "PASS": 0,
+    "FAIL": 1,
+    "ERROR": 0,
+    "SKIP": 0,
+    "runtimeSeconds": 4.891,
+    "qualification": "Overlapping selections; never add to unique totals. JUnit may include subtests separately."
+  },
+  {
+    "file": "pytest-batch-chunk-final.xml",
+    "JUnitTestcasesIncludingSubtests": 6,
+    "PASS": 6,
+    "FAIL": 0,
+    "ERROR": 0,
+    "SKIP": 0,
+    "runtimeSeconds": 14.171,
+    "qualification": "Overlapping selections; never add to unique totals. JUnit may include subtests separately."
+  },
+  {
+    "file": "pytest-contract-followup-collection-attempt.xml",
+    "JUnitTestcasesIncludingSubtests": 1,
+    "PASS": 0,
+    "FAIL": 0,
+    "ERROR": 1,
+    "SKIP": 0,
+    "runtimeSeconds": 4.394,
+    "qualification": "Overlapping selections; never add to unique totals. JUnit may include subtests separately."
+  },
+  {
+    "file": "pytest-contract-followup.xml",
+    "JUnitTestcasesIncludingSubtests": 9,
+    "PASS": 9,
+    "FAIL": 0,
+    "ERROR": 0,
+    "SKIP": 0,
+    "runtimeSeconds": 18.95,
+    "qualification": "Overlapping selections; never add to unique totals. JUnit may include subtests separately."
+  },
+  {
+    "file": "pytest-fixture-batch1.xml",
+    "JUnitTestcasesIncludingSubtests": 395,
+    "PASS": 394,
+    "FAIL": 1,
+    "ERROR": 0,
+    "SKIP": 0,
+    "runtimeSeconds": 582.834,
+    "qualification": "Overlapping selections; never add to unique totals. JUnit may include subtests separately."
+  },
+  {
+    "file": "pytest-fixture-batch2-collection-attempt.xml",
+    "JUnitTestcasesIncludingSubtests": 1,
+    "PASS": 0,
+    "FAIL": 0,
+    "ERROR": 1,
+    "SKIP": 0,
+    "runtimeSeconds": 5.508,
+    "qualification": "Overlapping selections; never add to unique totals. JUnit may include subtests separately."
+  },
+  {
+    "file": "pytest-fixture-batch2.xml",
+    "JUnitTestcasesIncludingSubtests": 349,
+    "PASS": 346,
+    "FAIL": 3,
+    "ERROR": 0,
+    "SKIP": 0,
+    "runtimeSeconds": 476.796,
+    "qualification": "Overlapping selections; never add to unique totals. JUnit may include subtests separately."
+  },
+  {
+    "file": "pytest-full-frozen-attempt2.xml",
+    "JUnitTestcasesIncludingSubtests": 4392,
+    "PASS": 4385,
+    "FAIL": 0,
+    "ERROR": 0,
+    "SKIP": 7,
+    "runtimeSeconds": 6107.53,
+    "qualification": "Overlapping selections; never add to unique totals. JUnit may include subtests separately."
+  },
+  {
+    "file": "pytest-full-frozen.xml",
+    "JUnitTestcasesIncludingSubtests": 4392,
+    "PASS": 4383,
+    "FAIL": 1,
+    "ERROR": 0,
+    "SKIP": 8,
+    "runtimeSeconds": 5505.735,
+    "qualification": "Overlapping selections; never add to unique totals. JUnit may include subtests separately."
+  },
+  {
+    "file": "pytest-historical-isolation-retest.xml",
+    "JUnitTestcasesIncludingSubtests": 13,
+    "PASS": 3,
+    "FAIL": 10,
+    "ERROR": 0,
+    "SKIP": 0,
+    "runtimeSeconds": 52.894,
+    "qualification": "Overlapping selections; never add to unique totals. JUnit may include subtests separately."
+  },
+  {
+    "file": "pytest-historical-isolation.xml",
+    "JUnitTestcasesIncludingSubtests": 13,
+    "PASS": 3,
+    "FAIL": 0,
+    "ERROR": 10,
+    "SKIP": 0,
+    "runtimeSeconds": 38.262,
+    "qualification": "Overlapping selections; never add to unique totals. JUnit may include subtests separately."
+  },
+  {
+    "file": "pytest-historical-targets.xml",
+    "JUnitTestcasesIncludingSubtests": 18,
+    "PASS": 18,
+    "FAIL": 0,
+    "ERROR": 0,
+    "SKIP": 0,
+    "runtimeSeconds": 51.95,
+    "qualification": "Overlapping selections; never add to unique totals. JUnit may include subtests separately."
+  },
+  {
+    "file": "pytest-live-lifecycle-preflight.xml",
+    "JUnitTestcasesIncludingSubtests": 1,
+    "PASS": 1,
+    "FAIL": 0,
+    "ERROR": 0,
+    "SKIP": 0,
+    "runtimeSeconds": 5.519,
+    "qualification": "Overlapping selections; never add to unique totals. JUnit may include subtests separately."
+  },
+  {
+    "file": "pytest-logging-isolated-after.xml",
+    "JUnitTestcasesIncludingSubtests": 27,
+    "PASS": 27,
+    "FAIL": 0,
+    "ERROR": 0,
+    "SKIP": 0,
+    "runtimeSeconds": 23.777,
+    "qualification": "Overlapping selections; never add to unique totals. JUnit may include subtests separately."
+  },
+  {
+    "file": "pytest-logging-isolated-before.xml",
+    "JUnitTestcasesIncludingSubtests": 1,
+    "PASS": 0,
+    "FAIL": 1,
+    "ERROR": 0,
+    "SKIP": 0,
+    "runtimeSeconds": 3.083,
+    "qualification": "Overlapping selections; never add to unique totals. JUnit may include subtests separately."
+  },
+  {
+    "file": "pytest-new-safeguards.xml",
+    "JUnitTestcasesIncludingSubtests": 44,
+    "PASS": 44,
+    "FAIL": 0,
+    "ERROR": 0,
+    "SKIP": 0,
+    "runtimeSeconds": 56.924,
+    "qualification": "Overlapping selections; never add to unique totals. JUnit may include subtests separately."
+  },
+  {
+    "file": "pytest-optional-backup-redis.xml",
+    "JUnitTestcasesIncludingSubtests": 7,
+    "PASS": 6,
+    "FAIL": 1,
+    "ERROR": 0,
+    "SKIP": 0,
+    "runtimeSeconds": 32.042,
+    "qualification": "Overlapping selections; never add to unique totals. JUnit may include subtests separately."
+  },
+  {
+    "file": "pytest-prior-round-protection.xml",
+    "JUnitTestcasesIncludingSubtests": 221,
+    "PASS": 220,
+    "FAIL": 1,
+    "ERROR": 0,
+    "SKIP": 0,
+    "runtimeSeconds": 334.756,
+    "qualification": "Overlapping selections; never add to unique totals. JUnit may include subtests separately."
+  },
+  {
+    "file": "pytest-reconcile-after.xml",
+    "JUnitTestcasesIncludingSubtests": 4,
+    "PASS": 4,
+    "FAIL": 0,
+    "ERROR": 0,
+    "SKIP": 0,
+    "runtimeSeconds": 11.762,
+    "qualification": "Overlapping selections; never add to unique totals. JUnit may include subtests separately."
+  },
+  {
+    "file": "pytest-reconcile-before.xml",
+    "JUnitTestcasesIncludingSubtests": 1,
+    "PASS": 0,
+    "FAIL": 1,
+    "ERROR": 0,
+    "SKIP": 0,
+    "runtimeSeconds": 5.449,
+    "qualification": "Overlapping selections; never add to unique totals. JUnit may include subtests separately."
+  },
+  {
+    "file": "pytest-reconcile-scope.xml",
+    "JUnitTestcasesIncludingSubtests": 6,
+    "PASS": 4,
+    "FAIL": 2,
+    "ERROR": 0,
+    "SKIP": 0,
+    "runtimeSeconds": 11.079,
+    "qualification": "Overlapping selections; never add to unique totals. JUnit may include subtests separately."
+  },
+  {
+    "file": "pytest-redis-owned.xml",
+    "JUnitTestcasesIncludingSubtests": 6,
+    "PASS": 6,
+    "FAIL": 0,
+    "ERROR": 0,
+    "SKIP": 0,
+    "runtimeSeconds": 12.09,
+    "qualification": "Overlapping selections; never add to unique totals. JUnit may include subtests separately."
+  },
+  {
+    "file": "pytest-remaining-backend.xml",
+    "JUnitTestcasesIncludingSubtests": 346,
+    "PASS": 346,
+    "FAIL": 0,
+    "ERROR": 0,
+    "SKIP": 0,
+    "runtimeSeconds": 428.795,
+    "qualification": "Overlapping selections; never add to unique totals. JUnit may include subtests separately."
+  },
+  {
+    "file": "pytest-uuid-batch-after.xml",
+    "JUnitTestcasesIncludingSubtests": 34,
+    "PASS": 34,
+    "FAIL": 0,
+    "ERROR": 0,
+    "SKIP": 0,
+    "runtimeSeconds": 59.422,
+    "qualification": "Overlapping selections; never add to unique totals. JUnit may include subtests separately."
+  },
+  {
+    "file": "pytest-uuid-batch-before.xml",
+    "JUnitTestcasesIncludingSubtests": 4,
+    "PASS": 0,
+    "FAIL": 4,
+    "ERROR": 0,
+    "SKIP": 0,
+    "runtimeSeconds": 9.125,
+    "qualification": "Overlapping selections; never add to unique totals. JUnit may include subtests separately."
+  },
+  {
+    "file": "pytest-uuid-batch-reproduction.xml",
+    "JUnitTestcasesIncludingSubtests": 4,
+    "PASS": 3,
+    "FAIL": 1,
+    "ERROR": 0,
+    "SKIP": 0,
+    "runtimeSeconds": 7.545,
+    "qualification": "Overlapping selections; never add to unique totals. JUnit may include subtests separately."
+  }
+]

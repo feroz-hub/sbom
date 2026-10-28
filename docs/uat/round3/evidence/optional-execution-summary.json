@@ -1,0 +1,8 @@
+{
+  "defaultInitiallyDeselected": 19,
+  "laterOptInResults": {
+    "PASS": 18,
+    "FAIL": 1
+  },
+  "notes": "All19 existing-marker exclusions separately attempted. Advisor benchmark fails guarded raw SQL fixture setup; no performance claim. Other18pass. No new skip markers introduced."
+}

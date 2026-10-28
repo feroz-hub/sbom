@@ -1,0 +1,796 @@
+[
+  {
+    "id": "UAT-ISOLATION-project",
+    "module": "Tenant isolation",
+    "role": "foreign",
+    "preconditions": "Independent Native bearer authentication per role; direct loopback API; greenfield development stack; no browser session reused",
+    "steps": "Direct backend Bearer [REDACTED] with authorized Isolation Control header: GET /api/projects/cf8ba463-6879-4102-843b-71013cc9b9b8",
+    "expected": "Known Olympus public UUID is concealed from Isolation Control; HTTP 404",
+    "actual": {
+      "status": 404,
+      "data": {
+        "detail": "Resource not found"
+      },
+      "requestId": "72e3378fb879"
+    },
+    "api": 404,
+    "status": "PASS",
+    "defect": null,
+    "time": "2026-10-19T15:24:41.823Z"
+  },
+  {
+    "id": "UAT-ISOLATION-product",
+    "module": "Tenant isolation",
+    "role": "foreign",
+    "preconditions": "Independent Native bearer authentication per role; direct loopback API; greenfield development stack; no browser session reused",
+    "steps": "Direct backend Bearer [REDACTED] with authorized Isolation Control header: GET /api/products/7c775f48-ff32-4ab6-bec9-9fd79b10106e",
+    "expected": "Known Olympus public UUID is concealed from Isolation Control; HTTP 404",
+    "actual": {
+      "status": 404,
+      "data": {
+        "detail": "Resource not found"
+      },
+      "requestId": "5bd97ac93393"
+    },
+    "api": 404,
+    "status": "PASS",
+    "defect": null,
+    "time": "2026-10-19T15:24:41.967Z"
+  },
+  {
+    "id": "UAT-ISOLATION-sbom",
+    "module": "Tenant isolation",
+    "role": "foreign",
+    "preconditions": "Independent Native bearer authentication per role; direct loopback API; greenfield development stack; no browser session reused",
+    "steps": "Direct backend Bearer [REDACTED] with authorized Isolation Control header: GET /api/sboms/29c07ef5-9193-4c70-9ac4-9c649fe7d291",
+    "expected": "Known Olympus public UUID is concealed from Isolation Control; HTTP 404",
+    "actual": {
+      "status": 404,
+      "data": {
+        "detail": "Resource not found"
+      },
+      "requestId": "4a5e44c1d21f"
+    },
+    "api": 404,
+    "status": "PASS",
+    "defect": null,
+    "time": "2026-10-19T15:24:42.135Z"
+  },
+  {
+    "id": "UAT-ISOLATION-components",
+    "module": "Tenant isolation",
+    "role": "foreign",
+    "preconditions": "Independent Native bearer authentication per role; direct loopback API; greenfield development stack; no browser session reused",
+    "steps": "Direct backend Bearer [REDACTED] with authorized Isolation Control header: GET /api/sboms/29c07ef5-9193-4c70-9ac4-9c649fe7d291/components",
+    "expected": "Known Olympus public UUID is concealed from Isolation Control; HTTP 404",
+    "actual": {
+      "status": 404,
+      "data": {
+        "detail": "Resource not found"
+      },
+      "requestId": "a71d997981f7"
+    },
+    "api": 404,
+    "status": "PASS",
+    "defect": null,
+    "time": "2026-10-19T15:24:42.269Z"
+  },
+  {
+    "id": "UAT-ISOLATION-runs",
+    "module": "Tenant isolation",
+    "role": "foreign",
+    "preconditions": "Independent Native bearer authentication per role; direct loopback API; greenfield development stack; no browser session reused",
+    "steps": "Direct backend Bearer [REDACTED] with authorized Isolation Control header: GET /api/sboms/29c07ef5-9193-4c70-9ac4-9c649fe7d291/analysis-runs",
+    "expected": "Known Olympus public UUID is concealed from Isolation Control; HTTP 404",
+    "actual": {
+      "status": 404,
+      "data": {
+        "detail": "Resource not found"
+      },
+      "requestId": "ebe9e65c9de9"
+    },
+    "api": 404,
+    "status": "PASS",
+    "defect": null,
+    "time": "2026-10-19T15:24:42.377Z"
+  },
+  {
+    "id": "UAT-ISOLATION-products-list",
+    "module": "Tenant isolation",
+    "role": "foreign",
+    "preconditions": "Independent Native bearer authentication per role; direct loopback API; greenfield development stack; no browser session reused",
+    "steps": "Direct backend Bearer [REDACTED] with authorized Isolation Control header: GET /api/projects/cf8ba463-6879-4102-843b-71013cc9b9b8/products",
+    "expected": "Known Olympus public UUID is concealed from Isolation Control; HTTP 404",
+    "actual": {
+      "status": 404,
+      "data": {
+        "detail": "Resource not found"
+      },
+      "requestId": "c40a3a98004a"
+    },
+    "api": 404,
+    "status": "PASS",
+    "defect": null,
+    "time": "2026-10-19T15:24:42.447Z"
+  },
+  {
+    "id": "UAT-ISOLATION-sbom-filter",
+    "module": "Tenant isolation",
+    "role": "foreign",
+    "preconditions": "Independent Native bearer authentication per role; direct loopback API; greenfield development stack; no browser session reused",
+    "steps": "Direct backend Bearer [REDACTED] with authorized Isolation Control header: GET /api/sboms?project_id=cf8ba463-6879-4102-843b-71013cc9b9b8",
+    "expected": "Known Olympus public UUID is concealed from Isolation Control; HTTP 404",
+    "actual": {
+      "status": 404,
+      "data": {
+        "detail": "Resource not found"
+      },
+      "requestId": "1990e2beba12"
+    },
+    "api": 404,
+    "status": "PASS",
+    "defect": null,
+    "time": "2026-10-19T15:24:42.519Z"
+  },
+  {
+    "id": "UAT-ISOLATION-ENUMERATION",
+    "module": "Tenant isolation",
+    "role": "foreign",
+    "preconditions": "Independent Native bearer authentication per role; direct loopback API; greenfield development stack; no browser session reused",
+    "steps": "Compare existing Olympus project with synthetic nonexistent project",
+    "expected": "Known foreign UUID and nonexistent UUID have same status and response body",
+    "actual": {
+      "known": {
+        "status": 404,
+        "data": {
+          "detail": "Resource not found"
+        },
+        "requestId": "c476c8284cfb"
+      },
+      "unknown": {
+        "status": 404,
+        "data": {
+          "detail": "Resource not found"
+        },
+        "requestId": "e3736e46037d"
+      }
+    },
+    "api": 404,
+    "status": "PASS",
+    "defect": null,
+    "time": "2026-10-19T15:24:42.616Z"
+  },
+  {
+    "id": "UAT-ISOLATION-foreign-header",
+    "module": "Tenant isolation",
+    "role": "foreign",
+    "preconditions": "Independent Native bearer authentication per role; direct loopback API; greenfield development stack; no browser session reused",
+    "steps": "Direct backend GET /api/projects with controlled tenant header",
+    "expected": "Cross-tenant header/path rejected HTTP 403",
+    "actual": {
+      "status": 403,
+      "data": {
+        "detail": {
+          "code": "IAM_UNAUTHORIZED_TENANT",
+          "message": "The requested tenant is not available to this account."
+        }
+      },
+      "requestId": "e3e708dcde37"
+    },
+    "api": 403,
+    "status": "PASS",
+    "defect": null,
+    "time": "2026-10-19T15:24:42.640Z"
+  },
+  {
+    "id": "UAT-ISOLATION-foreign-users",
+    "module": "Tenant isolation",
+    "role": "foreign",
+    "preconditions": "Independent Native bearer authentication per role; direct loopback API; greenfield development stack; no browser session reused",
+    "steps": "Direct backend GET /api/tenants/3a900179-36bf-4b5f-b2e1-2a4a9d06e6af/users with controlled tenant header",
+    "expected": "Cross-tenant header/path rejected HTTP 404",
+    "actual": {
+      "status": 404,
+      "data": {
+        "detail": "Resource not found"
+      },
+      "requestId": "9591c819b886"
+    },
+    "api": 404,
+    "status": "PASS",
+    "defect": null,
+    "time": "2026-10-19T15:24:42.692Z"
+  },
+  {
+    "id": "UAT-ISOLATION-admin-foreign-users",
+    "module": "Tenant isolation",
+    "role": "admin",
+    "preconditions": "Independent Native bearer authentication per role; direct loopback API; greenfield development stack; no browser session reused",
+    "steps": "Direct backend GET /api/tenants/a803c17f-7e7d-439c-8664-c5406d391fd1/users with controlled tenant header",
+    "expected": "Cross-tenant header/path rejected HTTP 404",
+    "actual": {
+      "status": 404,
+      "data": {
+        "detail": "Resource not found"
+      },
+      "requestId": "8852e08acb01"
+    },
+    "api": 404,
+    "status": "PASS",
+    "defect": null,
+    "time": "2026-10-19T15:24:42.739Z"
+  },
+  {
+    "id": "UAT-ISOLATION-admin-foreign-header",
+    "module": "Tenant isolation",
+    "role": "admin",
+    "preconditions": "Independent Native bearer authentication per role; direct loopback API; greenfield development stack; no browser session reused",
+    "steps": "Direct backend GET /api/projects with controlled tenant header",
+    "expected": "Cross-tenant header/path rejected HTTP 403",
+    "actual": {
+      "status": 403,
+      "data": {
+        "detail": {
+          "code": "IAM_UNAUTHORIZED_TENANT",
+          "message": "The requested tenant is not available to this account."
+        }
+      },
+      "requestId": "8de9cd672036"
+    },
+    "api": 403,
+    "status": "PASS",
+    "defect": null,
+    "time": "2026-10-19T15:24:42.763Z"
+  },
+  {
+    "id": "UAT-ISOLATION-LIST",
+    "module": "Tenant isolation",
+    "role": "foreign",
+    "preconditions": "Independent Native bearer authentication per role; direct loopback API; greenfield development stack; no browser session reused",
+    "steps": "Compare complete authorized tenant project lists by UUID",
+    "expected": "Tenant list contains no Olympus project UUIDs",
+    "actual": {
+      "status": 200,
+      "ids": [],
+      "forbiddenIds": [
+        "9dffa2da-a90a-4923-88b0-c0124f58af59",
+        "68a84204-ba3b-437e-8a75-5d6f2ddb0e96",
+        "cf8ba463-6879-4102-843b-71013cc9b9b8"
+      ]
+    },
+    "api": 200,
+    "status": "PASS",
+    "defect": null,
+    "time": "2026-10-19T15:24:42.840Z"
+  },
+  {
+    "id": "UAT-ISOLATION-MUTATION",
+    "module": "Tenant isolation",
+    "role": "foreign",
+    "preconditions": "Independent Native bearer authentication per role; direct loopback API; greenfield development stack; no browser session reused",
+    "steps": "PATCH only an Olympus project created by this UAT; seeded business data untouched",
+    "expected": "Cross-tenant mutation of UAT-created Olympus project returns 404",
+    "actual": {
+      "status": 404,
+      "data": {
+        "detail": "Resource not found"
+      },
+      "requestId": "5945d9a06778"
+    },
+    "api": 404,
+    "status": "PASS",
+    "defect": null,
+    "time": "2026-10-19T15:24:42.911Z"
+  },
+  {
+    "id": "UAT-DIRECT-DENY-analyst-invite",
+    "module": "Authorization",
+    "role": "analyst",
+    "preconditions": "Independent Native bearer authentication per role; direct loopback API; greenfield development stack; no browser session reused",
+    "steps": "POST direct backend /api/tenants/3a900179-36bf-4b5f-b2e1-2a4a9d06e6af/native-users; only nonexistent or UAT-owned targets",
+    "expected": "Server rejects unauthorized operation independently of BFF/UI; HTTP 403",
+    "actual": {
+      "status": 403,
+      "data": {
+        "detail": "Insufficient permission"
+      },
+      "requestId": "712b0989f496"
+    },
+    "api": 403,
+    "status": "PASS",
+    "defect": null,
+    "time": "2026-10-19T15:24:43.383Z"
+  },
+  {
+    "id": "UAT-DIRECT-DENY-analyst-roles",
+    "module": "Authorization",
+    "role": "analyst",
+    "preconditions": "Independent Native bearer authentication per role; direct loopback API; greenfield development stack; no browser session reused",
+    "steps": "PUT direct backend /api/tenants/3a900179-36bf-4b5f-b2e1-2a4a9d06e6af/users/2147483000/roles; only nonexistent or UAT-owned targets",
+    "expected": "Server rejects unauthorized operation independently of BFF/UI; HTTP 403",
+    "actual": {
+      "status": 403,
+      "data": {
+        "detail": "Insufficient permission"
+      },
+      "requestId": "5dd2c915139b"
+    },
+    "api": 403,
+    "status": "PASS",
+    "defect": null,
+    "time": "2026-10-19T15:24:43.460Z"
+  },
+  {
+    "id": "UAT-DIRECT-DENY-analyst-platform-status",
+    "module": "Authorization",
+    "role": "analyst",
+    "preconditions": "Independent Native bearer authentication per role; direct loopback API; greenfield development stack; no browser session reused",
+    "steps": "PATCH direct backend /api/platform/users/2147483000/status; only nonexistent or UAT-owned targets",
+    "expected": "Server rejects unauthorized operation independently of BFF/UI; HTTP 403",
+    "actual": {
+      "status": 403,
+      "data": {
+        "detail": {
+          "code": "IAM_PLATFORM_PERMISSION_DENIED",
+          "message": "Platform permission is required for this action."
+        }
+      },
+      "requestId": "578961478664"
+    },
+    "api": 403,
+    "status": "PASS",
+    "defect": null,
+    "time": "2026-10-19T15:24:43.574Z"
+  },
+  {
+    "id": "UAT-DIRECT-DENY-developer-invite",
+    "module": "Authorization",
+    "role": "developer",
+    "preconditions": "Independent Native bearer authentication per role; direct loopback API; greenfield development stack; no browser session reused",
+    "steps": "POST direct backend /api/tenants/3a900179-36bf-4b5f-b2e1-2a4a9d06e6af/native-users; only nonexistent or UAT-owned targets",
+    "expected": "Server rejects unauthorized operation independently of BFF/UI; HTTP 403",
+    "actual": {
+      "status": 403,
+      "data": {
+        "detail": "Insufficient permission"
+      },
+      "requestId": "d0026488a21a"
+    },
+    "api": 403,
+    "status": "PASS",
+    "defect": null,
+    "time": "2026-10-19T15:24:44.037Z"
+  },
+  {
+    "id": "UAT-DIRECT-DENY-developer-roles",
+    "module": "Authorization",
+    "role": "developer",
+    "preconditions": "Independent Native bearer authentication per role; direct loopback API; greenfield development stack; no browser session reused",
+    "steps": "PUT direct backend /api/tenants/3a900179-36bf-4b5f-b2e1-2a4a9d06e6af/users/2147483000/roles; only nonexistent or UAT-owned targets",
+    "expected": "Server rejects unauthorized operation independently of BFF/UI; HTTP 403",
+    "actual": {
+      "status": 403,
+      "data": {
+        "detail": "Insufficient permission"
+      },
+      "requestId": "cdc3395b7130"
+    },
+    "api": 403,
+    "status": "PASS",
+    "defect": null,
+    "time": "2026-10-19T15:24:44.083Z"
+  },
+  {
+    "id": "UAT-DIRECT-DENY-developer-platform-status",
+    "module": "Authorization",
+    "role": "developer",
+    "preconditions": "Independent Native bearer authentication per role; direct loopback API; greenfield development stack; no browser session reused",
+    "steps": "PATCH direct backend /api/platform/users/2147483000/status; only nonexistent or UAT-owned targets",
+    "expected": "Server rejects unauthorized operation independently of BFF/UI; HTTP 403",
+    "actual": {
+      "status": 403,
+      "data": {
+        "detail": {
+          "code": "IAM_PLATFORM_PERMISSION_DENIED",
+          "message": "Platform permission is required for this action."
+        }
+      },
+      "requestId": "6bf568982c9a"
+    },
+    "api": 403,
+    "status": "PASS",
+    "defect": null,
+    "time": "2026-10-19T15:24:44.161Z"
+  },
+  {
+    "id": "UAT-DIRECT-DENY-developer-project-update",
+    "module": "Authorization",
+    "role": "developer",
+    "preconditions": "Independent Native bearer authentication per role; direct loopback API; greenfield development stack; no browser session reused",
+    "steps": "PATCH direct backend /api/projects/9dffa2da-a90a-4923-88b0-c0124f58af59; only nonexistent or UAT-owned targets",
+    "expected": "Server rejects unauthorized operation independently of BFF/UI; HTTP 403",
+    "actual": {
+      "status": 403,
+      "data": {
+        "detail": "Insufficient permission"
+      },
+      "requestId": "62d6bea228da"
+    },
+    "api": 403,
+    "status": "PASS",
+    "defect": null,
+    "time": "2026-10-19T15:24:44.194Z"
+  },
+  {
+    "id": "UAT-DIRECT-DENY-viewer-invite",
+    "module": "Authorization",
+    "role": "viewer",
+    "preconditions": "Independent Native bearer authentication per role; direct loopback API; greenfield development stack; no browser session reused",
+    "steps": "POST direct backend /api/tenants/3a900179-36bf-4b5f-b2e1-2a4a9d06e6af/native-users; only nonexistent or UAT-owned targets",
+    "expected": "Server rejects unauthorized operation independently of BFF/UI; HTTP 403",
+    "actual": {
+      "status": 403,
+      "data": {
+        "detail": "Insufficient permission"
+      },
+      "requestId": "74687862d1c4"
+    },
+    "api": 403,
+    "status": "PASS",
+    "defect": null,
+    "time": "2026-10-19T15:24:44.543Z"
+  },
+  {
+    "id": "UAT-DIRECT-DENY-viewer-roles",
+    "module": "Authorization",
+    "role": "viewer",
+    "preconditions": "Independent Native bearer authentication per role; direct loopback API; greenfield development stack; no browser session reused",
+    "steps": "PUT direct backend /api/tenants/3a900179-36bf-4b5f-b2e1-2a4a9d06e6af/users/2147483000/roles; only nonexistent or UAT-owned targets",
+    "expected": "Server rejects unauthorized operation independently of BFF/UI; HTTP 403",
+    "actual": {
+      "status": 403,
+      "data": {
+        "detail": "Insufficient permission"
+      },
+      "requestId": "c81b59cfea07"
+    },
+    "api": 403,
+    "status": "PASS",
+    "defect": null,
+    "time": "2026-10-19T15:24:44.621Z"
+  },
+  {
+    "id": "UAT-DIRECT-DENY-viewer-platform-status",
+    "module": "Authorization",
+    "role": "viewer",
+    "preconditions": "Independent Native bearer authentication per role; direct loopback API; greenfield development stack; no browser session reused",
+    "steps": "PATCH direct backend /api/platform/users/2147483000/status; only nonexistent or UAT-owned targets",
+    "expected": "Server rejects unauthorized operation independently of BFF/UI; HTTP 403",
+    "actual": {
+      "status": 403,
+      "data": {
+        "detail": {
+          "code": "IAM_PLATFORM_PERMISSION_DENIED",
+          "message": "Platform permission is required for this action."
+        }
+      },
+      "requestId": "197ec4f2373f"
+    },
+    "api": 403,
+    "status": "PASS",
+    "defect": null,
+    "time": "2026-10-19T15:24:44.666Z"
+  },
+  {
+    "id": "UAT-DIRECT-DENY-viewer-project-update",
+    "module": "Authorization",
+    "role": "viewer",
+    "preconditions": "Independent Native bearer authentication per role; direct loopback API; greenfield development stack; no browser session reused",
+    "steps": "PATCH direct backend /api/projects/9dffa2da-a90a-4923-88b0-c0124f58af59; only nonexistent or UAT-owned targets",
+    "expected": "Server rejects unauthorized operation independently of BFF/UI; HTTP 403",
+    "actual": {
+      "status": 403,
+      "data": {
+        "detail": "Insufficient permission"
+      },
+      "requestId": "c3553861c45d"
+    },
+    "api": 403,
+    "status": "PASS",
+    "defect": null,
+    "time": "2026-10-19T15:24:44.705Z"
+  },
+  {
+    "id": "UAT-DIRECT-platform-no-tenant",
+    "module": "Platform",
+    "role": "platform",
+    "preconditions": "Independent Native bearer authentication per role; direct loopback API; greenfield development stack; no browser session reused",
+    "steps": "Direct GET /api/projects without tenant header",
+    "expected": "Platform authority uses supported administration workflow; HTTP 403",
+    "actual": {
+      "status": 403,
+      "count": 0,
+      "keys": [
+        "detail"
+      ],
+      "error": {
+        "detail": {
+          "code": "IAM_NO_TENANT",
+          "message": "No active tenant membership is available. Contact an administrator."
+        }
+      },
+      "requestId": "c6374b5880ca"
+    },
+    "api": 403,
+    "status": "PASS",
+    "defect": null,
+    "time": "2026-10-19T15:24:45.099Z"
+  },
+  {
+    "id": "UAT-DIRECT-platform-forged-tenant",
+    "module": "Platform",
+    "role": "platform",
+    "preconditions": "Independent Native bearer authentication per role; direct loopback API; greenfield development stack; no browser session reused",
+    "steps": "Direct GET /api/projects with Olympus header and no explicit membership",
+    "expected": "Platform authority uses supported administration workflow; HTTP 403",
+    "actual": {
+      "status": 403,
+      "count": 0,
+      "keys": [
+        "detail"
+      ],
+      "error": {
+        "detail": {
+          "code": "IAM_UNAUTHORIZED_TENANT",
+          "message": "The requested tenant is not available to this account."
+        }
+      },
+      "requestId": "d7eaec3d0bc5"
+    },
+    "api": 403,
+    "status": "PASS",
+    "defect": null,
+    "time": "2026-10-19T15:24:45.128Z"
+  },
+  {
+    "id": "UAT-DIRECT-platform-administration",
+    "module": "Platform",
+    "role": "platform",
+    "preconditions": "Independent Native bearer authentication per role; direct loopback API; greenfield development stack; no browser session reused",
+    "steps": "Direct GET /api/platform/tenants/3a900179-36bf-4b5f-b2e1-2a4a9d06e6af without tenant header",
+    "expected": "Platform authority uses supported administration workflow; HTTP 200",
+    "actual": {
+      "status": 200,
+      "count": 0,
+      "keys": [
+        "id",
+        "name",
+        "slug",
+        "external_iam_tenant_id",
+        "identity_mapping",
+        "status",
+        "created_at",
+        "updated_at",
+        "member_count",
+        "initial_administrator",
+        "current_administrators"
+      ],
+      "requestId": "6846761f70db"
+    },
+    "api": 200,
+    "status": "PASS",
+    "defect": null,
+    "time": "2026-10-19T15:24:45.221Z"
+  },
+  {
+    "id": "UAT-POLICY-MATRIX",
+    "module": "Authorization",
+    "role": "platform",
+    "preconditions": "Independent Native bearer authentication per role; direct loopback API; greenfield development stack; no browser session reused",
+    "steps": "Read live authorization matrix for comparison with observed role permissions",
+    "expected": "Database authority catalogue is readable by Platform Admin",
+    "actual": {
+      "status": 200,
+      "count": 0,
+      "keys": [
+        "roles"
+      ],
+      "requestId": "474a39abb73b"
+    },
+    "api": 200,
+    "status": "PASS",
+    "defect": null,
+    "time": "2026-10-19T15:24:45.469Z"
+  },
+  {
+    "id": "UAT-HTTP-401-anonymous",
+    "module": "Error handling",
+    "role": "API control",
+    "preconditions": "Independent Native bearer authentication per role; direct loopback API; greenfield development stack; no browser session reused",
+    "steps": "GET direct backend /api/projects; synthetic invalid data",
+    "expected": "Actual error response HTTP 401",
+    "actual": {
+      "status": 401,
+      "data": {
+        "detail": "Authentication required"
+      },
+      "requestId": "3ce8bd7c73e0"
+    },
+    "api": 401,
+    "status": "PASS",
+    "defect": null,
+    "time": "2026-10-19T15:24:45.480Z"
+  },
+  {
+    "id": "UAT-HTTP-401-invalid-token",
+    "module": "Error handling",
+    "role": "API control",
+    "preconditions": "Independent Native bearer authentication per role; direct loopback API; greenfield development stack; no browser session reused",
+    "steps": "GET direct backend /api/projects; synthetic invalid data",
+    "expected": "Actual error response HTTP 401",
+    "actual": {
+      "status": 401,
+      "data": {
+        "detail": "Authentication required"
+      },
+      "requestId": "b5a34a8617c6"
+    },
+    "api": 401,
+    "status": "PASS",
+    "defect": null,
+    "time": "2026-10-19T15:24:45.484Z"
+  },
+  {
+    "id": "UAT-HTTP-404-unknown",
+    "module": "Error handling",
+    "role": "API control",
+    "preconditions": "Independent Native bearer authentication per role; direct loopback API; greenfield development stack; no browser session reused",
+    "steps": "GET direct backend /api/projects/00000000-0000-4000-8000-000000000001; synthetic invalid data",
+    "expected": "Actual error response HTTP 404",
+    "actual": {
+      "status": 404,
+      "data": {
+        "detail": "Resource not found"
+      },
+      "requestId": "2eca939e0f99"
+    },
+    "api": 404,
+    "status": "PASS",
+    "defect": null,
+    "time": "2026-10-19T15:24:45.516Z"
+  },
+  {
+    "id": "UAT-HTTP-422-numeric-identity",
+    "module": "Error handling",
+    "role": "API control",
+    "preconditions": "Independent Native bearer authentication per role; direct loopback API; greenfield development stack; no browser session reused",
+    "steps": "GET direct backend /api/projects/1; synthetic invalid data",
+    "expected": "Actual error response HTTP 422",
+    "actual": {
+      "status": 422,
+      "data": {
+        "detail": "Resource identifier must be a UUIDv4"
+      },
+      "requestId": "c2550f1f00c5"
+    },
+    "api": 422,
+    "status": "PASS",
+    "defect": null,
+    "time": "2026-10-19T15:24:45.618Z"
+  },
+  {
+    "id": "UAT-HTTP-422-malformed-uuid",
+    "module": "Error handling",
+    "role": "API control",
+    "preconditions": "Independent Native bearer authentication per role; direct loopback API; greenfield development stack; no browser session reused",
+    "steps": "GET direct backend /api/projects/not-a-uuid; synthetic invalid data",
+    "expected": "Actual error response HTTP 422",
+    "actual": {
+      "status": 422,
+      "data": {
+        "detail": "Resource identifier must be a UUIDv4"
+      },
+      "requestId": "409cb7186468"
+    },
+    "api": 422,
+    "status": "PASS",
+    "defect": null,
+    "time": "2026-10-19T15:24:45.662Z"
+  },
+  {
+    "id": "UAT-HTTP-422-invalid-body",
+    "module": "Error handling",
+    "role": "API control",
+    "preconditions": "Independent Native bearer authentication per role; direct loopback API; greenfield development stack; no browser session reused",
+    "steps": "POST direct backend /api/projects; synthetic invalid data",
+    "expected": "Actual error response HTTP 422",
+    "actual": {
+      "status": 422,
+      "data": {
+        "detail": [
+          {
+            "type": "missing",
+            "loc": [
+              "body",
+              "project_name"
+            ],
+            "msg": "Field required",
+            "input": {}
+          }
+        ]
+      },
+      "requestId": "c4445b08a74c"
+    },
+    "api": 422,
+    "status": "PASS",
+    "defect": null,
+    "time": "2026-10-19T15:24:45.717Z"
+  },
+  {
+    "id": "UAT-HTTP-400-invalid-activation",
+    "module": "Error handling",
+    "role": "API control",
+    "preconditions": "Independent Native bearer authentication per role; direct loopback API; greenfield development stack; no browser session reused",
+    "steps": "POST direct backend /api/auth/native/activate; synthetic invalid data",
+    "expected": "Actual error response HTTP 400",
+    "actual": {
+      "status": 400,
+      "data": {
+        "detail": "Activation link is invalid or unavailable"
+      },
+      "requestId": "d73e2e4ca48f"
+    },
+    "api": 400,
+    "status": "PASS",
+    "defect": null,
+    "time": "2026-10-19T15:24:45.759Z"
+  },
+  {
+    "id": "UAT-ISOLATION-GLOBAL-CANDIDATES",
+    "module": "Tenant isolation",
+    "role": "foreign Admin",
+    "preconditions": "Isolation Control active membership with tenant:user:invite; no Olympus membership",
+    "steps": "Direct authenticated GET own-tenant user-candidates?q=olympus; no membership mutations",
+    "expected": "Requested strict no-enumeration criterion: Olympus account identities are not discoverable from another tenant",
+    "actual": {
+      "status": 200,
+      "candidates": [
+        {
+          "id": 6,
+          "email": "platform@olympus.example.test",
+          "display_name": "Synthetic Greenfield Platform Administrator",
+          "status": "ACTIVE"
+        },
+        {
+          "id": 1,
+          "email": "admin@olympus.example.test",
+          "display_name": "Synthetic Olympus admin",
+          "status": "ACTIVE"
+        },
+        {
+          "id": 2,
+          "email": "analyst@olympus.example.test",
+          "display_name": "Synthetic Olympus analyst",
+          "status": "ACTIVE"
+        },
+        {
+          "id": 3,
+          "email": "developer@olympus.example.test",
+          "display_name": "Synthetic Olympus developer",
+          "status": "ACTIVE"
+        },
+        {
+          "id": 4,
+          "email": "viewer@olympus.example.test",
+          "display_name": "Synthetic Olympus viewer",
+          "status": "ACTIVE"
+        }
+      ],
+      "policy_note": "Implemented candidate lookup intentionally searches globally eligible IAM users; tenant membership and business data remain protected. UAT owner must accept this exception or request narrower discovery."
+    },
+    "api": 200,
+    "status": "FAIL",
+    "defect": "UAT-DEF-002",
+    "time": "2026-10-19T15:30:49.429268+00:00"
+  }
+]

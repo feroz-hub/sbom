@@ -53,3 +53,5 @@ describe('AiFixSection accessibility', () => {
     expect(results.violations).toEqual([]);
   }, 15000);
 });
+
+vi.mock('@/hooks/useAuth', async () => ({ useAuth: (await import('@/test/authorizedAuth')).authorizedAuth }));

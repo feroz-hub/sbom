@@ -1,0 +1,33 @@
+[
+  {
+    "id": "R3-SESSION-503-FAIL-CLOSED",
+    "role": "admin",
+    "expected": "Transient503 shows service-unavailable with Retry, no protected content or login redirect",
+    "actual": {
+      "path": "/",
+      "retry": true,
+      "dashboardVisible": false,
+      "opaqueSessionCookiePresent": true
+    },
+    "result": "PASS"
+  },
+  {
+    "id": "R3-SESSION-RETRY-RESTORES",
+    "role": "admin",
+    "expected": "Retry revalidates actual server session and previous tenant",
+    "actual": {
+      "path": "/",
+      "dashboardVisible": true
+    },
+    "result": "PASS"
+  },
+  {
+    "id": "R3-SESSION-POST-RECOVERY-NAV",
+    "role": "admin",
+    "expected": "Real protected Projects remains accessible after retry",
+    "actual": {
+      "path": "/projects"
+    },
+    "result": "PASS"
+  }
+]

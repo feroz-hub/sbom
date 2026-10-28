@@ -19,6 +19,9 @@ from __future__ import annotations
 
 import pytest
 
+from tests.public_id_fixture import public_row
+from tests.tenant_fixture_scope import verified_fixture_tenant
+
 _NVD_FINDING_WITH_STRATEGY = {
     "vuln_id": "CVE-MATCH-STRATEGY-REGRESSION",
     "aliases": [],
@@ -71,28 +74,30 @@ def test_persist_analysis_run_forwards_match_strategy(client, seeded_sbom, mock_
     run_id = resp.json()["id"]
 
     from app.db import SessionLocal
-    from app.models import AnalysisFinding
+    from app.models import AnalysisFinding, AnalysisRun
     from sqlalchemy import select
 
     db = SessionLocal()
     try:
-        rows = (
-            db.execute(
-                select(AnalysisFinding).where(
-                    AnalysisFinding.analysis_run_id == run_id,
-                    AnalysisFinding.vuln_id == "CVE-MATCH-STRATEGY-REGRESSION",
+        with verified_fixture_tenant(db, 1):
+            run_id = public_row(db, AnalysisRun, run_id).id
+            rows = (
+                db.execute(
+                    select(AnalysisFinding).where(
+                        AnalysisFinding.analysis_run_id == run_id,
+                        AnalysisFinding.vuln_id == "CVE-MATCH-STRATEGY-REGRESSION",
+                    )
                 )
+                .scalars()
+                .all()
             )
-            .scalars()
-            .all()
-        )
-        assert len(rows) == 1, f"expected exactly one row for the synthetic finding, got {len(rows)}"
-        row = rows[0]
-        assert row.match_strategy == "cpe_name", (
-            f"match_strategy was {row.match_strategy!r}; "
-            "persist_analysis_run is dropping the field — the explicit-"
-            "kwarg constructor at analysis_service.py:243 needs the kwarg"
-        )
+            assert len(rows) == 1, f"expected exactly one row for the synthetic finding, got {len(rows)}"
+            row = rows[0]
+            assert row.match_strategy == "cpe_name", (
+                f"match_strategy was {row.match_strategy!r}; "
+                "persist_analysis_run is dropping the field — the explicit-"
+                "kwarg constructor at analysis_service.py:243 needs the kwarg"
+            )
     finally:
         db.close()
 
@@ -121,22 +126,24 @@ def test_persist_analysis_run_tolerates_missing_match_strategy(client, seeded_sb
     run_id = resp.json()["id"]
 
     from app.db import SessionLocal
-    from app.models import AnalysisFinding
+    from app.models import AnalysisFinding, AnalysisRun
     from sqlalchemy import select
 
     db = SessionLocal()
     try:
-        rows = (
-            db.execute(
-                select(AnalysisFinding).where(
-                    AnalysisFinding.analysis_run_id == run_id,
-                    AnalysisFinding.vuln_id == "CVE-PRE-PR-C-SHAPE",
+        with verified_fixture_tenant(db, 1):
+            run_id = public_row(db, AnalysisRun, run_id).id
+            rows = (
+                db.execute(
+                    select(AnalysisFinding).where(
+                        AnalysisFinding.analysis_run_id == run_id,
+                        AnalysisFinding.vuln_id == "CVE-PRE-PR-C-SHAPE",
+                    )
                 )
+                .scalars()
+                .all()
             )
-            .scalars()
-            .all()
-        )
-        assert len(rows) == 1
-        assert rows[0].match_strategy is None
+            assert len(rows) == 1
+            assert rows[0].match_strategy is None
     finally:
         db.close()

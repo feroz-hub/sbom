@@ -23,7 +23,7 @@ import { BatchControls } from './BatchControls';
 import { BatchProgressBar } from './BatchProgressBar';
 
 interface RunBatchProgressProps {
-  runId: number;
+  runId: string;
   /** When false, the banner returns null. */
   enabled?: boolean;
   /**
@@ -497,7 +497,7 @@ function pluraliseDescription(description: string, count: number): string {
  * subscribing, since the real query data stays ``null`` (see
  * ``useGlobalAiBatchProgress``, which only tracks live statuses).
  */
-function makeIdleProgress(runId: number): AiBatchProgress {
+function makeIdleProgress(runId: string): AiBatchProgress {
   return {
     run_id: runId,
     batch_id: null,

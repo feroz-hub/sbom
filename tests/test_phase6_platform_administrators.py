@@ -1,5 +1,7 @@
 from __future__ import annotations
 
+from uuid import uuid4
+
 import pytest
 from app.core.security import _resolve_context
 from app.db import SessionLocal
@@ -15,6 +17,7 @@ from tests.phase6_helpers import (
     seed_platform_grant,
     seed_user,
 )
+from tests.public_id_fixture import grant_uuid, user_uuid
 
 
 def test_grant_is_eligible_duplicate_rejected_audited_and_immediate(client, monkeypatch):
@@ -30,7 +33,7 @@ def test_grant_is_eligible_duplicate_rejected_audited_and_immediate(client, monk
 
     granted = client.post(
         "/api/platform/administrators",
-        json={"user_id": target_id},
+        json={"user_id": user_uuid(target_id)},
         headers={"X-Correlation-ID": "grant-phase6"},
     )
     assert granted.status_code == 201, granted.text
@@ -39,28 +42,19 @@ def test_grant_is_eligible_duplicate_rejected_audited_and_immediate(client, monk
 
     repeated = client.post(
         "/api/platform/administrators",
-        json={"user_id": target_id},
+        json={"user_id": user_uuid(target_id)},
     )
     assert repeated.status_code == 409
-    assert (
-        repeated.json()["detail"]["code"]
-        == "IAM_PLATFORM_ADMIN_ALREADY_GRANTED"
-    )
+    assert repeated.json()["detail"]["code"] == "IAM_PLATFORM_ADMIN_ALREADY_GRANTED"
 
     monkeypatch.setenv("AUTH_ENABLED", "true")
     monkeypatch.setenv("DEV_DEFAULT_TENANT", "false")
     reset_settings()
     with SessionLocal() as db:
-        context = _resolve_context(
-            db, target_claims, None, allow_platform_context=True
-        )
+        context = _resolve_context(db, target_claims, None, allow_platform_context=True)
         assert context.is_platform_admin is True
         assert context.has_permission("platform:administrator:revoke")
-        assert db.scalar(
-            select(func.count(PlatformUserRole.id)).where(
-                PlatformUserRole.user_id == target_id
-            )
-        ) == 1
+        assert db.scalar(select(func.count(PlatformUserRole.id)).where(PlatformUserRole.user_id == target_id)) == 1
         audits = list(
             db.scalars(
                 select(AuthorizationAuditLog).where(
@@ -73,18 +67,14 @@ def test_grant_is_eligible_duplicate_rejected_audited_and_immediate(client, monk
         assert audits[0].actor_user_id == admin_id
         assert audits[0].tenant_id is None
         assert audits[0].correlation_id == "grant-phase6"
-        assert db.scalar(
-            select(func.count(TenantUser.id)).where(TenantUser.user_id == target_id)
-        ) == 0
+        assert db.scalar(select(func.count(TenantUser.id)).where(TenantUser.user_id == target_id)) == 0
 
 
 def test_inactive_grant_is_reactivated_without_duplicate(client):
     with SessionLocal() as db:
         admin, _ = seed_dev_platform_admin(db)
         target = seed_user(db)
-        grant = seed_platform_grant(
-            db, target, status="DISABLED", creator_id=admin.id
-        )
+        grant = seed_platform_grant(db, target, status="DISABLED", creator_id=admin.id)
         original_created_at = grant.created_at
         grant_id = grant.id
         target_id = target.id
@@ -92,25 +82,18 @@ def test_inactive_grant_is_reactivated_without_duplicate(client):
 
     response = client.post(
         "/api/platform/administrators",
-        json={"user_id": target_id},
+        json={"user_id": user_uuid(target_id)},
     )
     assert response.status_code == 201
     assert response.json()["action"] == "REACTIVATED"
-    assert response.json()["grant_id"] == grant_id
+    assert response.json()["grant_id"] == grant_uuid(grant_id)
     with SessionLocal() as db:
         grant = db.get(PlatformUserRole, grant_id)
         assert grant.status == "ACTIVE"
         assert grant.created_at == original_created_at
+        assert db.scalar(select(func.count(PlatformUserRole.id)).where(PlatformUserRole.user_id == target_id)) == 1
         assert db.scalar(
-            select(func.count(PlatformUserRole.id)).where(
-                PlatformUserRole.user_id == target_id
-            )
-        ) == 1
-        assert db.scalar(
-            select(AuthorizationAuditLog).where(
-                AuthorizationAuditLog.action
-                == "PLATFORM_ADMIN_GRANT_REACTIVATED"
-            )
+            select(AuthorizationAuditLog).where(AuthorizationAuditLog.action == "PLATFORM_ADMIN_GRANT_REACTIVATED")
         )
 
 
@@ -122,9 +105,7 @@ def test_inactive_grant_is_reactivated_without_duplicate(client):
         ("ACTIVE", False, "IAM_EMAIL_VERIFICATION_REQUIRED"),
     ],
 )
-def test_ineligible_users_cannot_receive_platform_grant(
-    client, status, verified, code
-):
+def test_ineligible_users_cannot_receive_platform_grant(client, status, verified, code):
     with SessionLocal() as db:
         seed_dev_platform_admin(db)
         target = seed_user(db, status=status, verified=verified)
@@ -133,20 +114,14 @@ def test_ineligible_users_cannot_receive_platform_grant(
 
     response = client.post(
         "/api/platform/administrators",
-        json={"user_id": target_id},
+        json={"user_id": user_uuid(target_id)},
     )
     assert response.status_code == 409
     assert response.json()["detail"]["code"] == code
     with SessionLocal() as db:
-        assert db.scalar(
-            select(PlatformUserRole).where(
-                PlatformUserRole.user_id == target_id
-            )
-        ) is None
+        assert db.scalar(select(PlatformUserRole).where(PlatformUserRole.user_id == target_id)) is None
         audit = db.scalar(
-            select(AuthorizationAuditLog).where(
-                AuthorizationAuditLog.action == "PLATFORM_ADMIN_GRANT_REJECTED"
-            )
+            select(AuthorizationAuditLog).where(AuthorizationAuditLog.action == "PLATFORM_ADMIN_GRANT_REJECTED")
         )
         assert audit is not None
         assert audit.tenant_id is None
@@ -158,15 +133,18 @@ def test_unknown_user_and_invalid_selector_are_rejected(client):
 
     unknown = client.post(
         "/api/platform/administrators",
-        json={"user_id": 999999},
+        json={"user_id": str(uuid4())},
     )
     assert unknown.status_code == 404
     assert unknown.json()["detail"]["code"] == "IAM_USER_NOT_FOUND"
     assert client.post("/api/platform/administrators", json={}).status_code == 422
-    assert client.post(
-        "/api/platform/administrators",
-        json={"user_id": 1, "external_user_id": "also-supplied"},
-    ).status_code == 422
+    assert (
+        client.post(
+            "/api/platform/administrators",
+            json={"user_id": user_uuid(1), "external_user_id": "also-supplied"},
+        ).status_code
+        == 422
+    )
 
 
 def test_administrator_listing_exposes_effectiveness_without_external_identity(client):
@@ -177,9 +155,7 @@ def test_administrator_listing_exposes_effectiveness_without_external_identity(c
         inactive = seed_user(db)
         seed_platform_grant(db, disabled, creator_id=admin.id)
         seed_platform_grant(db, unverified, creator_id=admin.id)
-        seed_platform_grant(
-            db, inactive, status="DISABLED", creator_id=admin.id
-        )
+        seed_platform_grant(db, inactive, status="DISABLED", creator_id=admin.id)
         db.commit()
 
     response = client.get("/api/platform/administrators?page_size=10")
@@ -206,9 +182,7 @@ def test_revoke_is_soft_immediate_and_preserves_membership(client, monkeypatch):
         claims = identity_claims(target)
         db.commit()
 
-    assert client.delete(
-        f"/api/platform/administrators/{grant_id}"
-    ).status_code == 204
+    assert client.delete(f"/api/platform/administrators/{grant_uuid(grant_id)}").status_code == 204
 
     monkeypatch.setenv("AUTH_ENABLED", "true")
     monkeypatch.setenv("DEV_DEFAULT_TENANT", "false")
@@ -239,9 +213,7 @@ def test_self_revocation_allowed_with_backup_and_final_admin_protected(client):
         backup_grant_id = backup_grant.id
         db.commit()
 
-    assert client.delete(
-        f"/api/platform/administrators/{dev_grant_id}"
-    ).status_code == 204
+    assert client.delete(f"/api/platform/administrators/{grant_uuid(dev_grant_id)}").status_code == 204
 
     # Test requests still resolve as the development identity, which now has
     # no platform grant. Exercise the service directly as the remaining admin.
@@ -251,10 +223,7 @@ def test_self_revocation_allowed_with_backup_and_final_admin_protected(client):
 
             platform_service.revoke_platform_administrator(db, backup_grant_id)
         assert exc_info.value.status_code == 409
-        assert (
-            exc_info.value.detail["code"]
-            == "IAM_LAST_PLATFORM_ADMIN_PROTECTED"
-        )
+        assert exc_info.value.detail["code"] == "IAM_LAST_PLATFORM_ADMIN_PROTECTED"
         db.rollback()
         assert db.get(PlatformUserRole, backup_grant_id).status == "ACTIVE"
 
@@ -267,26 +236,20 @@ def test_self_revocation_allowed_with_backup_and_final_admin_protected(client):
         ("ACTIVE", False),
     ],
 )
-def test_ineffective_backup_does_not_defeat_last_admin_protection(
-    backup_status, backup_verified
-):
+def test_ineffective_backup_does_not_defeat_last_admin_protection(backup_status, backup_verified):
     from app.services import platform_service
 
     with SessionLocal() as db:
         dev = seed_user(db)
         target_grant = seed_platform_grant(db, dev)
-        backup = seed_user(
-            db, status=backup_status, verified=backup_verified
-        )
+        backup = seed_user(db, status=backup_status, verified=backup_verified)
         seed_platform_grant(db, backup)
         db.commit()
         target_grant_id = target_grant.id
 
     with SessionLocal() as db:
         with pytest.raises(HTTPException) as exc_info:
-            platform_service.revoke_platform_administrator(
-                db, target_grant_id
-            )
+            platform_service.revoke_platform_administrator(db, target_grant_id)
         assert exc_info.value.detail["code"] == "IAM_LAST_PLATFORM_ADMIN_PROTECTED"
 
 
@@ -339,10 +302,7 @@ def test_email_change_removes_effective_platform_access_immediately():
         assert result.user.email_verified is False
         assert result.user.verification_required is True
         assert db.get(PlatformUserRole, grant_id).status == "ACTIVE"
-        assert (
-            platform_service.get_effective_platform_grant(db, result.user)
-            is None
-        )
+        assert platform_service.get_effective_platform_grant(db, result.user) is None
 
 
 def test_token_verification_does_not_reactivate_inactive_platform_grant(

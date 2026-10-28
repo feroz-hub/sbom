@@ -31,9 +31,10 @@ from sqlalchemy.exc import SQLAlchemyError
 from sqlalchemy.orm import Session
 
 from .. import metrics
+from ..core.security import require_permission
 from ..db import get_db
 from ..etag import maybe_not_modified
-from ..models import Product, Projects, SBOMSource, Tenant
+from ..models import Product, Projects, SBOMSource
 from ..schemas_dashboard import (
     DashboardPostureResponse,
     DashboardVexResponse,
@@ -41,7 +42,7 @@ from ..schemas_dashboard import (
     NetChange,
     VulnerabilityAgeResponse,
 )
-from ..services.dashboard_scope import dashboard_scope_dependency
+from ..services.dashboard_scope import dashboard_scope_dependency, scope_metadata
 from ..services.lifecycle.vex_provider import vex_dashboard_summary
 
 # Observation-window lengths (days) for the vulnerability-age period filter.
@@ -58,6 +59,24 @@ router = APIRouter(
     prefix="/dashboard", tags=["dashboard"],
     dependencies=[Depends(dashboard_scope_dependency)],
 )
+
+
+@router.get("/posture-versions")
+def dashboard_posture_versions(request: Request, db: Session = Depends(get_db)):
+    from ..services.sbom_posture import posture_evidence_summary, posture_metadata
+
+    scope = request.state.dashboard_scope
+    items = posture_metadata(db, *scope.key)
+    return {
+        "items": items,
+        "summary": posture_evidence_summary(items),
+        "scope": {
+            "tenant_id": scope.tenant_id,
+            "project_id": scope.project_id,
+            "product_id": scope.product_id,
+            "sbom_id": scope.sbom_id,
+        },
+    }
 
 
 @router.get("/filter-options/projects")
@@ -115,6 +134,16 @@ def dashboard_scoped_runs(
 ):
     """Run-list representation over the dashboard's eligible set."""
     return metrics.dashboard_runs(db, limit=limit, latest_only=latest_only, run_status=run_status)
+
+
+@router.get("/priority-findings", dependencies=[Depends(require_permission("analysis:read"))])
+def dashboard_priority_findings(
+    limit: int = Query(5, ge=1, le=20),
+    db: Session = Depends(get_db),
+):
+    """Read-only, tenant-scoped current finding instances for the overview."""
+    from ..metrics.findings import dashboard_priority_findings as priority_findings
+    return {"items": priority_findings(db, limit=limit)}
 
 
 @router.get("/stats")
@@ -625,15 +654,4 @@ def get_dashboard_summary(
 
 
 def _scope_metadata(request: Request, db: Session) -> dict:
-    scope = request.state.dashboard_scope
-    tenant_name = db.execute(select(Tenant.name).where(Tenant.id == scope.tenant_id)).scalar_one_or_none()
-    project_name = db.execute(select(Projects.project_name).where(Projects.id == scope.project_id)).scalar_one_or_none() if scope.project_id else None
-    product_name = db.execute(select(Product.name).where(Product.id == scope.product_id)).scalar_one_or_none() if scope.product_id else None
-    sbom = db.execute(select(SBOMSource.sbom_name, SBOMSource.sbom_version, SBOMSource.productver).where(SBOMSource.id == scope.sbom_id)).first() if scope.sbom_id else None
-    return {
-        "level": scope.level,
-        "tenant": {"id": scope.tenant_id, "name": tenant_name},
-        "project": {"id": scope.project_id, "name": project_name} if scope.project_id else None,
-        "application": {"id": scope.product_id, "name": product_name} if scope.product_id else None,
-        "sbom": {"id": scope.sbom_id, "name": sbom.sbom_name, "version": sbom.sbom_version or sbom.productver} if sbom else None,
-    }
+    return scope_metadata(db, request.state.dashboard_scope)

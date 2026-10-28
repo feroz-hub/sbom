@@ -19,7 +19,7 @@ from sqlalchemy.exc import IntegrityError, SQLAlchemyError
 from sqlalchemy.orm import Session
 
 from ..core.context import CurrentContext
-from ..core.security import get_current_tenant_context
+from ..core.security import get_current_tenant_context, require_permission
 from ..db import get_db
 from ..models import (
     AnalysisFinding,
@@ -159,7 +159,7 @@ def update_project(
             setattr(project, k, v)
 
         project.modified_on = now_iso()
-        project.modified_by = data.get("modified_by") or context.actor_label()
+        project.modified_by = context.actor_label()
 
         db.add(project)
         db.commit()
@@ -243,6 +243,7 @@ def delete_project(
     if not project:
         raise HTTPException(status_code=404, detail="Project not found")
 
+    public_identity = str(project.public_id)
     user_id = context.actor_label()
 
     if (confirm or "").strip().lower() not in {"yes", "y"}:
@@ -252,7 +253,7 @@ def delete_project(
                 "This will delete the Project. Re-send with confirm=yes "
                 "to proceed (and add permanent=true to bypass soft delete)."
             ),
-            "example": f"/api/projects/{project_id}?confirm=yes",
+            "example": f"/api/projects/{public_identity}?confirm=yes",
         }
 
     service = SoftDeleteService(db)
@@ -334,12 +335,12 @@ def delete_project(
             if session_ids:
                 db.execute(
                     delete(SBOMValidationSessionEvent)
-                    .where(SBOMValidationSessionEvent.session_id.in_(session_ids))
+                    .where(SBOMValidationSessionEvent.session_id.in_(session_ids), SBOMValidationSessionEvent.tenant_id == tenant_id)
                     .execution_options(synchronize_session=False)
                 )
                 db.execute(
                     delete(SBOMValidationSession)
-                    .where(SBOMValidationSession.id.in_(session_ids))
+                    .where(SBOMValidationSession.id.in_(session_ids), SBOMValidationSession.tenant_id == tenant_id)
                     .execution_options(synchronize_session=False)
                 )
             # Products carry ON DELETE CASCADE in the schema, but the ORM
@@ -386,7 +387,7 @@ def delete_project(
         return {
             "status": "deleted",
             "permanent": True,
-            "message": f"Project {project_id} permanently deleted.",
+            "message": f"Project {public_identity} permanently deleted.",
         }
 
     # Soft delete with cascade through the ownership tree.
@@ -411,7 +412,7 @@ def delete_project(
         "status": "deleted",
         "permanent": False,
         "cascaded_count": cascaded_count,
-        "message": f"Project {project_id} moved to deleted (recoverable).",
+        "message": f"Project {public_identity} moved to deleted (recoverable).",
     }
 
 
@@ -419,13 +420,16 @@ def delete_project(
 def restore_project(
     project_id: int = Path(..., ge=1),
     user_id: str | None = Query(None),
+    context: CurrentContext = Depends(require_permission("project:update")),
     db: Session = Depends(get_db),
 ):
     """Restore a soft-deleted project. Does not cascade — children must
     be restored individually if also tombstoned. (Phase 3.4: admin
     recovery surface; UI affordance ships in a follow-up PR.)"""
     project = db.execute(
-        select(Projects).where(Projects.id == project_id).execution_options(include_deleted=True)
+        select(Projects).where(
+            Projects.id == project_id, Projects.tenant_id == context.tenant_id
+        ).execution_options(include_deleted=True)
     ).scalar_one_or_none()
     if project is None:
         raise HTTPException(status_code=404, detail="Project not found")
@@ -436,7 +440,7 @@ def restore_project(
     db.commit()
     audit_log.record(
         db,
-        user_id=user_id,
+        user_id=context.actor_label(),
         action="project.restore",
         target_kind="project",
         target_id=project_id,

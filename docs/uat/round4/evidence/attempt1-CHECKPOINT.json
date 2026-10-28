@@ -1,0 +1,22 @@
+{
+  "status": "ROUND4_BACKEND_REGRESSION_PARTIALLY_COMPLETED",
+  "frozenRunStatus": "FINISHED",
+  "frozenRunOutcomes": {
+    "PASS": 4383,
+    "SKIP": 8,
+    "FAIL": 1,
+    "ERROR": 0,
+    "XFAIL": 0,
+    "XPASS": 0,
+    "NOT RUN": 0
+  },
+  "original228FocusedPASS": 228,
+  "remaining346PASS": 346,
+  "protectedEvidenceChanges": [],
+  "nextActions": [
+    "Allow frozen run to finish; do not edit app/tests/scripts/frontend source during it",
+    "Classify and resolve any actual remaining frozen failures, then repeat entire frozen run if corrections are necessary",
+    "Run full Vitest, TypeScript, Ruff, ESLint and production build sequentially after backend",
+    "Finalize four reports, sanitized logs, exact per-node reconciliation and tracker drafts; no commit or tracker writes"
+  ]
+}

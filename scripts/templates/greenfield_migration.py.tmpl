@@ -1,0 +1,47 @@
+"""Describe this forward-only application schema/data change."""
+
+from __future__ import annotations
+
+from alembic import op
+from sqlalchemy import text
+
+revision = "REPLACE_WITH_NEXT_REVISION"
+down_revision = "REPLACE_WITH_CURRENT_HEAD"
+branch_labels = None
+depends_on = None
+
+# Keep the startup contract and validation with the migration. No launcher edit
+# or separate per-revision startup adapter is necessary.
+startup = {
+    "version": 1,
+    "tables": ("REPLACE_WITH_EXISTING_AFFECTED_TABLE",),
+    "advisory_key": 0,  # Select a positive migration-specific serialization key.
+    "description": "REPLACE_WITH_REVIEWABLE_CHANGE_AND_DATA_PRESERVATION_SCOPE",
+}
+
+
+def startup_preflight(connection):
+    # Runs in server-enforced READ ONLY mode. Check exact predecessor schema,
+    # owners, privileges, reference data and migration-specific prerequisites.
+    raise RuntimeError("Implement exact read-only migration preconditions")
+
+
+def upgrade():
+    # No connections/transactions/commits/retries here. The caller owns one
+    # PostgreSQL transaction and atomically updates the Alembic marker.
+    connection = op.get_bind()
+    raise RuntimeError("Implement the forward migration body")
+
+
+def startup_validate(connection, before):
+    # Runs both before COMMIT and on an independent READ ONLY read-back.
+    # before contains the original complete catalog and per-table row digests.
+    # Check the exact allowed delta and intended data transformations.
+    # When before is None, validate an already-current database's full target
+    # schema/security without replaying the migration. Return literal True only
+    # on acceptance; otherwise raise. Do not query outside the fixed target.
+    raise RuntimeError("Implement exact schema/security/data acceptance")
+
+
+def downgrade():
+    raise RuntimeError("Use an independently approved recovery procedure")

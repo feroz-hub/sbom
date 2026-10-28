@@ -31,6 +31,7 @@ from slowapi.errors import RateLimitExceeded
 from slowapi.middleware import SlowAPIMiddleware
 from sqlalchemy import MetaData, Table, func, select, update
 from starlette.middleware.gzip import GZipMiddleware
+from starlette.routing import compile_path
 
 from .logger import get_logger, setup_logging
 
@@ -42,6 +43,7 @@ from datetime import UTC, datetime
 
 from . import error_handlers
 from .auth import validate_auth_setup
+from .core.route_policies import ROUTE_POLICIES
 from .core.security import enforce_request_access
 from .db import Base, SessionLocal, engine
 from .http_client import close_async_http_client, init_async_http_client
@@ -59,6 +61,7 @@ from .routers import (
     analyze_endpoints,
     authorization_catalog,
     compare,
+    component_advisor,
     cves,
     dashboard_advanced,
     dashboard_main,
@@ -66,6 +69,7 @@ from .routers import (
     kev,
     lifecycle,
     lifecycle_admin,
+    logical_sboms,
     pdf,
     platform,
     products,
@@ -73,6 +77,7 @@ from .routers import (
     remediation,
     reports,
     runs,
+    sbom_auto_repair,
     sbom_upload,
     sbom_validation_sessions,
     sbom_versions,
@@ -150,11 +155,22 @@ def _ensure_seed_data() -> None:
         )
 
         now = datetime.now(UTC)
-        db.execute(
-            update(SBOMSource)
-            .where(SBOMSource.validated_at.is_(None), SBOMSource.status == "validated")
-            .values(status="pending")
-        )
+        from .services.maintenance_scope import active_tenant_ids, maintenance_tenant
+
+        for tenant_id in active_tenant_ids():
+            with maintenance_tenant(tenant_id, "startup.sbom_status_repair"):
+                db.execute(
+                    update(SBOMSource)
+                    .where(
+                        SBOMSource.tenant_id == tenant_id,
+                        SBOMSource.validated_at.is_(None),
+                        SBOMSource.status == "validated",
+                    )
+                    .values(status="pending")
+                )
+                # Release this tenant's write transaction before the separate
+                # completion-audit session (also required by SQLite).
+                db.commit()
         if not get_settings().auth_enabled:
             tenant = db.get(Tenant, 1)
             if tenant is None:
@@ -224,12 +240,16 @@ def _ensure_seed_data() -> None:
             else:
                 membership.role = "TENANT_ADMIN"
                 membership.status = "ACTIVE"
-            assignment_exists = db.scalar(
-                select(TenantUserRoleAssignment.id).where(
-                    TenantUserRoleAssignment.tenant_user_id == membership.id,
-                    TenantUserRoleAssignment.status == "ACTIVE",
+            from .core.context import minimal_background_context, tenant_scope
+
+            with tenant_scope(minimal_background_context(membership.tenant_id)):
+                assignment_exists = db.scalar(
+                    select(TenantUserRoleAssignment.id).where(
+                        TenantUserRoleAssignment.tenant_id == membership.tenant_id,
+                        TenantUserRoleAssignment.tenant_user_id == membership.id,
+                        TenantUserRoleAssignment.status == "ACTIVE",
+                    )
                 )
-            )
             if assignment_exists is None:
                 create_initial_assignment(
                     db,
@@ -239,9 +259,11 @@ def _ensure_seed_data() -> None:
                     source="SYSTEM",
                 )
         else:
-            bootstrap = db.execute(
-                select(IAMUser).where(IAMUser.external_iam_user_id.in_(("local-dev-admin", "dev-user")))
-            ).scalars().all()
+            bootstrap = (
+                db.execute(select(IAMUser).where(IAMUser.external_iam_user_id.in_(("local-dev-admin", "dev-user"))))
+                .scalars()
+                .all()
+            )
             if any(user.status == "ACTIVE" for user in bootstrap):
                 log.warning("Authenticated deployment contains an active local bootstrap identity; disable it")
         db.commit()
@@ -314,6 +336,7 @@ def _verify_schema_is_current() -> None:
     # Check Alembic migrations status if alembic_version table exists
     if "alembic_version" in table_names:
         config = Config(str(Path(__file__).resolve().parent.parent / "alembic.ini"))
+        config.set_main_option("script_location", str(Path(__file__).resolve().parent.parent / "alembic"))
         expected_heads = set(ScriptDirectory.from_config(config).get_heads())
         try:
             alembic_version = Table("alembic_version", MetaData(), autoload_with=engine)
@@ -353,11 +376,7 @@ def _load_active_tenant_ids() -> list[int]:
 
     with SessionLocal() as lookup_db:
         return list(
-            lookup_db.execute(
-                select(Tenant.id)
-                .where(Tenant.status == "ACTIVE")
-                .order_by(Tenant.id.asc())
-            ).scalars()
+            lookup_db.execute(select(Tenant.id).where(Tenant.status == "ACTIVE").order_by(Tenant.id.asc())).scalars()
         )
 
 
@@ -500,9 +519,7 @@ def _log_ai_configuration_readiness() -> None:
         loader = get_loader()
         configs, effective = loader.resolve()
         configured_names = sorted({cfg.name for cfg in configs if cfg.enabled})
-        unavailable = sorted(
-            {cfg.config_error for cfg in configs if cfg.config_error is not None}
-        )
+        unavailable = sorted({cfg.config_error for cfg in configs if cfg.config_error is not None})
         try:
             default_config = get_registry().get_default_config()
         except Exception:  # noqa: BLE001 — summarized below without secrets
@@ -551,6 +568,10 @@ async def lifespan(app: FastAPI):
     # re-apply step, our formatter and rotating file handler would be lost
     # for the remainder of the process.
     setup_logging()
+    from .core.route_policy import validate_route_policies
+
+    validate_route_policies(app)
+    validate_auth_setup()
     await init_async_http_client()
     log.info("SBOM Analyzer starting up — initialising database …")
 
@@ -565,6 +586,9 @@ async def lifespan(app: FastAPI):
     except Exception as e:
         log.error("Failed to parse database URL for logging: %s", e)
 
+    from .services.native_operations import validate_configuration
+
+    validate_configuration()
     _ensure_seed_data()
     _backfill_analytics_per_tenant()
     _update_sbom_names()
@@ -572,10 +596,14 @@ async def lifespan(app: FastAPI):
     _reconcile_stale_analysis_runs()
     _log_ai_configuration_readiness()
     from .services.report_storage import configuration_errors
-    log.info("reports.startup enabled=%s authenticated=%s smtp_enabled=%s diagnostics=%s",
-             settings.report_notifications_enabled, settings.auth_enabled, settings.email_delivery_enabled,
-             ",".join(configuration_errors(settings)) or "ready")
-    validate_auth_setup()
+
+    log.info(
+        "reports.startup enabled=%s authenticated=%s smtp_enabled=%s diagnostics=%s",
+        settings.report_notifications_enabled,
+        settings.auth_enabled,
+        settings.email_delivery_enabled,
+        ",".join(configuration_errors(settings)) or "ready",
+    )
     log.info("Startup complete. API ready.")
     yield
     await close_async_http_client()
@@ -583,6 +611,42 @@ async def lifespan(app: FastAPI):
 
 
 app = FastAPI(title="SBOM & Projects API", version=APP_VERSION, lifespan=lifespan)
+
+_generate_openapi = app.openapi
+
+
+def custom_openapi():
+    """Document the existing route policy without changing runtime dependencies."""
+    if app.openapi_schema is not None:
+        return app.openapi_schema
+    schema = _generate_openapi()
+    schema.setdefault("components", {}).setdefault("securitySchemes", {})["BearerAuth"] = {
+        "type": "http",
+        "scheme": "bearer",
+        "bearerFormat": "JWT",
+    }
+    # OpenAPI omits Starlette path converters (e.g. {family_key:path}).
+    policies = {
+        (method, compile_path(path)[1]): policy
+        for key, policy in ROUTE_POLICIES.items()
+        for method, path in [key.split(" ", 1)]
+    }
+    for path, path_item in schema["paths"].items():
+        for method, operation in path_item.items():
+            policy = policies.get((method.upper(), path))
+            if policy is None or policy == "public":
+                continue
+            operation["security"] = [{"BearerAuth": []}]
+            if "parameters" in operation:
+                operation["parameters"] = [
+                    parameter
+                    for parameter in operation["parameters"]
+                    if not (parameter.get("in") == "header" and parameter.get("name", "").lower() == "authorization")
+                ]
+    return schema
+
+
+app.openapi = custom_openapi
 
 app.state.limiter = limiter
 app.add_exception_handler(RateLimitExceeded, rate_limit_exceeded_handler)
@@ -624,9 +688,12 @@ app.add_middleware(
     allow_credentials=False,
     allow_methods=["*"],
     allow_headers=["*"],
+    # Direct frontend API mode must be able to read server pagination metadata.
+    expose_headers=["X-Total-Count", "X-Next-Cursor"],
 )
 
 app.add_middleware(GZipMiddleware, minimum_size=1000)
+
 
 # --- Request / response logging middleware ------------------------------
 @app.middleware("http")
@@ -646,8 +713,23 @@ async def log_requests(request: Request, call_next):
     if context is not None and audit_action and response.status_code < 400:
         try:
             from .core.context import tenant_scope
-            from .models import AuditLog
+            from .models import AuditLog, AuthorizationAuditLog
 
+            if context.tenant_id is None:
+                # Platform operations have no tenant. Use the global security
+                # audit stream rather than attempting a tenant-owned insert.
+                with SessionLocal() as audit_db:
+                    audit_db.add(
+                        AuthorizationAuditLog(
+                            actor_user_id=context.user_id,
+                            action=audit_action,
+                            outcome="SUCCESS",
+                            detail=f"{request.method} {request.url.path}"[:240],
+                            created_at=datetime.now(UTC),
+                        )
+                    )
+                    audit_db.commit()
+                return response
             with tenant_scope(context), SessionLocal() as audit_db:
                 audit_db.add(
                     AuditLog(
@@ -693,13 +775,9 @@ error_handlers.install(app)
 # Routers already declare their own prefixes where appropriate, so we
 # include them here without overriding.
 #
-# Finding A: every router below carries `dependencies=[Depends(require_auth)]`
-# so the bearer-token check runs on every request before the route handler.
-# `health.router` is the deliberate exception — it serves the unauthenticated
-# `/`, `/health`, `/api/analysis/config`, and `/api/types` endpoints used by
-# liveness probes and the FastAPI `/docs` page. When `API_AUTH_MODE=none`
-# (the default) the dependency is a cheap no-op, so applying it everywhere
-# costs essentially nothing in dev but makes production a one-env-var flip.
+# Every business router inherits the explicit method/path policy guard.
+# Health/account/proof-token routes declare their own reviewed policies and
+# dependencies; startup validates coverage before database initialization.
 
 _protected = [Depends(enforce_request_access)]
 
@@ -713,6 +791,7 @@ app.include_router(sboms_crud.router, dependencies=_protected)
 # New multipart upload route running the eight-stage validation pipeline.
 # Path /api/sboms/upload — see ADR-0007.
 app.include_router(sbom_upload.router, dependencies=_protected)
+app.include_router(sbom_auto_repair.router, dependencies=_protected)
 app.include_router(sbom_validation_sessions.router, dependencies=_protected)
 app.include_router(sbom_validation_sessions.compat_router, dependencies=_protected)
 app.include_router(sbom_validation_sessions.workspace_router, dependencies=_protected)
@@ -733,16 +812,25 @@ app.include_router(compare.router, dependencies=_protected)
 app.include_router(ai_usage.router, dependencies=_protected)
 app.include_router(ai_fixes.router, dependencies=_protected)
 app.include_router(ai_credentials.router, dependencies=_protected)
+app.include_router(ai_credentials.platform_router, dependencies=_protected)
 app.include_router(lifecycle.router, dependencies=_protected)
 app.include_router(lifecycle_admin.router, dependencies=_protected)
+app.include_router(lifecycle_admin.platform_router, dependencies=_protected)
 app.include_router(vex.router, dependencies=_protected)
 app.include_router(vex_investigations.router, dependencies=_protected)
+app.include_router(logical_sboms.router, dependencies=_protected)
+app.include_router(component_advisor.router, dependencies=_protected)
+app.include_router(component_advisor.platform_policy_router, dependencies=_protected)
 app.include_router(remediation.router, dependencies=_protected)
 # Identity onboarding routes in this router perform JWT validation and local
 # state resolution themselves; its application routes retain explicit
 # tenant/permission dependencies at the route level.
 app.include_router(tenants.router)
 app.include_router(verification.router)
+from .routers import entra_auth, native_auth
+
+app.include_router(native_auth.router)
+app.include_router(entra_auth.router)
 app.include_router(platform.router, dependencies=_protected)
 app.include_router(authorization_catalog.router, dependencies=_protected)
 
@@ -767,6 +855,13 @@ app.include_router(
     dependencies=_protected,
 )
 
-# NVD mirror admin router. Auth via require_auth (binary none/bearer/jwt
-# per app.auth). Admin-role split is a TODO (see app/nvd_mirror/api.py).
+# NVD mirror operations require explicit platform authority in the route catalog.
 app.include_router(nvd_mirror_admin_router, dependencies=_protected)
+
+
+# Public UUIDs terminate at the HTTP boundary; internal services retain integer FKs.
+from .public_api import install_public_boundary, install_public_openapi
+
+install_public_boundary(app)
+
+install_public_openapi(app)

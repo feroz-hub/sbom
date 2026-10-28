@@ -10,6 +10,8 @@ from app.models import AuthorizationAuditLog, IAMUser, PlatformUserRole, Tenant,
 from app.services.auth_context_service import resolve_authorization_state
 from sqlalchemy import select
 
+from tests.public_id_fixture import tenant_uuid
+
 
 def _claims(suffix: str):
     return {
@@ -394,7 +396,7 @@ def test_unauthorized_tenant_header_returns_stable_error(client, app):
         db.commit()
     app.dependency_overrides[get_current_user] = lambda: claims
     try:
-        response = client.get("/api/auth/context", headers={"X-Tenant-ID": "not-authorized"})
+        response = client.get("/api/auth/context", headers={"X-Tenant-ID": tenant_uuid(1)})
         assert response.status_code == 403
         assert response.json()["detail"]["code"] == "IAM_UNAUTHORIZED_TENANT"
     finally:

@@ -1,0 +1,36 @@
+<?xml version="1.0" encoding="utf-8"?><testsuites name="pytest tests"><testsuite name="pytest" errors="0" failures="3" skipped="0" tests="23" time="4.519" timestamp="2026-10-20T16:10:49.049289+05:30" hostname="Ferozes-MacBook-Air.local"><testcase classname="tests.test_analysis_domain_logging" name="test_analysis_lifecycle_has_one_terminal_event_and_aggregates" time="0.241"><failure message="assert 2 == 1&#10; +  where 2 = &lt;LogRecord: app.services.analysis_orchestrator, 20, /Users/ferozebasha/sbom/app/services/analysis_orchestrator.py, 306, &quot;vulnerability_lookup_completed&quot;&gt;.vulnerable_components">tests/test_analysis_domain_logging.py:94: in test_analysis_lifecycle_has_one_terminal_event_and_aggregates
+    assert record.vulnerable_components == 1  # Two vulnerabilities on one component.
+    ^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^
+E   assert 2 == 1
+E    +  where 2 = &lt;LogRecord: app.services.analysis_orchestrator, 20, /Users/ferozebasha/sbom/app/services/analysis_orchestrator.py, 306, "vulnerability_lookup_completed"&gt;.vulnerable_components</failure></testcase><testcase classname="tests.test_analysis_domain_logging" name="test_lookup_failure_preserves_exception_and_context" time="0.011" /><testcase classname="tests.test_analysis_domain_logging" name="test_partial_lookup_retains_best_effort_result[True]" time="0.001" /><testcase classname="tests.test_analysis_domain_logging" name="test_partial_lookup_retains_best_effort_result[False]" time="0.001" /><testcase classname="tests.test_analysis_domain_logging" name="test_persisted_run_status_selects_terminal_event[FAIL]" time="0.001" /><testcase classname="tests.test_analysis_domain_logging" name="test_persisted_run_status_selects_terminal_event[ERROR]" time="0.001" /><testcase classname="tests.test_analysis_domain_logging" name="test_persisted_run_status_selects_terminal_event[FAILED]" time="0.001" /><testcase classname="tests.test_analysis_domain_logging" name="test_persisted_run_status_selects_terminal_event[INTERRUPTED]" time="0.001" /><testcase classname="tests.test_analysis_domain_logging" name="test_persisted_run_status_selects_terminal_event[FINDINGS]" time="0.001" /><testcase classname="tests.test_analysis_domain_logging" name="test_persisted_run_status_selects_terminal_event[PARTIAL]" time="0.001" /><testcase classname="tests.test_analysis_domain_logging" name="test_persisted_run_status_selects_terminal_event[OK]" time="0.001" /><testcase classname="tests.test_analysis_domain_logging" name="test_supplied_correlation_id_propagates_as_request_id" time="0.003" /><testcase classname="tests.test_analysis_domain_logging" name="test_active_run_does_not_emit_duplicate_lifecycle" time="0.001" /><testcase classname="tests.test_analysis_domain_logging" name="test_shared_failure_marker_keeps_traceback_for_stream_and_worker" time="0.001" /><testcase classname="tests.test_analysis_domain_logging" name="test_lifecycle_batch_logs_aggregates_after_commit" time="0.001"><failure message="TypeError: 'Mock' object is not iterable">tests/test_analysis_domain_logging.py:208: in test_lifecycle_batch_logs_aggregates_after_commit
+    summary = LifecycleEnrichmentService(providers=[]).enrich_sbom(session, sbom.id)
+              ^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^
+app/services/lifecycle/lifecycle_enrichment_service.py:161: in enrich_sbom
+    providers = self._providers_for_run(db)
+                ^^^^^^^^^^^^^^^^^^^^^^^^^^^
+app/services/lifecycle/lifecycle_enrichment_service.py:432: in _providers_for_run
+    self._configuration_namespace = configuration_cache_namespace(db)
+                                    ^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^
+app/services/lifecycle/provider_config_service.py:162: in configuration_cache_namespace
+    rows = LifecycleProviderConfigService().list_configs(db)
+           ^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^
+app/services/lifecycle/provider_config_service.py:396: in list_configs
+    self.bootstrap_defaults(db)
+app/services/lifecycle/provider_config_service.py:365: in bootstrap_defaults
+    for row in db.execute(
+E   TypeError: 'Mock' object is not iterable</failure></testcase><testcase classname="tests.test_analysis_domain_logging" name="test_lifecycle_commit_failure_does_not_log_completion" time="0.001"><failure message="TypeError: 'Mock' object is not iterable">tests/test_analysis_domain_logging.py:225: in test_lifecycle_commit_failure_does_not_log_completion
+    LifecycleEnrichmentService(providers=[]).enrich_sbom(session, sbom.id)
+app/services/lifecycle/lifecycle_enrichment_service.py:161: in enrich_sbom
+    providers = self._providers_for_run(db)
+                ^^^^^^^^^^^^^^^^^^^^^^^^^^^
+app/services/lifecycle/lifecycle_enrichment_service.py:432: in _providers_for_run
+    self._configuration_namespace = configuration_cache_namespace(db)
+                                    ^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^
+app/services/lifecycle/provider_config_service.py:162: in configuration_cache_namespace
+    rows = LifecycleProviderConfigService().list_configs(db)
+           ^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^
+app/services/lifecycle/provider_config_service.py:396: in list_configs
+    self.bootstrap_defaults(db)
+app/services/lifecycle/provider_config_service.py:365: in bootstrap_defaults
+    for row in db.execute(
+E   TypeError: 'Mock' object is not iterable</failure></testcase><testcase classname="tests.test_analysis_domain_logging" name="test_individual_lifecycle_check_logs_one_component" time="0.001" /><testcase classname="tests.test_analysis_domain_logging" name="test_pdf_generation_logs_totals_without_title_or_content" time="0.001" /><testcase classname="tests.test_analysis_domain_logging" name="test_pdf_failures_keep_original_error_contract[cache]" time="0.005" /><testcase classname="tests.test_analysis_domain_logging" name="test_pdf_failures_keep_original_error_contract[missing]" time="0.001" /><testcase classname="tests.test_analysis_domain_logging" name="test_pdf_failures_keep_original_error_contract[renderer]" time="0.002" /><testcase classname="tests.test_analysis_domain_logging" name="test_excel_logs_filtered_row_aggregates" time="0.001" /><testcase classname="tests.test_analysis_domain_logging" name="test_fda_report_validation_failure_is_logged_and_unchanged" time="0.022" /></testsuite></testsuites>

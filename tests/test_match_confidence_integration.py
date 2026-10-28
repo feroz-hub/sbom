@@ -15,6 +15,9 @@ import copy
 
 import pytest
 
+from tests.public_id_fixture import public_row
+from tests.tenant_fixture_scope import verified_fixture_tenant
+
 _LOG4SHELL_CVE = {
     "id": "CVE-2021-44228",
     "published": "2021-12-10T10:15:09.143",
@@ -107,32 +110,34 @@ def test_nvd_finding_carries_confidence_dict_to_row(client, seeded_sbom, monkeyp
     run_id = resp.json()["id"]
 
     from app.db import SessionLocal
-    from app.models import AnalysisFinding
+    from app.models import AnalysisFinding, AnalysisRun
     from sqlalchemy import select
 
     db = SessionLocal()
     try:
-        rows = (
-            db.execute(
-                select(AnalysisFinding).where(
-                    AnalysisFinding.analysis_run_id == run_id,
-                    AnalysisFinding.vuln_id == "CVE-2021-44228",
+        with verified_fixture_tenant(db, 1):
+            run_id = public_row(db, AnalysisRun, run_id).id
+            rows = (
+                db.execute(
+                    select(AnalysisFinding).where(
+                        AnalysisFinding.analysis_run_id == run_id,
+                        AnalysisFinding.vuln_id == "CVE-2021-44228",
+                    )
                 )
+                .scalars()
+                .all()
             )
-            .scalars()
-            .all()
-        )
-        # The seeded SBOM may not contain log4j; the test passes either
-        # way as long as IF the finding lands, it carries confidence.
-        # If the seeded SBOM contains log4j, we get a row. If not, the
-        # NVD path emits nothing and the test is a no-op on this axis.
-        for row in rows:
-            assert row.match_strategy == "cpe_name"
-            assert row.match_confidence is not None, (
-                "match_confidence is NULL on a Log4Shell finding emitted "
-                "with the strategy tagged — the emit-step wiring is broken"
-            )
-            assert 0.0 <= row.match_confidence <= 1.0
+            # The seeded SBOM may not contain log4j; the test passes either
+            # way as long as IF the finding lands, it carries confidence.
+            # If the seeded SBOM contains log4j, we get a row. If not, the
+            # NVD path emits nothing and the test is a no-op on this axis.
+            for row in rows:
+                assert row.match_strategy == "cpe_name"
+                assert row.match_confidence is not None, (
+                    "match_confidence is NULL on a Log4Shell finding emitted "
+                    "with the strategy tagged — the emit-step wiring is broken"
+                )
+                assert 0.0 <= row.match_confidence <= 1.0
     finally:
         db.close()
 

@@ -20,7 +20,7 @@ vi.mock('@/lib/api', async () => {
 import { UserSearchCombobox } from '../UserSearchCombobox';
 
 const ferozeCandidate: UserSearchResult = {
-  id: 10,
+  id: '00000000-0000-4000-8000-00000000000a',
   email: 'ferozebasha.s@hcltech.com',
   display_name: 'Feroze Basha',
   username: 'feroze',
@@ -41,7 +41,7 @@ describe('UserSearchCombobox component', () => {
 
     render(<UserSearchCombobox tenantId={7} onSelect={vi.fn()} selectedUser={null} />);
 
-    const input = screen.getByRole('textbox');
+    const input = screen.getByRole('combobox');
     fireEvent.change(input, { target: { value: 'feroze' } });
 
     await waitFor(() => expect(searchTenantUserCandidatesMock).toHaveBeenCalledTimes(1));
@@ -56,7 +56,7 @@ describe('UserSearchCombobox component', () => {
 
     render(<UserSearchCombobox tenantId={7} onSelect={vi.fn()} selectedUser={null} />);
 
-    fireEvent.change(screen.getByRole('textbox'), { target: { value: 'feroze' } });
+    fireEvent.change(screen.getByRole('combobox'), { target: { value: 'feroze' } });
 
     expect(await screen.findByText('Feroze Basha')).toBeInTheDocument();
     expect(screen.getByText('ferozebasha.s@hcltech.com')).toBeInTheDocument();
@@ -67,7 +67,7 @@ describe('UserSearchCombobox component', () => {
 
     render(<UserSearchCombobox tenantId={7} onSelect={vi.fn()} selectedUser={null} />);
 
-    fireEvent.change(screen.getByRole('textbox'), { target: { value: 'existing.member' } });
+    fireEvent.change(screen.getByRole('combobox'), { target: { value: 'existing.member' } });
 
     expect(await screen.findByText('No eligible users found for this tenant.')).toBeInTheDocument();
   });
@@ -78,28 +78,28 @@ describe('UserSearchCombobox component', () => {
     // 401 error
     searchTenantUserCandidatesMock.mockRejectedValueOnce(new ApiError('Unauthorized', 401));
     const { unmount: u1 } = render(<UserSearchCombobox tenantId={7} onSelect={onSelect} selectedUser={null} />);
-    fireEvent.change(screen.getByRole('textbox'), { target: { value: 'test' } });
+    fireEvent.change(screen.getByRole('combobox'), { target: { value: 'test' } });
     expect(await screen.findByText('Your session has expired. Sign in again.')).toBeInTheDocument();
     u1();
 
     // 403 error
     searchTenantUserCandidatesMock.mockRejectedValueOnce(new ApiError('Forbidden', 403));
     const { unmount: u2 } = render(<UserSearchCombobox tenantId={7} onSelect={onSelect} selectedUser={null} />);
-    fireEvent.change(screen.getByRole('textbox'), { target: { value: 'test' } });
+    fireEvent.change(screen.getByRole('combobox'), { target: { value: 'test' } });
     expect(await screen.findByText('You do not have permission to add members to this tenant.')).toBeInTheDocument();
     u2();
 
     // 404 error
     searchTenantUserCandidatesMock.mockRejectedValueOnce(new ApiError('Not found', 404));
     const { unmount: u3 } = render(<UserSearchCombobox tenantId={7} onSelect={onSelect} selectedUser={null} />);
-    fireEvent.change(screen.getByRole('textbox'), { target: { value: 'test' } });
+    fireEvent.change(screen.getByRole('combobox'), { target: { value: 'test' } });
     expect(await screen.findByText('The selected tenant could not be found.')).toBeInTheDocument();
     u3();
 
     // 500 error
     searchTenantUserCandidatesMock.mockRejectedValueOnce(new Error('Network error'));
     render(<UserSearchCombobox tenantId={7} onSelect={onSelect} selectedUser={null} />);
-    fireEvent.change(screen.getByRole('textbox'), { target: { value: 'test' } });
+    fireEvent.change(screen.getByRole('combobox'), { target: { value: 'test' } });
     expect(await screen.findByText('User search could not be completed. Try again.')).toBeInTheDocument();
   });
 
@@ -117,7 +117,7 @@ describe('UserSearchCombobox component', () => {
 
     render(<UserSearchCombobox tenantId={7} onSelect={vi.fn()} selectedUser={null} />);
 
-    const input = screen.getByRole('textbox');
+    const input = screen.getByRole('combobox');
 
     // First query "fer"
     fireEvent.change(input, { target: { value: 'fer' } });
@@ -129,7 +129,7 @@ describe('UserSearchCombobox component', () => {
     expect(await screen.findByText('Feroze Basha')).toBeInTheDocument();
 
     // Now resolve first query with stale result
-    const staleUser: UserSearchResult = { ...ferozeCandidate, id: 99, display_name: 'Stale User' };
+    const staleUser: UserSearchResult = { ...ferozeCandidate, id: '00000000-0000-4000-8000-000000000063', display_name: 'Stale User' };
     resolveFirst([staleUser]);
 
     // Ensure stale result did NOT overwrite "Feroze Basha"
@@ -143,9 +143,9 @@ describe('UserSearchCombobox component', () => {
 
     render(<UserSearchCombobox tenantId={7} onSelect={onSelect} selectedUser={null} />);
 
-    fireEvent.change(screen.getByRole('textbox'), { target: { value: 'feroze' } });
+    fireEvent.change(screen.getByRole('combobox'), { target: { value: 'feroze' } });
 
-    const candidateButton = await screen.findByRole('button', { name: /Feroze Basha/i });
+    const candidateButton = await screen.findByRole('option', { name: /Feroze Basha/i });
     fireEvent.click(candidateButton);
 
     expect(onSelect).toHaveBeenCalledWith(ferozeCandidate);

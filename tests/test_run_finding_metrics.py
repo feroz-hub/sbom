@@ -7,6 +7,9 @@ import sys
 
 import pytest
 
+from tests.public_id_fixture import run_uuid
+from tests.tenant_fixture_scope import verified_fixture_tenant
+
 
 @pytest.fixture()
 def db(client):
@@ -14,7 +17,8 @@ def db(client):
 
     session = SessionLocal()
     try:
-        yield session
+        with verified_fixture_tenant(session, 1):
+            yield session
     finally:
         session.rollback()
         session.close()
@@ -95,13 +99,13 @@ def test_persist_run_deduplicates_same_cve_from_multiple_sources(client, db):
     assert run.high_count == 1
     assert run.medium_count == 0
 
-    body = client.get(f"/api/runs/{run.id}").json()
+    body = client.get(f"/api/runs/{run_uuid(run.id)}").json()
     assert body["metrics"]["raw_observation_count"] == 2
     assert body["metrics"]["total_findings"] == 1
     assert body["metrics"]["unique_vulnerabilities"] == 1
     assert sum(body["metrics"]["severity_counts"].values()) == 1
 
-    resp = client.get(f"/api/runs/{run.id}/findings-enriched?page_size=50")
+    resp = client.get(f"/api/runs/{run_uuid(run.id)}/findings-enriched?page_size=50")
     assert resp.headers["X-Total-Count"] == "1"
     findings = resp.json()
     assert len(findings) == 1
@@ -206,20 +210,20 @@ def test_run_detail_and_enriched_endpoint_collapse_existing_duplicate_rows(clien
     )
     db.commit()
 
-    body = client.get(f"/api/runs/{run.id}").json()
+    body = client.get(f"/api/runs/{run_uuid(run.id)}").json()
     assert body["total_findings"] == 2
     assert body["metrics"]["raw_observation_count"] == 2
     assert body["metrics"]["total_findings"] == 1
     assert body["metrics"]["severity_counts"]["high"] == 1
 
-    resp = client.get(f"/api/runs/{run.id}/findings-enriched?page_size=50")
+    resp = client.get(f"/api/runs/{run_uuid(run.id)}/findings-enriched?page_size=50")
     assert resp.headers["X-Total-Count"] == "1"
     assert resp.headers["X-Unfiltered-Total-Count"] == "1"
     rows = resp.json()
     assert len(rows) == 1
     assert set(rows[0]["source"].split(",")) == {"NVD", "OSV"}
 
-    estimate = client.post(f"/api/v1/runs/{run.id}/ai-fixes/estimate", json={"scope": None}).json()
+    estimate = client.post(f"/api/v1/runs/{run_uuid(run.id)}/ai-fixes/estimate", json={"scope": None}).json()
     assert estimate["total_findings_in_scope"] == 1
 
 

@@ -1,0 +1,10 @@
+{
+  "result": "PASS",
+  "source_files": 73,
+  "historical_files_checked": 85,
+  "historical_hashes_preserved": true,
+  "branch": "feat/native-user-management",
+  "head": "aa264cd3673b074b3f9c15c9cc72a4ed95bdb222",
+  "public_evidence_secret_pattern_scan": [],
+  "main_baseline_fields_preserved": true
+}

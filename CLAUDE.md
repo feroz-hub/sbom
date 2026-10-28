@@ -123,3 +123,30 @@ upload validation redesign, alternative-library recommendations.
   updated: mark tasks done, record decisions and open questions at the end of every session.
 - Ask before: changing a public API shape, deleting anything, or making a schema change not
   listed in the plan.
+
+# Secure Component Advisor (SCA) Workstream
+
+A separate workstream from VEX (decision D-1). The VEX section's "out of scope" list scopes the
+VEX workstream only; SCA consumes VEX and lifecycle data **read-only** and must not change either.
+
+## Source of truth
+- Spec: [`docs/specs/Secure_Component_Advisor_Requirements_v1_1.docx`](./docs/specs/Secure_Component_Advisor_Requirements_v1_1.docx)
+  (FR-SCA-*, NFR-SCA-*, US-SCA-*). Reference the IDs in code comments, tests, commits and PRs.
+- Phase 0 analysis and approved decisions D-1…D-11:
+  [`docs/secure-component-advisor/phase0-analysis.md`](./docs/secure-component-advisor/phase0-analysis.md).
+- Running plan (update every session):
+  [`docs/secure-component-advisor/implementation-plan.md`](./docs/secure-component-advisor/implementation-plan.md).
+
+## Rules
+- Advisory only: never modify manifests, packages, source, SBOMs, components, findings or VEX.
+  Accepting a recommendation changes recommendation state and audit records only.
+- Never say "Safe", "Secure" or "Vulnerability Free"; use "No Known Actionable Vulnerabilities".
+  The ranking score is never a "Safety Score".
+- Actionable = VEX effective status AFFECTED or UNDER_INVESTIGATION from `VexInvestigation`
+  (`is_current`). A finding with no context is actionable (VEX-REC-002 A). Never use the legacy
+  `effective_vex_statements` / `VexStatement.status` paths or `choose_vex_result`.
+- Current dataset = `DashboardScope.eligible_sbom_ids()` + latest successful run per SBOM.
+- All finding/run aggregation lives in `app/metrics/component_advisor.py`; domain rules in
+  `app/services/component_advisor/` are pure and unit tested.
+- New tenant tables use `TenantOwnedMixin`; cross-tenant ids return 404.
+- One PR per step (spec Steps 2–10) on `feat/secure-component-advisor`.

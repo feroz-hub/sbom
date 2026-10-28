@@ -15,6 +15,11 @@ class CacheTtlResponse(BaseModel):
 
 
 class LifecycleProviderConfigResponse(BaseModel):
+    runtime_status: dict[str, Any] = Field(default_factory=dict)
+    configuration_status: str = "unverified"
+    capabilities: dict[str, Any] = Field(default_factory=dict)
+    source: Literal["PLATFORM_DEFAULT", "TENANT_OVERRIDE"] = "PLATFORM_DEFAULT"
+    override_enabled: bool = False
     provider_key: str
     display_name: str
     provider_type: str
@@ -28,6 +33,9 @@ class LifecycleProviderConfigResponse(BaseModel):
     circuit_breaker_enabled: bool
     cache_ttl: CacheTtlResponse
     health_status: Literal["healthy", "degraded", "disabled", "unknown"]
+    last_verification_at: str | None = None
+    last_lookup_at: str | None = None
+    last_probe: dict[str, Any] | None = None
     last_success_at: str | None = None
     last_failure_at: str | None = None
     last_failure_message: str | None = None
@@ -51,6 +59,13 @@ class LifecycleProviderUpdateRequest(BaseModel):
     cache_ttl_unknown_hours: int | None = Field(default=None, ge=1)
     cache_ttl_failure_minutes: int | None = Field(default=None, ge=1)
     cache_ttl_deprecated_days: int | None = Field(default=None, ge=1)
+
+    @field_validator("enabled", "priority", "timeout_seconds", "max_retries", "circuit_breaker_enabled")
+    @classmethod
+    def require_value(cls, value):
+        if value is None:
+            raise ValueError("This setting cannot be null")
+        return value
 
     def to_service_payload(self) -> dict[str, Any]:
         data = self.model_dump(exclude_unset=True)
@@ -76,6 +91,19 @@ class LifecycleProviderSecretResponse(BaseModel):
 
 
 class LifecycleProviderTestResponse(BaseModel):
+    provider_key: str | None = None
+    probe_type: str | None = None
+    configuration_valid: bool = False
+    connection_verified: bool = False
+    authentication_verified: bool | None = None
+    response_valid: bool = False
+    sample_matched: bool = False
+    lifecycle_evidence_found: bool = False
+    real_provider_call: bool = False
+    http_status: int | None = None
+    error_code: str | None = None
+    sample_component: dict[str, Any] | None = None
+
     success: bool
     status: str
     latency_ms: int

@@ -5,8 +5,16 @@
 # ── Environment & secrets ─────────────────────────────────
 .env
 .env.*
+.env.dev.local
+.dev-beat.pid
+.dev-runtime.json
+.dev-runtime.lock
+.dev-runtime.stop
+.dev-runtime.*.tmp
+.dev-logs/
 !.env.example
 !.env.hcl-iam.example
+!.env.native-iam.example
 !.env.server.example
 
 # ── Python ────────────────────────────────────────────────
@@ -57,6 +65,9 @@ logs/
 # ── Celery beat state (per-machine runtime, regenerated) ─
 celerybeat-schedule*
 celerybeat.pid
+
+# ── SBOM upload workspaces (runtime data, regenerated) ──
+data/sbom-workspaces/
 
 # ── IDE / editor ─────────────────────────────────────────
 .vscode/

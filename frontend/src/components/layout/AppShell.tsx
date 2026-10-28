@@ -6,9 +6,11 @@ import { Sidebar } from './Sidebar';
 import { SidebarProvider, useSidebar } from './SidebarContext';
 import { GlobalAiBatchBanner } from '@/components/ai-fixes/GlobalAiBatchProgress';
 import { useAuth } from '@/hooks/useAuth';
+import { PermissionRouteGuard } from '@/components/ui/PermissionGate';
 import { cn } from '@/lib/utils';
+import { ApplicationHeader, ApplicationHeaderContext } from './ApplicationHeader';
 
-const PUBLIC_PATHS = ['/auth/callback', '/access-denied', '/verification-required', '/access-pending', '/logged-out'];
+const PUBLIC_PATHS = ['/sign-in', '/forgot-password', '/reset-password', '/change-password', '/native-sign-in', '/activate-account', '/auth/callback', '/access-denied', '/verification-required', '/access-pending', '/logged-out'];
 
 function FullScreenBrandedLoader({ message = 'Verifying authentication…' }: { message?: string }) {
   return (
@@ -62,11 +64,11 @@ function BootstrapTimeoutRecovery({ message, onRetry, onLogin }: { message: stri
 }
 
 function Shell({ children }: { children: React.ReactNode }) {
-  const { collapsed } = useSidebar();
+  const { collapsed, mobileOpen } = useSidebar();
   const pathname = usePathname();
   const isDashboard = pathname === '/';
   return (
-    <div className="flex min-h-screen">
+    <div className="app-shell relative flex overflow-hidden">
       {/* Skip link — WCAG 2.4.1 Bypass Blocks. First focusable element so
           keyboard users can jump past the nav on every page load. */}
       <a href="#main-content" className="skip-link">
@@ -77,25 +79,38 @@ function Shell({ children }: { children: React.ReactNode }) {
         <Sidebar />
       </Suspense>
 
-      <main
-        id="main-content"
-        tabIndex={-1}
+      <div
         className={cn(
-          'flex-1 flex flex-col min-h-screen w-full',
+          'flex min-h-0 min-w-0 flex-1 flex-col',
           isDashboard && 'bg-dashboard-page',
           'transition-[margin-left] duration-300 ease-in-out motion-reduce:transition-none',
           // Mobile: sidebar is overlay, no margin offset
           'ml-0',
           // Desktop: reserve space for the fixed sidebar rail
           collapsed ? 'md:ml-[68px]' : 'md:ml-60',
-          'focus-visible:outline-none',
         )}
       >
-        <div className="mx-auto flex w-full max-w-[1600px] flex-1 flex-col min-h-0">
-          <GlobalAiBatchBanner />
-          {children}
-        </div>
-      </main>
+        <ApplicationHeaderContext.Provider value={true}>
+          {/* These rows never scroll. Flex gives main exactly the remaining
+              viewport height, including when the progress banner changes. */}
+          <ApplicationHeader />
+          <div className="mx-auto w-full max-w-[1600px] shrink-0">
+            <GlobalAiBatchBanner />
+          </div>
+          <main
+            id="main-content"
+            tabIndex={-1}
+            className={cn(
+              'app-content min-h-0 min-w-0 flex-1 overflow-x-hidden overscroll-y-contain focus-visible:outline-none',
+              mobileOpen ? 'overflow-y-hidden' : 'overflow-y-auto',
+            )}
+          >
+            <div className="mx-auto flex min-h-full w-full max-w-[1600px] flex-col">
+              <PermissionRouteGuard>{children}</PermissionRouteGuard>
+            </div>
+          </main>
+        </ApplicationHeaderContext.Provider>
+      </div>
     </div>
   );
 }
@@ -120,6 +135,8 @@ export function AppShell({ children }: { children: React.ReactNode }) {
       router.replace('/verification-required');
       return;
     }
+
+    if (bootstrapState === 'access-denied') { router.replace('/access-denied'); return; }
 
     if (bootstrapState === 'access-pending' && pathname !== '/access-pending') {
       router.replace('/access-pending');
@@ -169,7 +186,7 @@ export function AppShell({ children }: { children: React.ReactNode }) {
   }
 
   // Intermediate transition states -> full-screen redirect loader
-  if (bootstrapState === 'verification-required' || bootstrapState === 'access-pending') {
+  if (bootstrapState === 'verification-required' || bootstrapState === 'access-pending' || bootstrapState === 'access-denied') {
     return <FullScreenBrandedLoader message="Redirecting to access assignment…" />;
   }
 

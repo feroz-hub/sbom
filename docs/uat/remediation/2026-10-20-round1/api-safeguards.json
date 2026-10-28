@@ -1,0 +1,172 @@
+[
+  {
+    "id": "R1-FINAL-IDENTITY-admin",
+    "phase": "safeguards",
+    "role": "admin",
+    "expected": "Original credentials and seeded role/context remain unchanged",
+    "actual": {
+      "status": 200,
+      "email": "admin@olympus.example.test",
+      "roles": [
+        "TENANT_ADMIN"
+      ],
+      "tenant_id": "3a900179-36bf-4b5f-b2e1-2a4a9d06e6af",
+      "is_platform_admin": false
+    },
+    "result": "PASS",
+    "time": "2026-10-20T03:41:28.850127+00:00"
+  },
+  {
+    "id": "R1-FINAL-IDENTITY-analyst",
+    "phase": "safeguards",
+    "role": "analyst",
+    "expected": "Original credentials and seeded role/context remain unchanged",
+    "actual": {
+      "status": 200,
+      "email": "analyst@olympus.example.test",
+      "roles": [
+        "SECURITY_ANALYST"
+      ],
+      "tenant_id": "3a900179-36bf-4b5f-b2e1-2a4a9d06e6af",
+      "is_platform_admin": false
+    },
+    "result": "PASS",
+    "time": "2026-10-20T03:41:29.104205+00:00"
+  },
+  {
+    "id": "R1-FINAL-IDENTITY-developer",
+    "phase": "safeguards",
+    "role": "developer",
+    "expected": "Original credentials and seeded role/context remain unchanged",
+    "actual": {
+      "status": 200,
+      "email": "developer@olympus.example.test",
+      "roles": [
+        "DEVELOPER"
+      ],
+      "tenant_id": "3a900179-36bf-4b5f-b2e1-2a4a9d06e6af",
+      "is_platform_admin": false
+    },
+    "result": "PASS",
+    "time": "2026-10-20T03:41:29.383366+00:00"
+  },
+  {
+    "id": "R1-FINAL-IDENTITY-viewer",
+    "phase": "safeguards",
+    "role": "viewer",
+    "expected": "Original credentials and seeded role/context remain unchanged",
+    "actual": {
+      "status": 200,
+      "email": "viewer@olympus.example.test",
+      "roles": [
+        "VIEWER"
+      ],
+      "tenant_id": "3a900179-36bf-4b5f-b2e1-2a4a9d06e6af",
+      "is_platform_admin": false
+    },
+    "result": "PASS",
+    "time": "2026-10-20T03:41:29.609060+00:00"
+  },
+  {
+    "id": "R1-FINAL-IDENTITY-foreign",
+    "phase": "safeguards",
+    "role": "foreign",
+    "expected": "Original credentials and seeded role/context remain unchanged",
+    "actual": {
+      "status": 200,
+      "email": "foreign@olympus.example.test",
+      "roles": [
+        "TENANT_ADMIN"
+      ],
+      "tenant_id": "a803c17f-7e7d-439c-8664-c5406d391fd1",
+      "is_platform_admin": false
+    },
+    "result": "PASS",
+    "time": "2026-10-20T03:41:29.864343+00:00"
+  },
+  {
+    "id": "R1-FINAL-IDENTITY-platform",
+    "phase": "safeguards",
+    "role": "platform",
+    "expected": "Original credentials and seeded role/context remain unchanged",
+    "actual": {
+      "status": 200,
+      "email": "platform@olympus.example.test",
+      "roles": [
+        "PLATFORM_ADMIN"
+      ],
+      "tenant_id": null,
+      "is_platform_admin": true
+    },
+    "result": "PASS",
+    "time": "2026-10-20T03:41:30.102658+00:00"
+  },
+  {
+    "id": "R1-FINAL-MEMBERS",
+    "phase": "safeguards",
+    "role": "admin",
+    "expected": "Olympus retains exactly its original four active verified memberships",
+    "actual": {
+      "status": 200,
+      "members": [
+        {
+          "email": "admin@olympus.example.test",
+          "role": "TENANT_ADMIN",
+          "status": "ACTIVE",
+          "user_status": "ACTIVE",
+          "email_verified": true
+        },
+        {
+          "email": "analyst@olympus.example.test",
+          "role": "SECURITY_ANALYST",
+          "status": "ACTIVE",
+          "user_status": "ACTIVE",
+          "email_verified": true
+        },
+        {
+          "email": "developer@olympus.example.test",
+          "role": "DEVELOPER",
+          "status": "ACTIVE",
+          "user_status": "ACTIVE",
+          "email_verified": true
+        },
+        {
+          "email": "viewer@olympus.example.test",
+          "role": "VIEWER",
+          "status": "ACTIVE",
+          "user_status": "ACTIVE",
+          "email_verified": true
+        }
+      ]
+    },
+    "result": "PASS",
+    "time": "2026-10-20T03:41:30.136575+00:00"
+  },
+  {
+    "id": "R1-FINAL-OWNERSHIP",
+    "phase": "safeguards",
+    "role": "admin",
+    "expected": "Disposable investigation has no residual assignment and remains readable",
+    "actual": {
+      "status": 200,
+      "assigned_to": null,
+      "row_version": 17
+    },
+    "result": "PASS",
+    "time": "2026-10-20T03:41:30.357516+00:00"
+  },
+  {
+    "id": "R1-FINAL-SESSION-CLEANUP",
+    "phase": "safeguards",
+    "role": "admin",
+    "expected": "Only this run's retained Native Admin/Developer/foreign test BFF sessions are removed",
+    "actual": {
+      "status": null,
+      "removedSessions": 11,
+      "remainingMatchedSessions": 0,
+      "accountRolesStatusPasswordUntouched": true
+    },
+    "result": "PASS",
+    "time": "2026-10-20T03:41:30.375806+00:00"
+  }
+]

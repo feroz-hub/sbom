@@ -1,0 +1,23 @@
+[
+  {
+    "id": "R1-DASHBOARD-FOREIGN-DEEP-LINK",
+    "role": "foreign",
+    "preconditions": "Clean Chrome context; actual Native BFF login API fixture; TLS validation enabled; actual supported tenant selection/browser navigation",
+    "expected": "Foreign UUID scope rejected with no Olympus metrics",
+    "actual": {
+      "loginStatus": 200,
+      "scopeStatus": 404,
+      "api": {
+        "status": 404,
+        "body": {
+          "detail": "Resource not found"
+        },
+        "tenant": "a803c17f-7e7d-439c-8664-c5406d391fd1"
+      },
+      "metricText": "TOTAL SBOMS STORED\nAll uploaded SBOMs\nView SBOMs →\nTOTAL PROJECTS SCANNED\nProjects with a completed analysis\nView Projects →\nTOTAL SBOM FILES ANALYSED\nSBOMs with a completed run\nView analysed SBOMs →",
+      "numericMetricValues": []
+    },
+    "result": "PASS",
+    "time": "2026-10-20T03:41:00.902Z"
+  }
+]

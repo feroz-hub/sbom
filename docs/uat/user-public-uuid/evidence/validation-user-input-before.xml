@@ -1,0 +1,3 @@
+<?xml version="1.0" encoding="utf-8"?><testsuites name="pytest tests"><testsuite name="pytest" errors="0" failures="1" skipped="0" tests="1" time="4.120" timestamp="2026-10-21T13:10:44.345873+05:30" hostname="Ferozes-MacBook-Air.local"><testcase classname="tests.test_iam_user_public_uuid" name="test_validation_error_retains_public_user_input_not_internal_key" time="2.856"><failure message="AssertionError: assert 2 == 'd1b86803-0a88-4756-9d18-f1a772039a09'">tests/test_iam_user_public_uuid.py:301: in test_validation_error_retains_public_user_input_not_internal_key
+    assert error["input"]["user_id"] == public
+E   AssertionError: assert 2 == 'd1b86803-0a88-4756-9d18-f1a772039a09'</failure></testcase></testsuite></testsuites>

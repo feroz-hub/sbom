@@ -28,6 +28,7 @@ from ..models import (
     RunCache,
     SBOMAnalysisReport,
     SBOMComponent,
+    SBOMRepairJob,
     SBOMSource,
     SBOMValidationSession,
     SBOMValidationSessionEvent,
@@ -78,6 +79,9 @@ class SBOMDeleteService:
             ("sbom_source", "source_sbom_id", "sbom_source"),
             ("sbom_validation_session_events", "session_id", "sbom_validation_sessions"),
             ("sbom_validation_sessions", "imported_sbom_id", "sbom_source"),
+            ("sbom_repair_jobs", "session_id", "sbom_validation_sessions"),
+            ("sbom_repair_jobs", "source_sbom_id", "sbom_source"),
+            ("sbom_repair_jobs", "imported_sbom_id", "sbom_source"),
             ("vex_documents", "sbom_id", "sbom_source"),
             ("vex_override_audit", "component_id", "sbom_component"),
             ("vex_statements", "component_id", "sbom_component"),
@@ -87,6 +91,7 @@ class SBOMDeleteService:
     )
 
     DELETE_ORDER = [
+        "repair_jobs",
         "validation_session_events",
         "vex_statements",
         "lifecycle_override_audits",
@@ -145,6 +150,9 @@ class SBOMDeleteService:
                 SBOMAnalysisReport.id,
                 SBOMAnalysisReport.sbom_ref_id.in_(tree_ids),
             ),
+            "repair_jobs": self._count(SBOMRepairJob.id, or_(
+                SBOMRepairJob.session_id.in_(session_ids), SBOMRepairJob.source_sbom_id.in_(tree_ids),
+                SBOMRepairJob.imported_sbom_id.in_(tree_ids))),
             "validation_sessions": len(session_ids),
             "validation_events": self._count(
                 SBOMValidationSessionEvent.id,
@@ -218,6 +226,7 @@ class SBOMDeleteService:
             "sbom_source": len(tree_ids - {sbom_id}),
             "sbom_validation_session_events": counts["validation_events"],
             "sbom_validation_sessions": counts["validation_sessions"],
+            "sbom_repair_jobs": counts["repair_jobs"],
             "vex_documents": counts["vex_documents"],
             "vex_override_audit": counts["vex_override_audits"],
             "vex_statements": counts["vex_statements"],
@@ -262,6 +271,7 @@ class SBOMDeleteService:
         sbom = self.get_sbom(sbom_id)
         if sbom is None:
             raise LookupError("SBOM not found")
+        public_identity = str(sbom.public_id)
         tree_ids, _, _ = self._dependency_tree(sbom_id)
         try:
             cleared_current_products = self.db.execute(
@@ -298,7 +308,7 @@ class SBOMDeleteService:
             "cascaded_count": cascaded_count,
             "sbom_id": sbom_id,
             "requested_by": user_id,
-            "message": f"SBOM {sbom_id} moved to deleted (recoverable).",
+            "message": f"SBOM {public_identity} moved to deleted (recoverable).",
         }
 
     @workflow_event("sbom_permanent_deletion", result_kind="delete", completed_event="sbom_deleted", expected_errors=(SBOMDeleteConflict, LookupError))
@@ -319,6 +329,7 @@ class SBOMDeleteService:
         here, so the caller only has to translate the raised error.
         """
         impact = self.get_delete_impact(sbom_id)
+        public_identity = str(self.get_sbom(sbom_id).public_id)
         if not confirm:
             raise SBOMDeleteConflict(
                 "Permanent deletion requires confirm=yes.",
@@ -353,6 +364,9 @@ class SBOMDeleteService:
                 .values(current_sbom_id=None, updated_at=datetime.now(UTC).isoformat())
                 .execution_options(synchronize_session=False)
             )
+            # Repair jobs precede every referenced workspace and SBOM artifact.
+            self._delete(SBOMRepairJob, or_(SBOMRepairJob.session_id.in_(session_ids),
+                SBOMRepairJob.source_sbom_id.in_(tree_ids), SBOMRepairJob.imported_sbom_id.in_(tree_ids)))
             # Repair workspaces and VEX/component-owned audit data.
             self._delete(
                 SBOMValidationSessionEvent, SBOMValidationSessionEvent.session_id.in_(session_ids), session_ids
@@ -479,7 +493,7 @@ class SBOMDeleteService:
         return {
             "status": "deleted",
             "permanent": True,
-            "message": f"SBOM {sbom_id} and related data have been permanently deleted.",
+            "message": f"SBOM {public_identity} and related data have been permanently deleted.",
             "sbom_id": sbom_id,
             "deleted_sbom_ids": sorted(tree_ids),
             "requested_by": user_id,

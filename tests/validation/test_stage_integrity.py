@@ -48,7 +48,7 @@ def test_dangling_relationship_rejected_for_spdx() -> None:
     assert E.E072_RELATIONSHIP_ELEMENT_DANGLING in [e.code for e in ctx.report.errors]
 
 
-def test_documentref_pseudo_targets_accepted_for_spdx() -> None:
+def test_bare_undeclared_documentref_requires_manual_review_for_spdx() -> None:
     model = InternalSbom(
         spec="spdx",
         spec_version="SPDX-2.3",
@@ -59,6 +59,7 @@ def test_documentref_pseudo_targets_accepted_for_spdx() -> None:
     )
     ctx = integrity.run(_ctx(model))
     assert E.E072_RELATIONSHIP_ELEMENT_DANGLING not in [e.code for e in ctx.report.errors]
+    assert E.E073_EXTERNAL_DOC_REF_INVALID in [e.code for e in ctx.report.errors]
 
 
 def test_self_edge_rejected() -> None:

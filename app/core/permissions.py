@@ -2,9 +2,17 @@ from __future__ import annotations
 
 from enum import Enum
 
+from ..authorization_catalog_seed_v3 import (
+    COMPONENT_ADVISOR_PERMISSIONS_V3,
+    COMPONENT_ADVISOR_ROLE_PERMISSIONS_V3,
+)
+from ..authorization_catalog_seed_v4 import ADVISOR_POLICY_PERMISSIONS_V4, ADVISOR_POLICY_ROLE_PERMISSIONS_V4
+from ..authorization_catalog_seed_v6 import PLATFORM_ADMIN_PERMISSIONS_V6
+from .native_identity import AccountStatus
+
 TENANT_ROLES = frozenset({"TENANT_ADMIN", "SECURITY_ANALYST", "DEVELOPER", "VIEWER"})
 MEMBERSHIP_STATUSES = frozenset({"ACTIVE", "DISABLED", "PENDING"})
-USER_STATUSES = frozenset({"ACTIVE", "DISABLED", "PENDING"})
+USER_STATUSES = frozenset(status.value for status in AccountStatus)
 TENANT_STATUSES = frozenset({"ACTIVE", "DISABLED", "PENDING"})
 PLATFORM_GRANT_STATUSES = frozenset({"ACTIVE", "DISABLED"})
 
@@ -63,13 +71,32 @@ ALL_PERMISSIONS = frozenset(
         "platform:administrator:grant",
         "platform:administrator:revoke",
         "platform:tenant:create",
+        "platform:tenant:read",
+        "platform:tenant:update_status",
+        "platform:tenant:bootstrap_admin",
+        "platform:tenant:recover_admin",
+        "platform:health:read",
+        "platform:ai:read",
+        "platform:ai:update",
+        "platform:ai:test",
+        "platform:lifecycle-provider:read",
+        "platform:lifecycle-provider:update",
+        "platform:lifecycle-provider:test",
+        "platform:lifecycle-provider:sync",
+        "tenant:ai:read",
+        "tenant:ai:update",
+        "tenant:ai:test",
+        "tenant:lifecycle-provider:read",
+        "tenant:lifecycle-provider:update",
+        "tenant:lifecycle-provider:test",
+        "tenant:lifecycle-provider:sync",
         "platform:authorization:read",
         "platform:authorization:manage",
     }
-)
+) | COMPONENT_ADVISOR_PERMISSIONS_V3 | ADVISOR_POLICY_PERMISSIONS_V4 | PLATFORM_ADMIN_PERMISSIONS_V6
 
 ROLE_PERMISSIONS: dict[str, frozenset[str]] = {
-    "PLATFORM_ADMIN": ALL_PERMISSIONS,
+    "PLATFORM_ADMIN": PLATFORM_ADMIN_PERMISSIONS_V6,
     "TENANT_ADMIN": frozenset(
         {
             "sbom:read",
@@ -96,10 +123,6 @@ ROLE_PERMISSIONS: dict[str, frozenset[str]] = {
             "component:update",
             "lifecycle:read",
             "lifecycle:override",
-            "lifecycle:provider:read",
-            "lifecycle:provider:update",
-            "lifecycle:provider:test",
-            "lifecycle:provider:sync",
             "lifecycle:vendor-record:read",
             "lifecycle:vendor-record:write",
             "lifecycle:vendor-record:delete",
@@ -113,12 +136,19 @@ ROLE_PERMISSIONS: dict[str, frozenset[str]] = {
             "tenant:user:invite",
             "tenant:user:update",
             "tenant:settings:update",
+            "tenant:ai:read",
+            "tenant:ai:update",
+            "tenant:ai:test",
+            "tenant:lifecycle-provider:read",
+            "tenant:lifecycle-provider:update",
+            "tenant:lifecycle-provider:test",
+            "tenant:lifecycle-provider:sync",
             "schedule:read",
             "schedule:write",
             "analysis:read",
             "analysis:run",
         }
-    ),
+    ) | COMPONENT_ADVISOR_ROLE_PERMISSIONS_V3["TENANT_ADMIN"] | ADVISOR_POLICY_ROLE_PERMISSIONS_V4["TENANT_ADMIN"],
     "SECURITY_ANALYST": frozenset(
         {
             "sbom:read",
@@ -154,7 +184,7 @@ ROLE_PERMISSIONS: dict[str, frozenset[str]] = {
             "analysis:read",
             "analysis:run",
         }
-    ),
+    ) | COMPONENT_ADVISOR_ROLE_PERMISSIONS_V3["SECURITY_ANALYST"] | ADVISOR_POLICY_ROLE_PERMISSIONS_V4["SECURITY_ANALYST"],
     "DEVELOPER": frozenset(
         {
             "sbom:read",
@@ -171,7 +201,7 @@ ROLE_PERMISSIONS: dict[str, frozenset[str]] = {
             "schedule:read",
             "analysis:read",
         }
-    ),
+    ) | COMPONENT_ADVISOR_ROLE_PERMISSIONS_V3["DEVELOPER"],
     "VIEWER": frozenset(
         {
             "sbom:read",
@@ -187,7 +217,7 @@ ROLE_PERMISSIONS: dict[str, frozenset[str]] = {
             "schedule:read",
             "analysis:read",
         }
-    ),
+    ) | COMPONENT_ADVISOR_ROLE_PERMISSIONS_V3["VIEWER"],
 }
 
 ROLE_SCOPES = {
@@ -204,19 +234,7 @@ PERMISSION_SCOPES = {
 }
 
 PROTECTED_ROLE_PERMISSIONS: dict[str, frozenset[str]] = {
-    "PLATFORM_ADMIN": frozenset(
-        {
-            "platform:admin",
-            "platform:user:read",
-            "platform:user:manage_status",
-            "platform:administrator:read",
-            "platform:administrator:grant",
-            "platform:administrator:revoke",
-            "platform:tenant:create",
-            "platform:authorization:read",
-            "platform:authorization:manage",
-        }
-    ),
+    "PLATFORM_ADMIN": PLATFORM_ADMIN_PERMISSIONS_V6,
     "TENANT_ADMIN": frozenset(
         {
             "tenant:user:read",

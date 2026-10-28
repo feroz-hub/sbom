@@ -1,0 +1,14 @@
+{
+  "checked_runtime_sources": [
+    "frontend/src/app/settings/platform/page.tsx",
+    "frontend/src/app/settings/platform/tenants/page.tsx",
+    "frontend/src/components/admin/UserLifecycle.tsx",
+    "frontend/src/hooks/useAuth.tsx",
+    "frontend/src/lib/api.ts",
+    "frontend/src/lib/queryInvalidation.ts",
+    "frontend/src/lib/tenantForm.ts",
+    "frontend/src/types/reports.ts"
+  ],
+  "refreshed_task_private_copies": [],
+  "repository_source_modified": false
+}

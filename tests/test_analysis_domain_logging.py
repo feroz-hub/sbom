@@ -35,14 +35,14 @@ def session():
 
 @pytest.fixture
 def sbom():
-    return SBOMSource(id=12, tenant_id=4, projectid=3, sbom_name="private SBOM name")
+    return SBOMSource(id=12, tenant_id=4, projectid=3, sbom_name="private SBOM name", status="validated")
 
 
 @pytest.fixture
 def provider_result(monkeypatch):
     findings = [
-        {"component_name": "private-package", "component_version": "1", "vuln_id": "CVE-2026-10001", "severity": "HIGH"},
-        {"component_name": "private-package", "component_version": "1", "vuln_id": "CVE-2026-10002", "severity": "CRITICAL"},
+        {"component_id": 9, "component_name": "private-package", "component_version": "1", "vuln_id": "CVE-2026-10001", "severity": "HIGH"},
+        {"component_id": 9, "component_name": "private-package", "component_version": "1", "vuln_id": "CVE-2026-10002", "severity": "CRITICAL"},
     ]
     runner = AsyncMock(return_value=(findings, [], []))
     monkeypatch.setattr(analysis, "run_sources_concurrently", runner)
@@ -57,6 +57,8 @@ def test_analysis_lifecycle_has_one_terminal_event_and_aggregates(session, sbom,
     monkeypatch.setattr(orchestrator, "active_run", lambda _id: None)
     component = SBOMComponent(id=9, sbom_id=sbom.id, name="private-package", version="1")
     session.execute.return_value.scalars.return_value = [component]
+    session.scalar.return_value = sbom  # Trusted owner returned by the row lock.
+    session.execute.return_value.one.return_value = (0, None, None)
 
     def refresh(run):
         run.id, run.tenant_id = 21, sbom.tenant_id
@@ -199,7 +201,12 @@ def test_shared_failure_marker_keeps_traceback_for_stream_and_worker(session, ca
     assert failed.request_id == "analysis-1"
 
 
-def test_lifecycle_batch_logs_aggregates_after_commit(session, sbom, caplog):
+def test_lifecycle_batch_logs_aggregates_after_commit(session, sbom, monkeypatch, caplog):
+    # Configuration persistence is outside this logging unit's mocked DB contract.
+    monkeypatch.setattr(
+        "app.services.lifecycle.provider_config_service.configuration_cache_namespace",
+        lambda _db: "unit-logging-config",
+    )
     caplog.set_level(logging.INFO)
     session.get.return_value = sbom
     session.execute.return_value.scalars.return_value.all.return_value = []
@@ -214,7 +221,12 @@ def test_lifecycle_batch_logs_aggregates_after_commit(session, sbom, caplog):
     assert "provider_errors" not in completed.__dict__
 
 
-def test_lifecycle_commit_failure_does_not_log_completion(session, sbom, caplog):
+def test_lifecycle_commit_failure_does_not_log_completion(session, sbom, monkeypatch, caplog):
+    # Configuration persistence is outside this logging unit's mocked DB contract.
+    monkeypatch.setattr(
+        "app.services.lifecycle.provider_config_service.configuration_cache_namespace",
+        lambda _db: "unit-logging-config",
+    )
     caplog.set_level(logging.INFO)
     session.get.return_value = sbom
     session.execute.return_value.scalars.return_value.all.return_value = []

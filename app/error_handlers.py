@@ -28,6 +28,15 @@ log = logging.getLogger(__name__)
 def install(app: FastAPI) -> None:
     """Register the unhandled-Exception → canonical 500 handler."""
 
+    from fastapi.exception_handlers import request_validation_exception_handler
+    from fastapi.exceptions import RequestValidationError
+
+    @app.exception_handler(RequestValidationError)
+    async def _validation(request: Request, exc: RequestValidationError):
+        if request.url.path.startswith("/api/auth/native/"):
+            return JSONResponse(status_code=422, content={"detail": "Invalid authentication input"})
+        return await request_validation_exception_handler(request, exc)
+
     @app.exception_handler(Exception)
     async def _unhandled(request: Request, exc: Exception) -> JSONResponse:
         correlation_id = getattr(request.state, "request_id", None) or uuid.uuid4().hex[:12]

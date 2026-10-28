@@ -1,0 +1,23 @@
+{
+  "accepted_runs": [
+    {
+      "cases": 10,
+      "harness": "resource-browser.final-ten.cjs",
+      "harness_sha256": "489448473d33c888091ee44962bc03667ac96f04fd34381d737d1e274ec4b854",
+      "result": "browser-final-result.json"
+    },
+    {
+      "cases": 1,
+      "harness": "resource-browser.cjs",
+      "harness_sha256": "7331999745323d232246097e4be83e2749ae768a7f59eb1b1e0cacbf6acaf2a7",
+      "result": "browser-denials-result.json",
+      "selection": "additional public resource denial scenario only"
+    }
+  ],
+  "application_boundary_sha256": "48c2bb0c4ae5fd695a025714914a332202b6e06dcf349a039dd602d884457429",
+  "application_source_changed_since_runs": false,
+  "browser": "installed Google Chrome",
+  "certificate_verification_enabled": true,
+  "distinct_scenarios": 11,
+  "raw_authenticated_traces_published": false
+}

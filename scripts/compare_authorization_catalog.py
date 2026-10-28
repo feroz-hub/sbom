@@ -1,5 +1,5 @@
 #!/usr/bin/env python3
-"""Read-only comparison of the frozen legacy matrix and database catalogue."""
+"""Read-only comparison of the active authorization matrix and database catalogue."""
 
 from __future__ import annotations
 
@@ -13,6 +13,10 @@ from sqlalchemy import select
 sys.path.insert(0, str(Path(__file__).resolve().parent.parent))
 
 from app.authorization_catalog_seed_v1 import ROLE_PERMISSIONS_V1, ROLE_SCOPES_V1
+from app.authorization_catalog_seed_v2 import TENANT_CONFIGURATION_PERMISSIONS_V2
+from app.authorization_catalog_seed_v3 import COMPONENT_ADVISOR_ROLE_PERMISSIONS_V3
+from app.authorization_catalog_seed_v4 import ADVISOR_POLICY_ROLE_PERMISSIONS_V4
+from app.authorization_catalog_seed_v6 import PLATFORM_ADMIN_PERMISSIONS_V6
 from app.db import SessionLocal
 from app.models import AuthorizationRole
 
@@ -27,6 +31,12 @@ def comparison() -> dict[str, dict[str, object]]:
             )
         }
         for code, legacy_codes in ROLE_PERMISSIONS_V1.items():
+            if code == 'PLATFORM_ADMIN':
+                legacy_codes = PLATFORM_ADMIN_PERMISSIONS_V6
+            elif code == 'TENANT_ADMIN':
+                legacy_codes = frozenset(legacy_codes) | TENANT_CONFIGURATION_PERMISSIONS_V2
+            legacy_codes = frozenset(legacy_codes) | COMPONENT_ADVISOR_ROLE_PERMISSIONS_V3.get(code, frozenset())
+            legacy_codes = legacy_codes | ADVISOR_POLICY_ROLE_PERMISSIONS_V4.get(code, frozenset())
             role = roles.get(code)
             if role is None:
                 report[code] = {
@@ -48,7 +58,6 @@ def comparison() -> dict[str, dict[str, object]]:
                     mapping.permission.code
                     for mapping in role.permissions
                     if mapping.permission.scope != role.scope
-                    and role.code != "PLATFORM_ADMIN"
                 ),
                 "inactive_permissions": sorted(
                     mapping.permission.code

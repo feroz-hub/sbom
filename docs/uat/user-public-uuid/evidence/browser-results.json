@@ -1,0 +1,56 @@
+[
+  {
+    "name": "admin: login, UUID context, refresh, logout/login stability",
+    "result": "PASS",
+    "observations": {},
+    "time": "2026-10-21T10:10:16.079Z"
+  },
+  {
+    "name": "analyst: login, UUID context, refresh, logout/login stability",
+    "result": "PASS",
+    "observations": {},
+    "time": "2026-10-21T10:10:48.638Z"
+  },
+  {
+    "name": "developer: login, UUID context, refresh, logout/login stability",
+    "result": "PASS",
+    "observations": {},
+    "time": "2026-10-21T10:11:17.983Z"
+  },
+  {
+    "name": "viewer: login, UUID context, refresh, logout/login stability",
+    "result": "PASS",
+    "observations": {},
+    "time": "2026-10-21T10:11:42.692Z"
+  },
+  {
+    "name": "foreign: login, UUID context, refresh, logout/login stability",
+    "result": "PASS",
+    "observations": {},
+    "time": "2026-10-21T10:12:08.158Z"
+  },
+  {
+    "name": "platform: login, UUID context, refresh, logout/login stability",
+    "result": "PASS",
+    "observations": {},
+    "time": "2026-10-21T10:12:22.922Z"
+  },
+  {
+    "name": "Tenant Admin: actual Users & Access find/add/change roles/remove UUID user",
+    "result": "PASS",
+    "observations": {},
+    "time": "2026-10-21T10:12:43.334Z"
+  },
+  {
+    "name": "Platform Admin: purpose-limited UUID selection, actual grant/revoke UI",
+    "result": "PASS",
+    "observations": {},
+    "time": "2026-10-21T10:13:00.589Z"
+  },
+  {
+    "name": "Admin UUID path syntax, missing identities and membership separation",
+    "result": "PASS",
+    "observations": {},
+    "time": "2026-10-21T10:13:13.078Z"
+  }
+]

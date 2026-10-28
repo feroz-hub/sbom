@@ -1,0 +1,4 @@
+<?xml version="1.0" encoding="utf-8"?><testsuites name="pytest tests"><testsuite name="pytest" errors="0" failures="1" skipped="0" tests="1" time="3.083" timestamp="2026-10-20T21:52:51.044398+05:30" hostname="Ferozes-MacBook-Air.local"><testcase classname="tests.test_structured_logging" name="test_early_body_rejection_logged" time="0.801"><failure message="KeyError: 'status_code'">tests/test_structured_logging.py:280: in test_early_body_rejection_logged
+    assert entries(log_file)[-1]["status_code"] == 413
+           ^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^
+E   KeyError: 'status_code'</failure></testcase></testsuite></testsuites>

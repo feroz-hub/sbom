@@ -1,0 +1,107 @@
+{
+  "status": "PASS",
+  "startedAt": "2026-10-20T18:18:06.424327+00:00",
+  "checks": [
+    {
+      "name": "vitest-full-final",
+      "command": [
+        "/Users/ferozebasha/.cache/codex-runtimes/codex-primary-runtime/dependencies/node/bin/node",
+        "node_modules/vitest/vitest.mjs",
+        "run",
+        "--maxWorkers=1"
+      ],
+      "cwd": "/Users/ferozebasha/sbom/frontend",
+      "outcome": "PASS",
+      "exitCode": 0,
+      "runtimeSeconds": 155.102,
+      "log": "evidence/vitest-full-final.log",
+      "testCounts": {
+        "passed": 1805
+      },
+      "fileCounts": {
+        "passed": 199
+      }
+    },
+    {
+      "name": "typescript-final",
+      "command": [
+        "/Users/ferozebasha/.cache/codex-runtimes/codex-primary-runtime/dependencies/node/bin/node",
+        "node_modules/typescript/bin/tsc",
+        "--noEmit"
+      ],
+      "cwd": "/Users/ferozebasha/sbom/frontend",
+      "outcome": "PASS",
+      "exitCode": 0,
+      "runtimeSeconds": 2.209,
+      "log": "evidence/typescript-final.log"
+    },
+    {
+      "name": "ruff-final",
+      "command": [
+        "/Users/ferozebasha/sbom/.venv/bin/python",
+        "-m",
+        "ruff",
+        "check",
+        "app",
+        "tests",
+        "scripts/reconcile_analysis_run_finding_counts.py",
+        "scripts/greenfield_uuid.py"
+      ],
+      "cwd": "/Users/ferozebasha/sbom",
+      "outcome": "PASS",
+      "exitCode": 0,
+      "runtimeSeconds": 0.091,
+      "log": "evidence/ruff-final.log"
+    },
+    {
+      "name": "eslint-full-final",
+      "command": [
+        "/Users/ferozebasha/.cache/codex-runtimes/codex-primary-runtime/dependencies/node/bin/node",
+        "node_modules/eslint/bin/eslint.js",
+        ".",
+        "--format",
+        "json"
+      ],
+      "cwd": "/Users/ferozebasha/sbom/frontend",
+      "outcome": "PASS",
+      "exitCode": 0,
+      "runtimeSeconds": 16.419,
+      "log": "evidence/eslint-full-final.log",
+      "fileCount": 628,
+      "errors": 0,
+      "warnings": 52
+    },
+    {
+      "name": "build-final",
+      "command": [
+        "/Users/ferozebasha/sbom/.venv/bin/python",
+        "-m",
+        "scripts.greenfield_uuid",
+        "build"
+      ],
+      "cwd": "/Users/ferozebasha/sbom",
+      "outcome": "PASS",
+      "exitCode": 0,
+      "runtimeSeconds": 10.665,
+      "log": "evidence/build-final.log"
+    },
+    {
+      "name": "diff-whitespace-final",
+      "command": [
+        "git",
+        "-c",
+        "core.fsmonitor=false",
+        "diff",
+        "--check"
+      ],
+      "cwd": "/Users/ferozebasha/sbom",
+      "outcome": "PASS",
+      "exitCode": 0,
+      "runtimeSeconds": 0.074,
+      "log": "evidence/diff-whitespace-final.log"
+    }
+  ],
+  "changedSourceFiles": [],
+  "sourceUnchangedFromBackend": true,
+  "finishedAt": "2026-10-20T18:21:11.236662+00:00"
+}

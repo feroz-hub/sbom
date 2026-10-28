@@ -23,6 +23,9 @@ from __future__ import annotations
 
 import pytest
 
+from tests.public_id_fixture import public_row
+from tests.tenant_fixture_scope import verified_fixture_tenant
+
 
 def _make_finding(*, vuln_id: str, source: str, strategy: str) -> dict:
     return {
@@ -51,25 +54,27 @@ async def _empty(*args, **kwargs):
     return [], [], []
 
 
-def _read_row(run_id: int, vuln_id: str):
+def _read_row(run_id: str, vuln_id: str):
     from app.db import SessionLocal
-    from app.models import AnalysisFinding
+    from app.models import AnalysisFinding, AnalysisRun
     from sqlalchemy import select
 
     db = SessionLocal()
     try:
-        rows = (
-            db.execute(
-                select(AnalysisFinding).where(
-                    AnalysisFinding.analysis_run_id == run_id,
-                    AnalysisFinding.vuln_id == vuln_id,
+        with verified_fixture_tenant(db, 1):
+            run_id = public_row(db, AnalysisRun, run_id).id
+            rows = (
+                db.execute(
+                    select(AnalysisFinding).where(
+                        AnalysisFinding.analysis_run_id == run_id,
+                        AnalysisFinding.vuln_id == vuln_id,
+                    )
                 )
+                .scalars()
+                .all()
             )
-            .scalars()
-            .all()
-        )
-        assert len(rows) == 1, f"expected one row for vuln_id={vuln_id!r}, got {len(rows)}"
-        return rows[0]
+            assert len(rows) == 1, f"expected one row for vuln_id={vuln_id!r}, got {len(rows)}"
+            return rows[0]
     finally:
         db.close()
 

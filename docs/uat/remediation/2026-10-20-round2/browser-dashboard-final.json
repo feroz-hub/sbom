@@ -1,0 +1,32 @@
+[
+  {
+    "id": "R2-BROWSER-TLS",
+    "role": "admin",
+    "preconditions": "Clean Chrome context; real Native BFF authentication fixture; TLS validation enabled",
+    "steps": "R2-BROWSER-TLS",
+    "expected": "Actual trusted HTTPS handshake; no TLS bypass",
+    "actual": {
+      "https": "https:",
+      "certificate": {
+        "issuer": "mkcert ferozebasha@Ferozes-MacBook-Air.local",
+        "protocol": "TLS 1.3",
+        "subjectName": "",
+        "validFrom": 1792421098,
+        "validTo": 1863528298
+      },
+      "ignoreHTTPSErrors": false
+    },
+    "result": "PASS"
+  },
+  {
+    "id": "R2-DASHBOARD-EXECUTION",
+    "role": "admin",
+    "preconditions": "Clean Chrome context; real Native BFF authentication fixture; TLS validation enabled",
+    "steps": "R2-DASHBOARD-EXECUTION",
+    "expected": "Complete browser dashboard acceptance",
+    "actual": {
+      "message": "locator.selectOption: Timeout 60000ms exceeded.\nCall log:\n\u001b[2m  - waiting for getByRole('region', { name: 'Dashboard filters' }).getByLabel('Project', { exact: true })\u001b[22m\n\u001b[2m    - locator resolved to <select disabled tabindex=\"-1\" id=\"select-_r_2_\" class=\"sr-only pointer-events-none absolute -z-10 opacity-0\">…</select>\u001b[22m\n\u001b[2m  - attempting select option action\u001b[22m\n\u001b[2m    2 × waiting for element to be visible and enabled\u001b[22m\n\u001b[2m      - element is not enabled\u001b[22m\n\u001b[2m    - retrying select option action\u001b[22m\n\u001b[2m    - waiting 20ms\u001b[22m\n\u001b[2m    2 × waiting for element to be visible and enabled\u001b[22m\n\u001b[2m      - element is not enabled\u001b[22m\n\u001b[2m    - retrying select option action\u001b[22m\n\u001b[2m      - waiting 100ms\u001b[22m\n\u001b[2m    113 × waiting for element to be visible and enabled\u001b[22m\n\u001b[2m        - element is not enabled\u001b[22m\n\u001b[2m      - retrying select option action\u001b[22m\n\u001b[2m        - waiting 500ms\u001b[22m\n\u001b[2m    - waiting for element to be visible and enabled\u001b[22m\n"
+    },
+    "result": "FAIL"
+  }
+]

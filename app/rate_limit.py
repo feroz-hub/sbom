@@ -1,5 +1,5 @@
 """
-API rate limiting (slowapi) — per client IP / forwarded IP + bearer token hash.
+API rate limiting (slowapi) — per verified transport client IP + bearer token hash.
 
 Disabled when API_RATE_LIMIT_ENABLED is false (e.g. tests).
 """
@@ -41,15 +41,13 @@ def _verification_confirm_limit() -> str:
 
 def build_rate_limit_bucket_key(request: Request) -> str:
     """
-    Key by first X-Forwarded-For hop (if present), else client host,
+    Key by the transport client address,
     plus a stable hash of the bearer token when Authorization is set
     so distinct authenticated clients do not share one bucket on NAT.
     """
-    forwarded = request.headers.get("x-forwarded-for")
-    if forwarded:
-        host = forwarded.split(",")[0].strip() or get_remote_address(request)
-    else:
-        host = get_remote_address(request)
+    # A configured trusted proxy may normalize request.client at the ASGI layer.
+    # Raw client-provided forwarding headers never establish caller identity.
+    host = get_remote_address(request)
     auth = request.headers.get("authorization") or ""
     if auth.lower().startswith("bearer "):
         token = auth[7:].strip()

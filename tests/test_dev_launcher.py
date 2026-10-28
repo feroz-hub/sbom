@@ -1,0 +1,799 @@
+"""Safety checks for the one-command development launcher."""
+
+from __future__ import annotations
+
+from pathlib import Path
+from types import SimpleNamespace
+from unittest.mock import MagicMock
+
+import pytest
+from scripts import dev
+from scripts.dev_runtime import Runtime
+
+
+@pytest.fixture(autouse=True)
+def isolated_runtime(monkeypatch, tmp_path):
+    monkeypatch.setattr(dev, "ROOT", tmp_path)
+    monkeypatch.setattr(dev, "Runtime", lambda root: Runtime(tmp_path))
+    monkeypatch.setattr(dev, "ACTIVE_RUNTIME", None)
+
+
+def mock_virtualenv_handoff(monkeypatch, tmp_path, platform):
+    python = tmp_path / "venv" / "python.exe"
+    python.parent.mkdir()
+    python.touch()
+    monkeypatch.setattr(dev, "VENV", python.parent)
+    monkeypatch.setattr(dev, "venv_python", lambda: python)
+    monkeypatch.setattr(dev.sys, "prefix", str(tmp_path / "system-python"))
+    monkeypatch.setattr(dev.sys, "platform", platform)
+    monkeypatch.setattr(dev.sys, "argv", ["scripts/dev.py", "--verbose"])
+    return [str(python), str(Path(dev.__file__).resolve()), "--verbose"]
+
+
+@pytest.mark.parametrize("exit_code", [0, 1, 130])
+def test_windows_handoff_waits_with_inherited_console(monkeypatch, tmp_path, exit_code):
+    command = mock_virtualenv_handoff(monkeypatch, tmp_path, "win32")
+    handlers = []
+    original_handler = object()
+    monkeypatch.setattr(dev.signal, "signal", lambda sig, handler: handlers.append(handler) or original_handler)
+
+    def wait():
+        # Windows broadcasts Ctrl+C to both processes. The parent stays alive
+        # until the child has handled cancellation and completed cleanup.
+        assert callable(handlers[0])
+        handlers[0](dev.signal.SIGINT, None)
+        return exit_code
+
+    child = SimpleNamespace(wait=MagicMock(side_effect=wait))
+    popen = MagicMock(return_value=child)
+    monkeypatch.setattr(dev.subprocess, "Popen", popen)
+    monkeypatch.setattr(dev.os, "execv", lambda *args: pytest.fail("Windows must not execv"))
+    with pytest.raises(SystemExit) as result:
+        dev.ensure_virtualenv()
+    assert result.value.code == exit_code
+    popen.assert_called_once_with(command)  # No pipes, detached console, or new process group.
+    child.wait.assert_called_once_with()
+    assert handlers[-1] is original_handler
+
+
+def test_windows_handoff_restores_signal_handler_on_spawn_failure(monkeypatch, tmp_path):
+    mock_virtualenv_handoff(monkeypatch, tmp_path, "win32")
+    handler = MagicMock(return_value=dev.signal.default_int_handler)
+    monkeypatch.setattr(dev.signal, "signal", handler)
+    monkeypatch.setattr(dev.subprocess, "Popen", MagicMock(side_effect=OSError("spawn failed")))
+    with pytest.raises(OSError, match="spawn failed"):
+        dev.ensure_virtualenv()
+    assert handler.call_args.args == (dev.signal.SIGINT, dev.signal.default_int_handler)
+
+
+@pytest.mark.parametrize("platform", ["linux", "darwin"])
+def test_posix_handoff_keeps_execv(monkeypatch, tmp_path, platform):
+    command = mock_virtualenv_handoff(monkeypatch, tmp_path, platform)
+    execute = MagicMock()
+    monkeypatch.setattr(dev.os, "execv", execute)
+    dev.ensure_virtualenv()
+    execute.assert_called_once_with(command[0], command)
+
+
+def test_virtualenv_handoff_does_not_relaunch_inside_venv(monkeypatch, tmp_path):
+    mock_virtualenv_handoff(monkeypatch, tmp_path, "win32")
+    monkeypatch.setattr(dev.sys, "prefix", str(dev.VENV))
+    monkeypatch.setattr(dev.subprocess, "Popen", lambda *args: pytest.fail("Unexpected relaunch"))
+    dev.ensure_virtualenv()
+
+
+@pytest.mark.parametrize("keys,expected,masked", [
+    ("Secret9!\r", "Secret9!", "********"),
+    ("\bAb\bC\r", "AC", "**\b \b*"),
+    ("A\x00KB\xe0MC\r", "ABC", "***"),
+])
+def test_windows_password_is_masked(monkeypatch, capsys, keys, expected, masked):
+    characters = iter(keys)
+    monkeypatch.setattr(dev.sys, "platform", "win32")
+    monkeypatch.setitem(dev.sys.modules, "msvcrt", SimpleNamespace(getwch=lambda: next(characters)))
+    assert dev.read_password("Password: ") == expected
+    output = capsys.readouterr().out
+    assert output == f"Password: {masked}\n"
+    assert expected not in output
+
+
+@pytest.mark.parametrize("key", ["\x03", "\x1a", ""])
+def test_windows_password_cancellation_is_safe(monkeypatch, capsys, key):
+    characters = iter([*"private-secret", key])
+    monkeypatch.setattr(dev.sys, "platform", "win32")
+    monkeypatch.setitem(dev.sys.modules, "msvcrt", SimpleNamespace(getwch=lambda: next(characters)))
+    with pytest.raises(dev.SetupError, match="credential entry cancelled") as error:
+        dev.read_postgres_credentials(input_fn=lambda prompt: "")
+    assert "private-secret" not in str(error.value)
+    assert "private-secret" not in capsys.readouterr().out
+
+
+@pytest.mark.parametrize("exception", [KeyboardInterrupt, EOFError])
+def test_username_entry_cancellation_is_safe(exception):
+    def cancelled(prompt):
+        raise exception
+    with pytest.raises(dev.SetupError, match="credential entry cancelled"):
+        dev.read_postgres_credentials(input_fn=cancelled)
+
+
+@pytest.mark.parametrize("platform", ["linux", "darwin"])
+def test_non_windows_password_uses_getpass(monkeypatch, platform):
+    monkeypatch.setattr(dev.sys, "platform", platform)
+    read = MagicMock(return_value="private-secret")
+    monkeypatch.setattr(dev.getpass, "getpass", read)
+    assert dev.read_password("Password: ") == "private-secret"
+    read.assert_called_once_with("Password: ")
+
+
+@pytest.mark.parametrize("valid", [False, True])
+def test_interactive_credentials_validated_before_persistence(monkeypatch, tmp_path, capsys, valid):
+    config = tmp_path / ".env.dev.local"
+    prompts = []
+    attempts = []
+
+    def validate(url):
+        attempts.append(url)
+        assert not config.exists()
+        if not valid or dev.unquote(dev.urlsplit(url).password or "") != "private-secret":
+            raise dev.SetupError("invalid")
+
+    monkeypatch.setattr(dev, "ensure_database", validate)
+    kwargs = dict(
+        config_path=config, repository_env=tmp_path / "missing.env",
+        pgpass_path=tmp_path / "missing.pgpass", interactive=True,
+        input_fn=lambda prompt: prompts.append(prompt) or "  ",
+        password_fn=lambda prompt: "private-secret",
+    )
+    values = {"DATABASE_URL": dev.default_database_url("local", 5432)}
+    if valid:
+        dev.configure_local_database(values, {}, 5432, **kwargs)
+        persisted = dev.read_config(config)["DATABASE_URL"]
+        assert dev.unquote(dev.urlsplit(persisted).password) == "private-secret"
+        assert dev.urlsplit(persisted).username == "postgres"
+        assert persisted == attempts[-1]
+    else:
+        with pytest.raises(dev.SetupError, match="after 3 attempts") as error:
+            dev.configure_local_database(values, {}, 5432, **kwargs)
+        assert "private-secret" not in str(error.value)
+        assert not config.exists()
+    assert prompts == ["PostgreSQL user [postgres]: "] * (1 if valid else 3)
+    assert "private-secret" not in capsys.readouterr().out
+
+
+def test_config_roundtrip_and_secrets_persist(tmp_path: Path, capsys: pytest.CaptureFixture[str]) -> None:
+    path = tmp_path / ".env.dev.local"
+    values = dev.resolve_config({}, dev.POSTGRES_PORT, dev.REDIS_PORT, dev.MAILPIT_SMTP_PORT)
+    dev.generate_keys(values)
+    dev.write_config(values, path)
+    loaded = dev.read_config(path)
+    dev.generate_keys(loaded)
+    assert loaded == values
+    assert "BEGIN PRIVATE KEY" in loaded["NATIVE_JWT_PRIVATE_KEY"]
+    assert loaded["REDIS_URL"].endswith("/0")
+    assert loaded["AUTH_SESSION_REDIS_URL"].endswith("/1")
+    assert loaded["NATIVE_AUTH_RATE_LIMIT_STORAGE_URI"].endswith("/2")
+    assert loaded["CELERY_USE_DATABASE_BROKER"] == "false"
+    assert loaded["HCL_AUTH_ENABLED"] == "false"
+    assert loaded["DEV_POSTGRES_PROVIDER"] == "docker"
+    assert loaded["DEV_REDIS_PROVIDER"] == "docker"
+    assert loaded["DEV_API_PORT"] == "18000"
+    assert loaded["DEV_FRONTEND_PORT"] == "13000"
+    assert loaded["NATIVE_JWT_PRIVATE_KEY"] not in capsys.readouterr().out
+    if dev.os.name != "nt":
+        assert path.stat().st_mode & 0o077 == 0
+
+
+def test_config_allows_simple_bootstrap_flag(tmp_path: Path) -> None:
+    path = tmp_path / ".env.dev.local"
+    path.write_text("NATIVE_PLATFORM_BOOTSTRAP_ENABLED=true\n")
+    assert dev.read_config(path)["NATIVE_PLATFORM_BOOTSTRAP_ENABLED"] == "true"
+
+
+def test_incomplete_keypair_is_rejected() -> None:
+    with pytest.raises(dev.SetupError, match="incomplete"):
+        dev.generate_keys({"NATIVE_JWT_PRIVATE_KEY": "existing"})
+
+
+def test_invalid_or_mismatched_secrets_are_rejected(capsys: pytest.CaptureFixture[str]) -> None:
+    first: dict[str, str] = {}
+    second: dict[str, str] = {}
+    dev.generate_keys(first)
+    dev.generate_keys(second)
+    original_private = first["NATIVE_JWT_PRIVATE_KEY"]
+    first["NATIVE_JWT_PUBLIC_KEY"] = second["NATIVE_JWT_PUBLIC_KEY"]
+    with pytest.raises(dev.SetupError, match="does not match"):
+        dev.generate_keys(first)
+    assert first["NATIVE_JWT_PRIVATE_KEY"] == original_private
+    assert original_private not in capsys.readouterr().out
+    first["NATIVE_JWT_PUBLIC_KEY"] = second["NATIVE_JWT_PRIVATE_KEY"]
+    with pytest.raises(dev.SetupError, match="keypair is invalid"):
+        dev.validate_secrets(first)
+    first["NATIVE_JWT_PUBLIC_KEY"] = second["NATIVE_JWT_PUBLIC_KEY"]
+    first["NATIVE_JWT_PRIVATE_KEY"] = second["NATIVE_JWT_PRIVATE_KEY"]
+    first["NATIVE_SECURITY_OUTBOX_KEY"] = "invalid"
+    with pytest.raises(dev.SetupError, match="NATIVE_SECURITY_OUTBOX_KEY"):
+        dev.validate_secrets(first)
+    first["NATIVE_SECURITY_OUTBOX_KEY"] = second["NATIVE_SECURITY_OUTBOX_KEY"]
+    first["AUTH_SESSION_ENCRYPTION_KEY"] = "invalid"
+    with pytest.raises(dev.SetupError, match="AUTH_SESSION_ENCRYPTION_KEY"):
+        dev.validate_secrets(first)
+
+
+@pytest.mark.parametrize(
+    "url",
+    [
+        "postgresql+psycopg://u:p@127.0.0.1:55439/sbom_analyser",
+        "postgresql+psycopg://u:p@remote:5432/sbom_analyser_dev",
+        "postgresql+psycopg://u:p@localhost:5432/sbom_analyser_dev?options=-csearch_path%3Dother",
+        "sqlite:///sbom_analyser_dev",
+    ],
+)
+def test_database_safety_rejects_other_targets(url: str) -> None:
+    with pytest.raises(dev.SetupError, match="refusing another database"):
+        dev.validate_database_url(url)
+
+
+def test_saved_database_port_cannot_silently_change() -> None:
+    with pytest.raises(dev.SetupError, match="different local PostgreSQL port"):
+        dev.resolve_config(
+            {"DATABASE_URL": "postgresql+psycopg://u:p@localhost:5432/sbom_analyser_dev"}, 55439, 56379, 1025
+        )
+
+
+def test_windows_username_is_not_used_for_local_postgres(monkeypatch: pytest.MonkeyPatch) -> None:
+    monkeypatch.setattr(dev.getpass, "getuser", lambda: pytest.fail("Windows username was used"))
+    assert dev.default_database_url("local", 5432).startswith("postgresql+psycopg://postgres:@")
+
+
+def test_docker_database_credentials_are_unchanged() -> None:
+    assert (
+        dev.default_database_url("docker", dev.POSTGRES_PORT)
+        == "postgresql+psycopg://sbom:sbom@127.0.0.1:55439/sbom_analyser_dev"
+    )
+
+
+def test_saved_local_database_credentials_are_reused(monkeypatch: pytest.MonkeyPatch, tmp_path: Path) -> None:
+    saved_url = "postgresql+psycopg://saved:saved-secret@localhost:5432/sbom_analyser_dev"
+    checked = []
+    monkeypatch.setattr(dev, "ensure_database", lambda url: checked.append(url))
+    resolved = dev.resolve_local_database_url(
+        saved_url,
+        5432,
+        repository_env=tmp_path / "missing.env",
+        pgpass_path=tmp_path / "missing.pgpass",
+        interactive=False,
+    )
+    assert resolved == saved_url
+    assert checked == [saved_url]
+
+
+@pytest.mark.parametrize("host", ["localhost", "127.0.0.1"])
+def test_repository_local_credentials_are_reused_with_dev_database(tmp_path: Path, host: str) -> None:
+    path = tmp_path / ".env"
+    path.write_text(f"DATABASE_URL=postgresql://app-user:app-password@{host}:5432/sbom_analyser\n")
+    candidate = dev.repository_database_candidate(path, 5432)
+    assert candidate == "postgresql+psycopg://app-user:app-password@127.0.0.1:5432/sbom_analyser_dev"
+
+
+def test_repository_remote_database_url_is_not_a_candidate(tmp_path: Path) -> None:
+    path = tmp_path / ".env"
+    path.write_text("DATABASE_URL=postgresql://app-user:secret@database.example:5432/sbom_analyser\n")
+    assert dev.repository_database_candidate(path, 5432) is None
+
+
+def test_pgpass_local_credentials_are_parsed_without_exposing_password(tmp_path: Path) -> None:
+    path = tmp_path / ".pgpass"
+    path.write_text(
+        "# ignored\n"
+        "database.example:5432:*:remote:remote-secret\n"
+        "localhost:5432:sbom_analyser_dev:local-user:local\\:secret\n"
+    )
+    candidates = dev.pgpass_database_candidates(path, 5432)
+    assert candidates == [
+        "postgresql+psycopg://local-user:local%3Asecret@127.0.0.1:5432/sbom_analyser_dev"
+    ]
+
+
+def test_standard_pgpass_paths() -> None:
+    assert dev.default_pgpass_path(platform_name="nt", environment={"APPDATA": "C:/Users/dev/AppData/Roaming"}) == Path(
+        "C:/Users/dev/AppData/Roaming/postgresql/pgpass.conf"
+    )
+    assert dev.default_pgpass_path(platform_name="posix", home=Path("/Users/dev")) == Path("/Users/dev/.pgpass")
+
+
+def test_local_prompt_defaults_to_postgres_and_hides_password(
+    monkeypatch: pytest.MonkeyPatch, tmp_path: Path, capsys: pytest.CaptureFixture[str]
+) -> None:
+    prompts = []
+
+    def validate(url: str) -> None:
+        if dev.unquote(dev.urlsplit(url).password or "") != "prompt-secret":
+            raise dev.SetupError("invalid")
+
+    monkeypatch.setattr(dev, "ensure_database", validate)
+    resolved = dev.resolve_local_database_url(
+        None,
+        5432,
+        repository_env=tmp_path / "missing.env",
+        pgpass_path=tmp_path / "missing.pgpass",
+        interactive=True,
+        input_fn=lambda prompt: prompts.append(prompt) or "",
+        password_fn=lambda prompt: "prompt-secret",
+    )
+    assert dev.unquote(dev.urlsplit(resolved).username or "") == "postgres"
+    assert prompts == ["PostgreSQL user [postgres]: "]
+    assert "prompt-secret" not in capsys.readouterr().out
+
+
+def test_invalid_prompted_credentials_can_be_retried_without_password_output(
+    monkeypatch: pytest.MonkeyPatch, tmp_path: Path, capsys: pytest.CaptureFixture[str]
+) -> None:
+    passwords = iter(["wrong-secret", "right-secret"])
+
+    def validate(url: str) -> None:
+        if dev.unquote(dev.urlsplit(url).password or "") != "right-secret":
+            raise dev.SetupError("invalid")
+
+    monkeypatch.setattr(dev, "ensure_database", validate)
+    resolved = dev.resolve_local_database_url(
+        None,
+        5432,
+        repository_env=tmp_path / "missing.env",
+        pgpass_path=tmp_path / "missing.pgpass",
+        interactive=True,
+        input_fn=lambda prompt: "postgres",
+        password_fn=lambda prompt: next(passwords),
+    )
+    output = capsys.readouterr().out
+    assert dev.unquote(dev.urlsplit(resolved).password or "") == "right-secret"
+    assert "Try again" in output
+    assert "wrong-secret" not in output
+    assert "right-secret" not in output
+
+
+def test_invalid_local_credentials_are_not_persisted(monkeypatch: pytest.MonkeyPatch, tmp_path: Path) -> None:
+    config = tmp_path / ".env.dev.local"
+    monkeypatch.setattr(dev, "ensure_database", lambda url: (_ for _ in ()).throw(dev.SetupError("invalid")))
+    with pytest.raises(dev.SetupError, match="credentials are required"):
+        dev.configure_local_database(
+            {"DATABASE_URL": dev.default_database_url("local", 5432)},
+            {},
+            5432,
+            config_path=config,
+            repository_env=tmp_path / "missing.env",
+            pgpass_path=tmp_path / "missing.pgpass",
+            interactive=False,
+        )
+    assert not config.exists()
+
+
+def test_valid_local_credentials_are_persisted(monkeypatch: pytest.MonkeyPatch, tmp_path: Path) -> None:
+    repository_env = tmp_path / ".env"
+    repository_env.write_text("DATABASE_URL=postgresql://local:valid-secret@localhost:5432/production_name\n")
+    config = tmp_path / ".env.dev.local"
+    monkeypatch.setattr(dev, "ensure_database", lambda url: None)
+    values = {"DATABASE_URL": dev.default_database_url("local", 5432)}
+    dev.configure_local_database(
+        values,
+        {},
+        5432,
+        config_path=config,
+        repository_env=repository_env,
+        pgpass_path=tmp_path / "missing.pgpass",
+        interactive=False,
+    )
+    persisted = dev.read_config(config)
+    assert persisted["DATABASE_URL"] == (
+        "postgresql+psycopg://local:valid-secret@127.0.0.1:5432/sbom_analyser_dev"
+    )
+
+
+def test_provider_fallback_updates_only_development_urls() -> None:
+    saved = dev.resolve_config({}, 55439, 56379, 1025)
+    changed = dev.resolve_config(saved, 5432, 6379, 1025, pg_provider="local", redis_provider="local")
+    assert changed["DEV_POSTGRES_PROVIDER"] == "local"
+    assert changed["DEV_REDIS_PROVIDER"] == "local"
+    assert changed["DATABASE_URL"].endswith(":5432/sbom_analyser_dev")
+    assert changed["REDIS_URL"].endswith(":6379/0")
+    assert changed["AUTH_SESSION_REDIS_URL"].endswith(":6379/1")
+
+
+def test_generated_application_urls_use_development_ports() -> None:
+    values = dev.resolve_config({}, 55439, 56379, 1025)
+    assert values["SBOM_API_URL"] == "http://127.0.0.1:18000"
+    assert values["NEXT_PUBLIC_API_URL"] == "http://127.0.0.1:18000"
+    assert values["APP_ORIGIN"] == "https://localhost:13000"
+    assert values["CORS_ORIGINS"] == "https://localhost:13000"
+    assert values["NATIVE_ACTIVATION_FRONTEND_URL"] == "https://localhost:13000/activate-account"
+    assert values["NATIVE_PASSWORD_RESET_FRONTEND_URL"] == "https://localhost:13000/reset-password"
+    assert values["EMAIL_VERIFICATION_FRONTEND_URL"] == "https://localhost:13000/verify-email"
+    assert values["NATIVE_JWT_ISSUER"] == "https://localhost:13000/native"
+
+
+def test_docker_service_is_reused(monkeypatch: pytest.MonkeyPatch) -> None:
+    monkeypatch.setattr(dev, "docker_available", lambda: True)
+    monkeypatch.setattr(dev, "legacy_redis_container", lambda: False)
+    monkeypatch.setattr(dev, "compose_container", lambda service: True)
+    monkeypatch.setattr(dev, "service_available", lambda service, port: True)
+    monkeypatch.setattr(dev, "start_compose", lambda *args: pytest.fail("started existing service"))
+    assert dev.select_service("redis", 56379, 6379, check=False, env={}) == ("Docker", 56379)
+
+
+def test_mailpit_readiness_succeeds_immediately_without_sleep(monkeypatch: pytest.MonkeyPatch) -> None:
+    monkeypatch.setattr(dev, "reachable", lambda host, port: True)
+    monkeypatch.setattr(dev, "mailpit_ready", lambda: True)
+    monkeypatch.setattr(dev.time, "sleep", lambda seconds: pytest.fail("unexpected readiness delay"))
+    assert dev.wait_for_mailpit_ready()
+
+
+def test_mailpit_readiness_retries_until_http_api_is_ready(monkeypatch: pytest.MonkeyPatch) -> None:
+    clock = SimpleNamespace(now=0.0)
+    sleeps = []
+    http_results = iter((False, False, False, True))
+    monkeypatch.setattr(dev, "reachable", lambda host, port: True)
+    monkeypatch.setattr(dev, "mailpit_ready", lambda: next(http_results))
+    monkeypatch.setattr(dev.time, "monotonic", lambda: clock.now)
+
+    def advance(seconds):
+        sleeps.append(seconds)
+        clock.now += seconds
+
+    monkeypatch.setattr(dev.time, "sleep", advance)
+    assert dev.wait_for_mailpit_ready(timeout=2.0)
+    assert sleeps == [0.5, 0.5, 0.5]
+
+
+def test_mailpit_startup_waits_after_transient_http_failure(monkeypatch, capsys) -> None:
+    http_results = iter((False, True))
+    monkeypatch.setattr(dev, "reachable", lambda host, port: True)
+    monkeypatch.setattr(dev, "mailpit_ready", lambda: next(http_results))
+    wait = MagicMock(return_value=True)
+    monkeypatch.setattr(dev, "wait_for_mailpit_ready", wait)
+    dev.ensure_mailpit_ready()
+    wait.assert_called_once_with(dev.MAILPIT_READY_TIMEOUT)
+    assert capsys.readouterr().out.count("waiting for HTTP API") == 1
+
+
+def test_mailpit_http_timeout_has_clear_error(monkeypatch: pytest.MonkeyPatch) -> None:
+    clock = SimpleNamespace(now=0.0)
+    monkeypatch.setattr(dev, "reachable", lambda host, port: True)
+    monkeypatch.setattr(dev, "mailpit_ready", lambda: False)
+    monkeypatch.setattr(dev.time, "monotonic", lambda: clock.now)
+    monkeypatch.setattr(dev.time, "sleep", lambda seconds: setattr(clock, "now", clock.now + seconds))
+    with pytest.raises(dev.SetupError, match="SMTP is reachable, but its HTTP API did not become ready.*1 seconds"):
+        dev.ensure_mailpit_ready(timeout=1.0)
+
+
+def test_mailpit_readiness_times_out_when_smtp_never_listens(monkeypatch: pytest.MonkeyPatch) -> None:
+    clock = SimpleNamespace(now=0.0)
+    monkeypatch.setattr(dev, "reachable", lambda host, port: False)
+    monkeypatch.setattr(dev, "mailpit_ready", lambda: pytest.fail("HTTP must not be probed before SMTP is reachable"))
+    monkeypatch.setattr(dev.time, "monotonic", lambda: clock.now)
+    monkeypatch.setattr(dev.time, "sleep", lambda seconds: setattr(clock, "now", clock.now + seconds))
+    assert not dev.wait_for_mailpit_ready(timeout=1.0)
+
+
+def test_current_compose_mailpit_selection_waits_for_readiness(monkeypatch: pytest.MonkeyPatch) -> None:
+    monkeypatch.setattr(dev, "docker_available", lambda: True)
+    monkeypatch.setattr(dev, "run", lambda command: SimpleNamespace(stdout="false\n"))
+    selected = MagicMock(return_value=("Docker", dev.MAILPIT_SMTP_PORT))
+    ready = MagicMock()
+    monkeypatch.setattr(dev, "select_service", selected)
+    monkeypatch.setattr(dev, "ensure_mailpit_ready", ready)
+    assert dev.select_mailpit(check=False, env={}) == "Docker"
+    selected.assert_called_once_with(
+        "mailpit",
+        dev.MAILPIT_SMTP_PORT,
+        dev.MAILPIT_SMTP_PORT,
+        check=False,
+        env={},
+    )
+    ready.assert_called_once_with()
+
+
+def test_legacy_mailpit_selection_keeps_compatibility(monkeypatch: pytest.MonkeyPatch) -> None:
+    monkeypatch.setattr(dev, "docker_available", lambda: True)
+    monkeypatch.setattr(dev, "run", lambda command: SimpleNamespace(stdout="true\n"))
+    monkeypatch.setattr(dev, "reachable", lambda host, port: True)
+    ready = MagicMock()
+    monkeypatch.setattr(dev, "ensure_mailpit_ready", ready)
+    monkeypatch.setattr(dev, "select_service", lambda *args, **kwargs: pytest.fail("Compose Mailpit was touched"))
+    assert dev.select_mailpit(check=False, env={}) == "Docker (sbom-mailpit)"
+    ready.assert_called_once_with()
+
+
+def test_docker_starts_project_service(monkeypatch: pytest.MonkeyPatch) -> None:
+    started = []
+    monkeypatch.setattr(dev, "docker_available", lambda: True)
+    monkeypatch.setattr(dev, "legacy_redis_container", lambda: False)
+    monkeypatch.setattr(dev, "compose_container", lambda service: False)
+    monkeypatch.setattr(dev, "reachable", lambda host, port: False)
+    monkeypatch.setattr(dev, "service_available", lambda service, port: False)
+    monkeypatch.setattr(dev, "start_compose", lambda service, env: started.append(service))
+    monkeypatch.setattr(dev, "wait_for_service", lambda service, port: True)
+    assert dev.select_service("redis", 56379, 6379, check=False, env={}) == ("Docker", 56379)
+    assert started == ["redis"]
+
+
+def test_no_docker_uses_local_service(monkeypatch: pytest.MonkeyPatch) -> None:
+    monkeypatch.setattr(dev, "docker_available", lambda: False)
+    monkeypatch.setattr(dev, "service_available", lambda service, port: port == 6379)
+    assert dev.select_service("redis", 56379, 6379, check=False, env={}) == ("local", 6379)
+
+
+def test_saved_local_is_reused_even_with_docker(monkeypatch: pytest.MonkeyPatch) -> None:
+    monkeypatch.setattr(dev, "docker_available", lambda: True)
+    monkeypatch.setattr(dev, "service_available", lambda service, port: port == 6379)
+    monkeypatch.setattr(dev, "compose_container", lambda service: pytest.fail("probed Docker unnecessarily"))
+    assert dev.select_service("redis", 56379, 6379, check=False, env={}, preferred="local") == ("local", 6379)
+
+
+def test_saved_docker_falls_back_when_unavailable(monkeypatch: pytest.MonkeyPatch) -> None:
+    monkeypatch.setattr(dev, "docker_available", lambda: False)
+    monkeypatch.setattr(dev, "service_available", lambda service, port: port == 6379)
+    assert dev.select_service("redis", 56379, 6379, check=False, env={}, preferred="docker") == ("local", 6379)
+
+
+def test_infrastructure_port_conflict_is_clear(monkeypatch: pytest.MonkeyPatch) -> None:
+    monkeypatch.setattr(dev, "docker_available", lambda: True)
+    monkeypatch.setattr(dev, "legacy_redis_container", lambda: False)
+    monkeypatch.setattr(dev, "compose_container", lambda service: False)
+    monkeypatch.setattr(dev, "reachable", lambda host, port: port == 56379)
+    monkeypatch.setattr(dev, "service_available", lambda service, port: False)
+    with pytest.raises(dev.SetupError, match="Port 56379 is occupied"):
+        dev.select_service("redis", 56379, 6379, check=False, env={})
+
+
+def test_provider_probe_requires_expected_protocol(monkeypatch: pytest.MonkeyPatch) -> None:
+    connection = MagicMock()
+    connection.__enter__.return_value = connection
+    monkeypatch.setattr(dev.socket, "create_connection", lambda *args, **kwargs: connection)
+    connection.recv.return_value = b"+PONG\r\n"
+    assert dev.service_available("redis", 6379)
+    connection.recv.return_value = b"HTTP/1.1"
+    assert not dev.service_available("redis", 6379)
+    connection.recv.return_value = b"N"
+    assert dev.service_available("postgres", 5432)
+
+
+def test_exact_legacy_redis_is_reused_without_compose_change(monkeypatch: pytest.MonkeyPatch) -> None:
+    monkeypatch.setattr(dev, "docker_available", lambda: True)
+    monkeypatch.setattr(dev, "legacy_redis_container", lambda: True)
+    monkeypatch.setattr(dev, "compose_container", lambda service: pytest.fail("Compose Redis was touched"))
+    assert dev.select_service("redis", 56379, 6379, check=False, env={}) == ("Docker (sbom-native-redis)", 56379)
+
+
+def test_no_redis_does_not_switch_celery_broker(monkeypatch: pytest.MonkeyPatch) -> None:
+    monkeypatch.setattr(dev, "docker_available", lambda: False)
+    monkeypatch.setattr(dev, "service_available", lambda service, port: False)
+    with pytest.raises(dev.SetupError, match="Redis is unavailable"):
+        dev.select_service("redis", 56379, 6379, check=False, env={})
+
+
+def test_check_mode_does_not_start_services_or_processes(
+    monkeypatch: pytest.MonkeyPatch, capsys: pytest.CaptureFixture[str]
+) -> None:
+    monkeypatch.setattr(dev.sys, "argv", ["dev.py", "--check"])
+    monkeypatch.setattr(dev, "docker_available", lambda: False)
+    monkeypatch.setattr(dev, "reachable", lambda host, port: True)
+    monkeypatch.setattr(dev, "service_available", lambda service, port: True)
+    monkeypatch.setattr(dev, "read_config", lambda: {})
+    monkeypatch.setattr(dev, "ensure_virtualenv", lambda: pytest.fail("venv created"))
+    monkeypatch.setattr(dev, "ensure_database", lambda url: pytest.fail("database touched"))
+    monkeypatch.setattr(dev, "start_process", lambda *args: pytest.fail("process started"))
+    monkeypatch.setattr(dev, "wait_for_mailpit_ready", lambda *args: pytest.fail("readiness wait started"))
+    dev.main()
+    output = capsys.readouterr().out
+    assert "no services or processes started" in output
+    assert "BEGIN PRIVATE KEY" not in output
+
+
+@pytest.mark.parametrize("platform", ["win32", "linux", "darwin"])
+def test_startup_commands_use_solo_only_for_windows_worker(monkeypatch, tmp_path, platform):
+    monkeypatch.setattr(dev.sys, "platform", platform)
+    monkeypatch.setattr(dev.sys, "argv", ["dev.py"])
+    monkeypatch.setattr(dev, "CONFIG", tmp_path / ".env.dev.local")
+    monkeypatch.setattr(dev, "BEAT_LOCK", tmp_path / "beat.lock")
+    monkeypatch.setattr(dev, "venv_python", lambda: tmp_path / "python")
+    monkeypatch.setattr(dev, "read_config", lambda: {})
+    monkeypatch.setattr(dev, "docker_available", lambda: False)
+    monkeypatch.setattr(dev, "select_service", lambda service, port, *args, **kwargs: ("Docker", port))
+    monkeypatch.setattr(dev, "mailpit_ready", lambda: True)
+    # This test constructs commands; service readiness has its own tests.
+    monkeypatch.setattr(dev, "select_mailpit", lambda **kwargs: "Docker")
+    def unexpected_network_probe(*args, **kwargs):
+        pytest.fail("Command-generation test must not probe a live service")
+    monkeypatch.setattr(dev, "reachable", unexpected_network_probe)
+    for name in ("ensure_virtualenv", "ensure_dependencies", "generate_keys", "check_application_ports",
+                 "ensure_database", "write_config", "validate_existing_schema", "acquire_beat_lock", "stop_processes"):
+        monkeypatch.setattr(dev, name, lambda *args, **kwargs: None)
+    monkeypatch.setattr(dev, "run_migrations", lambda env: "test-head")
+    monkeypatch.setattr(dev, "ensure_frontend", lambda: "npm")
+    started = {}
+    monkeypatch.setattr(dev, "start_process", lambda name, command, *args: started.setdefault(name, command))
+
+    def ready(*args):
+        raise KeyboardInterrupt  # End the simulated foreground run without launching anything.
+
+    monkeypatch.setattr(dev, "wait_for_ready", ready)
+    dev.start_application(SimpleNamespace(check=False))
+    python = str(tmp_path / "python")
+    celery = [python, "-m", "celery", "-A", "app.workers.celery_app"]
+    assert started["Celery worker"] == [*celery, "worker", "--loglevel=info", *(["--pool=solo"] if platform == "win32" else [])]
+    assert started["Celery Beat"] == [*celery, "beat", "--loglevel=info"]
+    assert started["API"] == [python, "-m", "uvicorn", "app.main:app", "--host", "127.0.0.1",
+                              "--port", "18000", "--no-proxy-headers"]
+    assert started["Frontend"] == ["npm", "run", "dev:https", "--", "--port", "13000"]
+
+
+@pytest.fixture
+def frontend_install(monkeypatch, tmp_path):
+    frontend = tmp_path / "frontend"
+    frontend.mkdir()
+    (frontend / "package.json").write_text('{"name":"test"}')
+    (frontend / "package-lock.json").write_text('{"lockfileVersion":3}')
+    certificates = frontend / "certificates"
+    certificates.mkdir()
+    (certificates / "localhost.pem").write_text("existing certificate")
+    (certificates / "localhost-key.pem").write_text("existing key")
+    monkeypatch.setattr(dev, "ROOT", tmp_path)
+    monkeypatch.setattr(dev.shutil, "which", lambda name: "npm")
+
+    def install(command):
+        assert command == ["npm", "ci", "--prefix", "frontend"]
+        (frontend / "node_modules").mkdir(exist_ok=True)
+        return SimpleNamespace(returncode=0)
+
+    runner = MagicMock(side_effect=install)
+    monkeypatch.setattr(dev, "run", runner)
+    monkeypatch.setattr(dev, "create_local_certificate", lambda *args: pytest.fail("Certificate replaced"))
+    return frontend, runner
+
+
+@pytest.mark.parametrize("existing_modules", [False, True])
+def test_frontend_install_without_stamp_then_skip_unchanged(frontend_install, existing_modules):
+    frontend, runner = frontend_install
+    if existing_modules:
+        (frontend / "node_modules").mkdir()
+    assert dev.ensure_frontend() == "npm"
+    assert (frontend / "node_modules/.sbom-dependencies-sha256").is_file()
+    dev.ensure_frontend()
+    assert runner.call_count == 1
+
+
+@pytest.mark.parametrize("manifest", ["package.json", "package-lock.json"])
+def test_frontend_manifest_change_reinstalls(frontend_install, manifest):
+    frontend, runner = frontend_install
+    dev.ensure_frontend()
+    stamp = frontend / "node_modules/.sbom-dependencies-sha256"
+    previous = stamp.read_text()
+    (frontend / manifest).write_text('{"changed":true}')
+    dev.ensure_frontend()
+    assert runner.call_count == 2
+    assert stamp.read_text() != previous
+    dev.ensure_frontend()
+    assert runner.call_count == 2
+
+
+def test_failed_frontend_install_is_not_stamped_and_retries(frontend_install):
+    frontend, runner = frontend_install
+    dev.ensure_frontend()
+    (frontend / "package-lock.json").write_text('{"changed":true}')
+    install = runner.side_effect
+    runner.side_effect = lambda command: SimpleNamespace(returncode=1)
+    with pytest.raises(dev.SetupError, match="Frontend npm ci failed"):
+        dev.ensure_frontend()
+    assert not (frontend / "node_modules/.sbom-dependencies-sha256").exists()
+    runner.side_effect = install
+    dev.ensure_frontend()
+    assert runner.call_count == 3
+
+
+def test_missing_frontend_manifest_fails_clearly(frontend_install):
+    frontend, runner = frontend_install
+    (frontend / "package-lock.json").unlink()
+    with pytest.raises(dev.SetupError, match="Cannot read frontend"):
+        dev.ensure_frontend()
+    runner.assert_not_called()
+
+
+def test_same_environment_passed_to_all_processes(monkeypatch: pytest.MonkeyPatch) -> None:
+    received = []
+
+    def fake_popen(command, **kwargs):
+        received.append(kwargs["env"])
+        return SimpleNamespace(pid=123)
+
+    monkeypatch.setattr(dev.subprocess, "Popen", fake_popen)
+    env = {"DATABASE_URL": "same", "NATIVE_SECURITY_OUTBOX_KEY": "same-secret"}
+    dev.start_process("API", ["api"], env)
+    dev.start_process("Worker", ["worker"], env)
+    assert received == [env, env]
+
+
+def test_schema_guard_allows_empty_and_known_revision() -> None:
+    dev.check_schema_objects(set(), None, {"001_initial_schema"})
+    dev.check_schema_objects({"alembic_version", "iam_users", "tenants"}, "001_initial_schema", {"001_initial_schema"})
+
+
+@pytest.mark.parametrize(
+    "objects,revision",
+    [
+        ({"other_app_table"}, None),
+        ({"alembic_version", "iam_users", "tenants"}, "unknown_revision"),
+        ({"alembic_version", "tenants"}, "001_initial_schema"),
+    ],
+)
+def test_schema_guard_refuses_unknown_or_incomplete_database(objects: set[str], revision: str | None) -> None:
+    with pytest.raises(dev.SetupError, match="unknown or incomplete schema"):
+        dev.check_schema_objects(objects, revision, {"001_initial_schema"})
+
+
+def test_verbose_prints_subprocess_output_but_redacts_secrets(
+    monkeypatch: pytest.MonkeyPatch, capsys: pytest.CaptureFixture[str]
+) -> None:
+    monkeypatch.setattr(dev, "VERBOSE", True)
+    monkeypatch.setattr(
+        dev.subprocess,
+        "run",
+        lambda *args, **kwargs: SimpleNamespace(stdout="hello secret-value", stderr="error secret-value", returncode=1),
+    )
+    dev.run(["docker", "info"], env={"NATIVE_SECURITY_OUTBOX_KEY": "secret-value"})
+    output = capsys.readouterr()
+    assert "hello [REDACTED]" in output.out
+    assert "error [REDACTED]" in output.err
+
+
+def test_verbose_prints_startup_log_without_secret(
+    monkeypatch: pytest.MonkeyPatch, tmp_path: Path, capsys: pytest.CaptureFixture[str]
+) -> None:
+    path = tmp_path / ".dev-logs"
+    path.mkdir()
+    (path / "api.log").write_text("startup failed secret-value")
+    monkeypatch.setattr(dev, "ROOT", tmp_path)
+    monkeypatch.setattr(dev, "VERBOSE", True)
+    dev.show_log("API", {"NATIVE_SECURITY_OUTBOX_KEY": "secret-value"})
+    output = capsys.readouterr().err
+    assert "startup failed [REDACTED]" in output
+    assert "secret-value" not in output
+
+
+def test_readiness_waits_for_all_three_checks(monkeypatch: pytest.MonkeyPatch) -> None:
+    requests = []
+    monkeypatch.setattr(dev, "http_ready", lambda url, json_ready=False: requests.append((url, json_ready)) or True)
+    processes = [SimpleNamespace(poll=lambda: None) for _ in range(4)]
+    dev.wait_for_ready(processes, {}, dev.DEV_API_PORT, dev.DEV_FRONTEND_PORT, timeout=1)
+    assert requests == [
+        ("http://127.0.0.1:18000/health", False),
+        ("http://127.0.0.1:18000/ready/iam", True),
+        ("https://localhost:13000", False),
+    ]
+
+
+def test_readiness_failure_names_log(monkeypatch: pytest.MonkeyPatch) -> None:
+    monkeypatch.setattr(dev, "http_ready", lambda url, json_ready=False: False)
+    processes = [SimpleNamespace(poll=lambda: None) for _ in range(4)]
+    with pytest.raises(dev.SetupError, match=r"\.dev-logs/api\.log"):
+        dev.wait_for_ready(processes, {}, dev.DEV_API_PORT, dev.DEV_FRONTEND_PORT, timeout=0)
+
+
+def test_unrecognized_application_port_is_not_reused(monkeypatch: pytest.MonkeyPatch, tmp_path: Path) -> None:
+    monkeypatch.setattr(dev, "BEAT_LOCK", tmp_path / "absent.pid")
+    monkeypatch.setattr(dev, "reachable", lambda host, port: port == dev.DEV_API_PORT)
+    with pytest.raises(dev.SetupError, match=r"API port 18000 is already in use"):
+        dev.check_application_ports(dev.DEV_API_PORT, dev.DEV_FRONTEND_PORT)
+
+
+def test_production_application_ports_do_not_block_development(monkeypatch: pytest.MonkeyPatch) -> None:
+    monkeypatch.setattr(dev, "reachable", lambda host, port: port in {3000, 8000})
+    dev.check_application_ports(dev.DEV_API_PORT, dev.DEV_FRONTEND_PORT)
+
+
+def test_existing_sbom_launcher_is_identified(monkeypatch: pytest.MonkeyPatch, tmp_path: Path) -> None:
+    lock = tmp_path / "beat.pid"
+    lock.write_text(str(dev.os.getpid()))
+    monkeypatch.setattr(dev, "BEAT_LOCK", lock)
+    monkeypatch.setattr(dev, "reachable", lambda host, port: port == dev.DEV_API_PORT)
+    monkeypatch.setattr(dev, "http_ready", lambda url, json_ready=False: True)
+    with pytest.raises(dev.SetupError, match="ownership: unrelated/unknown"):
+        dev.check_application_ports(dev.DEV_API_PORT, dev.DEV_FRONTEND_PORT)

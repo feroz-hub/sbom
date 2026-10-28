@@ -1,10 +1,15 @@
 'use client';
 
+import { useAnalysisScope } from '@/hooks/useAnalysisScope';
+import { addPendingAnalysis } from '@/lib/pendingAnalysis';
+import { invalidateScheduleLists, invalidateAnalysisSubmission } from '@/lib/queryInvalidation';
+import { PermissionButton } from '@/components/ui/PermissionButton';
+
 import { useState } from 'react';
 import { useMutation, useQuery, useQueryClient } from '@tanstack/react-query';
 import { Ban, CalendarClock, Pause, Pencil, Play, RotateCcw, Trash2, Zap } from 'lucide-react';
 import { Card, CardHeader, CardTitle, CardContent } from '@/components/ui/Card';
-import { Button } from '@/components/ui/Button';
+import { PermissionButton as Button } from '@/components/ui/PermissionButton';
 import { Badge } from '@/components/ui/Badge';
 import { DeleteConfirmDialog } from '@/components/ui/DeleteConfirmDialog';
 import {
@@ -25,11 +30,6 @@ import { useToast } from '@/hooks/useToast';
 import { getApiErrorMessage } from '@/lib/notifications';
 import { formatRelative } from '@/lib/utils';
 import { HttpError } from '@/lib/api';
-import {
-  invalidateDashboardTiles,
-  invalidateRunLists,
-  invalidateSbomLists,
-} from '@/lib/queryInvalidation';
 import { ScheduleEditor } from './ScheduleEditor';
 import type { AnalysisSchedule, SbomScheduleResolved, ScheduleCadence } from '@/types';
 
@@ -43,7 +43,8 @@ import type { AnalysisSchedule, SbomScheduleResolved, ScheduleCadence } from '@/
 
 interface ScheduleCardProps {
   scope: 'PROJECT' | 'PRODUCT' | 'SBOM';
-  targetId: number;
+  targetId: (string | number);
+  processingReason?: string | null;
 }
 
 const cadenceLabel = (s: AnalysisSchedule): string => {
@@ -79,8 +80,9 @@ const CADENCE_BADGE: Record<ScheduleCadence, string> = {
   CUSTOM: 'bg-purple-50 text-purple-700 border-purple-200',
 };
 
-export function ScheduleCard({ scope, targetId }: ScheduleCardProps) {
+export function ScheduleCard({ scope, targetId, processingReason }: ScheduleCardProps) {
   const queryClient = useQueryClient();
+  const analysisScope = useAnalysisScope();
   const { showToast } = useToast();
   const [showEditor, setShowEditor] = useState(false);
   const [confirmDelete, setConfirmDelete] = useState(false);
@@ -108,16 +110,13 @@ export function ScheduleCard({ scope, targetId }: ScheduleCardProps) {
       err instanceof HttpError && err.status === 404 ? false : failureCount < 2,
   });
 
-  const invalidate = () => {
-    queryClient.invalidateQueries({ queryKey: ['schedule'] });
-    queryClient.invalidateQueries({ queryKey: ['schedule-targets'] });
-  };
+  const invalidate = () => invalidateScheduleLists(queryClient);
 
   const pauseMutation = useMutation({
     mutationFn: (id: number) => pauseSchedule(id),
     onSuccess: () => {
       showToast('Schedule paused', 'success');
-      invalidate();
+      return invalidate();
     },
     onError: (error: unknown) => showToast(getApiErrorMessage(error, 'Schedule pause failed.'), 'error'),
   });
@@ -126,21 +125,25 @@ export function ScheduleCard({ scope, targetId }: ScheduleCardProps) {
     mutationFn: (id: number) => resumeSchedule(id),
     onSuccess: () => {
       showToast('Schedule resumed', 'success');
-      invalidate();
+      return invalidate();
     },
     onError: (error: unknown) => showToast(getApiErrorMessage(error, 'Schedule resume failed.'), 'error'),
   });
 
   const runNowMutation = useMutation({
-    mutationFn: (id: number) => runScheduleNow(id),
-    onSuccess: (res) => {
+    onMutate: () => ({ isCurrent: analysisScope.capture(), scopeKey: analysisScope.key }),
+    mutationFn: (id: number) => {
+      if (processingReason) throw new Error(processingReason);
+      return runScheduleNow(id);
+    },
+    onSuccess: (res, _variables, context) => {
+      if (!context?.isCurrent()) return;
+      for (const id of res.sbom_ids) addPendingAnalysis(id, 'Scheduled SBOM', context.scopeKey);
       showToast(
         `Enqueued ${res.sbom_ids.length} SBOM analysis${res.sbom_ids.length === 1 ? '' : 'es'}`,
         'success',
       );
-      invalidateRunLists(queryClient);
-      invalidateSbomLists(queryClient);
-      invalidateDashboardTiles(queryClient);
+      return invalidateAnalysisSubmission(queryClient);
     },
     onError: (error: unknown) => showToast(getApiErrorMessage(error, 'The scheduled analysis could not be queued.'), 'error'),
   });
@@ -159,7 +162,7 @@ export function ScheduleCard({ scope, targetId }: ScheduleCardProps) {
         'success',
       );
       setConfirmDelete(false);
-      invalidate();
+      return invalidate();
     },
     onError: (error: unknown) => showToast(getApiErrorMessage(error, 'Schedule deletion failed.'), 'error'),
   });
@@ -168,7 +171,7 @@ export function ScheduleCard({ scope, targetId }: ScheduleCardProps) {
     mutationFn: () => excludeFromParentSchedule(scope as 'PRODUCT' | 'SBOM', targetId),
     onSuccess: () => {
       showToast(`${scope === 'PRODUCT' ? 'Product' : 'SBOM'} excluded from parent schedules`, 'success');
-      invalidate();
+      return invalidate();
     },
     onError: (error: unknown) => showToast(getApiErrorMessage(error, 'Schedule exclusion failed.'), 'error'),
   });
@@ -177,7 +180,7 @@ export function ScheduleCard({ scope, targetId }: ScheduleCardProps) {
     mutationFn: () => restoreScheduleInheritance(scope as 'PRODUCT' | 'SBOM', targetId),
     onSuccess: () => {
       showToast('Parent schedule inheritance restored', 'success');
-      invalidate();
+      return invalidate();
     },
     onError: (error: unknown) => showToast(getApiErrorMessage(error, 'Could not restore inheritance.'), 'error'),
   });
@@ -235,7 +238,7 @@ export function ScheduleCard({ scope, targetId }: ScheduleCardProps) {
             <CardTitle className="flex items-center gap-2">
               <CalendarClock className="h-4 w-4" /> Periodic analysis
             </CardTitle>
-            <Button size="sm" onClick={() => setShowEditor(true)}>
+            <Button permission={["schedule:write","product:manage_schedule"]} size="sm" onClick={() => setShowEditor(true)}>
               <Pencil className="h-4 w-4" /> Set up schedule
             </Button>
           </CardHeader>
@@ -289,12 +292,12 @@ export function ScheduleCard({ scope, targetId }: ScheduleCardProps) {
             {!excluded && !sched.enabled && <Badge variant="gray">paused</Badge>}
           </CardTitle>
           <div className="flex items-center gap-2">
-            <Button size="sm" variant="secondary" onClick={() => setShowEditor(true)}>
+            <Button permission={["schedule:write","product:manage_schedule"]} size="sm" variant="secondary" onClick={() => setShowEditor(true)}>
               <Pencil className="h-4 w-4" />
               {inherited || excluded ? 'Create override' : 'Edit'}
             </Button>
             {(scope === 'PRODUCT' || scope === 'SBOM') && inherited && (
-              <Button
+              <Button permission={["schedule:write","product:manage_schedule"]}
                 size="sm"
                 variant="secondary"
                 loading={excludeMutation.isPending}
@@ -304,7 +307,7 @@ export function ScheduleCard({ scope, targetId }: ScheduleCardProps) {
               </Button>
             )}
             {(scope === 'PRODUCT' || scope === 'SBOM') && excluded && (
-              <Button
+              <Button permission={["schedule:write","product:manage_schedule"]}
                 size="sm"
                 variant="secondary"
                 loading={inheritMutation.isPending}
@@ -316,7 +319,7 @@ export function ScheduleCard({ scope, targetId }: ScheduleCardProps) {
             {!inherited && !excluded && (
               <>
                 {sched.enabled ? (
-                  <Button
+                  <Button permission={["schedule:write","product:manage_schedule"]}
                     size="sm"
                     variant="secondary"
                     loading={pauseMutation.isPending}
@@ -325,7 +328,7 @@ export function ScheduleCard({ scope, targetId }: ScheduleCardProps) {
                     <Pause className="h-4 w-4" /> Pause
                   </Button>
                 ) : (
-                  <Button
+                  <Button permission={["schedule:write","product:manage_schedule"]}
                     size="sm"
                     variant="secondary"
                     loading={resumeMutation.isPending}
@@ -334,22 +337,23 @@ export function ScheduleCard({ scope, targetId }: ScheduleCardProps) {
                     <Play className="h-4 w-4" /> Resume
                   </Button>
                 )}
-                <Button
+                <Button permission={["schedule:write","product:manage_schedule"]}
                   size="sm"
                   variant="secondary"
                   loading={runNowMutation.isPending}
+                  disabled={Boolean(processingReason)}
                   onClick={() => runNowMutation.mutate(sched.id)}
-                  title="Trigger an analysis immediately. The cadence cursor is unchanged."
+                  title={processingReason || "Trigger an analysis immediately. The cadence cursor is unchanged."}
                 >
                   <Zap className="h-4 w-4" /> Run now
                 </Button>
-                <button
+                <PermissionButton size="sm" variant="ghost" permission={["schedule:write","product:manage_schedule"]}
                   onClick={() => setConfirmDelete(true)}
                   className="rounded-lg p-1.5 text-hcl-muted transition-colors hover:bg-red-50 hover:text-red-600 dark:hover:bg-red-950/40"
                   aria-label={scope === 'PROJECT' ? 'Remove schedule' : 'Remove override'}
                 >
                   <Trash2 className="h-4 w-4" />
-                </button>
+                </PermissionButton>
               </>
             )}
           </div>

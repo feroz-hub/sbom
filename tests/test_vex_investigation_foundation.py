@@ -7,16 +7,13 @@ Spec: docs/requirements/vex-dashboard-investigation.md sections 5-10 and 33-36.
 """
 
 import unittest
-
-from fastapi import HTTPException
-from sqlalchemy import create_engine, select
-from sqlalchemy.exc import IntegrityError
-from sqlalchemy.orm import Session
+from datetime import UTC, datetime
 
 from app.models import (
     Base,
     SBOMComponent,
     SBOMSource,
+    Tenant,
     VexDocument,
     VexInvestigation,
     VexStatement,
@@ -39,6 +36,12 @@ from app.services.vex.identity import (
     canonical_for_statement,
     parse_alias_column,
 )
+from fastapi import HTTPException
+from sqlalchemy import create_engine, select
+from sqlalchemy.exc import IntegrityError
+from sqlalchemy.orm import Session
+
+from tests.tenant_fixture_scope import verified_fixture_tenant
 
 
 class _DbTestCase(unittest.TestCase):
@@ -48,6 +51,12 @@ class _DbTestCase(unittest.TestCase):
         self.engine = create_engine("sqlite:///:memory:")
         Base.metadata.create_all(self.engine)
         self.db = Session(self.engine)
+        self.addCleanup(self.engine.dispose)
+        self.addCleanup(self.db.close)
+        now = datetime.now(UTC)
+        self.db.add(Tenant(id=1, name="VEX fixture", slug="vex-fixture", status="ACTIVE", created_at=now, updated_at=now))
+        self.db.flush()
+        self.enterContext(verified_fixture_tenant(self.db, 1))
         self.sbom = SBOMSource(sbom_name="vex-foundation", sbom_data="{}", tenant_id=1)
         self.db.add(self.sbom)
         self.db.flush()
@@ -59,10 +68,6 @@ class _DbTestCase(unittest.TestCase):
         )
         self.db.add_all([self.component, self.other_component])
         self.db.commit()
-
-    def tearDown(self):
-        self.db.close()
-        self.engine.dispose()
 
     def make_context(self, **overrides):
         values = {

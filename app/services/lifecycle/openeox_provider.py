@@ -12,6 +12,7 @@ import httpx
 
 from .provider_base import LifecycleProvider
 from .provider_chain import PRIORITY_OPENEOX
+from .provider_http import policy_context, request_json
 from .types import (
     DEPRECATED,
     EOF,
@@ -69,12 +70,19 @@ class OpenEoXProvider(LifecycleProvider):
         self.local_paths = [path.strip() for path in (local_paths or []) if path.strip()]
         self.timeout_seconds = timeout_seconds
         self.today = today
-        self._records = _load_openeox_records(self.feed_urls, self.local_paths, timeout_seconds)
+        self._records = None
+        self._load_errors: list[str] = []
 
     def supports(self, component: NormalizedComponent) -> bool:
-        return bool(self._records)
+        return bool(self.feed_urls or self.local_paths)
 
     def lookup(self, component: NormalizedComponent) -> LifecycleResult:
+        policy = policy_context.get()
+        if self._records is None:
+            self._records = _load_openeox_records(self.feed_urls, self.local_paths, self.timeout_seconds)
+            self._load_errors = list(policy.errors) if policy else []
+        elif policy:
+            policy.errors.extend(self._load_errors)
         if not self._records:
             return unknown_result(component, self.name)
         record = _match_openeox_record(self._records, component)
@@ -113,10 +121,7 @@ def _fetch_json(url: str, timeout_seconds: float) -> Any:
     if parsed.scheme == "file":
         return _read_local_json(parsed.path)
     try:
-        with httpx.Client(timeout=timeout_seconds, follow_redirects=True) as client:
-            response = client.get(url)
-            response.raise_for_status()
-            return response.json()
+        return request_json("GET", url, timeout=timeout_seconds)
     except (httpx.HTTPError, ValueError, TypeError):
         return None
 
@@ -172,7 +177,7 @@ def _result_from_openeox_record(
     eol_date = _iso_date(record.get("eol_date") or record.get("end_of_life") or record.get("eol"))
     eos_date = _iso_date(record.get("eos_date") or record.get("end_of_support") or record.get("eos"))
     eof_date = _iso_date(record.get("eof_date") or record.get("end_of_feature") or record.get("eof"))
-    if status == SUPPORTED:
+    if (status == SUPPORTED or not raw_status) and (eol_date or eos_date or eof_date):
         status = _status_from_dates(eol_date, eos_date, eof_date, current)
     evidence_url = str(record.get("source_url") or record.get("evidence_url") or record.get("url") or "")
     return LifecycleResult(
@@ -189,7 +194,7 @@ def _result_from_openeox_record(
         unsupported=status in {EOL, EOS, EOF, UNSUPPORTED},
         maintenance_status=str(record.get("maintenance_status") or status),
         latest_version=_text(record.get("latest_version")),
-        latest_supported_version=_text(record.get("latest_supported_version") or record.get("latest_version")),
+        latest_supported_version=_text(record.get("latest_supported_version")),
         recommended_version=_text(record.get("recommended_version")),
         recommendation=_text(record.get("recommendation")),
         source_name=source_name,

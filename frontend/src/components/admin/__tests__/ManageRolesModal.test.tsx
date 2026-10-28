@@ -33,6 +33,15 @@ describe('ManageRolesModal', () => {
     expect(screen.getByText('Can manage tenant users, roles and tenant configuration.')).toBeInTheDocument();
   });
 
+  it('offers only roles the caller is allowed to assign', () => {
+    render(<ManageRolesModal {...defaultProps} assignableRoles={['SECURITY_ANALYST', 'DEVELOPER', 'VIEWER']} />);
+    expect(screen.queryByRole('checkbox', { name: /Tenant Admin/i })).not.toBeInTheDocument();
+    expect(screen.queryByRole('checkbox', { name: /Platform Admin/i })).not.toBeInTheDocument();
+    expect(screen.getByRole('checkbox', { name: /Security Analyst/i })).toBeInTheDocument();
+    expect(screen.getByRole('checkbox', { name: /Developer/i })).toBeInTheDocument();
+    expect(screen.getByRole('checkbox', { name: /Viewer/i })).toBeChecked();
+  });
+
   it('maintains local draft and shows live Change Summary without calling API immediately', async () => {
     const user = userEvent.setup();
     const mockSave = vi.fn().mockResolvedValue(undefined);

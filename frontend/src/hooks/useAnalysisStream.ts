@@ -1,9 +1,12 @@
 'use client';
 
-import { useState, useRef, useCallback } from 'react';
+import { useState, useRef, useCallback, useEffect } from 'react';
 import { useQueryClient } from '@tanstack/react-query';
-import { BASE_URL } from '@/lib/api';
+import { BASE_URL, getRun } from '@/lib/api';
 import { invalidateAnalysisCompletion } from '@/lib/queryInvalidation';
+import { reconcileAnalysisTerminal, isTerminalAnalysis } from '@/lib/analysisSync';
+import { addPendingAnalysis, removePendingAnalysis } from '@/lib/pendingAnalysis';
+import { useAnalysisScope } from './useAnalysisScope';
 import { getActiveTenantId } from '@/lib/auth';
 
 // ─── Types ───────────────────────────────────────────────────────────────────
@@ -21,11 +24,13 @@ export interface SourceProgress {
 }
 
 export interface AnalysisStreamState {
+  /** Canonical terminal status supplied by the stream; absent on older responses. */
+  runStatus?: string | null;
   phase: 'idle' | 'connecting' | 'parsing' | 'running' | 'done' | 'error';
   components: number;
   sources: Record<string, SourceProgress>;
   elapsedMs: number;
-  runId: number | null;
+  runId: string | null;
   summary: {
     total: number;
     critical: number;
@@ -55,15 +60,17 @@ const INITIAL_STATE: AnalysisStreamState = {
 
 // ─── Hook ────────────────────────────────────────────────────────────────────
 
-export function useAnalysisStream(sbomId: number) {
+export function useAnalysisStream(sbomId: (string | number)) {
   const [state, setState] = useState<AnalysisStreamState>(INITIAL_STATE);
   const queryClient = useQueryClient();
+  const scope = useAnalysisScope();
+  const runIdRef = useRef<string | null>(null);
 
   // Elapsed wall-clock timer, updated every 500ms
   const timerRef = useRef<ReturnType<typeof setInterval> | null>(null);
   const startTimeRef = useRef<number>(0);
   const abortRef = useRef<AbortController | null>(null);
-  const runningAnalysisRef = useRef<Set<number>>(new Set());
+  const runningAnalysisRef = useRef<Set<string | number>>(new Set());
 
   const stopTimer = useCallback(() => {
     if (timerRef.current) {
@@ -92,9 +99,12 @@ export function useAnalysisStream(sbomId: number) {
     }));
   }, [stopTimer]);
 
+  useEffect(() => () => { abortRef.current?.abort(); stopTimer(); }, [scope.key, scope.ready, stopTimer]);
+
   const startAnalysis = useCallback(
     async (options: StartAnalysisOptions = {}) => {
-      if (!sbomId || runningAnalysisRef.current.has(sbomId)) return;
+      if (!sbomId || !scope.ready || runningAnalysisRef.current.has(sbomId)) return;
+      const isCurrent = scope.capture();
 
       // Analysis is tenant-scoped on the backend. Without an active tenant the
       // request would go out unscoped and come back 403, so fail inline before
@@ -109,6 +119,8 @@ export function useAnalysisStream(sbomId: number) {
         return;
       }
 
+      addPendingAnalysis(sbomId, 'Selected SBOM', scope.key);
+      runIdRef.current = null;
       runningAnalysisRef.current.add(sbomId);
       const clearPending = () => {
         runningAnalysisRef.current.delete(sbomId);
@@ -117,11 +129,12 @@ export function useAnalysisStream(sbomId: number) {
       const controller = new AbortController();
       abortRef.current = controller;
 
-      const initialSources = (options.sources ?? ['NVD', 'OSV', 'GITHUB']).map((s) => s.toUpperCase());
+      // Omission delegates to the server's configured provider policy.
+      const initialSources = options.sources?.map((s) => s.toUpperCase());
 
       // Seed source entries so the UI can show all sources immediately
       const sourcesMap: Record<string, SourceProgress> = {};
-      for (const name of initialSources) {
+      for (const name of initialSources ?? []) {
         sourcesMap[name] = { name, status: 'pending', findings: 0, errors: 0, elapsedMs: 0, sourceMs: 0 };
       }
 
@@ -159,8 +172,11 @@ export function useAnalysisStream(sbomId: number) {
           signal: controller.signal,
         });
       } catch (err: unknown) {
-        stopTimer();
+        // Release the local start reservation even when auth context retired.
+        // The guard still prevents old requests from writing state or caches.
         clearPending();
+        if (!isCurrent()) return;
+        stopTimer();
         if ((err as Error)?.name === 'AbortError') return;
         setState((prev) => ({
           ...prev,
@@ -170,6 +186,7 @@ export function useAnalysisStream(sbomId: number) {
         return;
       }
 
+      if (!isCurrent()) { clearPending(); return; }
       if (!response.ok) {
         stopTimer();
         clearPending();
@@ -221,6 +238,11 @@ export function useAnalysisStream(sbomId: number) {
       };
 
       const handleEvent = (eventType: string, data: Record<string, unknown>) => {
+        if (!isCurrent()) return;
+        if (typeof data.runId === 'string') {
+          runIdRef.current = data.runId;
+          addPendingAnalysis(sbomId, 'Selected SBOM', scope.key, data.runId);
+        }
         if (eventType === 'progress') {
           const phase = data.phase as string | undefined;
           const sourceName = data.source as string | undefined;
@@ -253,14 +275,14 @@ export function useAnalysisStream(sbomId: number) {
           }
         } else if (eventType === 'complete') {
           stopTimer();
-          invalidateAnalysisCompletion(queryClient, { sbomId });
-          queryClient.invalidateQueries({ queryKey: ['sbom', sbomId] });
-          queryClient.invalidateQueries({ queryKey: ['sbom-stats', sbomId] });
-          queryClient.invalidateQueries({ queryKey: ['runs', { sbom_id: sbomId }] });
+          void reconcileAnalysisTerminal(queryClient, { scope: scope.key, runId: String(data.runId), sbomId,
+            status: String(data.status ?? ''), isCurrent });
+          removePendingAnalysis(sbomId, scope.key);
           setState((prev) => ({
             ...prev,
             phase: 'done',
-            runId: data.runId as number,
+            runStatus: typeof data.status === 'string' ? data.status : null,
+            runId: data.runId as string,
             elapsedMs: (data.duration_ms as number) ?? prev.elapsedMs,
             summary: {
               total: (data.total as number) ?? 0,
@@ -273,10 +295,13 @@ export function useAnalysisStream(sbomId: number) {
           }));
         } else if (eventType === 'error') {
           stopTimer();
-          invalidateAnalysisCompletion(queryClient, { sbomId });
-          queryClient.invalidateQueries({ queryKey: ['sbom', sbomId] });
-          queryClient.invalidateQueries({ queryKey: ['sbom-stats', sbomId] });
-          queryClient.invalidateQueries({ queryKey: ['runs', { sbom_id: sbomId }] });
+          const runId = runIdRef.current;
+          if (runId) void getRun(runId).then(async run => {
+            if (!isCurrent()) return;
+            await reconcileAnalysisTerminal(queryClient, { scope: scope.key, runId, sbomId, status: run.run_status, isCurrent });
+            if (isCurrent() && isTerminalAnalysis(run.run_status)) removePendingAnalysis(sbomId, scope.key);
+          }).catch(() => { /* Recovery retries authoritative state; no guessed terminal status. */ });
+          else void invalidateAnalysisCompletion(queryClient, { sbomId });
           setState((prev) => ({
             ...prev,
             phase: 'error',
@@ -292,7 +317,7 @@ export function useAnalysisStream(sbomId: number) {
           parseEvents(decoder.decode(value, { stream: true }));
         }
       } catch (err: unknown) {
-        if ((err as Error)?.name !== 'AbortError') {
+        if (isCurrent() && (err as Error)?.name !== 'AbortError') {
           stopTimer();
           setState((prev) => ({
             ...prev,
@@ -302,11 +327,11 @@ export function useAnalysisStream(sbomId: number) {
         }
       } finally {
         reader.releaseLock();
-        stopTimer();
+        if (isCurrent()) stopTimer();
         clearPending();
       }
     },
-    [queryClient, sbomId, startTimer, stopTimer],
+    [queryClient, sbomId, startTimer, stopTimer, scope],
   );
 
   const reset = useCallback(() => {

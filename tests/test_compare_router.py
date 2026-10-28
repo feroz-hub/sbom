@@ -12,6 +12,9 @@ from datetime import UTC, datetime
 
 import pytest
 
+from tests.public_id_fixture import run_uuid
+from tests.tenant_fixture_scope import verified_fixture_tenant
+
 
 def _iso(dt: datetime) -> str:
     return dt.replace(microsecond=0).isoformat()
@@ -23,7 +26,8 @@ def db(client):
 
     s = SessionLocal()
     try:
-        yield s
+        with verified_fixture_tenant(s, 1):
+            yield s
     finally:
         s.rollback()
         s.close()
@@ -76,12 +80,12 @@ def test_post_compare_returns_full_payload(client, db):
 
     resp = client.post(
         "/api/v1/compare",
-        json={"run_a_id": run_a.id, "run_b_id": run_b.id},
+        json={"run_a_id": run_uuid(run_a.id), "run_b_id": run_uuid(run_b.id)},
     )
     assert resp.status_code == 200, resp.text
     body = resp.json()
-    assert body["run_a"]["id"] == run_a.id
-    assert body["run_b"]["id"] == run_b.id
+    assert body["run_a"]["id"] == run_uuid(run_a.id)
+    assert body["run_b"]["id"] == run_uuid(run_b.id)
     assert "posture" in body
     # Posture has no "risk_score" field — confirms PB-1 is honoured.
     assert "risk_score" not in body["posture"]
@@ -105,14 +109,14 @@ def test_post_compare_returns_full_payload(client, db):
 
 def test_post_compare_400_on_same_run(client, db):
     _, _, run = _seed(db, slug="same")
-    resp = client.post("/api/v1/compare", json={"run_a_id": run.id, "run_b_id": run.id})
+    resp = client.post("/api/v1/compare", json={"run_a_id": run_uuid(run.id), "run_b_id": run_uuid(run.id)})
     assert resp.status_code == 400
     assert resp.json()["detail"]["error_code"] == "COMPARE_E003_SAME_RUN"
 
 
 def test_post_compare_404_on_missing_run(client, db):
     _, _, run = _seed(db, slug="missing")
-    resp = client.post("/api/v1/compare", json={"run_a_id": run.id, "run_b_id": 999999})
+    resp = client.post("/api/v1/compare", json={"run_a_id": run_uuid(run.id), "run_b_id": run_uuid(999999)})
     assert resp.status_code == 404
     assert resp.json()["detail"]["error_code"] == "COMPARE_E001_RUN_NOT_FOUND"
 
@@ -120,7 +124,7 @@ def test_post_compare_404_on_missing_run(client, db):
 def test_post_compare_409_on_running_run(client, db):
     _, _, run_a = _seed(db, slug="ready")
     _, _, run_b = _seed(db, slug="running", status="RUNNING")
-    resp = client.post("/api/v1/compare", json={"run_a_id": run_a.id, "run_b_id": run_b.id})
+    resp = client.post("/api/v1/compare", json={"run_a_id": run_uuid(run_a.id), "run_b_id": run_uuid(run_b.id)})
     assert resp.status_code == 409
     body = resp.json()["detail"]
     assert body["error_code"] == "COMPARE_E002_RUN_NOT_READY"
@@ -133,7 +137,7 @@ def test_export_cycle_markdown_csv_json(client, db):
     _, _, run_b = _seed(db, slug="exp-b")
     resp = client.post(
         "/api/v1/compare",
-        json={"run_a_id": run_a.id, "run_b_id": run_b.id},
+        json={"run_a_id": run_uuid(run_a.id), "run_b_id": run_uuid(run_b.id)},
     )
     assert resp.status_code == 200
     cache_key = resp.json()["cache_key"]
@@ -179,8 +183,8 @@ def test_runs_recent_returns_compact_summaries(client, db):
     items = resp.json()
     # Newest first: most recent seed appears first.
     ids = [item["id"] for item in items[:2]]
-    assert run_b.id in ids
-    assert run_a.id in ids
+    assert run_uuid(run_b.id) in ids
+    assert run_uuid(run_a.id) in ids
     # Summary shape.
     sample = items[0]
     for k in ("id", "sbom_name", "project_name", "run_status", "completed_on"):
@@ -195,4 +199,4 @@ def test_runs_search_matches_sbom_name(client, db):
     assert resp.status_code == 200
     items = resp.json()
     ids = [item["id"] for item in items]
-    assert run_a.id in ids
+    assert run_uuid(run_a.id) in ids

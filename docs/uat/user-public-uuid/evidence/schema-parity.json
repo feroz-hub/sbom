@@ -1,0 +1,15 @@
+{
+  "result": "PASS",
+  "database": "sbom_iam_public_uuid_browser_test",
+  "revision": "101_iam_user_public_uuid",
+  "counts": {
+    "tables": 71,
+    "columns": 1149,
+    "foreign_keys": 144,
+    "indexes": 399,
+    "checks": 79,
+    "unique_constraints": 45
+  },
+  "iam_guard_and_runtime_privileges": "PASS",
+  "read_only": true
+}

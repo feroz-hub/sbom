@@ -182,7 +182,85 @@ def compose_report(db, preferences, *, tenant_id, cycle_start, cycle_end, sbom_i
         key=risk_rank,
         reverse=True,
     )[:10]
-    return report
+    return public_report_snapshot(db, report, tenant_id)
+
+
+def public_report_snapshot(db, report, tenant_id):
+    """Detach public resource references before email, spreadsheet or JSON rendering."""
+    from sqlalchemy import select
+
+    from ..models import AnalysisRun, Product, Projects, SBOMComponent, SBOMSource, Tenant
+    from ..record_presentation import add_display
+
+    models = {
+        "tenant_id": Tenant,
+        "project_id": Projects,
+        "product_id": Product,
+        "sbom_id": SBOMSource,
+        "component_id": SBOMComponent,
+        "previous_sbom_id": SBOMSource,
+        "current_sbom_id": SBOMSource,
+        "run_id": AnalysisRun,
+        "analysis_run_id": AnalysisRun,
+        "previous_run_id": AnalysisRun,
+        "current_run_id": AnalysisRun,
+    }
+    cache, references = {}, {}
+    collecting = True
+
+    def identity(model, value):
+        if type(value) is not int:
+            return value
+        key = (model, value)
+        if key not in cache:
+            if collecting:
+                references.setdefault(model, set()).add(value)
+                return value
+            raise RuntimeError("Unresolvable public report identity")
+        return cache[key]
+
+    def walk(value, entity=None):
+        if isinstance(value, list):
+            return [walk(item, entity) for item in value]
+        if isinstance(value, dict):
+            result = {}
+            labels = {}
+            for key, item in value.items():
+                if key == "scheduled_outcomes":
+                    outcomes = {}
+                    for k, v in item.items():
+                        internal = int(k) if str(k).isdecimal() else k
+                        row = walk(v)
+                        if not collecting:
+                            add_display(row, "sbom_id", "sbom_source", internal)
+                        outcomes[identity(SBOMSource, internal)] = row
+                    result[key] = outcomes
+                elif key in models or key == "id" and entity is not None:
+                    model = entity if key == "id" else models[key]
+                    result[key] = identity(model, item)
+                    if not collecting:
+                        add_display(labels, key, model.__tablename__, item)
+                else:
+                    result[key] = walk(
+                        item, SBOMSource if key == "sboms" else AnalysisRun if key in {"run_a", "run_b"} else None
+                    )
+            result.update(labels)
+            return result
+        return value
+
+    walk(report)
+    for model, identifiers in references.items():
+        table = model.__table__
+        ids = sorted(identifiers)
+        for offset in range(0, len(ids), 500):
+            query = select(table.c.id, table.c.public_id).where(table.c.id.in_(ids[offset : offset + 500]))
+            query = (
+                query.where(table.c.id == tenant_id) if model is Tenant else query.where(table.c.tenant_id == tenant_id)
+            )
+            for row in db.execute(query):
+                cache[(model, row.id)] = str(row.public_id)
+    collecting = False
+    return walk(report)
 
 
 def _visible(severity, floor):

@@ -10,6 +10,19 @@ Phase 2 §2.5 / §2.6 hard rules verified:
 
 from __future__ import annotations
 
+
+def _tenant_registry():
+    from app.ai.registry import get_registry
+    from app.core.context import minimal_background_context, tenant_scope
+    with tenant_scope(minimal_background_context(1)):
+        return get_registry()
+
+
+def _tenant_configs():
+    from app.ai.config_loader import resolve_effective_ai_configuration
+    return resolve_effective_ai_configuration(1)[0]
+
+
 import logging
 
 import pytest
@@ -97,9 +110,8 @@ def test_create_response_omits_raw_key(client):
     # Hard rule: response must not echo the raw key anywhere.
     assert raw_key not in resp.text
     assert body["api_key_present"] is True
-    assert body["api_key_preview"] is not None
-    assert body["api_key_preview"].startswith("sk-ant")
-    assert body["api_key_preview"].endswith("AhB7")
+    assert body["api_key_preview"] is None
+    assert body["api_key_preview"] is None
 
 
 def test_get_one_response_shape(client):
@@ -144,7 +156,7 @@ def test_update_omitted_api_key_preserves(client):
     body = resp.json()
     assert body["default_model"] == "claude-haiku-4-5"
     # Preview must still match the original key (the tail).
-    assert body["api_key_preview"].endswith(raw_key[-4:])
+    assert body["api_key_preview"] is None
 
 
 def test_update_with_new_api_key_replaces(client):
@@ -162,7 +174,7 @@ def test_update_with_new_api_key_replaces(client):
         json={"api_key": "sk-ant-NEWNEWNEW-YYYYYYYYYYYYYYYYY"},
     )
     body = resp.json()
-    assert body["api_key_preview"].endswith("YYYY")
+    assert body["api_key_preview"] is None
 
 
 # ============================================================ Set default / fallback
@@ -192,7 +204,6 @@ def test_set_default_swaps_atomically(client):
 
 
 def test_default_provider_change_rebuilds_registry_without_restart(client):
-    from app.ai.registry import get_registry
 
     first = client.post(
         "/api/v1/ai/credentials",
@@ -213,10 +224,10 @@ def test_default_provider_change_rebuilds_registry_without_restart(client):
         },
     ).json()
     client.put(f"/api/v1/ai/credentials/{first['id']}/set-default")
-    assert get_registry().get_default_config().credential_id == first["id"]
+    assert _tenant_registry().get_default_config().credential_id == first["id"]
 
     client.put(f"/api/v1/ai/credentials/{second['id']}/set-default")
-    assert get_registry().get_default_config().credential_id == second["id"]
+    assert _tenant_registry().get_default_config().credential_id == second["id"]
 
 
 def test_set_fallback_swaps_atomically(client):
@@ -313,8 +324,9 @@ def test_settings_write_updates_runtime_surfaces_without_restart(client):
 
     analysis = client.get("/api/analysis/config").json()
     usage = client.get("/api/v1/ai/usage").json()
-    assert analysis["ai_fixes_enabled"] is False
-    assert analysis["ai_settings_source"] == "db"
+    assert analysis["ai_fixes_enabled"] is False  # Analysis config now reflects the authenticated tenant runtime.
+    assert analysis["ai_status"]["state"] == "DISABLED"
+    assert analysis["ai_settings_source"] in {"env", "db"}
     assert usage["budget_caps_usd"] == {
         "per_request_usd": 0.03,
         "per_scan_usd": 0.40,
@@ -500,7 +512,7 @@ def test_saved_key_remains_decryptable_after_cipher_restart(client, monkeypatch)
     reset_cipher()  # simulate a new API process using the same environment key
     listing = client.get("/api/v1/ai/credentials")
     assert listing.status_code == 200
-    assert listing.json()[0]["api_key_preview"].endswith(raw_key[-4:])
+    assert listing.json()[0]["api_key_preview"] is None
     assert raw_key not in listing.text
 
 
@@ -625,3 +637,69 @@ def test_model_registry_api_refresh_test_and_explicit_select(client, monkeypatch
     assert selected.status_code == 200
     assert selected.json()["is_selected"] is True
     assert client.get(f"/api/v1/ai/credentials/{credential_id}").json()["default_model"] == "new-live-model"
+
+@pytest.mark.parametrize('kind,status', [('provider_unavailable', 503), ('rate_limit', 429), ('network', None)])
+def test_transient_probe_does_not_block_encrypted_save_or_retest(client, monkeypatch, caplog, kind, status):
+    from app.security.secrets import get_cipher
+    secret = 'sentinel-provider-key-never-return'
+    outcome = ConnectionTestResult(success=False, error_kind=kind, http_status=status, error_message=secret, provider='gemini')
+    class Provider:
+        name = 'gemini'
+        async def test_connection(self, **kwargs):
+            return outcome
+    monkeypatch.setattr('app.routers.ai_credentials._build_transient_provider', lambda body: Provider())
+    payload = {'provider_name': 'gemini', 'api_key': secret, 'default_model': 'gemini-2.5-flash', 'tier': 'free'}
+    result = client.post('/api/v1/ai/credentials/test', json=payload)
+    assert result.status_code == 200 and result.json()['error_kind'] == kind
+    assert secret not in result.text
+    # Persistence must not call any upstream probe.
+    monkeypatch.setattr(Provider, 'test_connection', lambda *a, **k: pytest.fail('Save contacted the provider'))
+    saved = client.post('/api/v1/ai/credentials', json=payload)
+    assert saved.status_code == 201, saved.text
+    row_id = saved.json()['id']
+    assert saved.json()['verification_status'] == 'UNVERIFIED'
+    assert saved.json()['enabled'] is True
+    with SessionLocal() as db:
+        row = db.get(AiProviderCredential, row_id)
+        assert row.api_key_encrypted != secret
+        assert get_cipher().decrypt(row.api_key_encrypted) == secret
+    async def transient(**kwargs):
+        return outcome
+    provider = Provider()
+    provider.test_connection = transient
+    monkeypatch.setattr('app.routers.ai_credentials._build_transient_provider', lambda body: provider)
+    client.post(f'/api/v1/ai/credentials/{row_id}/test')
+    row = client.get(f'/api/v1/ai/credentials/{row_id}').json()
+    assert row['enabled'] is True
+    # Runtime selection must remain eligible after transient verification failures.
+    assert any(config.credential_id == row_id and config.enabled for config in _tenant_configs())
+    assert row['verification_status'] == 'TEMPORARILY_UNAVAILABLE'
+    async def successful(**kwargs):
+        return ConnectionTestResult(success=True, provider='gemini')
+    provider.test_connection = successful
+    assert client.post(f'/api/v1/ai/credentials/{row_id}/test').json()['success']
+    assert client.get(f'/api/v1/ai/credentials/{row_id}').json()['verification_status'] == 'VERIFIED'
+    assert secret not in caplog.text
+    with SessionLocal() as db:
+        assert all(secret not in (a.detail or '') for a in db.query(AiCredentialAuditLog).all())
+
+
+def test_rejected_saved_key_requires_successful_retest_before_enable(client, monkeypatch):
+    outcome = ConnectionTestResult(success=False, error_kind='auth', http_status=401, error_message='private secret')
+    class Provider:
+        name = 'openai'
+        async def test_connection(self, **kwargs):
+            return outcome
+    monkeypatch.setattr('app.routers.ai_credentials._build_transient_provider', lambda body: Provider())
+    saved = client.post('/api/v1/ai/credentials', json={'provider_name': 'openai', 'api_key': 'private secret', 'default_model': 'gpt-4o-mini'}).json()
+    path = f"/api/v1/ai/credentials/{saved['id']}"
+    client.post(path + '/test')
+    rejected = client.get(path).json()
+    assert rejected['verification_status'] == 'INVALID_CREDENTIALS'
+    assert rejected['enabled'] is False
+    assert client.put(path, json={'enabled': True}).status_code == 409
+    assert client.put(path, json={'api_key': 'corrected-key'}).status_code == 200
+    assert client.put(path, json={'enabled': True}).status_code == 409
+    outcome = ConnectionTestResult(success=True, provider='openai')
+    assert client.post(path + '/test').json()['success']
+    assert client.put(path, json={'enabled': True}).status_code == 200

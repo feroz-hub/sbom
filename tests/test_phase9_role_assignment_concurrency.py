@@ -6,11 +6,13 @@ from app.services import platform_service
 from app.services import tenant_role_assignment_service as service
 from fastapi import HTTPException
 
+from tests.tenant_fixture_scope import verified_fixture_tenant
+
 from .phase9_helpers import seed_role_membership
 
 
 def test_stale_membership_version_is_rejected_without_merging():
-    with SessionLocal() as db:
+    with SessionLocal() as db, verified_fixture_tenant(db, 1):
         user, _membership, _ = seed_role_membership(db)
         service.grant_role(
             db,
@@ -40,12 +42,12 @@ def test_stale_membership_version_is_rejected_without_merging():
 
 
 def test_concurrent_grants_with_same_version_have_one_winner():
-    with SessionLocal() as db:
+    with SessionLocal() as db, verified_fixture_tenant(db, 1):
         user, _membership, _ = seed_role_membership(db)
         user_id = user.id
 
     def grant(code: str):
-        with SessionLocal() as db:
+        with SessionLocal() as db, verified_fixture_tenant(db, 1):
             try:
                 service.grant_role(
                     db,
@@ -89,7 +91,7 @@ def test_concurrent_last_two_admin_disables_leave_one_effective_admin():
 
 
 def test_concurrent_primary_changes_have_one_winner():
-    with SessionLocal() as db:
+    with SessionLocal() as db, verified_fixture_tenant(db, 1):
         user, _membership, _ = seed_role_membership(db, role="VIEWER")
         user_id = user.id
         service.grant_role(
@@ -116,7 +118,7 @@ def test_concurrent_primary_changes_have_one_winner():
         )
 
     def make_primary(code: str):
-        with SessionLocal() as db:
+        with SessionLocal() as db, verified_fixture_tenant(db, 1):
             try:
                 service.grant_role(
                     db,

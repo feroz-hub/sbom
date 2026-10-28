@@ -1,0 +1,671 @@
+<?xml version="1.0" encoding="utf-8"?><testsuites name="pytest tests"><testsuite name="pytest" errors="10" failures="0" skipped="0" tests="32" time="63.899" timestamp="2026-10-20T16:18:02.579960+05:30" hostname="Ferozes-MacBook-Air.local"><testcase classname="tests.test_legacy_analysis_public_identity" name="test_legacy_valid_uuid_returns_existing_run_with_public_successor[/analyze-sbom-consolidated]" time="3.316"><error message="failed on setup with &quot;sqlalchemy.exc.IntegrityError: (psycopg.errors.NotNullViolation) null value in column &quot;completed_on&quot; of relation &quot;analysis_run&quot; violates not-null constraint&#10;DETAIL:  Failing row contains (1, 1, 1, 1, RUNNING, owned-1374f598-3ec9-4274-9326-5a89305de936, OSV, api, 2026-10-20T00:00:00Z, null, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, null, t, null, t, null, null, 1).&#10;[SQL: INSERT INTO analysis_run (sbom_id, project_id, product_id, run_status, sbom_name, source, trigger_source, started_on, completed_on, duration_ms, total_components, components_with_cpe, total_findings, critical_count, high_count, medium_count, low_count, unknown_count, query_error_count, raw_report, is_current, is_active, deactivated_at, deactivated_by, tenant_id) VALUES (%(sbom_id)s::INTEGER, %(project_id)s::INTEGER, %(product_id)s::INTEGER, %(run_status)s::VARCHAR, %(sbom_name)s::VARCHAR, %(source)s::VARCHAR, %(trigger_source)s::VARCHAR, %(started_on)s::VARCHAR, %(completed_on)s::VARCHAR, %(duration_ms)s::INTEGER, %(total_components)s::INTEGER, %(components_with_cpe)s::INTEGER, %(total_findings)s::INTEGER, %(critical_count)s::INTEGER, %(high_count)s::INTEGER, %(medium_count)s::INTEGER, %(low_count)s::INTEGER, %(unknown_count)s::INTEGER, %(query_error_count)s::INTEGER, %(raw_report)s::VARCHAR, %(is_current)s, %(is_active)s, %(deactivated_at)s::TIMESTAMP WITH TIME ZONE, %(deactivated_by)s::VARCHAR, %(tenant_id)s::INTEGER) RETURNING analysis_run.id]&#10;[SQL parameters hidden due to hide_parameters=True]&#10;(Background on this error at: https://sqlalche.me/e/20/gkpj)&quot;">.venv/lib/python3.12/site-packages/sqlalchemy/engine/base.py:1969: in _exec_single_context
+    self.dialect.do_execute(
+.venv/lib/python3.12/site-packages/sqlalchemy/engine/default.py:952: in do_execute
+    cursor.execute(statement, parameters)
+.venv/lib/python3.12/site-packages/psycopg/cursor.py:117: in execute
+    raise ex.with_traceback(None)
+E   psycopg.errors.NotNullViolation: null value in column "completed_on" of relation "analysis_run" violates not-null constraint
+E   DETAIL:  Failing row contains (1, 1, 1, 1, RUNNING, owned-1374f598-3ec9-4274-9326-5a89305de936, OSV, api, 2026-10-20T00:00:00Z, null, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, null, t, null, t, null, null, 1).
+
+The above exception was the direct cause of the following exception:
+tests/test_legacy_analysis_public_identity.py:34: in legacy_fixture
+    db.commit()
+.venv/lib/python3.12/site-packages/sqlalchemy/orm/session.py:2035: in commit
+    trans.commit(_to_root=True)
+&lt;string&gt;:2: in commit
+    ???
+.venv/lib/python3.12/site-packages/sqlalchemy/orm/state_changes.py:137: in _go
+    ret_value = fn(self, *arg, **kw)
+                ^^^^^^^^^^^^^^^^^^^^
+.venv/lib/python3.12/site-packages/sqlalchemy/orm/session.py:1316: in commit
+    self._prepare_impl()
+&lt;string&gt;:2: in _prepare_impl
+    ???
+.venv/lib/python3.12/site-packages/sqlalchemy/orm/state_changes.py:137: in _go
+    ret_value = fn(self, *arg, **kw)
+                ^^^^^^^^^^^^^^^^^^^^
+.venv/lib/python3.12/site-packages/sqlalchemy/orm/session.py:1290: in _prepare_impl
+    self.session.flush()
+.venv/lib/python3.12/site-packages/sqlalchemy/orm/session.py:4353: in flush
+    self._flush(objects)
+.venv/lib/python3.12/site-packages/sqlalchemy/orm/session.py:4488: in _flush
+    with util.safe_reraise():
+         ^^^^^^^^^^^^^^^^^^^
+.venv/lib/python3.12/site-packages/sqlalchemy/util/langhelpers.py:122: in __exit__
+    raise exc_value.with_traceback(exc_tb)
+.venv/lib/python3.12/site-packages/sqlalchemy/orm/session.py:4449: in _flush
+    flush_context.execute()
+.venv/lib/python3.12/site-packages/sqlalchemy/orm/unitofwork.py:465: in execute
+    rec.execute(self)
+.venv/lib/python3.12/site-packages/sqlalchemy/orm/unitofwork.py:641: in execute
+    util.preloaded.orm_persistence.save_obj(
+.venv/lib/python3.12/site-packages/sqlalchemy/orm/persistence.py:94: in save_obj
+    _emit_insert_statements(
+.venv/lib/python3.12/site-packages/sqlalchemy/orm/persistence.py:1234: in _emit_insert_statements
+    result = connection.execute(
+.venv/lib/python3.12/site-packages/sqlalchemy/engine/base.py:1421: in execute
+    return meth(
+.venv/lib/python3.12/site-packages/sqlalchemy/sql/elements.py:526: in _execute_on_connection
+    return connection._execute_clauseelement(
+.venv/lib/python3.12/site-packages/sqlalchemy/engine/base.py:1643: in _execute_clauseelement
+    ret = self._execute_context(
+.venv/lib/python3.12/site-packages/sqlalchemy/engine/base.py:1848: in _execute_context
+    return self._exec_single_context(
+.venv/lib/python3.12/site-packages/sqlalchemy/engine/base.py:1988: in _exec_single_context
+    self._handle_dbapi_exception(
+.venv/lib/python3.12/site-packages/sqlalchemy/engine/base.py:2365: in _handle_dbapi_exception
+    raise sqlalchemy_exception.with_traceback(exc_info[2]) from e
+.venv/lib/python3.12/site-packages/sqlalchemy/engine/base.py:1969: in _exec_single_context
+    self.dialect.do_execute(
+.venv/lib/python3.12/site-packages/sqlalchemy/engine/default.py:952: in do_execute
+    cursor.execute(statement, parameters)
+.venv/lib/python3.12/site-packages/psycopg/cursor.py:117: in execute
+    raise ex.with_traceback(None)
+E   sqlalchemy.exc.IntegrityError: (psycopg.errors.NotNullViolation) null value in column "completed_on" of relation "analysis_run" violates not-null constraint
+E   DETAIL:  Failing row contains (1, 1, 1, 1, RUNNING, owned-1374f598-3ec9-4274-9326-5a89305de936, OSV, api, 2026-10-20T00:00:00Z, null, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, null, t, null, t, null, null, 1).
+E   [SQL: INSERT INTO analysis_run (sbom_id, project_id, product_id, run_status, sbom_name, source, trigger_source, started_on, completed_on, duration_ms, total_components, components_with_cpe, total_findings, critical_count, high_count, medium_count, low_count, unknown_count, query_error_count, raw_report, is_current, is_active, deactivated_at, deactivated_by, tenant_id) VALUES (%(sbom_id)s::INTEGER, %(project_id)s::INTEGER, %(product_id)s::INTEGER, %(run_status)s::VARCHAR, %(sbom_name)s::VARCHAR, %(source)s::VARCHAR, %(trigger_source)s::VARCHAR, %(started_on)s::VARCHAR, %(completed_on)s::VARCHAR, %(duration_ms)s::INTEGER, %(total_components)s::INTEGER, %(components_with_cpe)s::INTEGER, %(total_findings)s::INTEGER, %(critical_count)s::INTEGER, %(high_count)s::INTEGER, %(medium_count)s::INTEGER, %(low_count)s::INTEGER, %(unknown_count)s::INTEGER, %(query_error_count)s::INTEGER, %(raw_report)s::VARCHAR, %(is_current)s, %(is_active)s, %(deactivated_at)s::TIMESTAMP WITH TIME ZONE, %(deactivated_by)s::VARCHAR, %(tenant_id)s::INTEGER) RETURNING analysis_run.id]
+E   [SQL parameters hidden due to hide_parameters=True]
+E   (Background on this error at: https://sqlalche.me/e/20/gkpj)</error></testcase><testcase classname="tests.test_legacy_analysis_public_identity" name="test_legacy_valid_uuid_returns_existing_run_with_public_successor[/analyze-sbom-github]" time="2.941"><error message="failed on setup with &quot;sqlalchemy.exc.IntegrityError: (psycopg.errors.NotNullViolation) null value in column &quot;completed_on&quot; of relation &quot;analysis_run&quot; violates not-null constraint&#10;DETAIL:  Failing row contains (1, 1, 1, 1, RUNNING, owned-a6c82f12-26cd-44e9-ac7f-ea43e1538ea5, OSV, api, 2026-10-20T00:00:00Z, null, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, null, t, null, t, null, null, 1).&#10;[SQL: INSERT INTO analysis_run (sbom_id, project_id, product_id, run_status, sbom_name, source, trigger_source, started_on, completed_on, duration_ms, total_components, components_with_cpe, total_findings, critical_count, high_count, medium_count, low_count, unknown_count, query_error_count, raw_report, is_current, is_active, deactivated_at, deactivated_by, tenant_id) VALUES (%(sbom_id)s::INTEGER, %(project_id)s::INTEGER, %(product_id)s::INTEGER, %(run_status)s::VARCHAR, %(sbom_name)s::VARCHAR, %(source)s::VARCHAR, %(trigger_source)s::VARCHAR, %(started_on)s::VARCHAR, %(completed_on)s::VARCHAR, %(duration_ms)s::INTEGER, %(total_components)s::INTEGER, %(components_with_cpe)s::INTEGER, %(total_findings)s::INTEGER, %(critical_count)s::INTEGER, %(high_count)s::INTEGER, %(medium_count)s::INTEGER, %(low_count)s::INTEGER, %(unknown_count)s::INTEGER, %(query_error_count)s::INTEGER, %(raw_report)s::VARCHAR, %(is_current)s, %(is_active)s, %(deactivated_at)s::TIMESTAMP WITH TIME ZONE, %(deactivated_by)s::VARCHAR, %(tenant_id)s::INTEGER) RETURNING analysis_run.id]&#10;[SQL parameters hidden due to hide_parameters=True]&#10;(Background on this error at: https://sqlalche.me/e/20/gkpj)&quot;">.venv/lib/python3.12/site-packages/sqlalchemy/engine/base.py:1969: in _exec_single_context
+    self.dialect.do_execute(
+.venv/lib/python3.12/site-packages/sqlalchemy/engine/default.py:952: in do_execute
+    cursor.execute(statement, parameters)
+.venv/lib/python3.12/site-packages/psycopg/cursor.py:117: in execute
+    raise ex.with_traceback(None)
+E   psycopg.errors.NotNullViolation: null value in column "completed_on" of relation "analysis_run" violates not-null constraint
+E   DETAIL:  Failing row contains (1, 1, 1, 1, RUNNING, owned-a6c82f12-26cd-44e9-ac7f-ea43e1538ea5, OSV, api, 2026-10-20T00:00:00Z, null, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, null, t, null, t, null, null, 1).
+
+The above exception was the direct cause of the following exception:
+tests/test_legacy_analysis_public_identity.py:34: in legacy_fixture
+    db.commit()
+.venv/lib/python3.12/site-packages/sqlalchemy/orm/session.py:2035: in commit
+    trans.commit(_to_root=True)
+&lt;string&gt;:2: in commit
+    ???
+.venv/lib/python3.12/site-packages/sqlalchemy/orm/state_changes.py:137: in _go
+    ret_value = fn(self, *arg, **kw)
+                ^^^^^^^^^^^^^^^^^^^^
+.venv/lib/python3.12/site-packages/sqlalchemy/orm/session.py:1316: in commit
+    self._prepare_impl()
+&lt;string&gt;:2: in _prepare_impl
+    ???
+.venv/lib/python3.12/site-packages/sqlalchemy/orm/state_changes.py:137: in _go
+    ret_value = fn(self, *arg, **kw)
+                ^^^^^^^^^^^^^^^^^^^^
+.venv/lib/python3.12/site-packages/sqlalchemy/orm/session.py:1290: in _prepare_impl
+    self.session.flush()
+.venv/lib/python3.12/site-packages/sqlalchemy/orm/session.py:4353: in flush
+    self._flush(objects)
+.venv/lib/python3.12/site-packages/sqlalchemy/orm/session.py:4488: in _flush
+    with util.safe_reraise():
+         ^^^^^^^^^^^^^^^^^^^
+.venv/lib/python3.12/site-packages/sqlalchemy/util/langhelpers.py:122: in __exit__
+    raise exc_value.with_traceback(exc_tb)
+.venv/lib/python3.12/site-packages/sqlalchemy/orm/session.py:4449: in _flush
+    flush_context.execute()
+.venv/lib/python3.12/site-packages/sqlalchemy/orm/unitofwork.py:465: in execute
+    rec.execute(self)
+.venv/lib/python3.12/site-packages/sqlalchemy/orm/unitofwork.py:641: in execute
+    util.preloaded.orm_persistence.save_obj(
+.venv/lib/python3.12/site-packages/sqlalchemy/orm/persistence.py:94: in save_obj
+    _emit_insert_statements(
+.venv/lib/python3.12/site-packages/sqlalchemy/orm/persistence.py:1234: in _emit_insert_statements
+    result = connection.execute(
+.venv/lib/python3.12/site-packages/sqlalchemy/engine/base.py:1421: in execute
+    return meth(
+.venv/lib/python3.12/site-packages/sqlalchemy/sql/elements.py:526: in _execute_on_connection
+    return connection._execute_clauseelement(
+.venv/lib/python3.12/site-packages/sqlalchemy/engine/base.py:1643: in _execute_clauseelement
+    ret = self._execute_context(
+.venv/lib/python3.12/site-packages/sqlalchemy/engine/base.py:1848: in _execute_context
+    return self._exec_single_context(
+.venv/lib/python3.12/site-packages/sqlalchemy/engine/base.py:1988: in _exec_single_context
+    self._handle_dbapi_exception(
+.venv/lib/python3.12/site-packages/sqlalchemy/engine/base.py:2365: in _handle_dbapi_exception
+    raise sqlalchemy_exception.with_traceback(exc_info[2]) from e
+.venv/lib/python3.12/site-packages/sqlalchemy/engine/base.py:1969: in _exec_single_context
+    self.dialect.do_execute(
+.venv/lib/python3.12/site-packages/sqlalchemy/engine/default.py:952: in do_execute
+    cursor.execute(statement, parameters)
+.venv/lib/python3.12/site-packages/psycopg/cursor.py:117: in execute
+    raise ex.with_traceback(None)
+E   sqlalchemy.exc.IntegrityError: (psycopg.errors.NotNullViolation) null value in column "completed_on" of relation "analysis_run" violates not-null constraint
+E   DETAIL:  Failing row contains (1, 1, 1, 1, RUNNING, owned-a6c82f12-26cd-44e9-ac7f-ea43e1538ea5, OSV, api, 2026-10-20T00:00:00Z, null, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, null, t, null, t, null, null, 1).
+E   [SQL: INSERT INTO analysis_run (sbom_id, project_id, product_id, run_status, sbom_name, source, trigger_source, started_on, completed_on, duration_ms, total_components, components_with_cpe, total_findings, critical_count, high_count, medium_count, low_count, unknown_count, query_error_count, raw_report, is_current, is_active, deactivated_at, deactivated_by, tenant_id) VALUES (%(sbom_id)s::INTEGER, %(project_id)s::INTEGER, %(product_id)s::INTEGER, %(run_status)s::VARCHAR, %(sbom_name)s::VARCHAR, %(source)s::VARCHAR, %(trigger_source)s::VARCHAR, %(started_on)s::VARCHAR, %(completed_on)s::VARCHAR, %(duration_ms)s::INTEGER, %(total_components)s::INTEGER, %(components_with_cpe)s::INTEGER, %(total_findings)s::INTEGER, %(critical_count)s::INTEGER, %(high_count)s::INTEGER, %(medium_count)s::INTEGER, %(low_count)s::INTEGER, %(unknown_count)s::INTEGER, %(query_error_count)s::INTEGER, %(raw_report)s::VARCHAR, %(is_current)s, %(is_active)s, %(deactivated_at)s::TIMESTAMP WITH TIME ZONE, %(deactivated_by)s::VARCHAR, %(tenant_id)s::INTEGER) RETURNING analysis_run.id]
+E   [SQL parameters hidden due to hide_parameters=True]
+E   (Background on this error at: https://sqlalche.me/e/20/gkpj)</error></testcase><testcase classname="tests.test_legacy_analysis_public_identity" name="test_legacy_valid_uuid_returns_existing_run_with_public_successor[/analyze-sbom-nvd]" time="2.534"><error message="failed on setup with &quot;sqlalchemy.exc.IntegrityError: (psycopg.errors.NotNullViolation) null value in column &quot;completed_on&quot; of relation &quot;analysis_run&quot; violates not-null constraint&#10;DETAIL:  Failing row contains (1, 1, 1, 1, RUNNING, owned-fb462d3d-1b99-418f-a470-7a0bd658168d, OSV, api, 2026-10-20T00:00:00Z, null, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, null, t, null, t, null, null, 1).&#10;[SQL: INSERT INTO analysis_run (sbom_id, project_id, product_id, run_status, sbom_name, source, trigger_source, started_on, completed_on, duration_ms, total_components, components_with_cpe, total_findings, critical_count, high_count, medium_count, low_count, unknown_count, query_error_count, raw_report, is_current, is_active, deactivated_at, deactivated_by, tenant_id) VALUES (%(sbom_id)s::INTEGER, %(project_id)s::INTEGER, %(product_id)s::INTEGER, %(run_status)s::VARCHAR, %(sbom_name)s::VARCHAR, %(source)s::VARCHAR, %(trigger_source)s::VARCHAR, %(started_on)s::VARCHAR, %(completed_on)s::VARCHAR, %(duration_ms)s::INTEGER, %(total_components)s::INTEGER, %(components_with_cpe)s::INTEGER, %(total_findings)s::INTEGER, %(critical_count)s::INTEGER, %(high_count)s::INTEGER, %(medium_count)s::INTEGER, %(low_count)s::INTEGER, %(unknown_count)s::INTEGER, %(query_error_count)s::INTEGER, %(raw_report)s::VARCHAR, %(is_current)s, %(is_active)s, %(deactivated_at)s::TIMESTAMP WITH TIME ZONE, %(deactivated_by)s::VARCHAR, %(tenant_id)s::INTEGER) RETURNING analysis_run.id]&#10;[SQL parameters hidden due to hide_parameters=True]&#10;(Background on this error at: https://sqlalche.me/e/20/gkpj)&quot;">.venv/lib/python3.12/site-packages/sqlalchemy/engine/base.py:1969: in _exec_single_context
+    self.dialect.do_execute(
+.venv/lib/python3.12/site-packages/sqlalchemy/engine/default.py:952: in do_execute
+    cursor.execute(statement, parameters)
+.venv/lib/python3.12/site-packages/psycopg/cursor.py:117: in execute
+    raise ex.with_traceback(None)
+E   psycopg.errors.NotNullViolation: null value in column "completed_on" of relation "analysis_run" violates not-null constraint
+E   DETAIL:  Failing row contains (1, 1, 1, 1, RUNNING, owned-fb462d3d-1b99-418f-a470-7a0bd658168d, OSV, api, 2026-10-20T00:00:00Z, null, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, null, t, null, t, null, null, 1).
+
+The above exception was the direct cause of the following exception:
+tests/test_legacy_analysis_public_identity.py:34: in legacy_fixture
+    db.commit()
+.venv/lib/python3.12/site-packages/sqlalchemy/orm/session.py:2035: in commit
+    trans.commit(_to_root=True)
+&lt;string&gt;:2: in commit
+    ???
+.venv/lib/python3.12/site-packages/sqlalchemy/orm/state_changes.py:137: in _go
+    ret_value = fn(self, *arg, **kw)
+                ^^^^^^^^^^^^^^^^^^^^
+.venv/lib/python3.12/site-packages/sqlalchemy/orm/session.py:1316: in commit
+    self._prepare_impl()
+&lt;string&gt;:2: in _prepare_impl
+    ???
+.venv/lib/python3.12/site-packages/sqlalchemy/orm/state_changes.py:137: in _go
+    ret_value = fn(self, *arg, **kw)
+                ^^^^^^^^^^^^^^^^^^^^
+.venv/lib/python3.12/site-packages/sqlalchemy/orm/session.py:1290: in _prepare_impl
+    self.session.flush()
+.venv/lib/python3.12/site-packages/sqlalchemy/orm/session.py:4353: in flush
+    self._flush(objects)
+.venv/lib/python3.12/site-packages/sqlalchemy/orm/session.py:4488: in _flush
+    with util.safe_reraise():
+         ^^^^^^^^^^^^^^^^^^^
+.venv/lib/python3.12/site-packages/sqlalchemy/util/langhelpers.py:122: in __exit__
+    raise exc_value.with_traceback(exc_tb)
+.venv/lib/python3.12/site-packages/sqlalchemy/orm/session.py:4449: in _flush
+    flush_context.execute()
+.venv/lib/python3.12/site-packages/sqlalchemy/orm/unitofwork.py:465: in execute
+    rec.execute(self)
+.venv/lib/python3.12/site-packages/sqlalchemy/orm/unitofwork.py:641: in execute
+    util.preloaded.orm_persistence.save_obj(
+.venv/lib/python3.12/site-packages/sqlalchemy/orm/persistence.py:94: in save_obj
+    _emit_insert_statements(
+.venv/lib/python3.12/site-packages/sqlalchemy/orm/persistence.py:1234: in _emit_insert_statements
+    result = connection.execute(
+.venv/lib/python3.12/site-packages/sqlalchemy/engine/base.py:1421: in execute
+    return meth(
+.venv/lib/python3.12/site-packages/sqlalchemy/sql/elements.py:526: in _execute_on_connection
+    return connection._execute_clauseelement(
+.venv/lib/python3.12/site-packages/sqlalchemy/engine/base.py:1643: in _execute_clauseelement
+    ret = self._execute_context(
+.venv/lib/python3.12/site-packages/sqlalchemy/engine/base.py:1848: in _execute_context
+    return self._exec_single_context(
+.venv/lib/python3.12/site-packages/sqlalchemy/engine/base.py:1988: in _exec_single_context
+    self._handle_dbapi_exception(
+.venv/lib/python3.12/site-packages/sqlalchemy/engine/base.py:2365: in _handle_dbapi_exception
+    raise sqlalchemy_exception.with_traceback(exc_info[2]) from e
+.venv/lib/python3.12/site-packages/sqlalchemy/engine/base.py:1969: in _exec_single_context
+    self.dialect.do_execute(
+.venv/lib/python3.12/site-packages/sqlalchemy/engine/default.py:952: in do_execute
+    cursor.execute(statement, parameters)
+.venv/lib/python3.12/site-packages/psycopg/cursor.py:117: in execute
+    raise ex.with_traceback(None)
+E   sqlalchemy.exc.IntegrityError: (psycopg.errors.NotNullViolation) null value in column "completed_on" of relation "analysis_run" violates not-null constraint
+E   DETAIL:  Failing row contains (1, 1, 1, 1, RUNNING, owned-fb462d3d-1b99-418f-a470-7a0bd658168d, OSV, api, 2026-10-20T00:00:00Z, null, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, null, t, null, t, null, null, 1).
+E   [SQL: INSERT INTO analysis_run (sbom_id, project_id, product_id, run_status, sbom_name, source, trigger_source, started_on, completed_on, duration_ms, total_components, components_with_cpe, total_findings, critical_count, high_count, medium_count, low_count, unknown_count, query_error_count, raw_report, is_current, is_active, deactivated_at, deactivated_by, tenant_id) VALUES (%(sbom_id)s::INTEGER, %(project_id)s::INTEGER, %(product_id)s::INTEGER, %(run_status)s::VARCHAR, %(sbom_name)s::VARCHAR, %(source)s::VARCHAR, %(trigger_source)s::VARCHAR, %(started_on)s::VARCHAR, %(completed_on)s::VARCHAR, %(duration_ms)s::INTEGER, %(total_components)s::INTEGER, %(components_with_cpe)s::INTEGER, %(total_findings)s::INTEGER, %(critical_count)s::INTEGER, %(high_count)s::INTEGER, %(medium_count)s::INTEGER, %(low_count)s::INTEGER, %(unknown_count)s::INTEGER, %(query_error_count)s::INTEGER, %(raw_report)s::VARCHAR, %(is_current)s, %(is_active)s, %(deactivated_at)s::TIMESTAMP WITH TIME ZONE, %(deactivated_by)s::VARCHAR, %(tenant_id)s::INTEGER) RETURNING analysis_run.id]
+E   [SQL parameters hidden due to hide_parameters=True]
+E   (Background on this error at: https://sqlalche.me/e/20/gkpj)</error></testcase><testcase classname="tests.test_legacy_analysis_public_identity" name="test_legacy_valid_uuid_returns_existing_run_with_public_successor[/analyze-sbom-osv]" time="2.140"><error message="failed on setup with &quot;sqlalchemy.exc.IntegrityError: (psycopg.errors.NotNullViolation) null value in column &quot;completed_on&quot; of relation &quot;analysis_run&quot; violates not-null constraint&#10;DETAIL:  Failing row contains (1, 1, 1, 1, RUNNING, owned-2da36446-16eb-456c-971c-ede2f7fca152, OSV, api, 2026-10-20T00:00:00Z, null, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, null, t, null, t, null, null, 1).&#10;[SQL: INSERT INTO analysis_run (sbom_id, project_id, product_id, run_status, sbom_name, source, trigger_source, started_on, completed_on, duration_ms, total_components, components_with_cpe, total_findings, critical_count, high_count, medium_count, low_count, unknown_count, query_error_count, raw_report, is_current, is_active, deactivated_at, deactivated_by, tenant_id) VALUES (%(sbom_id)s::INTEGER, %(project_id)s::INTEGER, %(product_id)s::INTEGER, %(run_status)s::VARCHAR, %(sbom_name)s::VARCHAR, %(source)s::VARCHAR, %(trigger_source)s::VARCHAR, %(started_on)s::VARCHAR, %(completed_on)s::VARCHAR, %(duration_ms)s::INTEGER, %(total_components)s::INTEGER, %(components_with_cpe)s::INTEGER, %(total_findings)s::INTEGER, %(critical_count)s::INTEGER, %(high_count)s::INTEGER, %(medium_count)s::INTEGER, %(low_count)s::INTEGER, %(unknown_count)s::INTEGER, %(query_error_count)s::INTEGER, %(raw_report)s::VARCHAR, %(is_current)s, %(is_active)s, %(deactivated_at)s::TIMESTAMP WITH TIME ZONE, %(deactivated_by)s::VARCHAR, %(tenant_id)s::INTEGER) RETURNING analysis_run.id]&#10;[SQL parameters hidden due to hide_parameters=True]&#10;(Background on this error at: https://sqlalche.me/e/20/gkpj)&quot;">.venv/lib/python3.12/site-packages/sqlalchemy/engine/base.py:1969: in _exec_single_context
+    self.dialect.do_execute(
+.venv/lib/python3.12/site-packages/sqlalchemy/engine/default.py:952: in do_execute
+    cursor.execute(statement, parameters)
+.venv/lib/python3.12/site-packages/psycopg/cursor.py:117: in execute
+    raise ex.with_traceback(None)
+E   psycopg.errors.NotNullViolation: null value in column "completed_on" of relation "analysis_run" violates not-null constraint
+E   DETAIL:  Failing row contains (1, 1, 1, 1, RUNNING, owned-2da36446-16eb-456c-971c-ede2f7fca152, OSV, api, 2026-10-20T00:00:00Z, null, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, null, t, null, t, null, null, 1).
+
+The above exception was the direct cause of the following exception:
+tests/test_legacy_analysis_public_identity.py:34: in legacy_fixture
+    db.commit()
+.venv/lib/python3.12/site-packages/sqlalchemy/orm/session.py:2035: in commit
+    trans.commit(_to_root=True)
+&lt;string&gt;:2: in commit
+    ???
+.venv/lib/python3.12/site-packages/sqlalchemy/orm/state_changes.py:137: in _go
+    ret_value = fn(self, *arg, **kw)
+                ^^^^^^^^^^^^^^^^^^^^
+.venv/lib/python3.12/site-packages/sqlalchemy/orm/session.py:1316: in commit
+    self._prepare_impl()
+&lt;string&gt;:2: in _prepare_impl
+    ???
+.venv/lib/python3.12/site-packages/sqlalchemy/orm/state_changes.py:137: in _go
+    ret_value = fn(self, *arg, **kw)
+                ^^^^^^^^^^^^^^^^^^^^
+.venv/lib/python3.12/site-packages/sqlalchemy/orm/session.py:1290: in _prepare_impl
+    self.session.flush()
+.venv/lib/python3.12/site-packages/sqlalchemy/orm/session.py:4353: in flush
+    self._flush(objects)
+.venv/lib/python3.12/site-packages/sqlalchemy/orm/session.py:4488: in _flush
+    with util.safe_reraise():
+         ^^^^^^^^^^^^^^^^^^^
+.venv/lib/python3.12/site-packages/sqlalchemy/util/langhelpers.py:122: in __exit__
+    raise exc_value.with_traceback(exc_tb)
+.venv/lib/python3.12/site-packages/sqlalchemy/orm/session.py:4449: in _flush
+    flush_context.execute()
+.venv/lib/python3.12/site-packages/sqlalchemy/orm/unitofwork.py:465: in execute
+    rec.execute(self)
+.venv/lib/python3.12/site-packages/sqlalchemy/orm/unitofwork.py:641: in execute
+    util.preloaded.orm_persistence.save_obj(
+.venv/lib/python3.12/site-packages/sqlalchemy/orm/persistence.py:94: in save_obj
+    _emit_insert_statements(
+.venv/lib/python3.12/site-packages/sqlalchemy/orm/persistence.py:1234: in _emit_insert_statements
+    result = connection.execute(
+.venv/lib/python3.12/site-packages/sqlalchemy/engine/base.py:1421: in execute
+    return meth(
+.venv/lib/python3.12/site-packages/sqlalchemy/sql/elements.py:526: in _execute_on_connection
+    return connection._execute_clauseelement(
+.venv/lib/python3.12/site-packages/sqlalchemy/engine/base.py:1643: in _execute_clauseelement
+    ret = self._execute_context(
+.venv/lib/python3.12/site-packages/sqlalchemy/engine/base.py:1848: in _execute_context
+    return self._exec_single_context(
+.venv/lib/python3.12/site-packages/sqlalchemy/engine/base.py:1988: in _exec_single_context
+    self._handle_dbapi_exception(
+.venv/lib/python3.12/site-packages/sqlalchemy/engine/base.py:2365: in _handle_dbapi_exception
+    raise sqlalchemy_exception.with_traceback(exc_info[2]) from e
+.venv/lib/python3.12/site-packages/sqlalchemy/engine/base.py:1969: in _exec_single_context
+    self.dialect.do_execute(
+.venv/lib/python3.12/site-packages/sqlalchemy/engine/default.py:952: in do_execute
+    cursor.execute(statement, parameters)
+.venv/lib/python3.12/site-packages/psycopg/cursor.py:117: in execute
+    raise ex.with_traceback(None)
+E   sqlalchemy.exc.IntegrityError: (psycopg.errors.NotNullViolation) null value in column "completed_on" of relation "analysis_run" violates not-null constraint
+E   DETAIL:  Failing row contains (1, 1, 1, 1, RUNNING, owned-2da36446-16eb-456c-971c-ede2f7fca152, OSV, api, 2026-10-20T00:00:00Z, null, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, null, t, null, t, null, null, 1).
+E   [SQL: INSERT INTO analysis_run (sbom_id, project_id, product_id, run_status, sbom_name, source, trigger_source, started_on, completed_on, duration_ms, total_components, components_with_cpe, total_findings, critical_count, high_count, medium_count, low_count, unknown_count, query_error_count, raw_report, is_current, is_active, deactivated_at, deactivated_by, tenant_id) VALUES (%(sbom_id)s::INTEGER, %(project_id)s::INTEGER, %(product_id)s::INTEGER, %(run_status)s::VARCHAR, %(sbom_name)s::VARCHAR, %(source)s::VARCHAR, %(trigger_source)s::VARCHAR, %(started_on)s::VARCHAR, %(completed_on)s::VARCHAR, %(duration_ms)s::INTEGER, %(total_components)s::INTEGER, %(components_with_cpe)s::INTEGER, %(total_findings)s::INTEGER, %(critical_count)s::INTEGER, %(high_count)s::INTEGER, %(medium_count)s::INTEGER, %(low_count)s::INTEGER, %(unknown_count)s::INTEGER, %(query_error_count)s::INTEGER, %(raw_report)s::VARCHAR, %(is_current)s, %(is_active)s, %(deactivated_at)s::TIMESTAMP WITH TIME ZONE, %(deactivated_by)s::VARCHAR, %(tenant_id)s::INTEGER) RETURNING analysis_run.id]
+E   [SQL parameters hidden due to hide_parameters=True]
+E   (Background on this error at: https://sqlalche.me/e/20/gkpj)</error></testcase><testcase classname="tests.test_legacy_analysis_public_identity" name="test_legacy_valid_uuid_returns_existing_run_with_public_successor[/analyze-sbom-vulndb]" time="1.765"><error message="failed on setup with &quot;sqlalchemy.exc.IntegrityError: (psycopg.errors.NotNullViolation) null value in column &quot;completed_on&quot; of relation &quot;analysis_run&quot; violates not-null constraint&#10;DETAIL:  Failing row contains (1, 1, 1, 1, RUNNING, owned-c2bc07e7-b92b-4ed0-9431-03874dcbffd8, OSV, api, 2026-10-20T00:00:00Z, null, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, null, t, null, t, null, null, 1).&#10;[SQL: INSERT INTO analysis_run (sbom_id, project_id, product_id, run_status, sbom_name, source, trigger_source, started_on, completed_on, duration_ms, total_components, components_with_cpe, total_findings, critical_count, high_count, medium_count, low_count, unknown_count, query_error_count, raw_report, is_current, is_active, deactivated_at, deactivated_by, tenant_id) VALUES (%(sbom_id)s::INTEGER, %(project_id)s::INTEGER, %(product_id)s::INTEGER, %(run_status)s::VARCHAR, %(sbom_name)s::VARCHAR, %(source)s::VARCHAR, %(trigger_source)s::VARCHAR, %(started_on)s::VARCHAR, %(completed_on)s::VARCHAR, %(duration_ms)s::INTEGER, %(total_components)s::INTEGER, %(components_with_cpe)s::INTEGER, %(total_findings)s::INTEGER, %(critical_count)s::INTEGER, %(high_count)s::INTEGER, %(medium_count)s::INTEGER, %(low_count)s::INTEGER, %(unknown_count)s::INTEGER, %(query_error_count)s::INTEGER, %(raw_report)s::VARCHAR, %(is_current)s, %(is_active)s, %(deactivated_at)s::TIMESTAMP WITH TIME ZONE, %(deactivated_by)s::VARCHAR, %(tenant_id)s::INTEGER) RETURNING analysis_run.id]&#10;[SQL parameters hidden due to hide_parameters=True]&#10;(Background on this error at: https://sqlalche.me/e/20/gkpj)&quot;">.venv/lib/python3.12/site-packages/sqlalchemy/engine/base.py:1969: in _exec_single_context
+    self.dialect.do_execute(
+.venv/lib/python3.12/site-packages/sqlalchemy/engine/default.py:952: in do_execute
+    cursor.execute(statement, parameters)
+.venv/lib/python3.12/site-packages/psycopg/cursor.py:117: in execute
+    raise ex.with_traceback(None)
+E   psycopg.errors.NotNullViolation: null value in column "completed_on" of relation "analysis_run" violates not-null constraint
+E   DETAIL:  Failing row contains (1, 1, 1, 1, RUNNING, owned-c2bc07e7-b92b-4ed0-9431-03874dcbffd8, OSV, api, 2026-10-20T00:00:00Z, null, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, null, t, null, t, null, null, 1).
+
+The above exception was the direct cause of the following exception:
+tests/test_legacy_analysis_public_identity.py:34: in legacy_fixture
+    db.commit()
+.venv/lib/python3.12/site-packages/sqlalchemy/orm/session.py:2035: in commit
+    trans.commit(_to_root=True)
+&lt;string&gt;:2: in commit
+    ???
+.venv/lib/python3.12/site-packages/sqlalchemy/orm/state_changes.py:137: in _go
+    ret_value = fn(self, *arg, **kw)
+                ^^^^^^^^^^^^^^^^^^^^
+.venv/lib/python3.12/site-packages/sqlalchemy/orm/session.py:1316: in commit
+    self._prepare_impl()
+&lt;string&gt;:2: in _prepare_impl
+    ???
+.venv/lib/python3.12/site-packages/sqlalchemy/orm/state_changes.py:137: in _go
+    ret_value = fn(self, *arg, **kw)
+                ^^^^^^^^^^^^^^^^^^^^
+.venv/lib/python3.12/site-packages/sqlalchemy/orm/session.py:1290: in _prepare_impl
+    self.session.flush()
+.venv/lib/python3.12/site-packages/sqlalchemy/orm/session.py:4353: in flush
+    self._flush(objects)
+.venv/lib/python3.12/site-packages/sqlalchemy/orm/session.py:4488: in _flush
+    with util.safe_reraise():
+         ^^^^^^^^^^^^^^^^^^^
+.venv/lib/python3.12/site-packages/sqlalchemy/util/langhelpers.py:122: in __exit__
+    raise exc_value.with_traceback(exc_tb)
+.venv/lib/python3.12/site-packages/sqlalchemy/orm/session.py:4449: in _flush
+    flush_context.execute()
+.venv/lib/python3.12/site-packages/sqlalchemy/orm/unitofwork.py:465: in execute
+    rec.execute(self)
+.venv/lib/python3.12/site-packages/sqlalchemy/orm/unitofwork.py:641: in execute
+    util.preloaded.orm_persistence.save_obj(
+.venv/lib/python3.12/site-packages/sqlalchemy/orm/persistence.py:94: in save_obj
+    _emit_insert_statements(
+.venv/lib/python3.12/site-packages/sqlalchemy/orm/persistence.py:1234: in _emit_insert_statements
+    result = connection.execute(
+.venv/lib/python3.12/site-packages/sqlalchemy/engine/base.py:1421: in execute
+    return meth(
+.venv/lib/python3.12/site-packages/sqlalchemy/sql/elements.py:526: in _execute_on_connection
+    return connection._execute_clauseelement(
+.venv/lib/python3.12/site-packages/sqlalchemy/engine/base.py:1643: in _execute_clauseelement
+    ret = self._execute_context(
+.venv/lib/python3.12/site-packages/sqlalchemy/engine/base.py:1848: in _execute_context
+    return self._exec_single_context(
+.venv/lib/python3.12/site-packages/sqlalchemy/engine/base.py:1988: in _exec_single_context
+    self._handle_dbapi_exception(
+.venv/lib/python3.12/site-packages/sqlalchemy/engine/base.py:2365: in _handle_dbapi_exception
+    raise sqlalchemy_exception.with_traceback(exc_info[2]) from e
+.venv/lib/python3.12/site-packages/sqlalchemy/engine/base.py:1969: in _exec_single_context
+    self.dialect.do_execute(
+.venv/lib/python3.12/site-packages/sqlalchemy/engine/default.py:952: in do_execute
+    cursor.execute(statement, parameters)
+.venv/lib/python3.12/site-packages/psycopg/cursor.py:117: in execute
+    raise ex.with_traceback(None)
+E   sqlalchemy.exc.IntegrityError: (psycopg.errors.NotNullViolation) null value in column "completed_on" of relation "analysis_run" violates not-null constraint
+E   DETAIL:  Failing row contains (1, 1, 1, 1, RUNNING, owned-c2bc07e7-b92b-4ed0-9431-03874dcbffd8, OSV, api, 2026-10-20T00:00:00Z, null, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, null, t, null, t, null, null, 1).
+E   [SQL: INSERT INTO analysis_run (sbom_id, project_id, product_id, run_status, sbom_name, source, trigger_source, started_on, completed_on, duration_ms, total_components, components_with_cpe, total_findings, critical_count, high_count, medium_count, low_count, unknown_count, query_error_count, raw_report, is_current, is_active, deactivated_at, deactivated_by, tenant_id) VALUES (%(sbom_id)s::INTEGER, %(project_id)s::INTEGER, %(product_id)s::INTEGER, %(run_status)s::VARCHAR, %(sbom_name)s::VARCHAR, %(source)s::VARCHAR, %(trigger_source)s::VARCHAR, %(started_on)s::VARCHAR, %(completed_on)s::VARCHAR, %(duration_ms)s::INTEGER, %(total_components)s::INTEGER, %(components_with_cpe)s::INTEGER, %(total_findings)s::INTEGER, %(critical_count)s::INTEGER, %(high_count)s::INTEGER, %(medium_count)s::INTEGER, %(low_count)s::INTEGER, %(unknown_count)s::INTEGER, %(query_error_count)s::INTEGER, %(raw_report)s::VARCHAR, %(is_current)s, %(is_active)s, %(deactivated_at)s::TIMESTAMP WITH TIME ZONE, %(deactivated_by)s::VARCHAR, %(tenant_id)s::INTEGER) RETURNING analysis_run.id]
+E   [SQL parameters hidden due to hide_parameters=True]
+E   (Background on this error at: https://sqlalche.me/e/20/gkpj)</error></testcase><testcase classname="tests.test_legacy_analysis_public_identity" name="test_legacy_invalid_integer_foreign_and_viewer_never_mutate[/analyze-sbom-consolidated]" time="1.496"><error message="failed on setup with &quot;sqlalchemy.exc.IntegrityError: (psycopg.errors.NotNullViolation) null value in column &quot;completed_on&quot; of relation &quot;analysis_run&quot; violates not-null constraint&#10;DETAIL:  Failing row contains (1, 1, 1, 1, RUNNING, owned-3c9c75a2-d0f2-48ff-b95f-a4b2925ae4cc, OSV, api, 2026-10-20T00:00:00Z, null, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, null, t, null, t, null, null, 1).&#10;[SQL: INSERT INTO analysis_run (sbom_id, project_id, product_id, run_status, sbom_name, source, trigger_source, started_on, completed_on, duration_ms, total_components, components_with_cpe, total_findings, critical_count, high_count, medium_count, low_count, unknown_count, query_error_count, raw_report, is_current, is_active, deactivated_at, deactivated_by, tenant_id) VALUES (%(sbom_id)s::INTEGER, %(project_id)s::INTEGER, %(product_id)s::INTEGER, %(run_status)s::VARCHAR, %(sbom_name)s::VARCHAR, %(source)s::VARCHAR, %(trigger_source)s::VARCHAR, %(started_on)s::VARCHAR, %(completed_on)s::VARCHAR, %(duration_ms)s::INTEGER, %(total_components)s::INTEGER, %(components_with_cpe)s::INTEGER, %(total_findings)s::INTEGER, %(critical_count)s::INTEGER, %(high_count)s::INTEGER, %(medium_count)s::INTEGER, %(low_count)s::INTEGER, %(unknown_count)s::INTEGER, %(query_error_count)s::INTEGER, %(raw_report)s::VARCHAR, %(is_current)s, %(is_active)s, %(deactivated_at)s::TIMESTAMP WITH TIME ZONE, %(deactivated_by)s::VARCHAR, %(tenant_id)s::INTEGER) RETURNING analysis_run.id]&#10;[SQL parameters hidden due to hide_parameters=True]&#10;(Background on this error at: https://sqlalche.me/e/20/gkpj)&quot;">.venv/lib/python3.12/site-packages/sqlalchemy/engine/base.py:1969: in _exec_single_context
+    self.dialect.do_execute(
+.venv/lib/python3.12/site-packages/sqlalchemy/engine/default.py:952: in do_execute
+    cursor.execute(statement, parameters)
+.venv/lib/python3.12/site-packages/psycopg/cursor.py:117: in execute
+    raise ex.with_traceback(None)
+E   psycopg.errors.NotNullViolation: null value in column "completed_on" of relation "analysis_run" violates not-null constraint
+E   DETAIL:  Failing row contains (1, 1, 1, 1, RUNNING, owned-3c9c75a2-d0f2-48ff-b95f-a4b2925ae4cc, OSV, api, 2026-10-20T00:00:00Z, null, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, null, t, null, t, null, null, 1).
+
+The above exception was the direct cause of the following exception:
+tests/test_legacy_analysis_public_identity.py:34: in legacy_fixture
+    db.commit()
+.venv/lib/python3.12/site-packages/sqlalchemy/orm/session.py:2035: in commit
+    trans.commit(_to_root=True)
+&lt;string&gt;:2: in commit
+    ???
+.venv/lib/python3.12/site-packages/sqlalchemy/orm/state_changes.py:137: in _go
+    ret_value = fn(self, *arg, **kw)
+                ^^^^^^^^^^^^^^^^^^^^
+.venv/lib/python3.12/site-packages/sqlalchemy/orm/session.py:1316: in commit
+    self._prepare_impl()
+&lt;string&gt;:2: in _prepare_impl
+    ???
+.venv/lib/python3.12/site-packages/sqlalchemy/orm/state_changes.py:137: in _go
+    ret_value = fn(self, *arg, **kw)
+                ^^^^^^^^^^^^^^^^^^^^
+.venv/lib/python3.12/site-packages/sqlalchemy/orm/session.py:1290: in _prepare_impl
+    self.session.flush()
+.venv/lib/python3.12/site-packages/sqlalchemy/orm/session.py:4353: in flush
+    self._flush(objects)
+.venv/lib/python3.12/site-packages/sqlalchemy/orm/session.py:4488: in _flush
+    with util.safe_reraise():
+         ^^^^^^^^^^^^^^^^^^^
+.venv/lib/python3.12/site-packages/sqlalchemy/util/langhelpers.py:122: in __exit__
+    raise exc_value.with_traceback(exc_tb)
+.venv/lib/python3.12/site-packages/sqlalchemy/orm/session.py:4449: in _flush
+    flush_context.execute()
+.venv/lib/python3.12/site-packages/sqlalchemy/orm/unitofwork.py:465: in execute
+    rec.execute(self)
+.venv/lib/python3.12/site-packages/sqlalchemy/orm/unitofwork.py:641: in execute
+    util.preloaded.orm_persistence.save_obj(
+.venv/lib/python3.12/site-packages/sqlalchemy/orm/persistence.py:94: in save_obj
+    _emit_insert_statements(
+.venv/lib/python3.12/site-packages/sqlalchemy/orm/persistence.py:1234: in _emit_insert_statements
+    result = connection.execute(
+.venv/lib/python3.12/site-packages/sqlalchemy/engine/base.py:1421: in execute
+    return meth(
+.venv/lib/python3.12/site-packages/sqlalchemy/sql/elements.py:526: in _execute_on_connection
+    return connection._execute_clauseelement(
+.venv/lib/python3.12/site-packages/sqlalchemy/engine/base.py:1643: in _execute_clauseelement
+    ret = self._execute_context(
+.venv/lib/python3.12/site-packages/sqlalchemy/engine/base.py:1848: in _execute_context
+    return self._exec_single_context(
+.venv/lib/python3.12/site-packages/sqlalchemy/engine/base.py:1988: in _exec_single_context
+    self._handle_dbapi_exception(
+.venv/lib/python3.12/site-packages/sqlalchemy/engine/base.py:2365: in _handle_dbapi_exception
+    raise sqlalchemy_exception.with_traceback(exc_info[2]) from e
+.venv/lib/python3.12/site-packages/sqlalchemy/engine/base.py:1969: in _exec_single_context
+    self.dialect.do_execute(
+.venv/lib/python3.12/site-packages/sqlalchemy/engine/default.py:952: in do_execute
+    cursor.execute(statement, parameters)
+.venv/lib/python3.12/site-packages/psycopg/cursor.py:117: in execute
+    raise ex.with_traceback(None)
+E   sqlalchemy.exc.IntegrityError: (psycopg.errors.NotNullViolation) null value in column "completed_on" of relation "analysis_run" violates not-null constraint
+E   DETAIL:  Failing row contains (1, 1, 1, 1, RUNNING, owned-3c9c75a2-d0f2-48ff-b95f-a4b2925ae4cc, OSV, api, 2026-10-20T00:00:00Z, null, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, null, t, null, t, null, null, 1).
+E   [SQL: INSERT INTO analysis_run (sbom_id, project_id, product_id, run_status, sbom_name, source, trigger_source, started_on, completed_on, duration_ms, total_components, components_with_cpe, total_findings, critical_count, high_count, medium_count, low_count, unknown_count, query_error_count, raw_report, is_current, is_active, deactivated_at, deactivated_by, tenant_id) VALUES (%(sbom_id)s::INTEGER, %(project_id)s::INTEGER, %(product_id)s::INTEGER, %(run_status)s::VARCHAR, %(sbom_name)s::VARCHAR, %(source)s::VARCHAR, %(trigger_source)s::VARCHAR, %(started_on)s::VARCHAR, %(completed_on)s::VARCHAR, %(duration_ms)s::INTEGER, %(total_components)s::INTEGER, %(components_with_cpe)s::INTEGER, %(total_findings)s::INTEGER, %(critical_count)s::INTEGER, %(high_count)s::INTEGER, %(medium_count)s::INTEGER, %(low_count)s::INTEGER, %(unknown_count)s::INTEGER, %(query_error_count)s::INTEGER, %(raw_report)s::VARCHAR, %(is_current)s, %(is_active)s, %(deactivated_at)s::TIMESTAMP WITH TIME ZONE, %(deactivated_by)s::VARCHAR, %(tenant_id)s::INTEGER) RETURNING analysis_run.id]
+E   [SQL parameters hidden due to hide_parameters=True]
+E   (Background on this error at: https://sqlalche.me/e/20/gkpj)</error></testcase><testcase classname="tests.test_legacy_analysis_public_identity" name="test_legacy_invalid_integer_foreign_and_viewer_never_mutate[/analyze-sbom-github]" time="1.583"><error message="failed on setup with &quot;sqlalchemy.exc.IntegrityError: (psycopg.errors.NotNullViolation) null value in column &quot;completed_on&quot; of relation &quot;analysis_run&quot; violates not-null constraint&#10;DETAIL:  Failing row contains (1, 1, 1, 1, RUNNING, owned-1e58cb18-d61f-44a9-a7a7-4c18c0c3b6da, OSV, api, 2026-10-20T00:00:00Z, null, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, null, t, null, t, null, null, 1).&#10;[SQL: INSERT INTO analysis_run (sbom_id, project_id, product_id, run_status, sbom_name, source, trigger_source, started_on, completed_on, duration_ms, total_components, components_with_cpe, total_findings, critical_count, high_count, medium_count, low_count, unknown_count, query_error_count, raw_report, is_current, is_active, deactivated_at, deactivated_by, tenant_id) VALUES (%(sbom_id)s::INTEGER, %(project_id)s::INTEGER, %(product_id)s::INTEGER, %(run_status)s::VARCHAR, %(sbom_name)s::VARCHAR, %(source)s::VARCHAR, %(trigger_source)s::VARCHAR, %(started_on)s::VARCHAR, %(completed_on)s::VARCHAR, %(duration_ms)s::INTEGER, %(total_components)s::INTEGER, %(components_with_cpe)s::INTEGER, %(total_findings)s::INTEGER, %(critical_count)s::INTEGER, %(high_count)s::INTEGER, %(medium_count)s::INTEGER, %(low_count)s::INTEGER, %(unknown_count)s::INTEGER, %(query_error_count)s::INTEGER, %(raw_report)s::VARCHAR, %(is_current)s, %(is_active)s, %(deactivated_at)s::TIMESTAMP WITH TIME ZONE, %(deactivated_by)s::VARCHAR, %(tenant_id)s::INTEGER) RETURNING analysis_run.id]&#10;[SQL parameters hidden due to hide_parameters=True]&#10;(Background on this error at: https://sqlalche.me/e/20/gkpj)&quot;">.venv/lib/python3.12/site-packages/sqlalchemy/engine/base.py:1969: in _exec_single_context
+    self.dialect.do_execute(
+.venv/lib/python3.12/site-packages/sqlalchemy/engine/default.py:952: in do_execute
+    cursor.execute(statement, parameters)
+.venv/lib/python3.12/site-packages/psycopg/cursor.py:117: in execute
+    raise ex.with_traceback(None)
+E   psycopg.errors.NotNullViolation: null value in column "completed_on" of relation "analysis_run" violates not-null constraint
+E   DETAIL:  Failing row contains (1, 1, 1, 1, RUNNING, owned-1e58cb18-d61f-44a9-a7a7-4c18c0c3b6da, OSV, api, 2026-10-20T00:00:00Z, null, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, null, t, null, t, null, null, 1).
+
+The above exception was the direct cause of the following exception:
+tests/test_legacy_analysis_public_identity.py:34: in legacy_fixture
+    db.commit()
+.venv/lib/python3.12/site-packages/sqlalchemy/orm/session.py:2035: in commit
+    trans.commit(_to_root=True)
+&lt;string&gt;:2: in commit
+    ???
+.venv/lib/python3.12/site-packages/sqlalchemy/orm/state_changes.py:137: in _go
+    ret_value = fn(self, *arg, **kw)
+                ^^^^^^^^^^^^^^^^^^^^
+.venv/lib/python3.12/site-packages/sqlalchemy/orm/session.py:1316: in commit
+    self._prepare_impl()
+&lt;string&gt;:2: in _prepare_impl
+    ???
+.venv/lib/python3.12/site-packages/sqlalchemy/orm/state_changes.py:137: in _go
+    ret_value = fn(self, *arg, **kw)
+                ^^^^^^^^^^^^^^^^^^^^
+.venv/lib/python3.12/site-packages/sqlalchemy/orm/session.py:1290: in _prepare_impl
+    self.session.flush()
+.venv/lib/python3.12/site-packages/sqlalchemy/orm/session.py:4353: in flush
+    self._flush(objects)
+.venv/lib/python3.12/site-packages/sqlalchemy/orm/session.py:4488: in _flush
+    with util.safe_reraise():
+         ^^^^^^^^^^^^^^^^^^^
+.venv/lib/python3.12/site-packages/sqlalchemy/util/langhelpers.py:122: in __exit__
+    raise exc_value.with_traceback(exc_tb)
+.venv/lib/python3.12/site-packages/sqlalchemy/orm/session.py:4449: in _flush
+    flush_context.execute()
+.venv/lib/python3.12/site-packages/sqlalchemy/orm/unitofwork.py:465: in execute
+    rec.execute(self)
+.venv/lib/python3.12/site-packages/sqlalchemy/orm/unitofwork.py:641: in execute
+    util.preloaded.orm_persistence.save_obj(
+.venv/lib/python3.12/site-packages/sqlalchemy/orm/persistence.py:94: in save_obj
+    _emit_insert_statements(
+.venv/lib/python3.12/site-packages/sqlalchemy/orm/persistence.py:1234: in _emit_insert_statements
+    result = connection.execute(
+.venv/lib/python3.12/site-packages/sqlalchemy/engine/base.py:1421: in execute
+    return meth(
+.venv/lib/python3.12/site-packages/sqlalchemy/sql/elements.py:526: in _execute_on_connection
+    return connection._execute_clauseelement(
+.venv/lib/python3.12/site-packages/sqlalchemy/engine/base.py:1643: in _execute_clauseelement
+    ret = self._execute_context(
+.venv/lib/python3.12/site-packages/sqlalchemy/engine/base.py:1848: in _execute_context
+    return self._exec_single_context(
+.venv/lib/python3.12/site-packages/sqlalchemy/engine/base.py:1988: in _exec_single_context
+    self._handle_dbapi_exception(
+.venv/lib/python3.12/site-packages/sqlalchemy/engine/base.py:2365: in _handle_dbapi_exception
+    raise sqlalchemy_exception.with_traceback(exc_info[2]) from e
+.venv/lib/python3.12/site-packages/sqlalchemy/engine/base.py:1969: in _exec_single_context
+    self.dialect.do_execute(
+.venv/lib/python3.12/site-packages/sqlalchemy/engine/default.py:952: in do_execute
+    cursor.execute(statement, parameters)
+.venv/lib/python3.12/site-packages/psycopg/cursor.py:117: in execute
+    raise ex.with_traceback(None)
+E   sqlalchemy.exc.IntegrityError: (psycopg.errors.NotNullViolation) null value in column "completed_on" of relation "analysis_run" violates not-null constraint
+E   DETAIL:  Failing row contains (1, 1, 1, 1, RUNNING, owned-1e58cb18-d61f-44a9-a7a7-4c18c0c3b6da, OSV, api, 2026-10-20T00:00:00Z, null, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, null, t, null, t, null, null, 1).
+E   [SQL: INSERT INTO analysis_run (sbom_id, project_id, product_id, run_status, sbom_name, source, trigger_source, started_on, completed_on, duration_ms, total_components, components_with_cpe, total_findings, critical_count, high_count, medium_count, low_count, unknown_count, query_error_count, raw_report, is_current, is_active, deactivated_at, deactivated_by, tenant_id) VALUES (%(sbom_id)s::INTEGER, %(project_id)s::INTEGER, %(product_id)s::INTEGER, %(run_status)s::VARCHAR, %(sbom_name)s::VARCHAR, %(source)s::VARCHAR, %(trigger_source)s::VARCHAR, %(started_on)s::VARCHAR, %(completed_on)s::VARCHAR, %(duration_ms)s::INTEGER, %(total_components)s::INTEGER, %(components_with_cpe)s::INTEGER, %(total_findings)s::INTEGER, %(critical_count)s::INTEGER, %(high_count)s::INTEGER, %(medium_count)s::INTEGER, %(low_count)s::INTEGER, %(unknown_count)s::INTEGER, %(query_error_count)s::INTEGER, %(raw_report)s::VARCHAR, %(is_current)s, %(is_active)s, %(deactivated_at)s::TIMESTAMP WITH TIME ZONE, %(deactivated_by)s::VARCHAR, %(tenant_id)s::INTEGER) RETURNING analysis_run.id]
+E   [SQL parameters hidden due to hide_parameters=True]
+E   (Background on this error at: https://sqlalche.me/e/20/gkpj)</error></testcase><testcase classname="tests.test_legacy_analysis_public_identity" name="test_legacy_invalid_integer_foreign_and_viewer_never_mutate[/analyze-sbom-nvd]" time="1.584"><error message="failed on setup with &quot;sqlalchemy.exc.IntegrityError: (psycopg.errors.NotNullViolation) null value in column &quot;completed_on&quot; of relation &quot;analysis_run&quot; violates not-null constraint&#10;DETAIL:  Failing row contains (1, 1, 1, 1, RUNNING, owned-4337df6c-6966-4adb-bd8f-37ff81cd552f, OSV, api, 2026-10-20T00:00:00Z, null, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, null, t, null, t, null, null, 1).&#10;[SQL: INSERT INTO analysis_run (sbom_id, project_id, product_id, run_status, sbom_name, source, trigger_source, started_on, completed_on, duration_ms, total_components, components_with_cpe, total_findings, critical_count, high_count, medium_count, low_count, unknown_count, query_error_count, raw_report, is_current, is_active, deactivated_at, deactivated_by, tenant_id) VALUES (%(sbom_id)s::INTEGER, %(project_id)s::INTEGER, %(product_id)s::INTEGER, %(run_status)s::VARCHAR, %(sbom_name)s::VARCHAR, %(source)s::VARCHAR, %(trigger_source)s::VARCHAR, %(started_on)s::VARCHAR, %(completed_on)s::VARCHAR, %(duration_ms)s::INTEGER, %(total_components)s::INTEGER, %(components_with_cpe)s::INTEGER, %(total_findings)s::INTEGER, %(critical_count)s::INTEGER, %(high_count)s::INTEGER, %(medium_count)s::INTEGER, %(low_count)s::INTEGER, %(unknown_count)s::INTEGER, %(query_error_count)s::INTEGER, %(raw_report)s::VARCHAR, %(is_current)s, %(is_active)s, %(deactivated_at)s::TIMESTAMP WITH TIME ZONE, %(deactivated_by)s::VARCHAR, %(tenant_id)s::INTEGER) RETURNING analysis_run.id]&#10;[SQL parameters hidden due to hide_parameters=True]&#10;(Background on this error at: https://sqlalche.me/e/20/gkpj)&quot;">.venv/lib/python3.12/site-packages/sqlalchemy/engine/base.py:1969: in _exec_single_context
+    self.dialect.do_execute(
+.venv/lib/python3.12/site-packages/sqlalchemy/engine/default.py:952: in do_execute
+    cursor.execute(statement, parameters)
+.venv/lib/python3.12/site-packages/psycopg/cursor.py:117: in execute
+    raise ex.with_traceback(None)
+E   psycopg.errors.NotNullViolation: null value in column "completed_on" of relation "analysis_run" violates not-null constraint
+E   DETAIL:  Failing row contains (1, 1, 1, 1, RUNNING, owned-4337df6c-6966-4adb-bd8f-37ff81cd552f, OSV, api, 2026-10-20T00:00:00Z, null, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, null, t, null, t, null, null, 1).
+
+The above exception was the direct cause of the following exception:
+tests/test_legacy_analysis_public_identity.py:34: in legacy_fixture
+    db.commit()
+.venv/lib/python3.12/site-packages/sqlalchemy/orm/session.py:2035: in commit
+    trans.commit(_to_root=True)
+&lt;string&gt;:2: in commit
+    ???
+.venv/lib/python3.12/site-packages/sqlalchemy/orm/state_changes.py:137: in _go
+    ret_value = fn(self, *arg, **kw)
+                ^^^^^^^^^^^^^^^^^^^^
+.venv/lib/python3.12/site-packages/sqlalchemy/orm/session.py:1316: in commit
+    self._prepare_impl()
+&lt;string&gt;:2: in _prepare_impl
+    ???
+.venv/lib/python3.12/site-packages/sqlalchemy/orm/state_changes.py:137: in _go
+    ret_value = fn(self, *arg, **kw)
+                ^^^^^^^^^^^^^^^^^^^^
+.venv/lib/python3.12/site-packages/sqlalchemy/orm/session.py:1290: in _prepare_impl
+    self.session.flush()
+.venv/lib/python3.12/site-packages/sqlalchemy/orm/session.py:4353: in flush
+    self._flush(objects)
+.venv/lib/python3.12/site-packages/sqlalchemy/orm/session.py:4488: in _flush
+    with util.safe_reraise():
+         ^^^^^^^^^^^^^^^^^^^
+.venv/lib/python3.12/site-packages/sqlalchemy/util/langhelpers.py:122: in __exit__
+    raise exc_value.with_traceback(exc_tb)
+.venv/lib/python3.12/site-packages/sqlalchemy/orm/session.py:4449: in _flush
+    flush_context.execute()
+.venv/lib/python3.12/site-packages/sqlalchemy/orm/unitofwork.py:465: in execute
+    rec.execute(self)
+.venv/lib/python3.12/site-packages/sqlalchemy/orm/unitofwork.py:641: in execute
+    util.preloaded.orm_persistence.save_obj(
+.venv/lib/python3.12/site-packages/sqlalchemy/orm/persistence.py:94: in save_obj
+    _emit_insert_statements(
+.venv/lib/python3.12/site-packages/sqlalchemy/orm/persistence.py:1234: in _emit_insert_statements
+    result = connection.execute(
+.venv/lib/python3.12/site-packages/sqlalchemy/engine/base.py:1421: in execute
+    return meth(
+.venv/lib/python3.12/site-packages/sqlalchemy/sql/elements.py:526: in _execute_on_connection
+    return connection._execute_clauseelement(
+.venv/lib/python3.12/site-packages/sqlalchemy/engine/base.py:1643: in _execute_clauseelement
+    ret = self._execute_context(
+.venv/lib/python3.12/site-packages/sqlalchemy/engine/base.py:1848: in _execute_context
+    return self._exec_single_context(
+.venv/lib/python3.12/site-packages/sqlalchemy/engine/base.py:1988: in _exec_single_context
+    self._handle_dbapi_exception(
+.venv/lib/python3.12/site-packages/sqlalchemy/engine/base.py:2365: in _handle_dbapi_exception
+    raise sqlalchemy_exception.with_traceback(exc_info[2]) from e
+.venv/lib/python3.12/site-packages/sqlalchemy/engine/base.py:1969: in _exec_single_context
+    self.dialect.do_execute(
+.venv/lib/python3.12/site-packages/sqlalchemy/engine/default.py:952: in do_execute
+    cursor.execute(statement, parameters)
+.venv/lib/python3.12/site-packages/psycopg/cursor.py:117: in execute
+    raise ex.with_traceback(None)
+E   sqlalchemy.exc.IntegrityError: (psycopg.errors.NotNullViolation) null value in column "completed_on" of relation "analysis_run" violates not-null constraint
+E   DETAIL:  Failing row contains (1, 1, 1, 1, RUNNING, owned-4337df6c-6966-4adb-bd8f-37ff81cd552f, OSV, api, 2026-10-20T00:00:00Z, null, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, null, t, null, t, null, null, 1).
+E   [SQL: INSERT INTO analysis_run (sbom_id, project_id, product_id, run_status, sbom_name, source, trigger_source, started_on, completed_on, duration_ms, total_components, components_with_cpe, total_findings, critical_count, high_count, medium_count, low_count, unknown_count, query_error_count, raw_report, is_current, is_active, deactivated_at, deactivated_by, tenant_id) VALUES (%(sbom_id)s::INTEGER, %(project_id)s::INTEGER, %(product_id)s::INTEGER, %(run_status)s::VARCHAR, %(sbom_name)s::VARCHAR, %(source)s::VARCHAR, %(trigger_source)s::VARCHAR, %(started_on)s::VARCHAR, %(completed_on)s::VARCHAR, %(duration_ms)s::INTEGER, %(total_components)s::INTEGER, %(components_with_cpe)s::INTEGER, %(total_findings)s::INTEGER, %(critical_count)s::INTEGER, %(high_count)s::INTEGER, %(medium_count)s::INTEGER, %(low_count)s::INTEGER, %(unknown_count)s::INTEGER, %(query_error_count)s::INTEGER, %(raw_report)s::VARCHAR, %(is_current)s, %(is_active)s, %(deactivated_at)s::TIMESTAMP WITH TIME ZONE, %(deactivated_by)s::VARCHAR, %(tenant_id)s::INTEGER) RETURNING analysis_run.id]
+E   [SQL parameters hidden due to hide_parameters=True]
+E   (Background on this error at: https://sqlalche.me/e/20/gkpj)</error></testcase><testcase classname="tests.test_legacy_analysis_public_identity" name="test_legacy_invalid_integer_foreign_and_viewer_never_mutate[/analyze-sbom-osv]" time="2.205"><error message="failed on setup with &quot;sqlalchemy.exc.IntegrityError: (psycopg.errors.NotNullViolation) null value in column &quot;completed_on&quot; of relation &quot;analysis_run&quot; violates not-null constraint&#10;DETAIL:  Failing row contains (1, 1, 1, 1, RUNNING, owned-16f6f5b7-8973-4390-bae6-81217e59c2a1, OSV, api, 2026-10-20T00:00:00Z, null, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, null, t, null, t, null, null, 1).&#10;[SQL: INSERT INTO analysis_run (sbom_id, project_id, product_id, run_status, sbom_name, source, trigger_source, started_on, completed_on, duration_ms, total_components, components_with_cpe, total_findings, critical_count, high_count, medium_count, low_count, unknown_count, query_error_count, raw_report, is_current, is_active, deactivated_at, deactivated_by, tenant_id) VALUES (%(sbom_id)s::INTEGER, %(project_id)s::INTEGER, %(product_id)s::INTEGER, %(run_status)s::VARCHAR, %(sbom_name)s::VARCHAR, %(source)s::VARCHAR, %(trigger_source)s::VARCHAR, %(started_on)s::VARCHAR, %(completed_on)s::VARCHAR, %(duration_ms)s::INTEGER, %(total_components)s::INTEGER, %(components_with_cpe)s::INTEGER, %(total_findings)s::INTEGER, %(critical_count)s::INTEGER, %(high_count)s::INTEGER, %(medium_count)s::INTEGER, %(low_count)s::INTEGER, %(unknown_count)s::INTEGER, %(query_error_count)s::INTEGER, %(raw_report)s::VARCHAR, %(is_current)s, %(is_active)s, %(deactivated_at)s::TIMESTAMP WITH TIME ZONE, %(deactivated_by)s::VARCHAR, %(tenant_id)s::INTEGER) RETURNING analysis_run.id]&#10;[SQL parameters hidden due to hide_parameters=True]&#10;(Background on this error at: https://sqlalche.me/e/20/gkpj)&quot;">.venv/lib/python3.12/site-packages/sqlalchemy/engine/base.py:1969: in _exec_single_context
+    self.dialect.do_execute(
+.venv/lib/python3.12/site-packages/sqlalchemy/engine/default.py:952: in do_execute
+    cursor.execute(statement, parameters)
+.venv/lib/python3.12/site-packages/psycopg/cursor.py:117: in execute
+    raise ex.with_traceback(None)
+E   psycopg.errors.NotNullViolation: null value in column "completed_on" of relation "analysis_run" violates not-null constraint
+E   DETAIL:  Failing row contains (1, 1, 1, 1, RUNNING, owned-16f6f5b7-8973-4390-bae6-81217e59c2a1, OSV, api, 2026-10-20T00:00:00Z, null, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, null, t, null, t, null, null, 1).
+
+The above exception was the direct cause of the following exception:
+tests/test_legacy_analysis_public_identity.py:34: in legacy_fixture
+    db.commit()
+.venv/lib/python3.12/site-packages/sqlalchemy/orm/session.py:2035: in commit
+    trans.commit(_to_root=True)
+&lt;string&gt;:2: in commit
+    ???
+.venv/lib/python3.12/site-packages/sqlalchemy/orm/state_changes.py:137: in _go
+    ret_value = fn(self, *arg, **kw)
+                ^^^^^^^^^^^^^^^^^^^^
+.venv/lib/python3.12/site-packages/sqlalchemy/orm/session.py:1316: in commit
+    self._prepare_impl()
+&lt;string&gt;:2: in _prepare_impl
+    ???
+.venv/lib/python3.12/site-packages/sqlalchemy/orm/state_changes.py:137: in _go
+    ret_value = fn(self, *arg, **kw)
+                ^^^^^^^^^^^^^^^^^^^^
+.venv/lib/python3.12/site-packages/sqlalchemy/orm/session.py:1290: in _prepare_impl
+    self.session.flush()
+.venv/lib/python3.12/site-packages/sqlalchemy/orm/session.py:4353: in flush
+    self._flush(objects)
+.venv/lib/python3.12/site-packages/sqlalchemy/orm/session.py:4488: in _flush
+    with util.safe_reraise():
+         ^^^^^^^^^^^^^^^^^^^
+.venv/lib/python3.12/site-packages/sqlalchemy/util/langhelpers.py:122: in __exit__
+    raise exc_value.with_traceback(exc_tb)
+.venv/lib/python3.12/site-packages/sqlalchemy/orm/session.py:4449: in _flush
+    flush_context.execute()
+.venv/lib/python3.12/site-packages/sqlalchemy/orm/unitofwork.py:465: in execute
+    rec.execute(self)
+.venv/lib/python3.12/site-packages/sqlalchemy/orm/unitofwork.py:641: in execute
+    util.preloaded.orm_persistence.save_obj(
+.venv/lib/python3.12/site-packages/sqlalchemy/orm/persistence.py:94: in save_obj
+    _emit_insert_statements(
+.venv/lib/python3.12/site-packages/sqlalchemy/orm/persistence.py:1234: in _emit_insert_statements
+    result = connection.execute(
+.venv/lib/python3.12/site-packages/sqlalchemy/engine/base.py:1421: in execute
+    return meth(
+.venv/lib/python3.12/site-packages/sqlalchemy/sql/elements.py:526: in _execute_on_connection
+    return connection._execute_clauseelement(
+.venv/lib/python3.12/site-packages/sqlalchemy/engine/base.py:1643: in _execute_clauseelement
+    ret = self._execute_context(
+.venv/lib/python3.12/site-packages/sqlalchemy/engine/base.py:1848: in _execute_context
+    return self._exec_single_context(
+.venv/lib/python3.12/site-packages/sqlalchemy/engine/base.py:1988: in _exec_single_context
+    self._handle_dbapi_exception(
+.venv/lib/python3.12/site-packages/sqlalchemy/engine/base.py:2365: in _handle_dbapi_exception
+    raise sqlalchemy_exception.with_traceback(exc_info[2]) from e
+.venv/lib/python3.12/site-packages/sqlalchemy/engine/base.py:1969: in _exec_single_context
+    self.dialect.do_execute(
+.venv/lib/python3.12/site-packages/sqlalchemy/engine/default.py:952: in do_execute
+    cursor.execute(statement, parameters)
+.venv/lib/python3.12/site-packages/psycopg/cursor.py:117: in execute
+    raise ex.with_traceback(None)
+E   sqlalchemy.exc.IntegrityError: (psycopg.errors.NotNullViolation) null value in column "completed_on" of relation "analysis_run" violates not-null constraint
+E   DETAIL:  Failing row contains (1, 1, 1, 1, RUNNING, owned-16f6f5b7-8973-4390-bae6-81217e59c2a1, OSV, api, 2026-10-20T00:00:00Z, null, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, null, t, null, t, null, null, 1).
+E   [SQL: INSERT INTO analysis_run (sbom_id, project_id, product_id, run_status, sbom_name, source, trigger_source, started_on, completed_on, duration_ms, total_components, components_with_cpe, total_findings, critical_count, high_count, medium_count, low_count, unknown_count, query_error_count, raw_report, is_current, is_active, deactivated_at, deactivated_by, tenant_id) VALUES (%(sbom_id)s::INTEGER, %(project_id)s::INTEGER, %(product_id)s::INTEGER, %(run_status)s::VARCHAR, %(sbom_name)s::VARCHAR, %(source)s::VARCHAR, %(trigger_source)s::VARCHAR, %(started_on)s::VARCHAR, %(completed_on)s::VARCHAR, %(duration_ms)s::INTEGER, %(total_components)s::INTEGER, %(components_with_cpe)s::INTEGER, %(total_findings)s::INTEGER, %(critical_count)s::INTEGER, %(high_count)s::INTEGER, %(medium_count)s::INTEGER, %(low_count)s::INTEGER, %(unknown_count)s::INTEGER, %(query_error_count)s::INTEGER, %(raw_report)s::VARCHAR, %(is_current)s, %(is_active)s, %(deactivated_at)s::TIMESTAMP WITH TIME ZONE, %(deactivated_by)s::VARCHAR, %(tenant_id)s::INTEGER) RETURNING analysis_run.id]
+E   [SQL parameters hidden due to hide_parameters=True]
+E   (Background on this error at: https://sqlalche.me/e/20/gkpj)</error></testcase><testcase classname="tests.test_legacy_analysis_public_identity" name="test_legacy_invalid_integer_foreign_and_viewer_never_mutate[/analyze-sbom-vulndb]" time="1.548"><error message="failed on setup with &quot;sqlalchemy.exc.IntegrityError: (psycopg.errors.NotNullViolation) null value in column &quot;completed_on&quot; of relation &quot;analysis_run&quot; violates not-null constraint&#10;DETAIL:  Failing row contains (1, 1, 1, 1, RUNNING, owned-e18ae4e2-cb5f-49b9-b2f2-65cbaba3480e, OSV, api, 2026-10-20T00:00:00Z, null, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, null, t, null, t, null, null, 1).&#10;[SQL: INSERT INTO analysis_run (sbom_id, project_id, product_id, run_status, sbom_name, source, trigger_source, started_on, completed_on, duration_ms, total_components, components_with_cpe, total_findings, critical_count, high_count, medium_count, low_count, unknown_count, query_error_count, raw_report, is_current, is_active, deactivated_at, deactivated_by, tenant_id) VALUES (%(sbom_id)s::INTEGER, %(project_id)s::INTEGER, %(product_id)s::INTEGER, %(run_status)s::VARCHAR, %(sbom_name)s::VARCHAR, %(source)s::VARCHAR, %(trigger_source)s::VARCHAR, %(started_on)s::VARCHAR, %(completed_on)s::VARCHAR, %(duration_ms)s::INTEGER, %(total_components)s::INTEGER, %(components_with_cpe)s::INTEGER, %(total_findings)s::INTEGER, %(critical_count)s::INTEGER, %(high_count)s::INTEGER, %(medium_count)s::INTEGER, %(low_count)s::INTEGER, %(unknown_count)s::INTEGER, %(query_error_count)s::INTEGER, %(raw_report)s::VARCHAR, %(is_current)s, %(is_active)s, %(deactivated_at)s::TIMESTAMP WITH TIME ZONE, %(deactivated_by)s::VARCHAR, %(tenant_id)s::INTEGER) RETURNING analysis_run.id]&#10;[SQL parameters hidden due to hide_parameters=True]&#10;(Background on this error at: https://sqlalche.me/e/20/gkpj)&quot;">.venv/lib/python3.12/site-packages/sqlalchemy/engine/base.py:1969: in _exec_single_context
+    self.dialect.do_execute(
+.venv/lib/python3.12/site-packages/sqlalchemy/engine/default.py:952: in do_execute
+    cursor.execute(statement, parameters)
+.venv/lib/python3.12/site-packages/psycopg/cursor.py:117: in execute
+    raise ex.with_traceback(None)
+E   psycopg.errors.NotNullViolation: null value in column "completed_on" of relation "analysis_run" violates not-null constraint
+E   DETAIL:  Failing row contains (1, 1, 1, 1, RUNNING, owned-e18ae4e2-cb5f-49b9-b2f2-65cbaba3480e, OSV, api, 2026-10-20T00:00:00Z, null, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, null, t, null, t, null, null, 1).
+
+The above exception was the direct cause of the following exception:
+tests/test_legacy_analysis_public_identity.py:34: in legacy_fixture
+    db.commit()
+.venv/lib/python3.12/site-packages/sqlalchemy/orm/session.py:2035: in commit
+    trans.commit(_to_root=True)
+&lt;string&gt;:2: in commit
+    ???
+.venv/lib/python3.12/site-packages/sqlalchemy/orm/state_changes.py:137: in _go
+    ret_value = fn(self, *arg, **kw)
+                ^^^^^^^^^^^^^^^^^^^^
+.venv/lib/python3.12/site-packages/sqlalchemy/orm/session.py:1316: in commit
+    self._prepare_impl()
+&lt;string&gt;:2: in _prepare_impl
+    ???
+.venv/lib/python3.12/site-packages/sqlalchemy/orm/state_changes.py:137: in _go
+    ret_value = fn(self, *arg, **kw)
+                ^^^^^^^^^^^^^^^^^^^^
+.venv/lib/python3.12/site-packages/sqlalchemy/orm/session.py:1290: in _prepare_impl
+    self.session.flush()
+.venv/lib/python3.12/site-packages/sqlalchemy/orm/session.py:4353: in flush
+    self._flush(objects)
+.venv/lib/python3.12/site-packages/sqlalchemy/orm/session.py:4488: in _flush
+    with util.safe_reraise():
+         ^^^^^^^^^^^^^^^^^^^
+.venv/lib/python3.12/site-packages/sqlalchemy/util/langhelpers.py:122: in __exit__
+    raise exc_value.with_traceback(exc_tb)
+.venv/lib/python3.12/site-packages/sqlalchemy/orm/session.py:4449: in _flush
+    flush_context.execute()
+.venv/lib/python3.12/site-packages/sqlalchemy/orm/unitofwork.py:465: in execute
+    rec.execute(self)
+.venv/lib/python3.12/site-packages/sqlalchemy/orm/unitofwork.py:641: in execute
+    util.preloaded.orm_persistence.save_obj(
+.venv/lib/python3.12/site-packages/sqlalchemy/orm/persistence.py:94: in save_obj
+    _emit_insert_statements(
+.venv/lib/python3.12/site-packages/sqlalchemy/orm/persistence.py:1234: in _emit_insert_statements
+    result = connection.execute(
+.venv/lib/python3.12/site-packages/sqlalchemy/engine/base.py:1421: in execute
+    return meth(
+.venv/lib/python3.12/site-packages/sqlalchemy/sql/elements.py:526: in _execute_on_connection
+    return connection._execute_clauseelement(
+.venv/lib/python3.12/site-packages/sqlalchemy/engine/base.py:1643: in _execute_clauseelement
+    ret = self._execute_context(
+.venv/lib/python3.12/site-packages/sqlalchemy/engine/base.py:1848: in _execute_context
+    return self._exec_single_context(
+.venv/lib/python3.12/site-packages/sqlalchemy/engine/base.py:1988: in _exec_single_context
+    self._handle_dbapi_exception(
+.venv/lib/python3.12/site-packages/sqlalchemy/engine/base.py:2365: in _handle_dbapi_exception
+    raise sqlalchemy_exception.with_traceback(exc_info[2]) from e
+.venv/lib/python3.12/site-packages/sqlalchemy/engine/base.py:1969: in _exec_single_context
+    self.dialect.do_execute(
+.venv/lib/python3.12/site-packages/sqlalchemy/engine/default.py:952: in do_execute
+    cursor.execute(statement, parameters)
+.venv/lib/python3.12/site-packages/psycopg/cursor.py:117: in execute
+    raise ex.with_traceback(None)
+E   sqlalchemy.exc.IntegrityError: (psycopg.errors.NotNullViolation) null value in column "completed_on" of relation "analysis_run" violates not-null constraint
+E   DETAIL:  Failing row contains (1, 1, 1, 1, RUNNING, owned-e18ae4e2-cb5f-49b9-b2f2-65cbaba3480e, OSV, api, 2026-10-20T00:00:00Z, null, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, null, t, null, t, null, null, 1).
+E   [SQL: INSERT INTO analysis_run (sbom_id, project_id, product_id, run_status, sbom_name, source, trigger_source, started_on, completed_on, duration_ms, total_components, components_with_cpe, total_findings, critical_count, high_count, medium_count, low_count, unknown_count, query_error_count, raw_report, is_current, is_active, deactivated_at, deactivated_by, tenant_id) VALUES (%(sbom_id)s::INTEGER, %(project_id)s::INTEGER, %(product_id)s::INTEGER, %(run_status)s::VARCHAR, %(sbom_name)s::VARCHAR, %(source)s::VARCHAR, %(trigger_source)s::VARCHAR, %(started_on)s::VARCHAR, %(completed_on)s::VARCHAR, %(duration_ms)s::INTEGER, %(total_components)s::INTEGER, %(components_with_cpe)s::INTEGER, %(total_findings)s::INTEGER, %(critical_count)s::INTEGER, %(high_count)s::INTEGER, %(medium_count)s::INTEGER, %(low_count)s::INTEGER, %(unknown_count)s::INTEGER, %(query_error_count)s::INTEGER, %(raw_report)s::VARCHAR, %(is_current)s, %(is_active)s, %(deactivated_at)s::TIMESTAMP WITH TIME ZONE, %(deactivated_by)s::VARCHAR, %(tenant_id)s::INTEGER) RETURNING analysis_run.id]
+E   [SQL parameters hidden due to hide_parameters=True]
+E   (Background on this error at: https://sqlalche.me/e/20/gkpj)</error></testcase><testcase classname="tests.test_analyze_endpoints_snapshot" name="test_analyze_sbom_nvd" time="1.694" /><testcase classname="tests.test_analyze_endpoints_snapshot" name="test_analyze_sbom_github" time="1.414" /><testcase classname="tests.test_analyze_endpoints_snapshot" name="test_analyze_sbom_osv" time="1.435" /><testcase classname="tests.test_analyze_endpoints_snapshot" name="test_analyze_sbom_consolidated" time="1.526" /><testcase classname="tests.test_analyze_endpoints_snapshot" name="test_legacy_consolidated_returns_existing_active_run" time="1.418" /><testcase classname="tests.test_policy_public_identity" name="test_history_without_any_sbom_never_resolves_an_sbom[trust]" time="1.393" /><testcase classname="tests.test_policy_public_identity" name="test_history_without_any_sbom_never_resolves_an_sbom[accepted-risk]" time="1.434" /><testcase classname="tests.test_policy_public_identity" name="test_history_without_any_sbom_never_resolves_an_sbom[scoring]" time="1.301" /><testcase classname="tests.test_policy_public_identity" name="test_tenant_history_preserves_policy_identity_with_sbom_collision[trust]" time="1.480" /><testcase classname="tests.test_policy_public_identity" name="test_tenant_history_preserves_policy_identity_with_sbom_collision[accepted-risk]" time="1.873" /><testcase classname="tests.test_policy_public_identity" name="test_tenant_history_preserves_policy_identity_with_sbom_collision[scoring]" time="1.519" /><testcase classname="tests.test_policy_public_identity" name="test_platform_history_is_platform_scoped_and_numeric[trust]" time="1.729" /><testcase classname="tests.test_policy_public_identity" name="test_platform_history_is_platform_scoped_and_numeric[accepted-risk]" time="1.580" /><testcase classname="tests.test_policy_public_identity" name="test_platform_history_is_platform_scoped_and_numeric[scoring]" time="1.922" /><testcase classname="tests.test_policy_public_identity" name="test_sbom_versions_still_have_public_uuid_identities" time="1.603" /><testcase classname="tests.test_repair_candidate_public_boundary" name="test_reviewed_candidate_hash_is_accepted_and_retry_does_not_import_twice" time="1.755" /><testcase classname="tests.test_vex_confidence_serialization" name="test_numeric_confidence_detail__VEX_UI_003[None]" time="1.675" /><testcase classname="tests.test_vex_confidence_serialization" name="test_numeric_confidence_detail__VEX_UI_003[0.0]" time="1.349" /><testcase classname="tests.test_vex_confidence_serialization" name="test_numeric_confidence_detail__VEX_UI_003[0.875]" time="1.357" /><testcase classname="tests.test_vex_confidence_serialization" name="test_numeric_confidence_detail__VEX_UI_003[1.0]" time="1.462" /><testcase classname="tests.test_vex_confidence_serialization" name="test_numeric_confidence_success_conflict_no_duplicate__VEX_AUD_001_002" time="2.056" /><testcase classname="tests.test_vex_confidence_serialization" name="test_invalid_decision_preserves_numeric_evidence_and_state__VEX_VAL_001" time="1.498" /></testsuite></testsuites>

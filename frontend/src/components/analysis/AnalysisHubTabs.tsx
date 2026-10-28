@@ -13,7 +13,7 @@ const tabs: { id: AnalysisHubTab; label: string; description: string; icon: type
   {
     id: 'consolidated',
     label: 'Consolidated scan',
-    description: 'Multi-source scan (NVD, GHSA, OSV, VulDB)',
+    description: 'Configure, monitor and review scans',
     icon: Layers,
   },
   {
@@ -35,7 +35,7 @@ export function AnalysisHubTabs({ active, onChange }: AnalysisHubTabsProps) {
     <div
       role="tablist"
       aria-label="Analysis sections"
-      className="flex flex-col gap-2 sm:flex-row sm:gap-3"
+      className="flex gap-2 sm:gap-3"
     >
       {tabs.map(({ id, label, description, icon: Icon }) => {
         const isActive = active === id;
@@ -45,11 +45,21 @@ export function AnalysisHubTabs({ active, onChange }: AnalysisHubTabsProps) {
             type="button"
             role="tab"
             aria-selected={isActive}
+            aria-controls={`analysis-panel-${id}`}
             id={`analysis-tab-${id}`}
             tabIndex={isActive ? 0 : -1}
             onClick={() => onChange(id)}
+            onKeyDown={(event) => {
+              const direction = event.key === 'ArrowRight' ? 1 : event.key === 'ArrowLeft' ? -1 : 0;
+              const next = event.key === 'Home' ? 0 : event.key === 'End' ? tabs.length - 1
+                : direction ? (tabs.findIndex(tab => tab.id === id) + direction + tabs.length) % tabs.length : -1;
+              if (next < 0) return;
+              event.preventDefault();
+              onChange(tabs[next].id);
+              document.getElementById(`analysis-tab-${tabs[next].id}`)?.focus();
+            }}
             className={cn(
-              'flex flex-1 items-start gap-3 rounded-xl border px-4 py-3 text-left transition-colors',
+              'flex min-w-0 flex-1 items-center gap-2 rounded-xl border px-3 py-2 text-left transition-colors sm:gap-3 sm:px-4 sm:py-3',
               'focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-hcl-blue/50',
               isActive
                 ? 'border-hcl-blue bg-hcl-light/80 shadow-md ring-1 ring-hcl-blue/20'
@@ -58,15 +68,15 @@ export function AnalysisHubTabs({ active, onChange }: AnalysisHubTabsProps) {
           >
             <div
               className={cn(
-                'flex h-10 w-10 shrink-0 items-center justify-center rounded-lg',
+                'hidden h-8 w-8 shrink-0 items-center justify-center rounded-lg sm:flex',
                 isActive ? 'bg-hcl-blue text-white' : 'bg-hcl-light text-hcl-muted',
               )}
             >
               <Icon className="h-5 w-5" aria-hidden />
             </div>
             <span className="min-w-0">
-              <span className="block text-sm font-semibold text-hcl-navy">{label}</span>
-              <span className="mt-0.5 block text-xs text-hcl-muted">{description}</span>
+              <span className="block text-xs font-semibold text-hcl-navy sm:text-sm">{label}</span>
+              <span className="mt-0.5 hidden text-xs text-hcl-muted sm:block">{description}</span>
             </span>
           </button>
         );

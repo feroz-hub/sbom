@@ -1,0 +1,15 @@
+{
+  "read_only": true,
+  "investigation_id": 42,
+  "validation_errors": [
+    {
+      "location": [
+        "analyzer_evidence",
+        "match_confidence"
+      ],
+      "type": "string_type",
+      "message": "Input should be a valid string",
+      "input_type": "float"
+    }
+  ]
+}

@@ -6,17 +6,19 @@ import {
   type AuthConfig, clearActiveTenantId, getActiveTenantId, resolveAuthConfig,
   safeReturnPath, setActiveTenantId,
 } from '@/lib/auth';
+import { publicId } from '@/lib/publicId';
 import type { IdentityMappingInfo } from '@/lib/identityMapping';
 import { followLogoutRedirect } from '@/lib/auth/logout-navigation';
 
 export interface AuthUser {
-  userId: number | null; externalUserId: string; email: string | null; displayName: string | null;
-  tenantId: number | null; externalTenantId: string | null; roles: string[]; permissions: string[];
+  userId: string | null; externalUserId: string; email: string | null; displayName: string | null;
+  tenantId: (string | number) | null; externalTenantId: string | null; roles: string[]; permissions: string[];
   isPlatformAdmin: boolean;
+  localStatus?: string;
 }
 
 export interface TenantInfo {
-  id: number; name: string; slug: string; externalIamTenantId: string | null;
+  id: (string | number); name: string; slug: string; externalIamTenantId: string | null;
   identity_mapping?: Record<string, unknown> | null;
   identityMapping?: IdentityMappingInfo | null;
   status: string; role: string | null;
@@ -42,6 +44,7 @@ export type BootstrapState =
   | 'verification-required'
   | 'tenant-selection-required'
   | 'access-pending'
+  | 'access-denied'
   | 'logging-out'
   | 'unauthenticated'
   | 'error';
@@ -66,7 +69,7 @@ interface AuthContextValue {
   logout: () => void;
   reloadAuth: () => void;
   retryBootstrap: () => void;
-  refreshSession: () => Promise<void>;
+  refreshSession: (options?: { authorizationChanged?: boolean }) => Promise<void>;
   setBootstrapState: (state: BootstrapState, error?: string | null) => void;
   selectTenant: (tenantId: string) => Promise<void>;
   clearTenantSelection: () => void;
@@ -78,7 +81,7 @@ interface AuthContextValue {
 const AuthContext = createContext<AuthContextValue | null>(null);
 
 const DEV_USER: AuthUser = {
-  userId: 1, externalUserId: 'dev-user', email: 'dev@local', displayName: 'Dev User', tenantId: 1,
+  userId: null, externalUserId: 'dev-user', email: 'dev@local', displayName: 'Dev User', tenantId: 1,
   externalTenantId: 'local-default', roles: ['TENANT_ADMIN'],
   // Must stay consistent with what TENANT_ADMIN actually grants server-side
   // (app/core/permissions.py). A permission missing here makes the feature
@@ -86,7 +89,18 @@ const DEV_USER: AuthUser = {
   // nav entry hides and the page refuses, which looks like a broken build.
   permissions: [
     'dashboard:read', 'tenant:user:read', 'tenant:user:invite', 'tenant:user:update',
-    'vex:read', 'vex:write',
+    'tenant:settings:update', 'vex:read', 'vex:write',
+    'sbom:read', 'sbom:upload', 'sbom:update', 'sbom:delete', 'sbom:export',
+    'sbom:repair:read', 'sbom:repair:update', 'sbom:repair:revalidate', 'sbom:repair:download', 'sbom:repair:search',
+    'project:read', 'project:create', 'project:update', 'project:delete',
+    'product:read', 'product:create', 'product:update', 'product:delete', 'product:assign_sbom', 'product:manage_schedule',
+    'component:read', 'component:update', 'analysis:read', 'analysis:run',
+    'remediation:read', 'remediation:write', 'remediation:close', 'schedule:read', 'schedule:write',
+    'lifecycle:read', 'lifecycle:override', 'lifecycle:vendor-record:read', 'lifecycle:vendor-record:write', 'lifecycle:vendor-record:delete',
+    // Secure Component Advisor (migrations 067/068).
+    'component_advisor:read', 'component_advisor:recommendation:create', 'component_advisor:recommendation:review',
+    'component_advisor:recommendation:accept', 'component_advisor:audit:read',
+    'tenant:advisor-policy:read', 'tenant:advisor-policy:update',
   ],
   isPlatformAdmin: false,
 };
@@ -103,7 +117,7 @@ function tenantInfoFromContext(tenant: Record<string, unknown>): TenantInfo {
       ? [String(tenant.current_role)]
       : [];
   return {
-    id: Number(tenant.id),
+    id: String(tenant.id),
     name: String(tenant.name ?? ''),
     slug: String(tenant.slug ?? ''),
     externalIamTenantId: (tenant.external_iam_tenant_id as string) ?? null,
@@ -122,12 +136,8 @@ function tenantInfoFromContext(tenant: Record<string, unknown>): TenantInfo {
  * An *actual* active tenant membership — the only thing bootstrap may select
  * from, and the only thing the AuthGuard offers on its selection screen.
  *
- * Platform-wide tenant accessibility is deliberately NOT a membership.
- * ``platformContextAvailable`` (and a null ``membershipStatus``) means "a
- * platform administrator can reach this tenant", which is true of every tenant
- * in the deployment; counting those as memberships turned platform-admin
- * sign-in into a mandatory pick-one-of-N screen that does not scale past a
- * handful of tenants.
+ * A platform grant is not tenant membership. Ignore legacy projections without
+ * a live membership status; they must never authorize entering a tenant.
  */
 export function isActiveMembership(tenant: TenantInfo): boolean {
   return tenant.status === 'ACTIVE' && tenant.membershipStatus === 'ACTIVE';
@@ -146,6 +156,7 @@ export function AuthProvider({ children }: { children: ReactNode }) {
   const [tenants, setTenants] = useState<TenantInfo[]>([]);
   const [activeTenantIdState, setActiveTenantIdState] = useState<string | null>(null);
   const timeoutRef = useRef<NodeJS.Timeout | null>(null);
+  const sessionProviderRef = useRef<string | null>(null);
 
   const setBootstrapState = useCallback((state: BootstrapState, error: string | null = null) => {
     setBootstrapStateInternal(state);
@@ -170,6 +181,8 @@ export function AuthProvider({ children }: { children: ReactNode }) {
       setAuthStatus('access-pending');
     } else if (state === 'unauthenticated') {
       setAuthStatus('unauthenticated');
+    } else if (state === 'access-denied') {
+      setAuthStatus('access-denied');
     } else if (state === 'error') {
       setAuthStatus('service-unavailable');
     }
@@ -188,6 +201,13 @@ export function AuthProvider({ children }: { children: ReactNode }) {
     try {
       const sessionResponse = await fetch('/api/auth/session', { credentials: 'include', cache: 'no-store' });
       const session = await sessionResponse.json().catch(() => null);
+      sessionProviderRef.current = session?.provider ?? null;
+
+      if (!sessionResponse.ok && sessionResponse.status !== 401) {
+        setUser(null);
+        setBootstrapState('error', 'The sign-in service is temporarily unavailable. Retry to check your session.');
+        return;
+      }
 
       if (!sessionResponse.ok || session?.authenticated !== true) {
         clearActiveTenantId();
@@ -223,6 +243,8 @@ export function AuthProvider({ children }: { children: ReactNode }) {
         setBootstrapState('loading-tenant-context');
         const status = body?.auth_context?.status ?? body?.status ?? null;
         const contextUser = body?.auth_context?.user ?? body?.user ?? {};
+        const userIdentity = publicId(body.user_id ?? body.userId ?? contextUser.id);
+        if (!userIdentity) throw new Error('Invalid public User identity in authentication context');
         let contextTenants: TenantInfo[] = Array.isArray(
           body?.auth_context?.tenant_context?.available_tenants,
         )
@@ -233,7 +255,7 @@ export function AuthProvider({ children }: { children: ReactNode }) {
 
         if (status === 'VERIFICATION_REQUIRED' || body?.verification_required === true) {
           setUser({
-            userId: body.user_id ?? body.userId ?? null,
+            userId: userIdentity,
             externalUserId: body.external_user_id ?? body.externalUserId ?? '',
             email: body.email ?? null,
             displayName: body.display_name ?? body.displayName ?? null,
@@ -245,9 +267,9 @@ export function AuthProvider({ children }: { children: ReactNode }) {
           return;
         }
 
-        if (status === 'ACCOUNT_DISABLED' || status === 'DISABLED' || status === 'BLOCKED') {
+        if (status === 'ACCOUNT_DISABLED' || status === 'DISABLED' || status === 'BLOCKED' || status === 'USER_SUSPENDED') {
           setUser({
-            userId: body.user_id ?? body.userId ?? null,
+            userId: userIdentity,
             externalUserId: body.external_user_id ?? body.externalUserId ?? '',
             email: body.email ?? null,
             displayName: body.display_name ?? body.displayName ?? null,
@@ -255,16 +277,17 @@ export function AuthProvider({ children }: { children: ReactNode }) {
             externalTenantId: body.external_tenant_id ?? body.externalTenantId ?? null,
             roles: body.roles || [], permissions: body.permissions || [], isPlatformAdmin: Boolean(body.is_platform_admin),
           });
-          setBootstrapState('error', 'Your SBOM account has been disabled.');
+          setBootstrapState('access-denied', 'Your SBOM account is disabled or suspended. Contact an administrator.');
           return;
         }
 
-        if (status === 'NO_TENANT' || status === 'ACCESS_PENDING') {
+        if (['NO_TENANT', 'ACCESS_PENDING', 'USER_ACCESS_PENDING', 'ACCOUNT_PENDING_APPROVAL'].includes(status)) {
           setUser({
-            userId: body.user_id ?? body.userId ?? contextUser.id ?? null,
+            userId: userIdentity,
             externalUserId: body.external_user_id ?? body.externalUserId ?? '',
             email: body.email ?? contextUser.email ?? null,
             displayName: body.display_name ?? body.displayName ?? contextUser.display_name ?? null,
+            localStatus: contextUser.local_status,
             tenantId: null,
             externalTenantId: null,
             roles: body.roles || [],
@@ -279,10 +302,8 @@ export function AuthProvider({ children }: { children: ReactNode }) {
         }
 
         // Compatibility fallback for deployments whose ``/api/auth/me`` answers
-        // without an embedded tenant context. Platform administrators are
-        // excluded on purpose: for them ``/api/tenants`` answers with every
-        // platform-accessible tenant (100+ in production), which is platform
-        // reach rather than membership and must never drive bootstrap.
+        // without an embedded tenant context. Platform administrators stay in
+        // platform context; only explicit memberships may drive tenant entry.
         if (contextTenants.length === 0 && !body.is_platform_admin) {
           try {
             const tenantsResponse = await fetch(`${BASE_URL}/api/tenants`, { credentials: 'include', headers, cache: 'no-store' });
@@ -290,7 +311,7 @@ export function AuthProvider({ children }: { children: ReactNode }) {
               const resJson = await tenantsResponse.json();
               if (Array.isArray(resJson)) {
                 contextTenants = resJson.map((tenant: Record<string, unknown>) => ({
-                  id: Number(tenant.id), name: String(tenant.name ?? ''), slug: String(tenant.slug ?? ''),
+                  id: String(tenant.id), name: String(tenant.name ?? ''), slug: String(tenant.slug ?? ''),
                   externalIamTenantId: (tenant.external_iam_tenant_id as string) ?? null,
                   status: (tenant.status as string) ?? 'ACTIVE',
                   role: tenant.role ? String(tenant.role) : null,
@@ -307,16 +328,6 @@ export function AuthProvider({ children }: { children: ReactNode }) {
 
         const isPlatformAdmin = Boolean(body.is_platform_admin);
 
-        // A platform administrator can open a tenant they hold no membership
-        // in. Keep that tenant in the list so the switcher can name the
-        // current context, without it ever counting as a membership.
-        const activeFromContext = body?.auth_context?.tenant_context?.active_tenant
-          ? tenantInfoFromContext(body.auth_context.tenant_context.active_tenant)
-          : null;
-        if (activeFromContext && !contextTenants.some((t) => t.id === activeFromContext.id)) {
-          contextTenants = [...contextTenants, activeFromContext];
-        }
-
         setTenants(contextTenants);
 
         // Actual active memberships — platform-wide accessibility excluded.
@@ -325,15 +336,9 @@ export function AuthProvider({ children }: { children: ReactNode }) {
         const backendTenantId =
           body.tenant_id !== null && body.tenant_id !== undefined ? String(body.tenant_id) : null;
         const candidateId = tenantOverride || getActiveTenantId() || backendTenantId;
-        // The backend only echoes ``tenant_id`` for a tenant it authorized for
-        // this request, so an echo of the requested id is what makes a
-        // platform administrator's explicit tenant selection valid — they do
-        // not need (and must not be given) a membership for it.
+        // Never accept a header echo as a substitute for explicit membership.
         const selectedTenant = candidateId
-          ? memberships.find((t) => String(t.id) === candidateId)
-            ?? (backendTenantId === candidateId
-              ? contextTenants.find((t) => String(t.id) === candidateId) ?? null
-              : null)
+          ? memberships.find((t) => String(t.id) === candidateId) ?? null
           : null;
 
         if (selectedTenant) {
@@ -345,20 +350,21 @@ export function AuthProvider({ children }: { children: ReactNode }) {
           if (currentBodyTenantIdStr !== selectedIdStr) {
             const reFetchHeaders: Record<string, string> = { 'X-Tenant-ID': selectedIdStr };
             const subMeRes = await fetch(`${BASE_URL}/api/auth/me`, { credentials: 'include', headers: reFetchHeaders, cache: 'no-store' });
-            if (subMeRes.ok) {
-              const subBody = await subMeRes.json().catch(() => null);
-              if (subBody) {
-                body = subBody;
-              }
+            const subBody = subMeRes.ok ? await subMeRes.json().catch(() => null) : null;
+            if (!subBody || String(subBody.tenant_id ?? '') !== selectedIdStr) {
+              setUser(null);
+              setBootstrapState('access-denied', 'The selected tenant context could not be authorized.');
+              return;
             }
+            body = subBody;
           }
 
           setUser({
-            userId: body.user_id ?? body.userId ?? contextUser.id ?? null,
+            userId: userIdentity,
             externalUserId: body.external_user_id ?? body.externalUserId ?? '',
             email: body.email ?? contextUser.email ?? null,
             displayName: body.display_name ?? body.displayName ?? contextUser.display_name ?? null,
-            tenantId: body.tenant_id ?? Number(selectedIdStr),
+            tenantId: body.tenant_id ?? selectedIdStr,
             externalTenantId: body.external_tenant_id ?? selectedTenant.externalIamTenantId ?? null,
             roles: body.roles || [],
             permissions: body.permissions || [],
@@ -376,14 +382,14 @@ export function AuthProvider({ children }: { children: ReactNode }) {
           clearActiveTenantId();
           setActiveTenantIdState(null);
           setUser({
-            userId: body.user_id ?? body.userId ?? contextUser.id ?? null,
+            userId: userIdentity,
             externalUserId: body.external_user_id ?? body.externalUserId ?? '',
             email: body.email ?? contextUser.email ?? null,
             displayName: body.display_name ?? body.displayName ?? contextUser.display_name ?? null,
             tenantId: null,
             externalTenantId: null,
             roles: body.roles || [],
-            permissions: body.permissions || [],
+            permissions: body.auth_context?.platform?.permissions ?? body.permissions ?? [],
             isPlatformAdmin: true,
           });
           setBootstrapState('ready');
@@ -407,11 +413,11 @@ export function AuthProvider({ children }: { children: ReactNode }) {
           }
 
           setUser({
-            userId: body.user_id ?? body.userId ?? contextUser.id ?? null,
+            userId: userIdentity,
             externalUserId: body.external_user_id ?? body.externalUserId ?? '',
             email: body.email ?? contextUser.email ?? null,
             displayName: body.display_name ?? body.displayName ?? contextUser.display_name ?? null,
-            tenantId: body.tenant_id ?? Number(autoSelectedIdStr),
+            tenantId: body.tenant_id ?? autoSelectedIdStr,
             externalTenantId: body.external_tenant_id ?? memberships[0].externalIamTenantId ?? null,
             roles: body.roles || [],
             permissions: body.permissions || [],
@@ -429,7 +435,7 @@ export function AuthProvider({ children }: { children: ReactNode }) {
           clearActiveTenantId();
           setActiveTenantIdState(null);
           setUser({
-            userId: body.user_id ?? body.userId ?? contextUser.id ?? null,
+            userId: userIdentity,
             externalUserId: body.external_user_id ?? body.externalUserId ?? '',
             email: body.email ?? contextUser.email ?? null,
             displayName: body.display_name ?? body.displayName ?? contextUser.display_name ?? null,
@@ -446,7 +452,7 @@ export function AuthProvider({ children }: { children: ReactNode }) {
         clearActiveTenantId();
         setActiveTenantIdState(null);
         setUser({
-          userId: body.user_id ?? body.userId ?? contextUser.id ?? null,
+          userId: userIdentity,
           externalUserId: body.external_user_id ?? body.externalUserId ?? '',
           email: body.email ?? contextUser.email ?? null,
           displayName: body.display_name ?? body.displayName ?? contextUser.display_name ?? null,
@@ -466,13 +472,13 @@ export function AuthProvider({ children }: { children: ReactNode }) {
           setBootstrapState('verification-required');
           return;
         }
-        if (code === 'IAM_ACCOUNT_DISABLED' || code === 'ACCOUNT_DISABLED' || code === 'ACCESS_DENIED') {
-          setBootstrapState('error', 'Your SBOM account has been disabled.');
+        if (code === 'IAM_ACCOUNT_DISABLED' || code === 'ACCOUNT_DISABLED' || code === 'USER_SUSPENDED' || code === 'ACCESS_DENIED') {
+          setBootstrapState('access-denied', 'Your SBOM account is disabled or suspended. Contact an administrator.');
           return;
         }
-        if (code === 'IAM_NO_ACTIVE_MEMBERSHIP' || code === 'NO_TENANT_MEMBERSHIP' || code === 'ACCESS_PENDING' || body?.email || body?.display_name) {
+        if (code === 'USER_ACCESS_PENDING' || code === 'IAM_ACCOUNT_PENDING_APPROVAL' || code === 'IAM_NO_ACTIVE_MEMBERSHIP' || code === 'NO_TENANT_MEMBERSHIP' || code === 'ACCESS_PENDING' || body?.email || body?.display_name) {
           setUser({
-            userId: body?.user_id ?? body?.userId ?? null,
+            userId: publicId(body?.user_id ?? body?.userId),
             externalUserId: body?.external_user_id ?? body?.externalUserId ?? '',
             email: body?.email ?? null,
             displayName: body?.display_name ?? body?.displayName ?? null,
@@ -530,6 +536,8 @@ export function AuthProvider({ children }: { children: ReactNode }) {
   }, [config.enabled]);
 
   const logout = useCallback(() => {
+    const localLogout = sessionProviderRef.current === 'MICROSOFT_ENTRA' ? '/logged-out?provider=entra' : sessionProviderRef.current === 'NATIVE' || process.env.NEXT_PUBLIC_HCL_AUTH_ENABLED === 'false'
+      ? '/logged-out?provider=native' : '/logged-out';
     clearActiveTenantId();
     setUser(null);
     setTenants([]);
@@ -557,9 +565,19 @@ export function AuthProvider({ children }: { children: ReactNode }) {
         }
         return response.json();
       })
-      .then((body) => followLogoutRedirect(body.redirectUrl || config.postLogoutRedirectUri))
-      .catch(() => followLogoutRedirect(config.postLogoutRedirectUri));
-  }, [config.enabled, config.postLogoutRedirectUri, queryClient, setBootstrapState]);
+      .then((body) => followLogoutRedirect(body.redirectUrl || localLogout))
+      .catch(() => followLogoutRedirect(localLogout));
+  }, [config.enabled, queryClient, setBootstrapState]);
+
+  // Authority changes must discard privileged results before resolving /auth/me.
+  const refreshSession = useCallback(async (options: { authorizationChanged?: boolean } = {}) => {
+    if (options.authorizationChanged) {
+      setBootstrapState('loading-auth-context');
+      await queryClient.cancelQueries();
+      queryClient.clear();
+    }
+    await checkAuth();
+  }, [checkAuth, queryClient, setBootstrapState]);
 
   const reloadAuth = useCallback(() => {
     void checkAuth();
@@ -593,7 +611,7 @@ export function AuthProvider({ children }: { children: ReactNode }) {
   }, [selectTenant]);
 
   const hasPermission = useCallback(
-    (permission: string) => Boolean(user && (user.isPlatformAdmin || user.permissions.includes(permission))),
+    (permission: string) => Boolean(user?.permissions.includes(permission)),
     [user],
   );
 
@@ -630,7 +648,7 @@ export function AuthProvider({ children }: { children: ReactNode }) {
     logout,
     reloadAuth,
     retryBootstrap,
-    refreshSession: checkAuth,
+    refreshSession,
     setBootstrapState,
     selectTenant,
     clearTenantSelection,
@@ -651,7 +669,7 @@ export function AuthProvider({ children }: { children: ReactNode }) {
     logout,
     reloadAuth,
     retryBootstrap,
-    checkAuth,
+    refreshSession,
     setBootstrapState,
     selectTenant,
     clearTenantSelection,

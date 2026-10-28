@@ -220,14 +220,14 @@ class OpenAiProvider(LlmProvider):
         if probe is None:
             return await self._probe_via_completion(target_model, client)
 
-        models, status = probe
+        models, status, error_body = probe
         latency = _probe.measure(t0)
         if status and status >= 400:
             return _probe.http_failure(
                 provider=self.name,
                 model=target_model,
                 status=status,
-                body_text="models endpoint returned error",
+                body_text=error_body,
                 latency_ms=latency,
             )
         completion_result = await self._probe_via_completion(target_model, client)

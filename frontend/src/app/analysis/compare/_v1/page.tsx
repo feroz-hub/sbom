@@ -1,5 +1,7 @@
 'use client';
 
+import { recordIdLabel } from '@/components/ui/RecordIdDisplay';
+import { publicId } from '@/lib/publicId';
 import { Suspense, useMemo, useState } from 'react';
 import Link from 'next/link';
 import { useSearchParams, useRouter } from 'next/navigation';
@@ -26,23 +28,19 @@ import { Skeleton, SkeletonText } from '@/components/ui/Spinner';
 import { compareRuns } from '@/lib/api';
 import { cn, formatDate } from '@/lib/utils';
 
-function parseRunId(value: string | null): number | null {
-  if (!value) return null;
-  const n = Number(value);
-  return Number.isFinite(n) && n > 0 ? n : null;
-}
+
 
 function CompareRunsPageInner() {
   const params = useSearchParams();
   const router = useRouter();
 
-  const runA = parseRunId(params.get('run_a'));
-  const runB = parseRunId(params.get('run_b'));
+  const runA = publicId(params.get('run_a'));
+  const runB = publicId(params.get('run_b'));
   const canQuery = runA !== null && runB !== null && runA !== runB;
 
   const { data, isLoading, error } = useQuery({
     queryKey: ['compare-runs', runA, runB],
-    queryFn: ({ signal }) => compareRuns(runA as number, runB as number, signal),
+    queryFn: ({ signal }) => compareRuns(runA as string, runB as string, signal),
     enabled: canQuery,
   });
 
@@ -50,7 +48,7 @@ function CompareRunsPageInner() {
     <div className="flex flex-1 flex-col">
       <TopBar
         title="Compare runs"
-        subtitle={canQuery ? `Run #${runA} vs Run #${runB}` : 'Diff two analysis runs'}
+        subtitle={canQuery ? 'Selected analysis runs' : 'Diff two analysis runs'}
         breadcrumbs={[
           { label: 'Analysis Runs', href: '/analysis' },
           { label: 'Compare' },
@@ -287,7 +285,7 @@ function CompareBody({ data }: { data: NonNullable<Awaited<ReturnType<typeof com
 // ─── Helper components ───────────────────────────────────────────────────────
 
 interface RunHeaderProps {
-  run: { id: number; sbom_name: string | null; completed_on: string | null };
+  run: { display_id?: number | null; id: string; sbom_name: string | null; completed_on: string | null };
   label: string;
   align: 'left' | 'right';
 }
@@ -305,7 +303,7 @@ function RunHeader({ run, label, align }: RunHeaderProps) {
       </p>
       <h3 className="mt-1 truncate text-display-sm font-semibold text-hcl-navy">
         <Link href={`/analysis/${run.id}`} className="hover:text-primary hover:underline">
-          #{run.id}
+          {recordIdLabel('Run', run.display_id)}
         </Link>
       </h3>
       <p className="font-metric mt-0.5 truncate text-xs tabular-nums text-hcl-muted">

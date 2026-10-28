@@ -1,0 +1,47 @@
+{
+  "browser": "Installed Google Chrome via Playwright channel=chrome",
+  "ignoreHTTPSErrors": false,
+  "tls_bypass_flags": false,
+  "application": "Actual FastAPI/Next.js and newly owned PostgreSQL schema102",
+  "provider": "Local Postman OSV HTTP simulation; not live OSV/provider acceptance",
+  "original_accounts_used": false,
+  "physical_mobile_device_validation": false,
+  "results": [
+    {
+      "scenario": "Analyst: real SBOM upload, analysis SSE, persisted UUID polling and foreign isolation",
+      "result": "PASS",
+      "time_utc": "2026-10-23T12:28:23.719Z",
+      "protected_original_sha256": "81d3eca8daf9faf68da398520d54e65435398ae0f509025f32726fd608e5c5a0"
+    },
+    {
+      "scenario": "viewer: login, UUID context, refresh, logout/login stability",
+      "result": "PASS",
+      "time_utc": "2026-10-23T12:31:00.701Z",
+      "protected_original_sha256": "b0e802a313dbaf253c1e61aa1beecf69476ee8816e59bf5bf9aefce4467ebd9d"
+    },
+    {
+      "scenario": "Tenant Admin: actual Users & Access find/add/change roles/remove UUID user",
+      "result": "PASS",
+      "time_utc": "2026-10-23T12:31:28.051Z",
+      "protected_original_sha256": "b0e802a313dbaf253c1e61aa1beecf69476ee8816e59bf5bf9aefce4467ebd9d"
+    },
+    {
+      "scenario": "Platform Admin: purpose-limited UUID selection, actual grant/revoke UI",
+      "result": "PASS",
+      "time_utc": "2026-10-23T12:31:55.119Z",
+      "protected_original_sha256": "b0e802a313dbaf253c1e61aa1beecf69476ee8816e59bf5bf9aefce4467ebd9d"
+    },
+    {
+      "scenario": "Admin UUID path syntax, missing identities and membership separation",
+      "result": "PASS",
+      "time_utc": "2026-10-23T12:32:07.924Z",
+      "protected_original_sha256": "b0e802a313dbaf253c1e61aa1beecf69476ee8816e59bf5bf9aefce4467ebd9d"
+    },
+    {
+      "scenario": "Mobile emulation: numeric Application/SBOM labels and UUID hrefs, tenant-admin platform denial",
+      "result": "PASS",
+      "time_utc": "2026-10-23T12:33:09.112Z",
+      "protected_original_sha256": "48f43ef5d6d63f50abb39cfc1eab40d64cdb94a48a9f90bb17663a4c1d590449"
+    }
+  ]
+}

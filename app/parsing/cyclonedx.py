@@ -100,6 +100,7 @@ def parse_cyclonedx_dict(doc: dict[str, Any]) -> list[dict[str, Any]]:
                 "bom_ref": norm(c.get("bom-ref") or c.get("bomRef")),
                 "license": norm(license_str),
                 "hashes": norm(hashes_str),
+                "description": norm(c.get("description")),
             }
         )
     return comps
@@ -199,6 +200,7 @@ def parse_cyclonedx_xml(xml_string: str) -> list[dict[str, Any]]:
                     "bom_ref": norm(c.get("@bom-ref")),
                     "license": norm(license_str),
                     "hashes": norm(hashes_str),
+                    "description": norm(c.get("description")),
                 }
             )
         return out
@@ -212,6 +214,7 @@ def parse_cyclonedx_xml(xml_string: str) -> list[dict[str, Any]]:
         return out
     for comp in comps_el.findall("cdx:component", ns):
         purl_el = comp.find("cdx:purl", ns)
+        desc_el = comp.find("cdx:description", ns)
         cpe_el = comp.find("cdx:cpe", ns)
         name_el = comp.find("cdx:name", ns)
         ver_el = comp.find("cdx:version", ns)
@@ -262,6 +265,7 @@ def parse_cyclonedx_xml(xml_string: str) -> list[dict[str, Any]]:
                 "bom_ref": norm(comp.get("bom-ref")),
                 "license": norm(license_str),
                 "hashes": norm(hashes_str),
+                "description": norm(desc_el.text if desc_el is not None else None),
             }
         )
     return out

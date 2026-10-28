@@ -122,6 +122,7 @@ celery_app = Celery(
     broker=_broker_url(),
     backend=_result_backend(),
     include=[
+        "app.workers.security_mail",
         "app.nvd_mirror.tasks",
         "app.workers.scheduled_analysis",
         "app.workers.cve_refresh",
@@ -130,6 +131,7 @@ celery_app = Celery(
         "app.workers.kev_sync",
         "app.workers.report_notifications",
         "app.workers.ai_model_discovery",
+        "app.workers.component_advisor_tasks",
     ],
 )
 
@@ -145,6 +147,7 @@ celery_app.conf.update(
 )
 
 celery_app.conf.beat_schedule = {
+    "security-mail-outbox": {"task": "security_mail.dispatch", "schedule": 30.0},
     "report-notifications-hourly": {"task": "report_notifications.tick", "schedule": crontab(minute=50)},
     "report-notifications-outbox": {"task": "report_notifications.dispatch_pending", "schedule": crontab(minute="*")},
     "report-notifications-retention": {"task": "report_notifications.purge", "schedule": crontab(minute=50, hour=4)},

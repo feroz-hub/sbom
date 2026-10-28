@@ -1,3 +1,4 @@
+import { PUBLIC_ID } from '@/lib/publicId';
 /** Browser-safe authentication configuration and tenant preference helpers. */
 
 export interface AuthConfig {
@@ -30,7 +31,7 @@ export const ACTIVE_TENANT_COOKIE = 'sbom_active_tenant_id';
 function syncActiveTenantCookie(value: string | null): void {
   if (typeof document === 'undefined') return;
   const secure = typeof location !== 'undefined' && location.protocol === 'https:' ? '; Secure' : '';
-  if (value && /^\d+$/.test(value)) {
+  if (value && PUBLIC_ID.test(value)) {
     document.cookie = `${ACTIVE_TENANT_COOKIE}=${encodeURIComponent(value)}; Path=/; SameSite=Strict; Max-Age=86400${secure}`;
     return;
   }
@@ -38,11 +39,19 @@ function syncActiveTenantCookie(value: string | null): void {
 }
 
 export function getActiveTenantId(): string | null {
-  return typeof sessionStorage === 'undefined' ? null : sessionStorage.getItem(ACTIVE_TENANT_KEY);
+  if (typeof sessionStorage === 'undefined') return null;
+  const value = sessionStorage.getItem(ACTIVE_TENANT_KEY);
+  // This preference survives a deployment/database change in an existing tab.
+  // Legacy integers and malformed values cannot become UUID tenant headers.
+  if (value !== null && !PUBLIC_ID.test(value)) {
+    clearActiveTenantId();
+    return null;
+  }
+  return value;
 }
 
 export function setActiveTenantId(tenantId: string): void {
-  if (!/^\d+$/.test(tenantId)) {
+  if (!PUBLIC_ID.test(tenantId)) {
     clearActiveTenantId();
     return;
   }

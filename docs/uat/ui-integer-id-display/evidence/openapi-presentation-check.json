@@ -1,0 +1,1088 @@
+{
+  "source": "Task-owned actual FastAPI OpenAPI; no populated database request",
+  "uuid_path_parameters": {
+    "/api/projects/{project_id}": {
+      "get": [
+        {
+          "name": "project_id",
+          "in": "path",
+          "required": true,
+          "schema": {
+            "description": "Project ID (positive integer)",
+            "title": "Project Id",
+            "type": "string",
+            "format": "uuid",
+            "pattern": "^[0-9a-fA-F]{8}-[0-9a-fA-F]{4}-4[0-9a-fA-F]{3}-[89abAB][0-9a-fA-F]{3}-[0-9a-fA-F]{12}$"
+          },
+          "description": "Project ID (positive integer)"
+        }
+      ],
+      "patch": [
+        {
+          "name": "project_id",
+          "in": "path",
+          "required": true,
+          "schema": {
+            "description": "Project ID (positive integer)",
+            "title": "Project Id",
+            "type": "string",
+            "format": "uuid",
+            "pattern": "^[0-9a-fA-F]{8}-[0-9a-fA-F]{4}-4[0-9a-fA-F]{3}-[89abAB][0-9a-fA-F]{3}-[0-9a-fA-F]{12}$"
+          },
+          "description": "Project ID (positive integer)"
+        }
+      ],
+      "delete": [
+        {
+          "name": "project_id",
+          "in": "path",
+          "required": true,
+          "schema": {
+            "title": "Project Id",
+            "type": "string",
+            "format": "uuid",
+            "pattern": "^[0-9a-fA-F]{8}-[0-9a-fA-F]{4}-4[0-9a-fA-F]{3}-[89abAB][0-9a-fA-F]{3}-[0-9a-fA-F]{12}$"
+          }
+        }
+      ]
+    },
+    "/api/sboms/{sbom_id}": {
+      "get": [
+        {
+          "name": "sbom_id",
+          "in": "path",
+          "required": true,
+          "schema": {
+            "title": "Sbom Id",
+            "type": "string",
+            "format": "uuid",
+            "pattern": "^[0-9a-fA-F]{8}-[0-9a-fA-F]{4}-4[0-9a-fA-F]{3}-[89abAB][0-9a-fA-F]{3}-[0-9a-fA-F]{12}$"
+          }
+        }
+      ],
+      "patch": [
+        {
+          "name": "sbom_id",
+          "in": "path",
+          "required": true,
+          "schema": {
+            "title": "Sbom Id",
+            "type": "string",
+            "format": "uuid",
+            "pattern": "^[0-9a-fA-F]{8}-[0-9a-fA-F]{4}-4[0-9a-fA-F]{3}-[89abAB][0-9a-fA-F]{3}-[0-9a-fA-F]{12}$"
+          }
+        }
+      ],
+      "delete": [
+        {
+          "name": "sbom_id",
+          "in": "path",
+          "required": true,
+          "schema": {
+            "title": "Sbom Id",
+            "type": "string",
+            "format": "uuid",
+            "pattern": "^[0-9a-fA-F]{8}-[0-9a-fA-F]{4}-4[0-9a-fA-F]{3}-[89abAB][0-9a-fA-F]{3}-[0-9a-fA-F]{12}$"
+          }
+        }
+      ]
+    },
+    "/api/runs/{run_id}": {
+      "get": [
+        {
+          "name": "run_id",
+          "in": "path",
+          "required": true,
+          "schema": {
+            "title": "Run Id",
+            "type": "string",
+            "format": "uuid",
+            "pattern": "^[0-9a-fA-F]{8}-[0-9a-fA-F]{4}-4[0-9a-fA-F]{3}-[89abAB][0-9a-fA-F]{3}-[0-9a-fA-F]{12}$"
+          }
+        }
+      ]
+    }
+  },
+  "output_schema_count": 27,
+  "display_fields": {
+    "AnalysisFindingOut": {
+      "analysis_run_display_id": {
+        "anyOf": [
+          {
+            "type": "integer",
+            "minimum": 1,
+            "maximum": 9007199254740991
+          },
+          {
+            "type": "null"
+          }
+        ],
+        "readOnly": true,
+        "description": "Existing persisted integer key for authorized display only. Never a resource selector; use the UUID."
+      },
+      "component_display_id": {
+        "anyOf": [
+          {
+            "type": "integer",
+            "minimum": 1,
+            "maximum": 9007199254740991
+          },
+          {
+            "type": "null"
+          }
+        ],
+        "readOnly": true,
+        "description": "Existing persisted integer key for authorized display only. Never a resource selector; use the UUID."
+      }
+    },
+    "AnalysisRunOut": {
+      "display_id": {
+        "anyOf": [
+          {
+            "type": "integer",
+            "minimum": 1,
+            "maximum": 9007199254740991
+          },
+          {
+            "type": "null"
+          }
+        ],
+        "readOnly": true,
+        "description": "Existing persisted integer key for authorized display only. Never a resource selector; use the UUID."
+      },
+      "sbom_display_id": {
+        "anyOf": [
+          {
+            "type": "integer",
+            "minimum": 1,
+            "maximum": 9007199254740991
+          },
+          {
+            "type": "null"
+          }
+        ],
+        "readOnly": true,
+        "description": "Existing persisted integer key for authorized display only. Never a resource selector; use the UUID."
+      },
+      "project_display_id": {
+        "anyOf": [
+          {
+            "type": "integer",
+            "minimum": 1,
+            "maximum": 9007199254740991
+          },
+          {
+            "type": "null"
+          }
+        ],
+        "readOnly": true,
+        "description": "Existing persisted integer key for authorized display only. Never a resource selector; use the UUID."
+      },
+      "product_display_id": {
+        "anyOf": [
+          {
+            "type": "integer",
+            "minimum": 1,
+            "maximum": 9007199254740991
+          },
+          {
+            "type": "null"
+          }
+        ],
+        "readOnly": true,
+        "description": "Existing persisted integer key for authorized display only. Never a resource selector; use the UUID."
+      }
+    },
+    "AnalyzerEvidenceSection": {
+      "analysis_run_display_id": {
+        "anyOf": [
+          {
+            "type": "integer",
+            "minimum": 1,
+            "maximum": 9007199254740991
+          },
+          {
+            "type": "null"
+          }
+        ],
+        "readOnly": true,
+        "description": "Existing persisted integer key for authorized display only. Never a resource selector; use the UUID."
+      }
+    },
+    "ComponentSection": {
+      "component_display_id": {
+        "anyOf": [
+          {
+            "type": "integer",
+            "minimum": 1,
+            "maximum": 9007199254740991
+          },
+          {
+            "type": "null"
+          }
+        ],
+        "readOnly": true,
+        "description": "Existing persisted integer key for authorized display only. Never a resource selector; use the UUID."
+      }
+    },
+    "InvestigationDetail": {
+      "sbom_display_id": {
+        "anyOf": [
+          {
+            "type": "integer",
+            "minimum": 1,
+            "maximum": 9007199254740991
+          },
+          {
+            "type": "null"
+          }
+        ],
+        "readOnly": true,
+        "description": "Existing persisted integer key for authorized display only. Never a resource selector; use the UUID."
+      },
+      "analysis_run_display_id": {
+        "anyOf": [
+          {
+            "type": "integer",
+            "minimum": 1,
+            "maximum": 9007199254740991
+          },
+          {
+            "type": "null"
+          }
+        ],
+        "readOnly": true,
+        "description": "Existing persisted integer key for authorized display only. Never a resource selector; use the UUID."
+      }
+    },
+    "InvestigationRow": {
+      "component_display_id": {
+        "anyOf": [
+          {
+            "type": "integer",
+            "minimum": 1,
+            "maximum": 9007199254740991
+          },
+          {
+            "type": "null"
+          }
+        ],
+        "readOnly": true,
+        "description": "Existing persisted integer key for authorized display only. Never a resource selector; use the UUID."
+      },
+      "project_display_id": {
+        "anyOf": [
+          {
+            "type": "integer",
+            "minimum": 1,
+            "maximum": 9007199254740991
+          },
+          {
+            "type": "null"
+          }
+        ],
+        "readOnly": true,
+        "description": "Existing persisted integer key for authorized display only. Never a resource selector; use the UUID."
+      },
+      "product_display_id": {
+        "anyOf": [
+          {
+            "type": "integer",
+            "minimum": 1,
+            "maximum": 9007199254740991
+          },
+          {
+            "type": "null"
+          }
+        ],
+        "readOnly": true,
+        "description": "Existing persisted integer key for authorized display only. Never a resource selector; use the UUID."
+      },
+      "sbom_display_id": {
+        "anyOf": [
+          {
+            "type": "integer",
+            "minimum": 1,
+            "maximum": 9007199254740991
+          },
+          {
+            "type": "null"
+          }
+        ],
+        "readOnly": true,
+        "description": "Existing persisted integer key for authorized display only. Never a resource selector; use the UUID."
+      },
+      "analysis_run_display_id": {
+        "anyOf": [
+          {
+            "type": "integer",
+            "minimum": 1,
+            "maximum": 9007199254740991
+          },
+          {
+            "type": "null"
+          }
+        ],
+        "readOnly": true,
+        "description": "Existing persisted integer key for authorized display only. Never a resource selector; use the UUID."
+      }
+    },
+    "LatestAnalysisOut": {
+      "run_display_id": {
+        "anyOf": [
+          {
+            "type": "integer",
+            "minimum": 1,
+            "maximum": 9007199254740991
+          },
+          {
+            "type": "null"
+          }
+        ],
+        "readOnly": true,
+        "description": "Existing persisted integer key for authorized display only. Never a resource selector; use the UUID."
+      }
+    },
+    "LogicalSBOMOut": {
+      "display_id": {
+        "anyOf": [
+          {
+            "type": "integer",
+            "minimum": 1,
+            "maximum": 9007199254740991
+          },
+          {
+            "type": "null"
+          }
+        ],
+        "readOnly": true,
+        "description": "Existing persisted integer key for authorized display only. Never a resource selector; use the UUID."
+      },
+      "product_display_id": {
+        "anyOf": [
+          {
+            "type": "integer",
+            "minimum": 1,
+            "maximum": 9007199254740991
+          },
+          {
+            "type": "null"
+          }
+        ],
+        "readOnly": true,
+        "description": "Existing persisted integer key for authorized display only. Never a resource selector; use the UUID."
+      }
+    },
+    "ProductRead": {
+      "display_id": {
+        "anyOf": [
+          {
+            "type": "integer",
+            "minimum": 1,
+            "maximum": 9007199254740991
+          },
+          {
+            "type": "null"
+          }
+        ],
+        "readOnly": true,
+        "description": "Existing persisted integer key for authorized display only. Never a resource selector; use the UUID."
+      },
+      "project_display_id": {
+        "anyOf": [
+          {
+            "type": "integer",
+            "minimum": 1,
+            "maximum": 9007199254740991
+          },
+          {
+            "type": "null"
+          }
+        ],
+        "readOnly": true,
+        "description": "Existing persisted integer key for authorized display only. Never a resource selector; use the UUID."
+      },
+      "latest_sbom_display_id": {
+        "anyOf": [
+          {
+            "type": "integer",
+            "minimum": 1,
+            "maximum": 9007199254740991
+          },
+          {
+            "type": "null"
+          }
+        ],
+        "readOnly": true,
+        "description": "Existing persisted integer key for authorized display only. Never a resource selector; use the UUID."
+      },
+      "current_sbom_display_id": {
+        "anyOf": [
+          {
+            "type": "integer",
+            "minimum": 1,
+            "maximum": 9007199254740991
+          },
+          {
+            "type": "null"
+          }
+        ],
+        "readOnly": true,
+        "description": "Existing persisted integer key for authorized display only. Never a resource selector; use the UUID."
+      }
+    },
+    "ProductSummary": {
+      "display_id": {
+        "anyOf": [
+          {
+            "type": "integer",
+            "minimum": 1,
+            "maximum": 9007199254740991
+          },
+          {
+            "type": "null"
+          }
+        ],
+        "readOnly": true,
+        "description": "Existing persisted integer key for authorized display only. Never a resource selector; use the UUID."
+      },
+      "project_display_id": {
+        "anyOf": [
+          {
+            "type": "integer",
+            "minimum": 1,
+            "maximum": 9007199254740991
+          },
+          {
+            "type": "null"
+          }
+        ],
+        "readOnly": true,
+        "description": "Existing persisted integer key for authorized display only. Never a resource selector; use the UUID."
+      },
+      "latest_sbom_display_id": {
+        "anyOf": [
+          {
+            "type": "integer",
+            "minimum": 1,
+            "maximum": 9007199254740991
+          },
+          {
+            "type": "null"
+          }
+        ],
+        "readOnly": true,
+        "description": "Existing persisted integer key for authorized display only. Never a resource selector; use the UUID."
+      },
+      "current_sbom_display_id": {
+        "anyOf": [
+          {
+            "type": "integer",
+            "minimum": 1,
+            "maximum": 9007199254740991
+          },
+          {
+            "type": "null"
+          }
+        ],
+        "readOnly": true,
+        "description": "Existing persisted integer key for authorized display only. Never a resource selector; use the UUID."
+      }
+    },
+    "ProjectOut": {
+      "display_id": {
+        "anyOf": [
+          {
+            "type": "integer",
+            "minimum": 1,
+            "maximum": 9007199254740991
+          },
+          {
+            "type": "null"
+          }
+        ],
+        "readOnly": true,
+        "description": "Existing persisted integer key for authorized display only. Never a resource selector; use the UUID."
+      }
+    },
+    "RunSummary": {
+      "display_id": {
+        "anyOf": [
+          {
+            "type": "integer",
+            "minimum": 1,
+            "maximum": 9007199254740991
+          },
+          {
+            "type": "null"
+          }
+        ],
+        "readOnly": true,
+        "description": "Existing persisted integer key for authorized display only. Never a resource selector; use the UUID."
+      },
+      "sbom_display_id": {
+        "anyOf": [
+          {
+            "type": "integer",
+            "minimum": 1,
+            "maximum": 9007199254740991
+          },
+          {
+            "type": "null"
+          }
+        ],
+        "readOnly": true,
+        "description": "Existing persisted integer key for authorized display only. Never a resource selector; use the UUID."
+      },
+      "project_display_id": {
+        "anyOf": [
+          {
+            "type": "integer",
+            "minimum": 1,
+            "maximum": 9007199254740991
+          },
+          {
+            "type": "null"
+          }
+        ],
+        "readOnly": true,
+        "description": "Existing persisted integer key for authorized display only. Never a resource selector; use the UUID."
+      },
+      "product_display_id": {
+        "anyOf": [
+          {
+            "type": "integer",
+            "minimum": 1,
+            "maximum": 9007199254740991
+          },
+          {
+            "type": "null"
+          }
+        ],
+        "readOnly": true,
+        "description": "Existing persisted integer key for authorized display only. Never a resource selector; use the UUID."
+      }
+    },
+    "SBOMComponentListItem": {
+      "display_id": {
+        "anyOf": [
+          {
+            "type": "integer",
+            "minimum": 1,
+            "maximum": 9007199254740991
+          },
+          {
+            "type": "null"
+          }
+        ],
+        "readOnly": true,
+        "description": "Existing persisted integer key for authorized display only. Never a resource selector; use the UUID."
+      },
+      "sbom_display_id": {
+        "anyOf": [
+          {
+            "type": "integer",
+            "minimum": 1,
+            "maximum": 9007199254740991
+          },
+          {
+            "type": "null"
+          }
+        ],
+        "readOnly": true,
+        "description": "Existing persisted integer key for authorized display only. Never a resource selector; use the UUID."
+      },
+      "duplicate_of_component_display_id": {
+        "anyOf": [
+          {
+            "type": "integer",
+            "minimum": 1,
+            "maximum": 9007199254740991
+          },
+          {
+            "type": "null"
+          }
+        ],
+        "readOnly": true,
+        "description": "Existing persisted integer key for authorized display only. Never a resource selector; use the UUID."
+      }
+    },
+    "SBOMComponentOut": {
+      "display_id": {
+        "anyOf": [
+          {
+            "type": "integer",
+            "minimum": 1,
+            "maximum": 9007199254740991
+          },
+          {
+            "type": "null"
+          }
+        ],
+        "readOnly": true,
+        "description": "Existing persisted integer key for authorized display only. Never a resource selector; use the UUID."
+      },
+      "sbom_display_id": {
+        "anyOf": [
+          {
+            "type": "integer",
+            "minimum": 1,
+            "maximum": 9007199254740991
+          },
+          {
+            "type": "null"
+          }
+        ],
+        "readOnly": true,
+        "description": "Existing persisted integer key for authorized display only. Never a resource selector; use the UUID."
+      },
+      "duplicate_of_component_display_id": {
+        "anyOf": [
+          {
+            "type": "integer",
+            "minimum": 1,
+            "maximum": 9007199254740991
+          },
+          {
+            "type": "null"
+          }
+        ],
+        "readOnly": true,
+        "description": "Existing persisted integer key for authorized display only. Never a resource selector; use the UUID."
+      }
+    },
+    "SBOMSourceOut": {
+      "logical_sbom_display_id": {
+        "anyOf": [
+          {
+            "type": "integer",
+            "minimum": 1,
+            "maximum": 9007199254740991
+          },
+          {
+            "type": "null"
+          }
+        ],
+        "readOnly": true,
+        "description": "Existing persisted integer key for authorized display only. Never a resource selector; use the UUID."
+      },
+      "display_id": {
+        "anyOf": [
+          {
+            "type": "integer",
+            "minimum": 1,
+            "maximum": 9007199254740991
+          },
+          {
+            "type": "null"
+          }
+        ],
+        "readOnly": true,
+        "description": "Existing persisted integer key for authorized display only. Never a resource selector; use the UUID."
+      },
+      "project_display_id": {
+        "anyOf": [
+          {
+            "type": "integer",
+            "minimum": 1,
+            "maximum": 9007199254740991
+          },
+          {
+            "type": "null"
+          }
+        ],
+        "readOnly": true,
+        "description": "Existing persisted integer key for authorized display only. Never a resource selector; use the UUID."
+      },
+      "product_display_id": {
+        "anyOf": [
+          {
+            "type": "integer",
+            "minimum": 1,
+            "maximum": 9007199254740991
+          },
+          {
+            "type": "null"
+          }
+        ],
+        "readOnly": true,
+        "description": "Existing persisted integer key for authorized display only. Never a resource selector; use the UUID."
+      },
+      "source_sbom_display_id": {
+        "anyOf": [
+          {
+            "type": "integer",
+            "minimum": 1,
+            "maximum": 9007199254740991
+          },
+          {
+            "type": "null"
+          }
+        ],
+        "readOnly": true,
+        "description": "Existing persisted integer key for authorized display only. Never a resource selector; use the UUID."
+      },
+      "converted_sbom_display_id": {
+        "anyOf": [
+          {
+            "type": "integer",
+            "minimum": 1,
+            "maximum": 9007199254740991
+          },
+          {
+            "type": "null"
+          }
+        ],
+        "readOnly": true,
+        "description": "Existing persisted integer key for authorized display only. Never a resource selector; use the UUID."
+      }
+    },
+    "SbomAcceptedResponse": {
+      "sbom_display_id": {
+        "anyOf": [
+          {
+            "type": "integer",
+            "minimum": 1,
+            "maximum": 9007199254740991
+          },
+          {
+            "type": "null"
+          }
+        ],
+        "readOnly": true,
+        "description": "Existing persisted integer key for authorized display only. Never a resource selector; use the UUID."
+      },
+      "logical_sbom_display_id": {
+        "anyOf": [
+          {
+            "type": "integer",
+            "minimum": 1,
+            "maximum": 9007199254740991
+          },
+          {
+            "type": "null"
+          }
+        ],
+        "readOnly": true,
+        "description": "Existing persisted integer key for authorized display only. Never a resource selector; use the UUID."
+      },
+      "project_display_id": {
+        "anyOf": [
+          {
+            "type": "integer",
+            "minimum": 1,
+            "maximum": 9007199254740991
+          },
+          {
+            "type": "null"
+          }
+        ],
+        "readOnly": true,
+        "description": "Existing persisted integer key for authorized display only. Never a resource selector; use the UUID."
+      },
+      "product_display_id": {
+        "anyOf": [
+          {
+            "type": "integer",
+            "minimum": 1,
+            "maximum": 9007199254740991
+          },
+          {
+            "type": "null"
+          }
+        ],
+        "readOnly": true,
+        "description": "Existing persisted integer key for authorized display only. Never a resource selector; use the UUID."
+      }
+    },
+    "SbomConversionReportResponse": {
+      "source_sbom_display_id": {
+        "anyOf": [
+          {
+            "type": "integer",
+            "minimum": 1,
+            "maximum": 9007199254740991
+          },
+          {
+            "type": "null"
+          }
+        ],
+        "readOnly": true,
+        "description": "Existing persisted integer key for authorized display only. Never a resource selector; use the UUID."
+      },
+      "converted_sbom_display_id": {
+        "anyOf": [
+          {
+            "type": "integer",
+            "minimum": 1,
+            "maximum": 9007199254740991
+          },
+          {
+            "type": "null"
+          }
+        ],
+        "readOnly": true,
+        "description": "Existing persisted integer key for authorized display only. Never a resource selector; use the UUID."
+      }
+    },
+    "SbomConversionResponse": {
+      "source_sbom_display_id": {
+        "anyOf": [
+          {
+            "type": "integer",
+            "minimum": 1,
+            "maximum": 9007199254740991
+          },
+          {
+            "type": "null"
+          }
+        ],
+        "readOnly": true,
+        "description": "Existing persisted integer key for authorized display only. Never a resource selector; use the UUID."
+      },
+      "converted_sbom_display_id": {
+        "anyOf": [
+          {
+            "type": "integer",
+            "minimum": 1,
+            "maximum": 9007199254740991
+          },
+          {
+            "type": "null"
+          }
+        ],
+        "readOnly": true,
+        "description": "Existing persisted integer key for authorized display only. Never a resource selector; use the UUID."
+      }
+    },
+    "SbomDocumentStatsResponse": {
+      "sbom_display_id": {
+        "anyOf": [
+          {
+            "type": "integer",
+            "minimum": 1,
+            "maximum": 9007199254740991
+          },
+          {
+            "type": "null"
+          }
+        ],
+        "readOnly": true,
+        "description": "Existing persisted integer key for authorized display only. Never a resource selector; use the UUID."
+      }
+    },
+    "SbomRawChunkResponse": {
+      "sbom_display_id": {
+        "anyOf": [
+          {
+            "type": "integer",
+            "minimum": 1,
+            "maximum": 9007199254740991
+          },
+          {
+            "type": "null"
+          }
+        ],
+        "readOnly": true,
+        "description": "Existing persisted integer key for authorized display only. Never a resource selector; use the UUID."
+      }
+    },
+    "ScheduleOut": {
+      "project_display_id": {
+        "anyOf": [
+          {
+            "type": "integer",
+            "minimum": 1,
+            "maximum": 9007199254740991
+          },
+          {
+            "type": "null"
+          }
+        ],
+        "readOnly": true,
+        "description": "Existing persisted integer key for authorized display only. Never a resource selector; use the UUID."
+      },
+      "product_display_id": {
+        "anyOf": [
+          {
+            "type": "integer",
+            "minimum": 1,
+            "maximum": 9007199254740991
+          },
+          {
+            "type": "null"
+          }
+        ],
+        "readOnly": true,
+        "description": "Existing persisted integer key for authorized display only. Never a resource selector; use the UUID."
+      },
+      "sbom_display_id": {
+        "anyOf": [
+          {
+            "type": "integer",
+            "minimum": 1,
+            "maximum": 9007199254740991
+          },
+          {
+            "type": "null"
+          }
+        ],
+        "readOnly": true,
+        "description": "Existing persisted integer key for authorized display only. Never a resource selector; use the UUID."
+      },
+      "last_run_display_id": {
+        "anyOf": [
+          {
+            "type": "integer",
+            "minimum": 1,
+            "maximum": 9007199254740991
+          },
+          {
+            "type": "null"
+          }
+        ],
+        "readOnly": true,
+        "description": "Existing persisted integer key for authorized display only. Never a resource selector; use the UUID."
+      }
+    },
+    "ScheduleTargetOut": {
+      "project_display_id": {
+        "anyOf": [
+          {
+            "type": "integer",
+            "minimum": 1,
+            "maximum": 9007199254740991
+          },
+          {
+            "type": "null"
+          }
+        ],
+        "readOnly": true,
+        "description": "Existing persisted integer key for authorized display only. Never a resource selector; use the UUID."
+      },
+      "product_display_id": {
+        "anyOf": [
+          {
+            "type": "integer",
+            "minimum": 1,
+            "maximum": 9007199254740991
+          },
+          {
+            "type": "null"
+          }
+        ],
+        "readOnly": true,
+        "description": "Existing persisted integer key for authorized display only. Never a resource selector; use the UUID."
+      },
+      "sbom_display_id": {
+        "anyOf": [
+          {
+            "type": "integer",
+            "minimum": 1,
+            "maximum": 9007199254740991
+          },
+          {
+            "type": "null"
+          }
+        ],
+        "readOnly": true,
+        "description": "Existing persisted integer key for authorized display only. Never a resource selector; use the UUID."
+      }
+    },
+    "ValidationReportResponse": {
+      "sbom_display_id": {
+        "anyOf": [
+          {
+            "type": "integer",
+            "minimum": 1,
+            "maximum": 9007199254740991
+          },
+          {
+            "type": "null"
+          }
+        ],
+        "readOnly": true,
+        "description": "Existing persisted integer key for authorized display only. Never a resource selector; use the UUID."
+      }
+    },
+    "VexTopAffectedComponent": {
+      "component_display_id": {
+        "anyOf": [
+          {
+            "type": "integer",
+            "minimum": 1,
+            "maximum": 9007199254740991
+          },
+          {
+            "type": "null"
+          }
+        ],
+        "readOnly": true,
+        "description": "Existing persisted integer key for authorized display only. Never a resource selector; use the UUID."
+      }
+    },
+    "VulnerabilityRemediationAuditOut": {
+      "project_display_id": {
+        "anyOf": [
+          {
+            "type": "integer",
+            "minimum": 1,
+            "maximum": 9007199254740991
+          },
+          {
+            "type": "null"
+          }
+        ],
+        "readOnly": true,
+        "description": "Existing persisted integer key for authorized display only. Never a resource selector; use the UUID."
+      }
+    },
+    "app__schemas__VulnerabilityRemediationOut__2": {
+      "project_display_id": {
+        "anyOf": [
+          {
+            "type": "integer",
+            "minimum": 1,
+            "maximum": 9007199254740991
+          },
+          {
+            "type": "null"
+          }
+        ],
+        "readOnly": true,
+        "description": "Existing persisted integer key for authorized display only. Never a resource selector; use the UUID."
+      }
+    },
+    "PublicRunReference": {
+      "display_id": {
+        "anyOf": [
+          {
+            "type": "integer",
+            "minimum": 1,
+            "maximum": 9007199254740991
+          },
+          {
+            "type": "null"
+          }
+        ],
+        "readOnly": true,
+        "description": "Existing persisted integer key for authorized display only. Never a resource selector; use the UUID."
+      },
+      "sbom_display_id": {
+        "anyOf": [
+          {
+            "type": "integer",
+            "minimum": 1,
+            "maximum": 9007199254740991
+          },
+          {
+            "type": "null"
+          }
+        ],
+        "readOnly": true,
+        "description": "Existing persisted integer key for authorized display only. Never a resource selector; use the UUID."
+      }
+    }
+  },
+  "sensitive_AuthContextUser_display_id_absent": true
+}

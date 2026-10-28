@@ -47,10 +47,20 @@ export type ComponentChangeKind =
 // =============================================================================
 
 export interface RunSummary {
-  id: number;
-  sbom_id: number | null;
+  /** Output-only persisted keys. Never use for selection, routing or authorization. */
+  display_id?: number | null;
+  project_display_id?: number | null;
+  product_display_id?: number | null;
+  sbom_display_id?: number | null;
+  current_sbom_display_id?: number | null;
+  latest_sbom_display_id?: number | null;
+  run_display_id?: number | null;
+
+  id: string;
+  sbom_id: (string | number) | null;
   sbom_name: string | null;
-  project_id: number | null;
+  sbom_version?: string | null;
+  project_id: (string | number) | null;
   project_name: string | null;
   run_status: string;
   completed_on: string | null;
@@ -160,8 +170,8 @@ export interface CompareResult {
 }
 
 export interface CompareRequest {
-  run_a_id: number;
-  run_b_id: number;
+  run_a_id: string;
+  run_b_id: string;
 }
 
 export type CompareExportFormat = 'markdown' | 'csv' | 'json';
@@ -173,8 +183,8 @@ export type CompareExportFormat = 'markdown' | 'csv' | 'json';
 export type CompareTab = 'findings' | 'components' | 'delta';
 
 export interface CompareUrlState {
-  runA: number | null;
-  runB: number | null;
+  runA: string | null;
+  runB: string | null;
   tab: CompareTab;
   /** Multi-select on FindingChangeKind (excludes "unchanged" by default). */
   changeKinds: Set<FindingChangeKind>;

@@ -1,0 +1,30 @@
+{
+  "parameter_label_normalizations": 0,
+  "checks": [
+    {
+      "file": "tests/test_analyze_endpoints_snapshot.py",
+      "test_functions": 5,
+      "collection_signatures_and_decorators_unchanged": true
+    },
+    {
+      "file": "tests/test_component_advisor_recommendations_api.py",
+      "test_functions": 22,
+      "collection_signatures_and_decorators_unchanged": true
+    },
+    {
+      "file": "tests/test_iam_user_uuid_migration.py",
+      "test_functions": 3,
+      "collection_signatures_and_decorators_unchanged": true
+    },
+    {
+      "file": "tests/test_public_identity_batch_serialization.py",
+      "test_functions": 5,
+      "collection_signatures_and_decorators_unchanged": true
+    },
+    {
+      "file": "tests/test_sboms_analyze_snapshot.py",
+      "test_functions": 3,
+      "collection_signatures_and_decorators_unchanged": true
+    }
+  ]
+}

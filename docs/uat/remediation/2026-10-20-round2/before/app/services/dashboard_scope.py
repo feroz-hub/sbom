@@ -1,0 +1,139 @@
+"""Validated ownership and eligible data for dashboard requests.
+
+The dashboard's metric functions share a Session.  A scope installed on that
+Session is applied by the existing ORM read filter in ``app.db``; metric SQL
+therefore keeps its canonical definitions while every query sees the same
+tenant, hierarchy and resolved current security-posture SBOM set.
+"""
+
+from __future__ import annotations
+
+from collections.abc import Iterator
+from contextlib import contextmanager
+from dataclasses import dataclass
+
+from fastapi import Depends, HTTPException, Query, Request
+from sqlalchemy import select
+from sqlalchemy.orm import Session
+
+from ..core.context import CurrentContext
+from ..core.security import get_current_tenant_context
+from ..db import get_db
+from ..models import Product, Projects, SBOMSource, Tenant
+
+
+@dataclass(frozen=True)
+class DashboardScope:
+    tenant_id: int
+    project_id: int | None = None
+    product_id: int | None = None
+    sbom_id: int | None = None
+
+    @property
+    def key(self) -> tuple[int, int | None, int | None, int | None]:
+        return (self.tenant_id, self.project_id, self.product_id, self.sbom_id)
+
+    @property
+    def level(self) -> str:
+        if self.sbom_id is not None:
+            return "SBOM"
+        if self.product_id is not None:
+            return "APPLICATION"
+        if self.project_id is not None:
+            return "PROJECT"
+        return "TENANT"
+
+    def eligible_sbom_ids(self):
+        """SQL subquery, not a Python list; usable by every metric query."""
+        from ..metrics.posture import posture_sbom_ids
+        return posture_sbom_ids(self.tenant_id, self.project_id, self.product_id, self.sbom_id)
+
+
+
+def resolve_dashboard_scope(
+    db: Session,
+    *,
+    tenant_id: int | None,
+    project_id: int | None = None,
+    product_id: int | None = None,
+    sbom_id: int | None = None,
+) -> DashboardScope:
+    if tenant_id is None:
+        raise HTTPException(status_code=403, detail="Tenant selection required")
+    if product_id is not None and project_id is None:
+        raise HTTPException(status_code=400, detail="Select a project before an application")
+    if sbom_id is not None and product_id is None:
+        raise HTTPException(status_code=400, detail="Select an application before an SBOM")
+    if project_id is not None and db.execute(
+        select(Projects.id).where(Projects.id == project_id, Projects.tenant_id == tenant_id)
+    ).scalar_one_or_none() is None:
+        raise HTTPException(status_code=404, detail="Dashboard scope not found")
+    if product_id is not None and db.execute(
+        select(Product.id).where(
+            Product.id == product_id,
+            Product.project_id == project_id,
+            Product.tenant_id == tenant_id,
+            Product.deleted_at.is_(None),
+        )
+    ).scalar_one_or_none() is None:
+        raise HTTPException(status_code=404, detail="Dashboard scope not found")
+    if sbom_id is not None and db.execute(
+        select(SBOMSource.id).where(
+            SBOMSource.id == sbom_id,
+            SBOMSource.projectid == project_id,
+            SBOMSource.product_id == product_id,
+            SBOMSource.tenant_id == tenant_id,
+        )
+    ).scalar_one_or_none() is None:
+        raise HTTPException(status_code=404, detail="Dashboard scope not found")
+    scope = DashboardScope(tenant_id, project_id, product_id, sbom_id)
+    if sbom_id is not None and db.execute(scope.eligible_sbom_ids()).scalar_one_or_none() is None:
+        raise HTTPException(status_code=404, detail="Dashboard scope not found")
+    return scope
+
+
+def scope_metadata(db: Session, scope: DashboardScope) -> dict:
+    """Names for the applied scope, echoed by dashboard responses."""
+    tenant_name = db.execute(select(Tenant.name).where(Tenant.id == scope.tenant_id)).scalar_one_or_none()
+    project_name = db.execute(select(Projects.project_name).where(Projects.id == scope.project_id)).scalar_one_or_none() if scope.project_id else None
+    product_name = db.execute(select(Product.name).where(Product.id == scope.product_id)).scalar_one_or_none() if scope.product_id else None
+    sbom = db.execute(select(SBOMSource.sbom_name, SBOMSource.sbom_version, SBOMSource.productver).where(SBOMSource.id == scope.sbom_id)).first() if scope.sbom_id else None
+    from .sbom_posture import posture_metadata
+    return {
+        "posture": posture_metadata(db, *scope.key),
+        "level": scope.level,
+        "tenant": {"id": scope.tenant_id, "name": tenant_name},
+        "project": {"id": scope.project_id, "name": project_name} if scope.project_id else None,
+        "application": {"id": scope.product_id, "name": product_name} if scope.product_id else None,
+        "sbom": {"id": scope.sbom_id, "name": sbom.sbom_name, "version": sbom.sbom_version or sbom.productver} if sbom else None,
+    }
+
+
+@contextmanager
+def dashboard_scope(db: Session, scope: DashboardScope) -> Iterator[None]:
+    previous = db.info.get("dashboard_scope")
+    db.info["dashboard_scope"] = scope
+    try:
+        yield
+    finally:
+        if previous is None:
+            db.info.pop("dashboard_scope", None)
+        else:
+            db.info["dashboard_scope"] = previous
+
+
+def dashboard_scope_dependency(
+    request: Request,
+    project_id: int | None = Query(None, ge=1),
+    product_id: int | None = Query(None, ge=1),
+    sbom_id: int | None = Query(None, ge=1),
+    context: CurrentContext = Depends(get_current_tenant_context),
+    db: Session = Depends(get_db),
+) -> Iterator[DashboardScope]:
+    scope = resolve_dashboard_scope(
+        db, tenant_id=context.tenant_id, project_id=project_id,
+        product_id=product_id, sbom_id=sbom_id,
+    )
+    request.state.dashboard_scope = scope
+    with dashboard_scope(db, scope):
+        yield scope

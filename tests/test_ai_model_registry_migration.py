@@ -8,7 +8,8 @@ from sqlalchemy import inspect
 
 def test_ai_model_registry_is_single_head_and_schema_is_installed(client):
     scripts = ScriptDirectory.from_config(Config("alembic.ini"))
-    assert scripts.get_heads() == ["055_ai_model_registry"]
+    assert len(scripts.get_heads()) == 1
+    assert scripts.get_revision("055_ai_model_registry") is not None
 
     inspector = inspect(engine)
     columns = {column["name"]: column for column in inspector.get_columns("ai_provider_model")}

@@ -9,6 +9,7 @@ import time
 from dataclasses import dataclass, replace
 from typing import Any
 
+from fastapi import HTTPException
 from sqlalchemy import select
 from sqlalchemy.orm import Session
 
@@ -32,6 +33,7 @@ from .analysis_service import (
     persist_analysis_run,
 )
 from .finding_metrics import component_identity_from_dict
+from .sbom_lifecycle import analysis_fingerprint, lock_sbom, require_processing
 from .sbom_service import (
     MISSING_SBOM_CONTENT_REASON,
     UNPARSEABLE_SBOM_CONTENT_REASON,
@@ -93,6 +95,11 @@ class AnalysisOrchestrator:
     @staticmethod
     def _component_input(row: SBOMComponent) -> dict[str, Any]:
         return {
+            "component_id": row.id,
+            "sbom_id": row.sbom_id,
+            "tenant_id": row.tenant_id,
+            "original_name": row.original_name or row.name,
+            "original_version": row.original_version or row.version,
             "bom_ref": row.bom_ref,
             "type": row.component_type,
             "group": row.component_group,
@@ -113,6 +120,7 @@ class AnalysisOrchestrator:
             "normalized_component_key": row.normalized_component_key,
             "primary_cpe": row.primary_cpe,
             "normalized_cpes": row.normalized_cpes,
+            "identity_notes": row.normalization_notes_json,
         }
 
     def load_components(
@@ -136,7 +144,6 @@ class AnalysisOrchestrator:
                     select(SBOMComponent)
                     .where(
                         SBOMComponent.sbom_id == sbom.id,
-                        (SBOMComponent.is_duplicate.is_(False)) | (SBOMComponent.is_duplicate.is_(None)),
                     )
                     .order_by(SBOMComponent.id.asc())
                 ).scalars()
@@ -206,7 +213,14 @@ class AnalysisOrchestrator:
         started_on: str,
         sbom_name: str | None = None,
     ) -> AnalysisRun:
+        sbom = lock_sbom(self.db, sbom.id, sbom.tenant_id)
+        require_processing(sbom)
+        fingerprint = analysis_fingerprint(self.db, sbom)
+        fingerprint["lifecycle_revision"] = sbom.lifecycle_revision
         run = AnalysisRun(
+            tenant_id=sbom.tenant_id,
+            analysis_input_fingerprint=fingerprint,
+            is_current=True,
             sbom_id=sbom.id,
             project_id=sbom.projectid,
             product_id=sbom.product_id,
@@ -230,6 +244,11 @@ class AnalysisOrchestrator:
         return run
 
     def mark_running(self, run: AnalysisRun, *, sources: list[str], components: list[dict] | None = None) -> None:
+        sbom = lock_sbom(self.db, run.sbom_id, run.tenant_id)
+        require_processing(sbom)
+        self.db.refresh(run)
+        if not run.is_current or run.run_status == "CANCELLED":
+            raise HTTPException(409, detail={"code": "SBOM_LIFECYCLE_OBSOLETE", "message": "This queued analysis is obsolete. Start a new analysis."})
         run.run_status = "RUNNING"
         run.source = ",".join(sources)
         payload: dict[str, Any] = {"status": "running", "sources": sources}
@@ -351,6 +370,12 @@ class AnalysisOrchestrator:
             "analysis_metadata": {
                 "sources": source_names,
                 "raw_observation_count": len(raw_findings),
+                "total_component_entries": len(components),
+                "unique_package_releases": len({c["normalized_component_key"] for c in components
+                                                if str(c.get("normalized_component_key") or "").startswith("purl:")
+                                                and not any("conflict" in n for n in c.get("identity_notes") or [])}),
+                "unresolved_component_entries": sum(not str(c.get("normalized_component_key") or "").startswith("purl:")
+                                                     or any("conflict" in n for n in c.get("identity_notes") or []) for c in components),
                 "source_summary": source_summary,
                 "provider_status": provider_status,
             },
@@ -456,6 +481,7 @@ class AnalysisOrchestrator:
         correlation_id: str | None = None,
         progress_queue: asyncio.Queue | None = None,
     ) -> tuple[AnalysisRun, AnalysisExecution | None] | None:
+        require_processing(sbom)
         existing = self.active_run(int(sbom.id))
         if existing is not None:
             return existing, None
@@ -490,6 +516,9 @@ class AnalysisOrchestrator:
                 correlation_id=correlation_id,
             )
             return persisted, execution
+        except HTTPException:
+            self.db.rollback()
+            raise
         except Exception as exc:
             self.fail_run(
                 run,

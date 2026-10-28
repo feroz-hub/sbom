@@ -26,20 +26,19 @@ export default function AccessPendingPage() {
         </div>
 
         <div className="space-y-2">
-          <h1 className="text-xl font-bold text-foreground">Access assignment required</h1>
+          <h1 className="text-xl font-bold text-foreground">{user?.localStatus === 'PENDING' ? 'Authentication successful' : 'Access assignment required'}</h1>
           <p className="text-sm text-hcl-muted">
-            Your HCL.CS identity is verified, but you have not been assigned a platform role or active tenant membership.
+            {user?.localStatus === 'PENDING' ? 'Your access to SBOM Analyzer is awaiting Platform Administrator approval.' : 'Your identity is authenticated, but you have not been assigned a platform role or active tenant membership.'}
           </p>
           <p className="text-xs text-hcl-muted">
-            Contact a Platform Administrator or Tenant Administrator to grant you membership.
+            A Platform Administrator must approve your account. Tenant and role assignments are managed separately.
           </p>
         </div>
 
         {user && (
           <div className="rounded-lg bg-surface-elevated p-4 text-xs space-y-1 text-left border border-border">
             <p><strong>Signed-in Email:</strong> {user.email || 'No email'}</p>
-            <p><strong>User ID:</strong> {user.userId ?? 'Pending'}</p>
-            <p><strong>Email Verification:</strong> Verified</p>
+
           </div>
         )}
 

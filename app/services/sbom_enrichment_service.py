@@ -34,47 +34,49 @@ def run_post_upload_enrichment(sbom_id: int, tenant_id: int | None = None) -> No
 
     from ..core.context import minimal_background_context, tenant_scope
     from .lifecycle.types import now_iso
+    from .maintenance_scope import background_tenant
 
-    db: Session = SessionLocal()
-    try:
-        from sqlalchemy import select
+    with background_tenant(tenant_id):
+        db: Session = SessionLocal()
+        try:
+            from sqlalchemy import select
 
-        stmt = select(SBOMSource).where(SBOMSource.id == sbom_id)
-        if tenant_id is not None:
-            stmt = stmt.where(SBOMSource.tenant_id == tenant_id)
-        sbom = db.execute(stmt).scalar_one_or_none()
-        if sbom is None:
-            return
-        effective_tenant = tenant_id or sbom.tenant_id
-        with tenant_scope(minimal_background_context(effective_tenant)):
-            started = now_iso()
-            sbom.enrichment_status = "running"
-            sbom.enrichment_started_at = started
-            sbom.enrichment_error = None
-            db.commit()
-
-            sync_lifecycle_for_sbom(db, sbom_id)
-            process_embedded_vex_for_sbom(db, sbom_id)
-            _run_background_nvd_enrichment(db, sbom_id)
-
-            sbom = db.get(SBOMSource, sbom_id)
-            if sbom is not None:
-                compute_and_save_completeness(db, sbom)
-                sbom.enrichment_status = "completed"
-                sbom.enrichment_completed_at = now_iso()
+            stmt = select(SBOMSource).where(SBOMSource.id == sbom_id)
+            if tenant_id is not None:
+                stmt = stmt.where(SBOMSource.tenant_id == tenant_id)
+            sbom = db.execute(stmt).scalar_one_or_none()
+            if sbom is None:
+                return
+            effective_tenant = tenant_id or sbom.tenant_id
+            with tenant_scope(minimal_background_context(effective_tenant)):
+                started = now_iso()
+                sbom.enrichment_status = "running"
+                sbom.enrichment_started_at = started
                 sbom.enrichment_error = None
                 db.commit()
-    except Exception as exc:  # pragma: no cover - defensive background path
-        log.exception("Post-upload enrichment failed for sbom_id=%s", sbom_id)
-        db.rollback()
-        sbom = db.get(SBOMSource, sbom_id)
-        if sbom is not None:
-            sbom.enrichment_status = "failed"
-            sbom.enrichment_error = str(exc)[:2000]
-            sbom.enrichment_completed_at = now_iso()
-            db.commit()
-    finally:
-        db.close()
+
+                sync_lifecycle_for_sbom(db, sbom_id)
+                process_embedded_vex_for_sbom(db, sbom_id)
+                _run_background_nvd_enrichment(db, sbom_id)
+
+                sbom = db.get(SBOMSource, sbom_id)
+                if sbom is not None:
+                    compute_and_save_completeness(db, sbom)
+                    sbom.enrichment_status = "completed"
+                    sbom.enrichment_completed_at = now_iso()
+                    sbom.enrichment_error = None
+                    db.commit()
+        except Exception as exc:  # pragma: no cover - defensive background path
+            log.exception("Post-upload enrichment failed for sbom_id=%s", sbom_id)
+            db.rollback()
+            sbom = db.get(SBOMSource, sbom_id)
+            if sbom is not None:
+                sbom.enrichment_status = "failed"
+                sbom.enrichment_error = str(exc)[:2000]
+                sbom.enrichment_completed_at = now_iso()
+                db.commit()
+        finally:
+            db.close()
 
 
 def _run_background_nvd_enrichment(db: Session, sbom_id: int) -> dict | None:
@@ -127,6 +129,7 @@ def _run_background_nvd_enrichment(db: Session, sbom_id: int) -> dict | None:
 def run_post_edit_enrichment(
     sbom_id: int,
     lifecycle_overrides: dict[str, dict] | None = None,
+    *, tenant_id: int | None = None,
 ) -> None:
     """Run slow enrichment after an SBOM edit response has returned.
 
@@ -135,40 +138,42 @@ def run_post_edit_enrichment(
     """
 
     from .lifecycle.types import now_iso
+    from .maintenance_scope import background_tenant
     from .version_control_service import reapply_edit_lifecycle_overrides
 
-    db: Session = SessionLocal()
-    try:
-        sbom = db.get(SBOMSource, sbom_id)
-        if sbom is None:
-            return
+    with background_tenant(tenant_id):
+        db: Session = SessionLocal()
+        try:
+            sbom = db.get(SBOMSource, sbom_id)
+            if sbom is None:
+                return
 
-        started = now_iso()
-        sbom.enrichment_status = "running"
-        sbom.enrichment_started_at = started
-        sbom.enrichment_error = None
-        db.commit()
-
-        sync_lifecycle_for_sbom(db, sbom_id)
-        process_embedded_vex_for_sbom(db, sbom_id)
-        if lifecycle_overrides:
-            reapply_edit_lifecycle_overrides(db, sbom_id, lifecycle_overrides)
-
-        sbom = db.get(SBOMSource, sbom_id)
-        if sbom is not None:
-            compute_and_save_completeness(db, sbom)
-            sbom.enrichment_status = "completed"
-            sbom.enrichment_completed_at = now_iso()
+            started = now_iso()
+            sbom.enrichment_status = "running"
+            sbom.enrichment_started_at = started
             sbom.enrichment_error = None
             db.commit()
-    except Exception as exc:  # pragma: no cover - defensive background path
-        log.exception("Post-edit enrichment failed for sbom_id=%s", sbom_id)
-        db.rollback()
-        sbom = db.get(SBOMSource, sbom_id)
-        if sbom is not None:
-            sbom.enrichment_status = "failed"
-            sbom.enrichment_error = str(exc)[:2000]
-            sbom.enrichment_completed_at = now_iso()
-            db.commit()
-    finally:
-        db.close()
+
+            sync_lifecycle_for_sbom(db, sbom_id)
+            process_embedded_vex_for_sbom(db, sbom_id)
+            if lifecycle_overrides:
+                reapply_edit_lifecycle_overrides(db, sbom_id, lifecycle_overrides)
+
+            sbom = db.get(SBOMSource, sbom_id)
+            if sbom is not None:
+                compute_and_save_completeness(db, sbom)
+                sbom.enrichment_status = "completed"
+                sbom.enrichment_completed_at = now_iso()
+                sbom.enrichment_error = None
+                db.commit()
+        except Exception as exc:  # pragma: no cover - defensive background path
+            log.exception("Post-edit enrichment failed for sbom_id=%s", sbom_id)
+            db.rollback()
+            sbom = db.get(SBOMSource, sbom_id)
+            if sbom is not None:
+                sbom.enrichment_status = "failed"
+                sbom.enrichment_error = str(exc)[:2000]
+                sbom.enrichment_completed_at = now_iso()
+                db.commit()
+        finally:
+            db.close()

@@ -3,6 +3,7 @@ from __future__ import annotations
 import json
 from datetime import UTC, datetime
 
+import pytest
 from app.core.context import minimal_background_context
 from app.db import Base
 from app.models import AnalysisFinding, AnalysisRun, KevEntry, SBOMSource, Tenant
@@ -10,17 +11,31 @@ from app.routers.runs import list_run_findings_enriched
 from app.services.analysis_service import persist_analysis_run
 from app.services.kev_enrichment import enrich_findings_with_kev
 from sqlalchemy import create_engine
-from sqlalchemy.orm import Session, sessionmaker
+from sqlalchemy.orm import Session
+
+from tests.tenant_fixture_scope import verified_fixture_tenant
 
 
 def _now_iso() -> str:
     return datetime.now(UTC).replace(microsecond=0).isoformat()
 
 
-def _new_db() -> Session:
+@pytest.fixture
+def db():
+    from app.models import Tenant
+    from sqlalchemy.orm import Session
+
     engine = create_engine("sqlite:///:memory:")
     Base.metadata.create_all(engine)
-    return sessionmaker(bind=engine)()
+    try:
+        with Session(engine) as session:
+            now = datetime.now(UTC)
+            session.add(Tenant(id=1, name="Dataset owner", slug="dataset-owner", status="ACTIVE", created_at=now, updated_at=now))
+            session.flush()
+            with verified_fixture_tenant(session, 1):
+                yield session
+    finally:
+        engine.dispose()
 
 
 def _seed_tenant(db: Session) -> None:
@@ -39,8 +54,7 @@ def _seed_tenant(db: Session) -> None:
         db.commit()
 
 
-def test_enrich_findings_with_kev_uses_primary_cve_and_aliases():
-    db = _new_db()
+def test_enrich_findings_with_kev_uses_primary_cve_and_aliases(db):
     _seed_tenant(db)
     db.add(
         KevEntry(
@@ -95,8 +109,7 @@ def test_enrich_findings_with_kev_uses_primary_cve_and_aliases():
     assert enriched[3].is_kev is False
 
 
-def test_persist_analysis_run_records_kev_metadata_in_raw_report():
-    db = _new_db()
+def test_persist_analysis_run_records_kev_metadata_in_raw_report(db):
     _seed_tenant(db)
     sbom = SBOMSource(
         id=1,
@@ -152,8 +165,7 @@ def test_persist_analysis_run_records_kev_metadata_in_raw_report():
     assert raw_report["analysis_metadata"]["kev_cves"] == ["CVE-2026-45659"]
 
 
-def test_enriched_findings_api_response_includes_kev_fields():
-    db = _new_db()
+def test_enriched_findings_api_response_includes_kev_fields(db):
     _seed_tenant(db)
     sbom = SBOMSource(
         id=1,
@@ -220,3 +232,23 @@ def test_enriched_findings_api_response_includes_kev_fields():
     assert row["product"] == "Widget"
     assert row["ransomware_status"] == "Known"
     assert row["notes"] == "CISA notes"
+
+
+def test_schema_reflection_preserves_pending_tenant_analysis_transaction(db):
+    from app.core.context import tenant_scope
+    from app.db import TenantContextRequired
+    from app.services.analysis_service import _validate_analysis_finding_rows
+    from sqlalchemy import select
+
+    sbom = SBOMSource(sbom_name="reflection-owner")
+    db.add(sbom)
+    db.flush()
+    run = AnalysisRun(sbom_id=sbom.id, run_status="PENDING", started_on=_now_iso(), completed_on=_now_iso())
+    db.add(run)
+    db.flush()
+    identifier = run.id
+    _validate_analysis_finding_rows(db, [], run_id=identifier, sbom_id=sbom.id)
+    assert db.scalar(select(AnalysisRun.id).where(AnalysisRun.id == identifier)) == identifier
+    with tenant_scope(None), pytest.raises(TenantContextRequired):
+        db.scalar(select(AnalysisRun.id))
+    assert db.scalar(select(AnalysisRun.id).where(AnalysisRun.id == identifier)) == identifier

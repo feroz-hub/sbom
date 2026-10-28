@@ -19,7 +19,7 @@ import { getSbomInfo } from '@/lib/api';
 import { cn } from '@/lib/utils';
 
 interface SbomPreflightChecklistProps {
-  sbomId: number | null;
+  sbomId: (string | number) | null;
 }
 
 type Tone = 'pass' | 'warn' | 'info' | 'idle';
@@ -75,7 +75,7 @@ function formatRuntimeRange(min: number, max: number): string {
 }
 
 export function SbomPreflightChecklist({ sbomId }: SbomPreflightChecklistProps) {
-  const enabled = sbomId != null && Number.isFinite(sbomId) && sbomId > 0;
+  const enabled = Boolean(sbomId);
   const { data, isLoading, error } = useQuery({
     queryKey: ['sbom-info', sbomId],
     queryFn: ({ signal }) => getSbomInfo(sbomId as number, signal),
@@ -127,7 +127,7 @@ export function SbomPreflightChecklist({ sbomId }: SbomPreflightChecklistProps) 
           <p className="flex items-start gap-2 text-sm text-amber-700 dark:text-amber-300">
             <AlertTriangle className="h-4 w-4 mt-0.5" aria-hidden />
             <span>
-              Could not preview SBOM #{sbomId}: {error.message}. You can still run analysis — but
+              Could not preview selected SBOM: {error.message}. You can still run analysis — but
               we won&apos;t be able to estimate runtime.
             </span>
           </p>

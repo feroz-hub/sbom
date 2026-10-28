@@ -102,7 +102,7 @@ export function createNavigationState(initialQuery = '') {
 export const SAMPLE_COMPARE_RESULT: CompareResult = {
   cache_key: 'a'.repeat(64),
   run_a: {
-    id: 1,
+    id: "00000000-0000-4000-8000-000000000001", display_id: 1,
     sbom_id: 100,
     sbom_name: 'sample-sbom',
     project_id: 200,
@@ -114,7 +114,7 @@ export const SAMPLE_COMPARE_RESULT: CompareResult = {
     total_components: 3,
   },
   run_b: {
-    id: 2,
+    id: "00000000-0000-4000-8000-000000000002", display_id: 2,
     sbom_id: 101,
     sbom_name: 'sample-sbom',
     project_id: 200,

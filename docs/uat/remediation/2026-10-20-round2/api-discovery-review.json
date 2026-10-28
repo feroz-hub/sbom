@@ -1,0 +1,102 @@
+{
+  "checks": [
+    {
+      "role": "foreign",
+      "path": "/api/tenants/a803c17f-7e7d-439c-8664-c5406d391fd1/user-candidates?q=olympus",
+      "actual": {
+        "status": 200,
+        "data": {
+          "items": [
+            {
+              "id": 6,
+              "display_name": "Synthetic Greenfield Platform Administrator",
+              "email": "platform@olympus.example.test",
+              "status": "ACTIVE",
+              "email_verified": true,
+              "verification_required": false,
+              "providers": [
+                "NATIVE"
+              ]
+            },
+            {
+              "id": 1,
+              "display_name": "Synthetic Olympus admin",
+              "email": "admin@olympus.example.test",
+              "status": "ACTIVE",
+              "email_verified": true,
+              "verification_required": false,
+              "providers": [
+                "NATIVE"
+              ]
+            },
+            {
+              "id": 2,
+              "display_name": "Synthetic Olympus analyst",
+              "email": "analyst@olympus.example.test",
+              "status": "ACTIVE",
+              "email_verified": true,
+              "verification_required": false,
+              "providers": [
+                "NATIVE"
+              ]
+            },
+            {
+              "id": 3,
+              "display_name": "Synthetic Olympus developer",
+              "email": "developer@olympus.example.test",
+              "status": "ACTIVE",
+              "email_verified": true,
+              "verification_required": false,
+              "providers": [
+                "NATIVE"
+              ]
+            },
+            {
+              "id": 4,
+              "display_name": "Synthetic Olympus viewer",
+              "email": "viewer@olympus.example.test",
+              "status": "ACTIVE",
+              "email_verified": true,
+              "verification_required": false,
+              "providers": [
+                "NATIVE"
+              ]
+            }
+          ]
+        },
+        "request_id": "1e4e5a8ae4a3"
+      },
+      "expectedStatus": 200,
+      "result": "PASS"
+    },
+    {
+      "role": "foreign",
+      "path": "/api/tenants/3a900179-36bf-4b5f-b2e1-2a4a9d06e6af/users",
+      "actual": {
+        "status": 404,
+        "data": {
+          "detail": "Resource not found"
+        },
+        "request_id": "060ef79d18ee"
+      },
+      "expectedStatus": 404,
+      "result": "PASS"
+    },
+    {
+      "role": "viewer",
+      "path": "/api/tenants/3a900179-36bf-4b5f-b2e1-2a4a9d06e6af/user-candidates?q=olympus",
+      "actual": {
+        "status": 403,
+        "data": {
+          "detail": "Insufficient permission"
+        },
+        "request_id": "402f7b198f17"
+      },
+      "expectedStatus": 403,
+      "result": "PASS"
+    }
+  ],
+  "discoveryPolicySourceUnchanged": true,
+  "sourceSha256": "b618de290a57e515bd71f24720bb2edf1ddbb121d0bb1c5eb68e83bfd6b41c18",
+  "policyDecision": "Decision Needed; no policy change"
+}

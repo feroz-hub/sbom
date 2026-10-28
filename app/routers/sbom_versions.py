@@ -15,6 +15,8 @@ from fastapi.responses import Response, StreamingResponse
 from sqlalchemy import select
 from sqlalchemy.orm import Session
 
+from ..core.context import CurrentContext
+from ..core.security import get_current_tenant_context
 from ..db import get_db
 from ..models import SBOMComponent, SBOMSource
 from ..schemas import SbomConversionReportResponse, SbomConversionResponse, SbomEditPayload, SBOMSourceOut
@@ -229,6 +231,7 @@ def edit_sbom_endpoint(
     payload: SbomEditPayload,
     background_tasks: BackgroundTasks,
     user_id: str | None = Query(None),
+    context: CurrentContext = Depends(get_current_tenant_context),
     db: Session = Depends(get_db),
 ):
     """
@@ -244,15 +247,15 @@ def edit_sbom_endpoint(
         new_version = edit_sbom(
             db=db,
             sbom_id=id,
-            user_id=user_id,
+            user_id=context.actor_label(),
             updates=payload.model_dump(exclude_none=True),
             change_summary=payload.change_summary,
             defer_enrichment=True,
         )
         if override_map:
-            background_tasks.add_task(run_post_edit_enrichment, new_version.id, override_map)
+            background_tasks.add_task(run_post_edit_enrichment, new_version.id, override_map, tenant_id=context.tenant_id)
         else:
-            background_tasks.add_task(run_post_edit_enrichment, new_version.id)
+            background_tasks.add_task(run_post_edit_enrichment, new_version.id, tenant_id=context.tenant_id)
         return new_version
     except ValueError as e:
         raise HTTPException(status_code=status.HTTP_400_BAD_REQUEST, detail=str(e))
@@ -267,6 +270,8 @@ def get_sbom_versions(id: int, db: Session = Depends(get_db)):
     if not sbom:
         raise HTTPException(status_code=status.HTTP_404_NOT_FOUND, detail=f"SBOM with ID {id} not found.")
 
+    if sbom.logical_sbom_id is not None:
+        return list(db.scalars(select(SBOMSource).where(SBOMSource.logical_sbom_id == sbom.logical_sbom_id, SBOMSource.tenant_id == sbom.tenant_id).order_by(SBOMSource.id.asc())))
     root = _root_for_lineage(db, sbom)
     ids = _lineage_ids(db, root.id)
     versions = (
@@ -295,6 +300,7 @@ def restore_sbom_version(
     id: int,
     version_id: int,
     user_id: str | None = Query(None),
+    context: CurrentContext = Depends(get_current_tenant_context),
     db: Session = Depends(get_db),
 ):
     """
@@ -302,7 +308,7 @@ def restore_sbom_version(
     Clones the target version and saves it as the current head version.
     """
     try:
-        restored = restore_version(db, id, version_id, user_id)
+        restored = restore_version(db, id, version_id, context.actor_label())
         return restored
     except ValueError as e:
         raise HTTPException(status_code=status.HTTP_400_BAD_REQUEST, detail=str(e))
@@ -362,6 +368,9 @@ def get_sbom_lifecycle_report(
 ):
     """Return a detailed lifecycle report suitable for export or UI evidence views."""
 
+    if format != "json":
+        from ..services.sbom_lifecycle import require_processing
+        require_processing(db.get(SBOMSource, id), operation="Report generation")
     if format == "csv":
         content = lifecycle_report_csv(db, id, report_type=report_type)
         suffix = f"_{report_type}" if report_type else ""
@@ -387,6 +396,8 @@ def get_lifecycle_report_pack(
 ):
     """Download a ZIP pack of lifecycle JSON and focused CSV reports."""
 
+    from ..services.sbom_lifecycle import require_processing
+    require_processing(db.get(SBOMSource, id), operation="Report generation")
     report = LifecycleEnrichmentService().lifecycle_report(db, id)
     buffer = BytesIO()
     with zipfile.ZipFile(buffer, mode="w", compression=zipfile.ZIP_DEFLATED) as zf:
@@ -484,6 +495,7 @@ def convert_spdx_to_cyclonedx_endpoint(
     id: int,
     background_tasks: BackgroundTasks,
     user_id: str | None = Query(None),
+    context: CurrentContext = Depends(get_current_tenant_context),
     db: Session = Depends(get_db),
 ):
     """Convert a validated SPDX SBOM to CycloneDX and persist as a related record."""
@@ -502,11 +514,11 @@ def convert_spdx_to_cyclonedx_endpoint(
             detail="SBOM must pass validation before conversion.",
         )
     try:
-        converted, result, report = convert_and_persist_spdx_to_cyclonedx(db, sbom, user_id=user_id)
+        converted, result, report = convert_and_persist_spdx_to_cyclonedx(db, sbom, user_id=context.actor_label())
     except ValueError as exc:
         raise HTTPException(status_code=status.HTTP_400_BAD_REQUEST, detail=str(exc)) from exc
 
-    background_tasks.add_task(run_post_conversion_enrichment, converted.id, id)
+    background_tasks.add_task(run_post_conversion_enrichment, converted.id, id, tenant_id=context.tenant_id)
 
     conv_status = "completed_with_warnings" if result.conversion_warnings else "completed"
     return SbomConversionResponse(
@@ -724,7 +736,10 @@ def export_sbom(
             # Sync flat canonical attributes back to raw
             for flat in export_flat:
                 if "raw" in flat:
-                    _sync_flat_to_raw(flat, flat["raw"], "cyclonedx")
+                    # Aggregates belong to the explicit normalized export;
+                    # stored representative occurrences retain their own fields.
+                    aggregate = (flat.get("dedupe_evidence_json") or {}).get("aggregate_metadata") or {}
+                    _sync_flat_to_raw({**flat, **aggregate}, flat["raw"], "cyclonedx")
 
             # Update doc components
             doc["components"] = [flat["raw"] for flat in export_flat if "raw" in flat]
@@ -773,7 +788,8 @@ def export_sbom(
             # Sync flat canonical attributes back to raw
             for flat in export_flat:
                 if "raw" in flat:
-                    _sync_flat_to_raw(flat, flat["raw"], "spdx")
+                    aggregate = (flat.get("dedupe_evidence_json") or {}).get("aggregate_metadata") or {}
+                    _sync_flat_to_raw({**flat, **aggregate}, flat["raw"], "spdx")
 
             # Rebuild packages and elements lists, keeping only canonical ones
             canonical_raw_set = {id(flat["raw"]) for flat in export_flat if "raw" in flat}

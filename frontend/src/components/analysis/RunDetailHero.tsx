@@ -1,5 +1,6 @@
 'use client';
 
+import { recordIdLabel } from '@/components/ui/RecordIdDisplay';
 import {
   AlertOctagon,
   CheckCircle2,
@@ -267,7 +268,7 @@ export function RunDetailHero({ run, findings, rightSlot }: RunDetailHeroProps) 
 
           <div>
             <h2 className="text-display-lg font-semibold tracking-display text-hcl-navy">
-              Run #{run.id}
+              {recordIdLabel('Run', run.display_id)}
               {run.sbom_name && (
                 <span className="ml-2 text-base font-normal text-hcl-muted">
                   · {run.sbom_name}
@@ -285,14 +286,21 @@ export function RunDetailHero({ run, findings, rightSlot }: RunDetailHeroProps) 
             </p>
           </div>
 
+          {run.metrics?.cvss_coverage != null && (
+            <p className="text-xs text-hcl-muted" title="Canonical findings with a validated numeric CVSS divided by all canonical findings in this run.">
+              CVSS coverage: {(run.metrics.cvss_coverage * 100).toFixed(1)}% · {run.metrics.cvss_unknown_findings ?? 0} unscored
+            </p>
+          )}
           {/* Meta tiles */}
           <div className="grid grid-cols-2 gap-3 sm:grid-cols-4">
             <MetaTile
               Icon={Package}
-              label="Components"
-              value={run.total_components?.toLocaleString() ?? '—'}
+              label={run.metrics?.total_component_entries != null ? "Component entries" : "Components"}
+              value={(run.metrics?.total_component_entries ?? run.total_components)?.toLocaleString() ?? '—'}
               hint={
-                run.components_with_cpe != null
+                run.metrics?.unique_package_releases != null
+                  ? `${run.metrics.unique_package_releases} unique package releases · ${run.metrics.unresolved_component_entries ?? 0} unresolved entries`
+                  : run.components_with_cpe != null
                   ? `${run.components_with_cpe.toLocaleString()} with CPE`
                   : undefined
               }
@@ -329,7 +337,7 @@ export function RunDetailHero({ run, findings, rightSlot }: RunDetailHeroProps) 
                     href={`/sboms/${run.sbom_id}`}
                     className="text-hcl-blue hover:underline"
                   >
-                    #{run.sbom_id}
+                    {recordIdLabel('SBOM', run.sbom_display_id)}
                   </Link>
                 ) : (
                   '—'

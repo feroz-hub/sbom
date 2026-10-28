@@ -1,0 +1,118 @@
+// @vitest-environment jsdom
+
+import { QueryClient, QueryClientProvider } from '@tanstack/react-query';
+import { act, render, screen, waitFor } from '@testing-library/react';
+import userEvent from '@testing-library/user-event';
+import { Suspense } from 'react';
+import { beforeEach, describe, expect, it, vi } from 'vitest';
+import { ToastProvider } from '@/hooks/useToast';
+
+const api = vi.hoisted(() => ({
+  getProduct: vi.fn(),
+  getProductSboms: vi.fn(),
+  getLogicalSboms: vi.fn(),
+  updateProduct: vi.fn(),
+}));
+
+vi.mock('@/lib/api', async (importOriginal) => ({
+  ...(await importOriginal<typeof import('@/lib/api')>()),
+  ...api,
+}));
+vi.mock('@/components/layout/TopBar', () => ({ TopBar: ({ title }: { title: string }) => <h1>{title}</h1> }));
+vi.mock('@/components/reports/NotifyMeLink', () => ({ NotifyMeLink: () => null }));
+vi.mock('@/components/schedules/ScheduleCard', () => ({
+  ScheduleCard: ({ scope, targetId }: { scope: string; targetId: number }) => (
+    <div data-testid="schedule-card">{scope}:{targetId}</div>
+  ),
+}));
+vi.mock('@/components/sboms/SbomUploadModal', () => ({ SbomUploadModal: () => null }));
+vi.mock('@/components/sboms/SbomStatusBadge', () => ({ SbomStatusBadge: () => <span>Not analyzed</span> }));
+vi.mock('@/hooks/useAnalysisStream', () => ({
+  useAnalysisStream: () => ({ state: { phase: 'idle' }, startAnalysis: vi.fn() }),
+}));
+
+import ProductDetailPage from './page';
+
+const routeParams = Promise.resolve({ id: "00000000-0000-4000-8000-000000000016" });
+const product = {
+  id: "00000000-0000-4000-8000-000000000016",
+  tenant_id: "00000000-0000-4000-8000-000000000001",
+  project_id: "00000000-0000-4000-8000-000000000003",
+  name: 'Infusion Pump Controller',
+  normalized_name: 'infusion pump controller',
+  slug: 'infusion-pump-controller',
+  description: null,
+  product_key: null,
+  vendor: null,
+  category: null,
+  status: 'active',
+  latest_version: '2.0',
+  current_sbom_id: "00000000-0000-4000-8000-000000000051",
+  current_sbom_name: 'controller.cdx',
+  current_sbom_version: '2.0',
+  metadata_json: {},
+  created_by: null,
+  created_at: '2026-09-01T00:00:00Z',
+  updated_at: '2026-09-01T00:00:00Z',
+  deleted_at: null,
+  sbom_count: 2,
+  latest_sbom_version: '2.0',
+};
+const sboms = [
+  { id: "00000000-0000-4000-8000-000000000050", tenant_id: "00000000-0000-4000-8000-000000000001", projectid: "00000000-0000-4000-8000-000000000003", product_id: "00000000-0000-4000-8000-000000000016", sbom_name: 'controller.cdx', sbom_version: '1.0', productver: '1.0', created_on: '2026-08-01T00:00:00Z' },
+  { id: "00000000-0000-4000-8000-000000000051", tenant_id: "00000000-0000-4000-8000-000000000001", projectid: "00000000-0000-4000-8000-000000000003", product_id: "00000000-0000-4000-8000-000000000016", sbom_name: 'controller.cdx', sbom_version: '2.0', productver: '2.0', created_on: '2026-09-01T00:00:00Z' },
+];
+
+async function renderPage() {
+  const client = new QueryClient({ defaultOptions: { queries: { retry: false }, mutations: { retry: false } } });
+  await act(async () => {
+    render(
+      <QueryClientProvider client={client}>
+        <ToastProvider>
+          <Suspense fallback={<div>Loading…</div>}>
+            <ProductDetailPage params={routeParams} />
+          </Suspense>
+        </ToastProvider>
+      </QueryClientProvider>,
+    );
+  });
+}
+
+describe('ProductDetailPage scheduler hierarchy', () => {
+  beforeEach(() => {
+    vi.clearAllMocks();
+    api.getProduct.mockResolvedValue(product);
+    api.getProductSboms.mockResolvedValue(sboms);
+    api.getLogicalSboms.mockResolvedValue({ items: [{ id: "00000000-0000-4000-8000-00000000000b", name: 'Backend SBOM', version_count: 2, latest_version: sboms[0] }], total: 1, page: 1, page_size: 50 });
+    api.updateProduct.mockResolvedValue(product);
+  });
+
+  it('groups logical SBOMs and links to their version history', async () => { await renderPage(); expect(await screen.findByRole('link', { name: 'Backend SBOM' })).toHaveAttribute('href', '/sboms/logical/00000000-0000-4000-8000-00000000000b'); expect(screen.getByRole('link', { name: 'Version history' })).toHaveAttribute('href', '/sboms/logical/00000000-0000-4000-8000-00000000000b'); });
+
+  it('shows the explicit current SBOM and Product schedule controls', async () => {
+    await renderPage();
+
+    const select = await screen.findByLabelText(/current version used by current_only schedules/i);
+    expect(select).toHaveValue('00000000-0000-4000-8000-000000000051');
+    expect(screen.getByTestId('schedule-card')).toHaveTextContent("PRODUCT:00000000-0000-4000-8000-000000000016");
+  });
+
+  it('changes current SBOM through the Product API', async () => {
+    await renderPage();
+    const user = userEvent.setup();
+    await user.selectOptions(
+      await screen.findByLabelText(/current version used by current_only schedules/i),
+      "00000000-0000-4000-8000-000000000050",
+    );
+
+    await waitFor(() => expect(api.updateProduct).toHaveBeenCalledWith("00000000-0000-4000-8000-000000000016", { current_sbom_id: "00000000-0000-4000-8000-000000000050" }));
+  });
+
+  it('changes selection mode through the authorized Product API', async () => {
+    await renderPage();
+    await userEvent.selectOptions(await screen.findByLabelText('Current SBOM selection policy'), 'AUTO');
+    await waitFor(() => expect(api.updateProduct).toHaveBeenCalledWith("00000000-0000-4000-8000-000000000016", {current_sbom_mode: 'AUTO'}));
+  });
+});
+
+vi.mock('@/hooks/useAuth', async () => ({ useAuth: (await import('@/test/authorizedAuth')).authorizedAuth }));

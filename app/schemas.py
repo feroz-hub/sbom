@@ -1,6 +1,7 @@
 # schemas.py
 
-from typing import Any
+from typing import Any, Literal
+from zoneinfo import ZoneInfo, ZoneInfoNotFoundError
 
 from pydantic import BaseModel, Field, field_validator, model_validator
 
@@ -61,6 +62,7 @@ class ProductUpdate(BaseModel):
     latest_version: str | None = None
     metadata_json: dict[str, Any] | None = None
     current_sbom_id: int | None = Field(None, ge=1)
+    current_sbom_mode: Literal["AUTO", "MANUAL_PIN"] | None = None
 
 
 class ProductRead(ORMModel):
@@ -87,6 +89,7 @@ class ProductRead(ORMModel):
     latest_sbom_version: str | None = None
     current_sbom_id: int | None = None
     current_sbom_version: str | None = None
+    current_sbom_mode: Literal["AUTO", "MANUAL_PIN"] = "AUTO"
 
 
 class ProductSummary(BaseModel):
@@ -103,6 +106,7 @@ class ProductSummary(BaseModel):
     latest_sbom_version: str | None = None
     current_sbom_id: int | None = None
     current_sbom_version: str | None = None
+    current_sbom_mode: Literal["AUTO", "MANUAL_PIN"] = "AUTO"
 
 
 class ProductListResponse(BaseModel):
@@ -121,6 +125,7 @@ class SBOMTypeOut(ORMModel):
 
 
 class SBOMSourceCreate(BaseModel):
+    logical_sbom_id: int | None = Field(default=None, ge=1)
     sbom_name: str
     sbom_data: str | None = None
     sbom_type: int | None = None
@@ -144,6 +149,7 @@ class SBOMSourceCreate(BaseModel):
 
 
 class LatestAnalysisOut(BaseModel):
+    is_current: bool = True
     run_id: int
     status: str
     result: str
@@ -160,6 +166,11 @@ class LatestAnalysisOut(BaseModel):
 
 
 class SBOMSourceOut(ORMModel):
+    logical_sbom_id: int | None = None
+    lifecycle_status: Literal["ACTIVE", "INACTIVE"] = "ACTIVE"
+    lifecycle_revision: int = 0
+    analysis_requires_reanalysis: bool = False
+    processing_eligibility: dict[str, Any] = Field(default_factory=dict)
     id: int
     sbom_name: str
     sbom_data: str | None = None
@@ -411,11 +422,15 @@ class SBOMComponentListResponse(BaseModel):
 
 
 class AnalysisRunOut(ORMModel):
+    processing_eligibility: dict[str, Any] = Field(default_factory=dict)
+    is_current: bool = True
     id: int
     sbom_id: int
     project_id: int | None = None
     product_id: int | None = None
     product_name: str | None = None
+    project_name: str | None = None
+    sbom_version: str | None = None
     run_status: str
     sbom_name: str | None = None
     source: str
@@ -470,6 +485,13 @@ class VulnerabilityRemediationOut(ORMModel):
 
 
 class AnalysisFindingOut(ORMModel):
+    source_observations: list[dict[str, Any]] = Field(default_factory=list)
+    selected_cvss: dict[str, Any] | None = None
+    cvss_source: str | None = None
+    rating_disagreement: bool = False
+    resolution_status: str | None = None
+    bom_ref: str | None = None
+    purl: str | None = None
     vex_status: str | None = None
     vex_decision: dict | None = None
     id: int
@@ -581,6 +603,15 @@ class ScheduleUpsert(BaseModel):
         description="Skip a tick if a manual or prior run completed within this many minutes",
     )
     modified_by: str | None = None
+
+    @field_validator("timezone")
+    @classmethod
+    def _check_timezone(cls, value: str) -> str:
+        try:
+            ZoneInfo(value)
+        except (ZoneInfoNotFoundError, ValueError):
+            raise ValueError("Unknown IANA timezone") from None
+        return value
 
     @field_validator("cadence", mode="before")
     @classmethod
@@ -808,3 +839,29 @@ class SbomConversionReportResponse(BaseModel):
     component_mapping: dict[str, str] = Field(default_factory=dict)
     relationship_mapping: list[dict[str, Any]] = Field(default_factory=list)
     conversion_report: dict[str, Any] = Field(default_factory=dict)
+
+
+class LogicalSBOMCreate(BaseModel):
+    name: str = Field(min_length=1, max_length=255)
+    description: str | None = None
+
+
+class LogicalSBOMOut(ORMModel):
+    id: int
+    tenant_id: int
+    product_id: int | None
+    name: str
+    description: str | None = None
+    created_by: str | None = None
+    created_at: str
+    updated_at: str
+    version_count: int = 0
+    latest_version: SBOMSourceOut | None = None
+    version_ordering: str = "numeric_or_upload_order"
+
+
+class LogicalSBOMListResponse(BaseModel):
+    items: list[LogicalSBOMOut]
+    total: int
+    page: int
+    page_size: int

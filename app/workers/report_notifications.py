@@ -70,6 +70,8 @@ def generate(delivery_id, tenant_id):
     settings = get_settings()
     with tenant_scope(minimal_background_context(tenant_id)), log_context(tenant_id=tenant_id):
         with SessionLocal() as db:
+            if not db.scalar(select(Tenant.id).where(Tenant.id == tenant_id, Tenant.status == "ACTIVE")):
+                return {"status": "NOT_CLAIMED"}
             row = db.scalar(
                 select(ReportDelivery)
                 .where(ReportDelivery.id == delivery_id, ReportDelivery.tenant_id == tenant_id)
@@ -130,6 +132,9 @@ def generate(delivery_id, tenant_id):
                     ]
                     report["unchanged"] = False
                 report["scheduled_outcomes"] = payload.get("completed", {})
+                from ..services.report_composer import public_report_snapshot
+
+                report = public_report_snapshot(db, report, tenant_id)
             # Session is CLOSED before any PDF/Excel/MIME rendering.
             if preferences.suppress_when_unchanged and report["unchanged"]:
                 log_event(
@@ -274,6 +279,16 @@ def generate(delivery_id, tenant_id):
 def tick():
     if not get_settings().report_notifications_enabled:
         return {"status": "DISABLED"}
+    from ..services.maintenance_scope import active_tenant_ids, maintenance_tenant
+    for tenant_id in active_tenant_ids():
+        with maintenance_tenant(tenant_id, "reports.tick"):
+            _tick_for_tenant()
+    return dispatch_pending()
+
+
+def _tick_for_tenant():
+    if not get_settings().report_notifications_enabled:
+        return {"status": "DISABLED"}
     now = datetime.now(UTC)
     with SessionLocal() as db:
         subs = list(
@@ -286,11 +301,21 @@ def tick():
         windows = {s.id: window for s in subs if (window := cadence_window(s, now))}
         create_cycles(db, [s for s in subs if s.id in windows], windows)
         db.commit()
-    return dispatch_pending()
 
 
 @shared_task(name="report_notifications.dispatch_pending", queue="reports", ignore_result=True)
 def dispatch_pending():
+    if not get_settings().report_notifications_enabled:
+        return {"status": "DISABLED"}
+    from ..services.maintenance_scope import active_tenant_ids, maintenance_tenant
+    pending = 0
+    for tenant_id in active_tenant_ids():
+        with maintenance_tenant(tenant_id, "reports.dispatch"):
+            pending += _dispatch_for_tenant()["pending"]
+    return {"pending": pending}
+
+
+def _dispatch_for_tenant():
     if not get_settings().report_notifications_enabled:
         return {"status": "DISABLED"}
     with SessionLocal() as db:
@@ -325,6 +350,19 @@ def dispatch_pending():
 def purge():
     if configuration_errors():
         return {"status": "NOT_CONFIGURED"}
+    from ..services.maintenance_scope import active_tenant_ids, maintenance_tenant
+    removed = 0
+    for tenant_id in active_tenant_ids():
+        with maintenance_tenant(tenant_id, "reports.purge"):
+            removed += _purge_for_tenant()["removed"]
+    with SessionLocal() as db:
+        orphans = purge_orphaned_artifacts(db)
+    return {"removed": removed, "orphaned_files_removed": orphans}
+
+
+def _purge_for_tenant():
+    if configuration_errors():
+        return {"status": "NOT_CONFIGURED"}
     with SessionLocal() as db:
         targets = list(
             db.execute(
@@ -339,6 +377,4 @@ def purge():
             artifact_path(row.storage_path).unlink(missing_ok=True)
             db.delete(row)
             db.commit()
-    with SessionLocal() as db:
-        orphans = purge_orphaned_artifacts(db)
-    return {"removed": len(targets), "orphaned_files_removed": orphans}
+    return {"removed": len(targets)}

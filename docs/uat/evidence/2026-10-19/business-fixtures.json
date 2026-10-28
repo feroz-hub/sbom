@@ -1,0 +1,11 @@
+{
+  "project_id": "d4828e7c-e71c-40f7-bb6c-dde0f4d48d09",
+  "product_id": "60de2b20-c45c-4a49-9b36-e0af7b5790fc",
+  "sbom_id": "729992e8-b107-4d3d-96a9-5cac4bcf5f8d",
+  "run_id": 21,
+  "investigation_id": 42,
+  "subscription_id": 8,
+  "second_sbom_id": "d6a91bb2-6ae4-4cfb-9664-b84a6a0bca7b",
+  "temporary_tenant_id": "b8d8eddd-2984-45c1-8372-b4be665c1a25",
+  "repaired_sbom_id": "a9ccf817-c835-4dc8-86bd-fa12638d4002"
+}

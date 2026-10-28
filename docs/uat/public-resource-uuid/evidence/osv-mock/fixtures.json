@@ -1,0 +1,88 @@
+{
+  "GHSA-jfh8-c2jp-5v3q": {
+    "id": "GHSA-jfh8-c2jp-5v3q",
+    "summary": "Remote code execution in Log4j 2.x",
+    "details": "Log4j JNDI lookup feature allows remote code execution.",
+    "aliases": [
+      "CVE-2021-44228"
+    ],
+    "modified": "2024-01-01T00:00:00Z",
+    "published": "2021-12-10T00:00:00Z",
+    "severity": [
+      {
+        "type": "CVSS_V3",
+        "score": "CVSS:3.1/AV:N/AC:L/PR:N/UI:N/S:C/C:H/I:H/A:H"
+      }
+    ],
+    "affected": [
+      {
+        "package": {
+          "ecosystem": "Maven",
+          "name": "org.apache.logging.log4j:log4j-core"
+        },
+        "ranges": [
+          {
+            "type": "ECOSYSTEM",
+            "events": [
+              {
+                "introduced": "0"
+              },
+              {
+                "fixed": "2.15.0"
+              }
+            ]
+          }
+        ]
+      }
+    ],
+    "references": [
+      {
+        "type": "WEB",
+        "url": "https://github.com/advisories/GHSA-jfh8-c2jp-5v3q"
+      }
+    ]
+  },
+  "PYSEC-2018-28": {
+    "id": "PYSEC-2018-28",
+    "summary": "requests vulnerability in 2.19.0",
+    "details": "requests <= 2.19.0 leaks Authorization headers on redirect.",
+    "aliases": [
+      "CVE-2018-18074"
+    ],
+    "modified": "2024-01-01T00:00:00Z",
+    "published": "2018-10-09T00:00:00Z",
+    "severity": [
+      {
+        "type": "CVSS_V3",
+        "score": "CVSS:3.1/AV:N/AC:L/PR:N/UI:N/S:U/C:H/I:N/A:N"
+      }
+    ],
+    "affected": [
+      {
+        "package": {
+          "ecosystem": "PyPI",
+          "name": "requests"
+        },
+        "ranges": [
+          {
+            "type": "ECOSYSTEM",
+            "events": [
+              {
+                "introduced": "0"
+              },
+              {
+                "fixed": "2.20.0"
+              }
+            ]
+          }
+        ]
+      }
+    ],
+    "references": [
+      {
+        "type": "WEB",
+        "url": "https://nvd.nist.gov/vuln/detail/CVE-2018-18074"
+      }
+    ]
+  }
+}

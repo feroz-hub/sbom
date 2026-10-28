@@ -4,13 +4,15 @@ from __future__ import annotations
 
 from datetime import UTC, datetime
 
+from tests.public_id_fixture import tenant_uuid
+
 
 def test_auth_me_dev_mode(client):
     resp = client.get("/api/auth/me")
     assert resp.status_code == 200
     body = resp.json()
     assert body["external_user_id"] == "dev-user"
-    assert body["tenant_id"] == 1
+    assert body["tenant_id"] == tenant_uuid(1)
     assert "permissions" in body
 
 
@@ -87,7 +89,7 @@ def test_authenticated_tenant_write_preserves_context(client, app, monkeypatch):
         db.add(membership)
         db.flush()
         from app.services.tenant_role_assignment_service import create_initial_assignment
-        create_initial_assignment(db, membership, role_code="TENANT_ADMIN", source="TENANT_ADMIN", actor_user_id=user.id)
+        create_initial_assignment(db, membership, role_code="TENANT_ADMIN", source="SYSTEM", actor_user_id=user.id)
         db.commit()
         tenant_id = tenant.id
 
@@ -98,7 +100,8 @@ def test_authenticated_tenant_write_preserves_context(client, app, monkeypatch):
             json={"project_name": "Authenticated Context Project", "created_by": "spoofed-user"},
         )
         assert response.status_code == 201, response.text
-        with SessionLocal() as db:
+        from app.core.context import minimal_background_context, tenant_scope
+        with tenant_scope(minimal_background_context(tenant_id)), SessionLocal() as db:
             project = db.execute(
                 select(Projects).where(Projects.project_name == "Authenticated Context Project")
             ).scalar_one()

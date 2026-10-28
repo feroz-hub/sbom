@@ -42,137 +42,139 @@ from sqlalchemy import func, select
 
 @pytest.fixture
 def fixture(client, monkeypatch, tmp_path):
-    from app.routers.report_notifications import reader
-    from app.workers import report_notifications as worker
+    from app.core.context import minimal_background_context, tenant_scope
+    with tenant_scope(minimal_background_context(1)):
+        from app.routers.report_notifications import reader
+        from app.workers import report_notifications as worker
 
-    now = datetime.now(UTC)
-    old = (now - timedelta(days=10)).isoformat()
-    settings = get_settings()
-    monkeypatch.setattr(settings, "tenant_role_assignment_mode", "LEGACY")
-    db = SessionLocal()
-    user = IAMUser(
-        external_iam_user_id="report-user",
-        email="verified@example.test",
-        display_name="Verified",
-        status="ACTIVE",
-        email_verified=True,
-        verification_required=False,
-        email_verified_at=now,
-        created_at=now,
-        updated_at=now,
-    )
-    db.add(user)
-    db.flush()
-    member = TenantUser(
-        tenant_id=1, user_id=user.id, role="TENANT_ADMIN", status="ACTIVE", created_at=now, updated_at=now
-    )
-    project = Projects(tenant_id=1, project_name="Reports", project_status=1, created_on=old)
-    db.add_all([member, project])
-    db.flush()
-    root = SBOMSource(tenant_id=1, projectid=project.id, sbom_name="Original", sbom_version="1", created_on=old)
-    db.add(root)
-    db.flush()
-    sbom = SBOMSource(
-        tenant_id=1,
-        projectid=project.id,
-        sbom_name="<script>bad</script>=SUM(A1)",
-        sbom_version="2",
-        parent_id=root.id,
-        created_on=old,
-    )
-    db.add(sbom)
-    db.flush()
-    component = SBOMComponent(
-        tenant_id=1, sbom_id=sbom.id, name="library", version="2", is_duplicate=False, lifecycle_status="eol"
-    )
-    db.add(component)
-    db.flush()
-    runs = []
-    for index, source in enumerate([root, sbom, sbom]):
-        when = (now - timedelta(days=9 - index)).isoformat()
-        run = AnalysisRun(
-            tenant_id=1,
-            sbom_id=source.id,
-            project_id=project.id,
-            run_status="FINDINGS",
-            started_on=when,
-            completed_on=when,
-            total_components=1,
-            total_findings=1,
+        now = datetime.now(UTC)
+        old = (now - timedelta(days=10)).isoformat()
+        settings = get_settings()
+        monkeypatch.setattr(settings, "tenant_role_assignment_mode", "LEGACY")
+        db = SessionLocal()
+        user = IAMUser(
+            external_iam_user_id="report-user",
+            email="verified@example.test",
+            display_name="Verified",
+            status="ACTIVE",
+            email_verified=True,
+            verification_required=False,
+            email_verified_at=now,
+            created_at=now,
+            updated_at=now,
         )
-        db.add(run)
+        db.add(user)
         db.flush()
-        db.add(
-            AnalysisFinding(
-                tenant_id=1,
-                analysis_run_id=run.id,
-                vuln_id="CVE-2025-10001",
-                component_name="library",
-                component_id=component.id if source.id == sbom.id else None,
-                component_version=source.sbom_version,
-                severity="HIGH",
-                score=9.0,
-                fixed_versions='["3"]',
-            )
+        member = TenantUser(
+            tenant_id=1, user_id=user.id, role="TENANT_ADMIN", status="ACTIVE", created_at=now, updated_at=now
         )
-        runs.append(run)
-    db.add(EpssScore(cve_id="CVE-2025-10001", epss=0.6, refreshed_at=now.isoformat()))
-    db.commit()
-    permissions = frozenset({"sbom:read", "analysis:read", "project:read", "product:read", "product:manage_schedule"})
-    context = CurrentContext(
-        user.id,
-        user.external_iam_user_id,
-        user.email,
-        user.display_name,
-        1,
-        None,
-        frozenset({"TENANT_ADMIN"}),
-        permissions,
-    )
-    client.app.dependency_overrides[reader] = lambda: context
-    private = tmp_path / "artifacts"
-    private.mkdir(mode=0o700)
-    worker_settings = settings.model_copy(
-        update={
-            "auth_enabled": True,
-            "report_notifications_enabled": True,
-            "email_delivery_enabled": True,
-            "report_notification_base_url": "https://app.example.test",
-            "report_artifact_storage_path": str(private),
-            "email_from_address": "reports@example.test",
-        }
-    )
-    monkeypatch.setattr(worker, "get_settings", lambda: worker_settings)
-    import app.services.report_storage as storage
+        project = Projects(tenant_id=1, project_name="Reports", project_status=1, created_on=old)
+        db.add_all([member, project])
+        db.flush()
+        root = SBOMSource(tenant_id=1, projectid=project.id, sbom_name="Original", sbom_version="1", created_on=old)
+        db.add(root)
+        db.flush()
+        sbom = SBOMSource(
+            tenant_id=1,
+            projectid=project.id,
+            sbom_name="<script>bad</script>=SUM(A1)",
+            sbom_version="2",
+            parent_id=root.id,
+            created_on=old,
+        )
+        db.add(sbom)
+        db.flush()
+        component = SBOMComponent(
+            tenant_id=1, sbom_id=sbom.id, name="library", version="2", is_duplicate=False, lifecycle_status="eol"
+        )
+        db.add(component)
+        db.flush()
+        runs = []
+        for index, source in enumerate([root, sbom, sbom]):
+            when = (now - timedelta(days=9 - index)).isoformat()
+            run = AnalysisRun(
+                tenant_id=1,
+                sbom_id=source.id,
+                project_id=project.id,
+                run_status="FINDINGS",
+                started_on=when,
+                completed_on=when,
+                total_components=1,
+                total_findings=1,
+            )
+            db.add(run)
+            db.flush()
+            db.add(
+                AnalysisFinding(
+                    tenant_id=1,
+                    analysis_run_id=run.id,
+                    vuln_id="CVE-2025-10001",
+                    component_name="library",
+                    component_id=component.id if source.id == sbom.id else None,
+                    component_version=source.sbom_version,
+                    severity="HIGH",
+                    score=8.0,
+                    fixed_versions='["3"]',
+                )
+            )
+            runs.append(run)
+        db.add(EpssScore(cve_id="CVE-2025-10001", epss=0.6, refreshed_at=now.isoformat()))
+        db.commit()
+        permissions = frozenset({"sbom:read", "sbom:export", "analysis:read", "project:read", "product:read", "product:manage_schedule"})
+        context = CurrentContext(
+            user.id,
+            user.external_iam_user_id,
+            user.email,
+            user.display_name,
+            1,
+            None,
+            frozenset({"TENANT_ADMIN"}),
+            permissions,
+        )
+        client.app.dependency_overrides[reader] = lambda: context
+        private = tmp_path / "artifacts"
+        private.mkdir(mode=0o700)
+        worker_settings = settings.model_copy(
+            update={
+                "auth_enabled": True,
+                "report_notifications_enabled": True,
+                "email_delivery_enabled": True,
+                "report_notification_base_url": "https://app.example.test",
+                "report_artifact_storage_path": str(private),
+                "email_from_address": "reports@example.test",
+            }
+        )
+        monkeypatch.setattr(worker, "get_settings", lambda: worker_settings)
+        import app.services.report_storage as storage
 
-    monkeypatch.setattr(storage, "get_settings", lambda: worker_settings)
-    sent = []
-    monkeypatch.setattr(
-        worker,
-        "get_email_sender",
-        lambda: SimpleNamespace(
-            send_email=lambda message: (sent.append(message), EmailDeliveryResult(EmailDeliveryStatus.SENT))[1]
-        ),
-    )
-    value = SimpleNamespace(
-        db=db,
-        client=client,
-        user=user,
-        member=member,
-        project=project,
-        root=root,
-        sbom=sbom,
-        runs=runs,
-        context=context,
-        worker=worker,
-        settings=worker_settings,
-        sent=sent,
-        now=now,
-        old=old,
-    )
-    yield value
-    client.app.dependency_overrides.pop(reader, None)
-    db.close()
+        monkeypatch.setattr(storage, "get_settings", lambda: worker_settings)
+        sent = []
+        monkeypatch.setattr(
+            worker,
+            "get_email_sender",
+            lambda: SimpleNamespace(
+                send_email=lambda message: (sent.append(message), EmailDeliveryResult(EmailDeliveryStatus.SENT))[1]
+            ),
+        )
+        value = SimpleNamespace(
+            db=db,
+            client=client,
+            user=user,
+            member=member,
+            project=project,
+            root=root,
+            sbom=sbom,
+            runs=runs,
+            context=context,
+            worker=worker,
+            settings=worker_settings,
+            sent=sent,
+            now=now,
+            old=old,
+        )
+        yield value
+        client.app.dependency_overrides.pop(reader, None)
+        db.close()
 
 
 def subscribe(f, **overrides):
@@ -215,7 +217,7 @@ def test_all_parts_and_real_artifact_renderers(fixture):
     assert report["summary"]["severity"]["HIGH"] == 1
     assert report["summary"]["epss_outlook"]["coverage"] == 1
     item = report["sboms"][0]
-    assert item["comparisons"]["B"]["run_a"]["id"] == f.runs[1].id
+    assert item["comparisons"]["B"]["run_a"]["id"] == str(f.runs[1].public_id)
     assert item["comparisons"]["C"]["persistent_findings"][0]["age_days"] > 0
     assert item["comparisons"]["D"]["relationship"]["classification"] == "SAME_LINEAGE_DIFFERENT_VERSION"
     assert item["comparisons"]["D"]["relationship"]["version_a"] == "1"
@@ -233,7 +235,7 @@ def test_all_parts_and_real_artifact_renderers(fixture):
 
 def test_preview_crud_unique_and_no_delivery(fixture):
     f = fixture
-    payload = ReportPreferences(scope="SBOM", sbom_id=f.sbom.id).model_dump()
+    payload = {**ReportPreferences(scope="SBOM", sbom_id=f.sbom.id).model_dump(), "sbom_id": str(f.sbom.public_id)}
     response = f.client.post("/api/report-subscriptions/preview", json=payload)
     assert response.status_code == 200, response.text
     assert "html_body" in response.json()
@@ -263,7 +265,8 @@ def test_tenant_scope_restricted_and_foreign_target_denied(fixture):
         sbom = SBOMSource(tenant_id=2, sbom_name="Secret")
         f.db.add(sbom)
         f.db.commit()
-    response = f.client.post("/api/report-subscriptions", json={"scope": "SBOM", "sbom_id": sbom.id})
+        foreign_id = str(sbom.public_id)
+    response = f.client.post("/api/report-subscriptions", json={"scope": "SBOM", "sbom_id": foreign_id})
     assert response.status_code == 404
 
 
@@ -285,6 +288,11 @@ def test_successful_delivery_once_and_authenticated_download(fixture):
     response = f.client.get(f"/api/report-deliveries/{identifier}/artifacts/{artifact['id']}")
     assert response.status_code == 200, response.text
     assert response.content.startswith(b"%PDF")
+    # Lifecycle deactivation removes current metrics, never stored artifacts.
+    f.sbom.lifecycle_status = "INACTIVE"
+    f.db.commit()
+    response = f.client.get(f"/api/report-deliveries/{identifier}/artifacts/{artifact['id']}")
+    assert response.status_code == 200 and response.content.startswith(b"%PDF")
     f.db.expire_all()
     assert f.db.get(ReportSubscription, sub.id).last_delivered_at == f.now.isoformat()
 
@@ -514,7 +522,8 @@ def test_unknown_smtp_outcome_is_not_retried(fixture):
     row.dispatch_started_at = f.old
     row.attempt_count = 1
     f.db.commit()
-    f.worker.dispatch_pending()
+    with tenant_scope(None):
+        f.worker.dispatch_pending()
     f.db.expire_all()
     assert row.status == "FAILED" and row.error_code == "SMTP_OUTCOME_UNKNOWN"
     assert f.worker.generate(identifier, 1)["status"] == "NOT_CLAIMED"
@@ -536,7 +545,7 @@ def test_preview_is_rate_limited(fixture):
         ]
     )
     f.db.commit()
-    response = f.client.post("/api/report-subscriptions/preview", json={"scope": "SBOM", "sbom_id": f.sbom.id})
+    response = f.client.post("/api/report-subscriptions/preview", json={"scope": "SBOM", "sbom_id": str(f.sbom.public_id)})
     assert response.status_code == 429
 
 
@@ -544,19 +553,19 @@ def test_report_routes_use_read_permission_not_tenant_settings_permission():
     from app.core.security import permission_for_request
     from starlette.requests import Request
 
-    for method, path in [
-        ("POST", "/api/report-subscriptions"),
-        ("PATCH", "/api/report-subscriptions/1"),
-        ("POST", "/api/report-subscriptions/preview"),
-        ("GET", "/api/report-deliveries/1/artifacts/1"),
+    for method, path, permission in [
+        ("POST", "/api/report-subscriptions", "sbom:read"),
+        ("PATCH", "/api/report-subscriptions/1", "sbom:read"),
+        ("POST", "/api/report-subscriptions/preview", "sbom:export"),
+        ("GET", "/api/report-deliveries/1/artifacts/1", "sbom:export"),
     ]:
         assert (
             permission_for_request(Request({"type": "http", "method": method, "path": path, "headers": []}))
-            == "sbom:read"
+            == permission
         )
 
 
-def test_read_only_member_can_subscribe_to_project(fixture):
+def test_read_only_member_cannot_subscribe_without_export(fixture):
     from dataclasses import replace
 
     from app.core.security import get_current_tenant_context
@@ -567,8 +576,9 @@ def test_read_only_member_can_subscribe_to_project(fixture):
     context = replace(f.context, roles=frozenset({"VIEWER"}))
     f.client.app.dependency_overrides[get_current_tenant_context] = lambda: context
     try:
-        response = f.client.post("/api/report-subscriptions", json={"scope": "PROJECT", "project_id": f.project.id})
-        assert response.status_code == 201, response.text
+        response = f.client.post("/api/report-subscriptions", json={"scope": "PROJECT", "project_id": str(f.project.public_id)})
+        assert response.status_code == 403, response.text
+        assert f.db.scalar(select(func.count(ReportSubscription.id))) == 0
     finally:
         f.client.app.dependency_overrides.pop(get_current_tenant_context, None)
 
@@ -628,8 +638,10 @@ def test_delivery_link_filter_finds_old_row_and_excludes_other_tenants(fixture):
     f.db.add(other)
     f.db.flush()
     row.tenant_id = other.id
-    f.db.commit()
-    assert f.client.get(f"/api/report-deliveries?delivery_id={identifier}").json() == []
+    with pytest.raises(RuntimeError, match="Cross-tenant"):
+        f.db.commit()
+    f.db.rollback()
+    assert [r["id"] for r in f.client.get(f"/api/report-deliveries?delivery_id={identifier}").json()] == [identifier]
 
 
 def test_severity_floor_does_not_change_persistent_headline(fixture):
@@ -683,7 +695,8 @@ def test_retention_expires_artifacts_and_only_owned_orphans(fixture):
     old = (f.now - timedelta(days=100)).timestamp()
     os.utime(orphan, (old, old))
     os.utime(unrelated, (old, old))
-    outcome = f.worker.purge()
+    with tenant_scope(None):
+        outcome = f.worker.purge()
     assert outcome == {"removed": len(artifacts), "orphaned_files_removed": 1}
     assert unrelated.exists() and not orphan.exists()
     assert f.client.get(f"/api/report-deliveries/{identifier}/artifacts/{artifact_id}").status_code == 410
@@ -748,30 +761,22 @@ def test_failed_scheduled_completion_is_visible_in_email(fixture):
 
 
 @pytest.mark.parametrize("sbom_count", [50, 250])
-def test_report_reference_load(fixture, sbom_count):
+def test_report_reference_load(fixture, sbom_count, record_testsuite_property):
     """Reference: 50 SBOM/4,901 findings; fan-out: 250 SBOM/24,901 findings."""
-    import resource
+    import json
+    import os
+    import subprocess
     import sys
-    import time
 
     from sqlalchemy import insert
 
     f = fixture
-    ids = list(
-        f.db.scalars(
-            insert(SBOMSource).returning(SBOMSource.id),
-            [
-                {
-                    "tenant_id": 1,
-                    "projectid": f.project.id,
-                    "sbom_name": f"Load {index}",
-                    "created_on": f.old,
-                    "is_active": True,
-                }
-                for index in range(sbom_count - 1)
-            ],
-        )
-    )
+    # SBOM ORM creation also establishes the mandatory logical parent.
+    versions = [SBOMSource(tenant_id=1, projectid=f.project.id, sbom_name=f"Load {index}", created_on=f.old, is_active=True)
+                for index in range(sbom_count - 1)]
+    f.db.add_all(versions)
+    f.db.flush()
+    ids = [version.id for version in versions]
     run_ids = list(
         f.db.scalars(
             insert(AnalysisRun).returning(AnalysisRun.id),
@@ -808,22 +813,40 @@ def test_report_reference_load(fixture, sbom_count):
             ],
         )
     f.db.commit()
-    start = time.monotonic()
-    with tenant_scope(f.context):
-        report = compose_report(
-            f.db,
-            ReportPreferences(scope="PROJECT", project_id=f.project.id, parts=["A", "B", "C", "D"]),
-            tenant_id=1,
-            cycle_start=f.old,
-            cycle_end=f.now.isoformat(),
-        )
+    # A long pytest process has a cumulative high-water mark; measure the
+    # committed report fixture in a fresh, bounded interpreter instead.
+    project_id = f.project.id
     f.db.close()
-    pdf, xlsx = render_pdf(report), render_xlsx(report)
-    elapsed = time.monotonic() - start
-    memory_mb = resource.getrusage(resource.RUSAGE_SELF).ru_maxrss / (1024**2 if sys.platform == "darwin" else 1024)
-    print(
-        f"REPORT_LOAD sboms={sbom_count} findings={report['summary']['total_findings']} elapsed_seconds={elapsed:.2f} peak_mb={memory_mb:.1f} pdf_bytes={len(pdf)} xlsx_bytes={len(xlsx)}"
+    result = subprocess.run(
+        [sys.executable, "-m", "tests.report_load_probe"],
+        input=json.dumps({"tenant_id": f.context.tenant_id, "project_id": project_id,
+                          "cycle_start": f.old, "cycle_end": f.now.isoformat()}),
+        env=os.environ.copy(), capture_output=True, text=True,
+        timeout=180 if sbom_count == 50 else 270, check=True,
     )
-    assert report["included_sboms"] == sbom_count
-    assert elapsed < (120 if sbom_count == 50 else 300)
-    assert memory_mb < 512
+    measurement = json.loads(result.stdout.splitlines()[-1])
+    print("REPORT_LOAD", json.dumps(measurement, sort_keys=True))
+    for name, value in measurement.items():
+        record_testsuite_property(f"report_load_{sbom_count}_{name}", value)
+    assert measurement["included_sboms"] == sbom_count
+    assert measurement["total_findings"] == (sbom_count - 1) * 100 + 1
+    assert measurement["elapsed_seconds"] < (120 if sbom_count == 50 else 300)
+    assert measurement["peak_mb"] < 512
+    assert measurement["peak_method"] == ("darwin-exec-ru_maxrss" if sys.platform == "darwin" else "linux-exec-VmHWM")
+    assert measurement["pdf_bytes"] > 0 and measurement["xlsx_bytes"] > 0
+
+
+def test_memory_probe_excludes_parent_pre_exec_residency():
+    import json
+    import subprocess
+    import sys
+
+    # A ru_maxrss-based probe inherits at least this footprint before exec;
+    # the fresh stdlib-only interpreter itself must stay below 64 MiB.
+    resident = bytearray(64 * 1024**2)
+    result = subprocess.run(
+        [sys.executable, "-c", "import json; from tests.report_load_probe import peak_rss_mb; print(json.dumps(peak_rss_mb()))"],
+        capture_output=True, text=True, timeout=15, check=True,
+    )
+    assert len(resident) == 64 * 1024**2
+    assert 0 < json.loads(result.stdout) < 64

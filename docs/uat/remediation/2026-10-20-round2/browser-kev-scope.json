@@ -1,0 +1,105 @@
+[
+  {
+    "id": "R2-KEV-BFF-foreign",
+    "role": "foreign",
+    "preconditions": "Clean validated-TLS Chrome context; actual Native BFF fixture; auth routes warmed before module navigation",
+    "steps": "R2-KEV-BFF-foreign",
+    "expected": "Independent fresh Native BFF session is authenticated",
+    "actual": {
+      "status": 200,
+      "authenticated": true
+    },
+    "result": "PASS"
+  },
+  {
+    "id": "R2-KEV-CONTEXT-foreign",
+    "role": "foreign",
+    "preconditions": "Clean validated-TLS Chrome context; actual Native BFF fixture; auth routes warmed before module navigation",
+    "steps": "R2-KEV-CONTEXT-foreign",
+    "expected": "Actual module auth context resolves",
+    "actual": {
+      "status": 200,
+      "roles": [
+        "TENANT_ADMIN"
+      ],
+      "tenant": "a803c17f-7e7d-439c-8664-c5406d391fd1"
+    },
+    "result": "PASS"
+  },
+  {
+    "id": "R2-KEV-CONTROL-foreign",
+    "role": "foreign",
+    "preconditions": "Clean validated-TLS Chrome context; actual Native BFF fixture; auth routes warmed before module navigation",
+    "steps": "R2-KEV-CONTROL-foreign",
+    "expected": "Effective global sync permission controls the button",
+    "actual": {
+      "enabled": false,
+      "path": "/kev"
+    },
+    "result": "PASS"
+  },
+  {
+    "id": "R2-KEV-BFF-platform",
+    "role": "platform",
+    "preconditions": "Clean validated-TLS Chrome context; actual Native BFF fixture; auth routes warmed before module navigation",
+    "steps": "R2-KEV-BFF-platform",
+    "expected": "Independent fresh Native BFF session is authenticated",
+    "actual": {
+      "status": 200,
+      "authenticated": true
+    },
+    "result": "PASS"
+  },
+  {
+    "id": "R2-KEV-CONTEXT-platform",
+    "role": "platform",
+    "preconditions": "Clean validated-TLS Chrome context; actual Native BFF fixture; auth routes warmed before module navigation",
+    "steps": "R2-KEV-CONTEXT-platform",
+    "expected": "Actual module auth context resolves",
+    "actual": {
+      "status": 200,
+      "roles": [
+        "PLATFORM_ADMIN"
+      ],
+      "tenant": null
+    },
+    "result": "PASS"
+  },
+  {
+    "id": "R2-KEV-CONTROL-platform",
+    "role": "platform",
+    "preconditions": "Clean validated-TLS Chrome context; actual Native BFF fixture; auth routes warmed before module navigation",
+    "steps": "R2-KEV-CONTROL-platform",
+    "expected": "Effective global sync permission controls the button",
+    "actual": {
+      "enabled": true,
+      "path": "/platform"
+    },
+    "result": "PASS"
+  },
+  {
+    "id": "R2-KEV-PLATFORM-ACTUAL-CLICK",
+    "role": "platform",
+    "preconditions": "Clean validated-TLS Chrome context; actual Native BFF fixture; auth routes warmed before module navigation",
+    "steps": "R2-KEV-PLATFORM-ACTUAL-CLICK",
+    "expected": "Actual UI click completes live global sync under controlled no-write test settings",
+    "actual": {
+      "status": 200,
+      "result": {
+        "ok": true,
+        "catalog_version": "2026.10.16",
+        "catalog_date_released": "2026-10-16T17:15:48.875200+00:00",
+        "total_in_feed": 1748,
+        "filtered_since": "2099-01-01",
+        "matched_after_filter": 0,
+        "upserted": 0,
+        "duration_seconds": 0.611
+      },
+      "controlledRequestSettings": {
+        "since": "2099-01-01",
+        "prune_stale": false
+      }
+    },
+    "result": "PASS"
+  }
+]

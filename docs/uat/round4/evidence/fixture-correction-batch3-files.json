@@ -1,0 +1,22 @@
+[
+  "test_sbom_repair_release.py",
+  "test_sbom_quality_integration.py",
+  "test_sbom_spdx_integration.py",
+  "test_sbom_spdx_release.py",
+  "test_sbom_upload_validation_persisted.py",
+  "test_sboms_analyze_snapshot.py",
+  "test_sbom_assign_and_edit.py",
+  "test_postgresql_integration.py",
+  "test_schedules_api.py",
+  "test_sbom_repair_release.py",
+  "test_sbom_quality_integration.py",
+  "test_sbom_spdx_release.py",
+  "test_sbom_upload_validation_persisted.py",
+  "test_sboms_analyze_snapshot.py",
+  "test_sbom_assign_and_edit.py",
+  "test_postgresql_integration.py",
+  "test_schedules_api.py",
+  "test_component_extraction_reconciliation.py",
+  "test_dashboard_posture_evidence.py",
+  "test_dashboard_priority_findings.py"
+]

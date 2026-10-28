@@ -4,6 +4,7 @@ import {
   useCallback,
   useEffect,
   useId,
+  useMemo,
   useRef,
   useState,
   type ReactNode,
@@ -11,6 +12,7 @@ import {
 import { useRouter } from 'next/navigation';
 import { Keyboard, X } from 'lucide-react';
 import { cn } from '@/lib/utils';
+import { useAuth } from '@/hooks/useAuth';
 
 // ─── Chord definitions ───────────────────────────────────────────────────────
 
@@ -20,16 +22,17 @@ interface ChordDef {
   label: string;
   /** Either a router path or an imperative action. */
   href?: string;
+  permission?: string;
   action?: () => void;
 }
 
 const NAV_CHORDS: ChordDef[] = [
-  { prefix: 'g', key: 'd', label: 'Dashboard', href: '/' },
-  { prefix: 'g', key: 'p', label: 'Projects', href: '/projects' },
-  { prefix: 'g', key: 's', label: 'SBOMs', href: '/sboms' },
-  { prefix: 'g', key: 'r', label: 'Analysis runs', href: '/analysis?tab=runs' },
-  { prefix: 'g', key: 'c', label: 'Compare runs', href: '/analysis/compare' },
-  { prefix: 'g', key: 'a', label: 'Run consolidated analysis', href: '/analysis?tab=consolidated' },
+  { prefix: 'g', key: 'd', label: 'Dashboard', href: '/', permission: 'dashboard:read' },
+  { prefix: 'g', key: 'p', label: 'Projects', href: '/projects', permission: 'project:read' },
+  { prefix: 'g', key: 's', label: 'SBOMs', href: '/sboms', permission: 'sbom:read' },
+  { prefix: 'g', key: 'r', label: 'Analysis runs', href: '/analysis?tab=runs', permission: 'analysis:read' },
+  { prefix: 'g', key: 'c', label: 'Compare runs', href: '/analysis/compare', permission: 'analysis:read' },
+  { prefix: 'g', key: 'a', label: 'Run consolidated analysis', href: '/analysis?tab=consolidated', permission: 'analysis:run' },
 ];
 
 const SINGLE_KEY_SHORTCUTS: Array<{ keys: string[]; label: string; hint: string }> = [
@@ -65,6 +68,10 @@ function isTypingTarget(el: EventTarget | null): boolean {
 
 export function KeyboardCheatsheet() {
   const router = useRouter();
+  const { hasPermission } = useAuth();
+  const chords = useMemo<ChordDef[]>(() => hasPermission('platform:tenant:read')
+    ? [{ prefix: 'g', key: 'd', label: 'Platform Dashboard', href: '/platform' }]
+    : NAV_CHORDS.filter(chord => !chord.permission || hasPermission(chord.permission)), [hasPermission]);
   const [open, setOpen] = useState(false);
   const dialogRef = useRef<HTMLDivElement>(null);
   const panelRef = useRef<HTMLDivElement>(null);
@@ -79,7 +86,7 @@ export function KeyboardCheatsheet() {
 
   const runChord = useCallback(
     (prefix: string, key: string) => {
-      const def = NAV_CHORDS.find((c) => c.prefix === prefix && c.key === key);
+      const def = chords.find((c) => c.prefix === prefix && c.key === key);
       if (!def) return false;
       if (def.href) {
         router.push(def.href);
@@ -88,7 +95,7 @@ export function KeyboardCheatsheet() {
       def.action?.();
       return true;
     },
-    [router],
+    [router, chords],
   );
 
   // Global keydown listener — chord handling + ? to open + custom event.
@@ -133,7 +140,7 @@ export function KeyboardCheatsheet() {
       }
 
       // Start a new chord if this is a known prefix.
-      if (NAV_CHORDS.some((c) => c.prefix === key)) {
+      if (chords.some((c) => c.prefix === key)) {
         chordRef.current = { prefix: key, until: now + 1500 };
         // Intentionally do NOT preventDefault — typing the prefix in a future
         // single-key shortcut should remain harmless if no follow-up arrives.
@@ -151,7 +158,7 @@ export function KeyboardCheatsheet() {
       window.removeEventListener('keydown', onKey);
       window.removeEventListener('sbom:show-cheatsheet', onCustomShow);
     };
-  }, [open, close, runChord]);
+  }, [open, close, runChord, chords]);
 
   // Focus management when the modal opens/closes.
   useEffect(() => {
@@ -223,7 +230,7 @@ export function KeyboardCheatsheet() {
             <p className="-mt-1 mb-2 text-[11px] text-hcl-muted">
               Press <Kbd>g</Kbd> followed by a letter within 1.5s.
             </p>
-            {NAV_CHORDS.map((c) => (
+            {chords.map((c) => (
               <Row
                 key={`${c.prefix}-${c.key}`}
                 keys={[c.prefix.toUpperCase(), c.key.toUpperCase()]}

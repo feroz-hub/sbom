@@ -1,327 +1,80 @@
 // @vitest-environment jsdom
-
+import { Suspense } from 'react';
 import { QueryClient, QueryClientProvider } from '@tanstack/react-query';
 import { act, render, screen, waitFor, within } from '@testing-library/react';
 import userEvent from '@testing-library/user-event';
-import { Suspense } from 'react';
-import { beforeEach, describe, expect, it, vi } from 'vitest';
-import { ToastProvider } from '@/hooks/useToast';
+import { beforeEach, expect, it, vi } from 'vitest';
+import Page from './page';
 
-/**
- * Platform → Tenants → Manage must offer the SAME member/role UX as
- * `/settings/tenant` (RoleBadges + action menu + modals), while every call
- * targets the tenant in the URL rather than the acting user's active tenant.
- *
- * The active tenant below is deliberately 1 while the route tenant is 7 —
- * any operation that leaks the active tenant id fails these tests.
- */
-const ROUTE_TENANT_ID = 7;
-const ACTIVE_TENANT_ID = 1;
+const state = vi.hoisted(() => ({ allowed: true, governance: false, platform: true, get: vi.fn(), directory: vi.fn(), recover: vi.fn(), status: vi.fn(), candidate: { id: 8, email: 'admin@example.test', display_name: 'New Admin' } }));
+vi.mock('@/hooks/useAuth', () => ({ useAuth: () => ({ user: { userId: '00000000-0000-4000-8000-000000000001', permissions: [] }, isPlatformContext: state.platform, isLoading: false, hasPermission: (permission: string) => state.allowed && (permission !== 'platform:tenant_admin:manage' || state.governance) }) }));
+vi.mock('@/hooks/useNotifications', () => ({ useNotifications: () => ({ showSuccess: vi.fn(), showError: vi.fn() }) }));
+vi.mock('@/lib/api', async original => ({ ...await original<typeof import('@/lib/api')>(), getPlatformTenant: (...args: unknown[]) => state.get(...args), getPlatformTenantAdministrators: (...args: unknown[]) => state.directory(...args), recoverPlatformTenantAdmin: (...args: unknown[]) => state.recover(...args), updatePlatformTenantStatus: (...args: unknown[]) => state.status(...args) }));
+vi.mock('@/components/admin/UserSearchCombobox', () => ({ UserSearchCombobox: ({ onSelect }: { onSelect: (user: typeof state.candidate) => void }) => <button onClick={() => onSelect(state.candidate)}>Select New Admin</button> }));
 
-const refreshSession = vi.hoisted(() => vi.fn());
-const auth = vi.hoisted(() => ({ allowed: true }));
-const api = vi.hoisted(() => ({
-  listPlatformTenants: vi.fn(),
-  getTenantMembers: vi.fn(),
-  getAssignableTenantRoles: vi.fn(),
-  addTenantMember: vi.fn(),
-  replaceTenantMemberRoles: vi.fn(),
-  activateTenantMember: vi.fn(),
-  deactivateTenantMember: vi.fn(),
-  removeTenantMember: vi.fn(),
-  updatePlatformTenantStatus: vi.fn(),
-  searchTenantUserCandidates: vi.fn(),
-  searchPlatformUsers: vi.fn(),
-  getTenantAuditHistory: vi.fn(),
-}));
-
-vi.mock('next/navigation', () => ({
-  useRouter: () => ({ push: vi.fn(), replace: vi.fn(), refresh: vi.fn(), prefetch: vi.fn() }),
-  usePathname: () => `/settings/platform/tenants/${ROUTE_TENANT_ID}`,
-}));
-
-vi.mock('@/hooks/useAuth', () => ({
-  useAuth: () => ({
-    user: { tenantId: ACTIVE_TENANT_ID, userId: 999, isPlatformAdmin: true },
-    activeTenantId: ACTIVE_TENANT_ID,
-    activeTenant: { id: ACTIVE_TENANT_ID, name: 'Default Tenant', slug: 'default', status: 'ACTIVE' },
-    tenants: [{ id: ACTIVE_TENANT_ID, name: 'Default Tenant', slug: 'default', status: 'ACTIVE' }],
-    hasPermission: (permission: string) => auth.allowed && permission === 'platform:tenant:create',
-    isLoading: false,
-    isTenantContextLoading: false,
-    refreshSession,
-  }),
-}));
-vi.mock('@/hooks/usePermission', () => ({ usePermission: () => true }));
-vi.mock('@/lib/api', async (importOriginal) => ({
-  ...(await importOriginal<typeof import('@/lib/api')>()),
-  ...api,
-}));
-
-import PlatformTenantDetailPage from './page';
-
-const tenant = {
-  id: ROUTE_TENANT_ID,
-  name: 'Acme Security',
-  slug: 'acme-security',
-  external_iam_tenant_id: null,
-  status: 'ACTIVE' as const,
-  created_at: '2026-08-01T00:00:00Z',
-  member_count: 1,
-};
-
-const member = {
-  membership_id: 9,
-  user_id: 12,
-  external_iam_user_id: 'subject-12',
-  email: 'user@example.test',
-  display_name: 'Example User',
-  user_status: 'ACTIVE',
-  email_verified: true,
-  verification_required: false,
-  role: 'VIEWER' as const,
-  roles: ['VIEWER'] as const,
-  role_assignment_version: 1,
-  status: 'ACTIVE' as const,
-};
-
-/** Stable across re-renders — `use()` must see the same promise instance. */
-const routeParams = Promise.resolve({ tenantId: String(ROUTE_TENANT_ID) });
-
-/**
- * The page reads its route params with `use(params)`, so the first render
- * suspends. Awaiting inside `act` lets React resolve the thenable and commit
- * the real tree before the assertions run.
- */
-async function renderPage() {
-  const client = new QueryClient({ defaultOptions: { queries: { retry: false }, mutations: { retry: false } } });
-  let utils!: ReturnType<typeof render>;
-  await act(async () => {
-    utils = render(
-      <QueryClientProvider client={client}>
-        <ToastProvider>
-          <Suspense fallback={<div>Loading…</div>}>
-            <PlatformTenantDetailPage params={routeParams} />
-          </Suspense>
-        </ToastProvider>
-      </QueryClientProvider>,
-    );
-  });
-  return utils;
-}
-
-async function openActionsMenu() {
-  const user = userEvent.setup();
-  await renderPage();
-  await screen.findAllByText('Example User');
-  await user.click(screen.getAllByRole('button', { name: 'Open actions for Example User' })[0]);
-  return user;
-}
-
-describe('PlatformTenantDetailPage — member management UX', () => {
-  beforeEach(() => {
-    vi.clearAllMocks();
-    auth.allowed = true;
-    api.listPlatformTenants.mockResolvedValue([tenant]);
-    api.getTenantMembers.mockResolvedValue([member]);
-    api.getAssignableTenantRoles.mockResolvedValue({ roles: ['TENANT_ADMIN', 'SECURITY_ANALYST', 'DEVELOPER', 'VIEWER'] });
-    api.addTenantMember.mockResolvedValue(member);
-    api.replaceTenantMemberRoles.mockResolvedValue({
-      membership_id: 9,
-      user_id: 12,
-      membership_status: 'ACTIVE',
-      role_assignment_version: 2,
-      primary_role: 'DEVELOPER',
-      roles: ['DEVELOPER', 'VIEWER'],
-      effective_permissions: [],
-    });
-    api.activateTenantMember.mockResolvedValue(member);
-    api.deactivateTenantMember.mockResolvedValue({ ...member, status: 'DISABLED' });
-    api.removeTenantMember.mockResolvedValue(undefined);
-    api.getTenantAuditHistory.mockResolvedValue([]);
-  });
-
-  it('renders effective roles as badges in the latest table layout', async () => {
-    await renderPage();
-
-    await screen.findAllByText('Example User');
-    // RoleBadges renders the role inside its labelled container, not a control.
-    const badgeGroups = screen.getAllByLabelText('Tenant roles');
-    expect(badgeGroups.length).toBeGreaterThan(0);
-    expect(badgeGroups[0]).toHaveTextContent('Viewer');
-    // …and each role is a RoleBadge, with its describing aria-label.
-    expect(within(badgeGroups[0]).getAllByLabelText(/^Viewer role \(effective\)/).length).toBe(1);
-
-    // Column headers match /settings/tenant.
-    for (const header of ['User', 'Verification', 'Effective roles', 'Membership', 'User account', 'Actions']) {
-      expect(screen.getAllByRole('columnheader', { name: header }).length).toBeGreaterThan(0);
-    }
-  });
-
-  it('no longer renders the old inline role multi-select or text action buttons', async () => {
-    await renderPage();
-    await screen.findAllByText('Example User');
-
-    // The per-row role editor is gone…
-    expect(screen.queryByLabelText('Roles for Example User')).not.toBeInTheDocument();
-    const multiSelects = document.querySelectorAll('select[multiple]');
-    // …the only multi-select left is the add-member "Initial roles" control,
-    // which is hidden until a user is picked.
-    expect(multiSelects.length).toBe(0);
-
-    // …and so are the old inline text buttons.
-    expect(screen.queryByRole('button', { name: 'Deactivate' })).not.toBeInTheDocument();
-    expect(screen.queryByRole('button', { name: 'Activate' })).not.toBeInTheDocument();
-    expect(screen.queryByRole('button', { name: 'Remove' })).not.toBeInTheDocument();
-  });
-
-  it('opens ManageRolesModal from the action menu and saves against the route tenant', async () => {
-    const user = await openActionsMenu();
-
-    await user.click(screen.getByRole('menuitem', { name: /Manage roles/i }));
-    expect(screen.getByRole('heading', { name: 'Manage roles — Example User' })).toBeInTheDocument();
-    // Platform context is named in the modal.
-    expect(screen.getByRole('dialog')).toHaveTextContent('Acme Security');
-
-    await user.click(screen.getByRole('checkbox', { name: /Developer/i }));
-    await user.click(screen.getByRole('button', { name: 'Save changes' }));
-
-    await waitFor(() => expect(api.replaceTenantMemberRoles).toHaveBeenCalledWith(
-      ROUTE_TENANT_ID,
-      12,
-      ['VIEWER', 'DEVELOPER'],
-      1,
-    ));
-    expect(api.replaceTenantMemberRoles).not.toHaveBeenCalledWith(
-      ACTIVE_TENANT_ID,
-      expect.anything(),
-      expect.anything(),
-      expect.anything(),
-    );
-  });
-
-  it('disables a membership through DisableMembershipDialog', async () => {
-    const user = await openActionsMenu();
-
-    await user.click(screen.getByRole('menuitem', { name: /Disable membership/i }));
-    expect(screen.getByRole('heading', { name: 'Disable tenant membership?' })).toBeInTheDocument();
-
-    const dialog = screen.getByRole('dialog');
-    await user.click(within(dialog).getByRole('button', { name: 'Disable membership' }));
-
-    await waitFor(() => expect(api.deactivateTenantMember).toHaveBeenCalledWith(ROUTE_TENANT_ID, 9));
-  });
-
-  it('enables a disabled membership through EnableMembershipDialog', async () => {
-    api.getTenantMembers.mockResolvedValue([{ ...member, status: 'DISABLED' }]);
-    const user = await openActionsMenu();
-
-    await user.click(screen.getByRole('menuitem', { name: /Enable membership/i }));
-    expect(screen.getByRole('heading', { name: 'Enable tenant membership?' })).toBeInTheDocument();
-
-    const dialog = screen.getByRole('dialog');
-    await user.click(within(dialog).getByRole('button', { name: 'Enable membership' }));
-
-    await waitFor(() => expect(api.activateTenantMember).toHaveBeenCalledWith(ROUTE_TENANT_ID, 9));
-  });
-
-  it('removes a member through RemoveMemberDialog with its confirmation checkbox', async () => {
-    const user = await openActionsMenu();
-
-    await user.click(screen.getByRole('menuitem', { name: /Remove from tenant/i }));
-    expect(screen.getByRole('heading', { name: 'Remove user from tenant?' })).toBeInTheDocument();
-
-    const dialog = screen.getByRole('dialog');
-    const removeBtn = within(dialog).getByRole('button', { name: 'Remove from tenant' });
-    expect(removeBtn).toBeDisabled();
-
-    await user.click(screen.getByRole('checkbox', { name: /I understand this user will lose access to this tenant/i }));
-    expect(removeBtn).not.toBeDisabled();
-    await user.click(removeBtn);
-
-    await waitFor(() => expect(api.removeTenantMember).toHaveBeenCalledWith(ROUTE_TENANT_ID, 9));
-  });
-
-  it('loads members and audit history for the route tenant, never the active tenant', async () => {
-    await renderPage();
-    await screen.findAllByText('Example User');
-
-    expect(api.getTenantMembers).toHaveBeenCalledWith(ROUTE_TENANT_ID);
-    expect(api.getTenantMembers).not.toHaveBeenCalledWith(ACTIVE_TENANT_ID);
-    await waitFor(() => expect(api.getTenantAuditHistory).toHaveBeenCalledWith(ROUTE_TENANT_ID));
-    expect(api.getAssignableTenantRoles).toHaveBeenCalledWith(ROUTE_TENANT_ID);
-  });
-
-  it('adds a member to the route tenant with the chosen initial roles', async () => {
-    api.searchTenantUserCandidates.mockResolvedValue([
-      {
-        id: 99,
-        email: 'new.user@hcltech.com',
-        display_name: 'New User',
-        status: 'ACTIVE',
-        email_verified: true,
-        verification_required: false,
-        external_subject: 'new-hcl-sub',
-      },
-    ]);
-    const user = userEvent.setup();
-    await renderPage();
-    await screen.findAllByText('Example User');
-
-    await user.type(screen.getByPlaceholderText(/Search existing SBOM users/i), 'New');
-    await user.click(await screen.findByText('New User'));
-    await user.selectOptions(screen.getByLabelText('Initial roles'), 'SECURITY_ANALYST');
-    await user.click(screen.getByRole('button', { name: 'Add Member' }));
-
-    await waitFor(() => expect(api.addTenantMember).toHaveBeenCalledWith(ROUTE_TENANT_ID, {
-      user_id: 99,
-      roles: ['SECURITY_ANALYST', 'VIEWER'],
-    }));
-  });
+beforeEach(() => {
+  vi.clearAllMocks(); state.allowed = true; state.governance = false; state.platform = true;
+  state.get.mockResolvedValue({ id: "00000000-0000-4000-8000-000000000007", name: 'Olympus', status: 'ACTIVE', member_count: 10, current_administrators: [{ user_id: '00000000-0000-4000-8000-000000000002', display_name: 'Current Admin', email: 'current@example.test' }] });
+  state.recover.mockResolvedValue({}); state.status.mockResolvedValue({});
+  state.directory.mockResolvedValue({ tenant_id: '00000000-0000-4000-8000-000000000007', administrators: [{
+    tenant_id: '00000000-0000-4000-8000-000000000007', membership_id: '00000000-0000-4000-8000-000000000008', user_id: '00000000-0000-4000-8000-000000000002',
+    display_name: 'Current Admin', email: 'current@example.test', status: 'ACTIVE', account_status: 'ACTIVE', is_effective: true,
+    roles: ['TENANT_ADMIN'], primary_role: 'TENANT_ADMIN', role_assignment_version: 3,
+  }], replacement_roles: [{ code: 'VIEWER', name: 'Viewer', scope: 'TENANT' }] });
 });
-
-describe('PlatformTenantDetailPage — preserved platform context', () => {
-  beforeEach(() => {
-    vi.clearAllMocks();
-    auth.allowed = true;
-    api.listPlatformTenants.mockResolvedValue([tenant]);
-    api.getTenantMembers.mockResolvedValue([member]);
-    api.getAssignableTenantRoles.mockResolvedValue({ roles: ['VIEWER'] });
-    api.updatePlatformTenantStatus.mockResolvedValue({ tenant_id: ROUTE_TENANT_ID, status: 'DISABLED' });
-    api.getTenantAuditHistory.mockResolvedValue([]);
-  });
-
-  it('keeps the breadcrumb, tenant overview and header', async () => {
-    await renderPage();
-
-    expect(await screen.findByRole('link', { name: 'Platform Tenants' })).toHaveAttribute(
-      'href',
-      '/settings/platform/tenants',
-    );
-    const overview = screen.getByRole('heading', { name: 'Overview' }).closest('section');
-    expect(overview).toHaveTextContent(/managing Acme Security in explicit platform context/i);
-    expect(screen.getAllByText('Acme Security').length).toBeGreaterThan(0);
-  });
-
-  it('keeps the platform tenant enable/disable control', async () => {
-    const user = userEvent.setup();
-    await renderPage();
-
-    await user.click(await screen.findByRole('button', { name: 'Disable Tenant' }));
-
-    await waitFor(() => expect(api.updatePlatformTenantStatus).toHaveBeenCalledWith(ROUTE_TENANT_ID, 'DISABLED'));
-  });
-
-  it('denies access without the platform permission and issues no member requests', async () => {
-    auth.allowed = false;
-    try {
-      await renderPage();
-
-      expect(await screen.findByRole('alert')).toHaveTextContent('Access denied.');
-      expect(api.getTenantMembers).not.toHaveBeenCalled();
-      expect(api.listPlatformTenants).not.toHaveBeenCalled();
-    } finally {
-      auth.allowed = true;
-    }
-  });
+async function renderPage() {
+  const params = Promise.resolve({ tenantId: "00000000-0000-4000-8000-000000000007" });
+  await act(async () => { render(<QueryClientProvider client={new QueryClient({ defaultOptions: { queries: { retry: false } } })}><Suspense fallback={<p>Loading</p>}><Page params={params} /></Suspense></QueryClientProvider>); });
+}
+it('shows summary and governance, not a generic tenant member editor', async () => {
+  await renderPage();
+  expect(await screen.findByRole('heading', { name: 'Olympus', level: 1 })).toBeInTheDocument();
+  expect(screen.getByText('10 memberships · 1 active Tenant Administrators')).toBeInTheDocument();
+  expect(screen.getByText('Current Admin — current@example.test')).toBeInTheDocument();
+  expect(screen.queryByText('Tenant Members')).not.toBeInTheDocument();
+  expect(screen.queryByText('Generic member editor')).not.toBeInTheDocument();
+  expect(screen.queryByText('Add existing member')).not.toBeInTheDocument();
+  expect(state.get).toHaveBeenCalledWith("00000000-0000-4000-8000-000000000007");
+});
+it('renders one shared breadcrumb with ancestor links and a non-linked current tenant', async () => {
+  state.get.mockResolvedValue({ id: "00000000-0000-4000-8000-000000000007", name: 'Wellysis', slug: 'wellysis', status: 'ACTIVE', member_count: 0, current_administrators: [] });
+  await renderPage();
+  await screen.findByRole('heading', { name: 'Wellysis', level: 1 });
+  const trails = screen.getAllByRole('navigation', { name: 'Breadcrumb' });
+  expect(trails).toHaveLength(1);
+  const trail = within(trails[0]);
+  expect(trail.getByRole('link', { name: 'Platform' })).toHaveAttribute('href', '/platform');
+  expect(trail.getByRole('link', { name: 'Tenants' })).toHaveAttribute('href', '/settings/platform/tenants');
+  expect(trail.getByText('Wellysis')).toHaveAttribute('aria-current', 'page');
+  expect(trail.queryByRole('link', { name: 'Wellysis' })).not.toBeInTheDocument();
+  expect(trail.getAllByRole('link')).toHaveLength(2);
+});
+it('uses a dedicated administrator recovery API with fixed role semantics', async () => {
+  await renderPage(); const user = userEvent.setup();
+  const save = await screen.findByRole('button', { name: 'Assign Tenant Administrator' });
+  expect(save).toBeDisabled();
+  await user.click(screen.getByRole('button', { name: 'Select New Admin' }));
+  await user.click(save);
+  await waitFor(() => expect(state.recover).toHaveBeenCalledWith("00000000-0000-4000-8000-000000000007", 8));
+});
+it('requires actual platform-context permission', async () => {
+  state.allowed = false; await renderPage();
+  expect(await screen.findByRole('alert')).toHaveTextContent('Platform tenant read permission is required');
+  expect(state.get).not.toHaveBeenCalled();
+});
+it('renders the authorized governance section once and loads the membership directory', async () => {
+  state.governance = true; await renderPage();
+  await screen.findByRole('heading', { name: 'Current Admin' });
+  expect(screen.getAllByRole('heading', { name: 'Tenant Administrators' })).toHaveLength(1);
+  expect(screen.getByRole('button', { name: 'Revoke Admin Role' })).toBeInTheDocument();
+  expect(screen.getByRole('button', { name: 'Deactivate Membership' })).toBeInTheDocument();
+  expect(screen.getByRole('button', { name: 'Remove From Tenant' })).toBeInTheDocument();
+  expect(state.directory).toHaveBeenCalledWith('00000000-0000-4000-8000-000000000007', expect.any(AbortSignal));
+  expect(screen.queryByText('Current Tenant Administrators')).not.toBeInTheDocument();
+});
+it('blocks direct navigation from tenant context despite stale platform permissions', async () => {
+  state.platform = false; state.governance = true; await renderPage();
+  expect(await screen.findByRole('alert')).toHaveTextContent('Platform tenant read permission is required');
+  expect(state.get).not.toHaveBeenCalled(); expect(state.directory).not.toHaveBeenCalled();
+  expect(screen.queryByRole('button', { name: 'Revoke Admin Role' })).not.toBeInTheDocument();
 });

@@ -170,6 +170,7 @@ export function MemberActionMenu({
   const menuContent = open && (
     <div
       ref={menuRef}
+      id={menuId}
       role="menu"
       aria-orientation="vertical"
       aria-label={`Actions for ${displayName}`}
@@ -249,7 +250,9 @@ export function MemberActionMenu({
         aria-label={ariaLabel}
         aria-haspopup="menu"
         aria-expanded={open}
-        className="inline-flex h-11 w-11 items-center justify-center rounded-lg border border-transparent text-hcl-muted hover:border-border hover:bg-surface-elevated hover:text-foreground focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-hcl-blue focus-visible:ring-offset-2 transition-colors min-h-[44px] min-w-[44px]"
+        aria-controls={open ? menuId : undefined}
+        title={ariaLabel}
+        className="inline-flex h-11 w-11 items-center justify-center rounded-lg border border-border text-hcl-muted hover:border-hcl-blue/40 hover:bg-surface-elevated hover:text-foreground focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-hcl-blue focus-visible:ring-offset-2 transition-colors min-h-[44px] min-w-[44px]"
       >
         <MoreVertical className="h-5 w-5" aria-hidden="true" />
       </button>

@@ -1,0 +1,23 @@
+[
+  {
+    "id": "UAT-VEX-DECISION-UI-ANALYST",
+    "role": "analyst",
+    "expected": "Analyst actual dialog justified decision succeeds",
+    "actual": {
+      "status": 200,
+      "effective_status": "UNDER_INVESTIGATION"
+    },
+    "result": "PASS",
+    "time": "2026-10-20T08:50:34.005Z"
+  },
+  {
+    "id": "UAT-VEX-DECISION-UI-ANALYST-READBACK",
+    "role": "analyst",
+    "expected": "Refreshed dialog retains Analyst decision audit reason",
+    "actual": {
+      "persisted": true
+    },
+    "result": "PASS",
+    "time": "2026-10-20T08:50:41.615Z"
+  }
+]

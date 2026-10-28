@@ -21,9 +21,9 @@ interface CveWhatSectionProps {
 export function CveWhatSection({ seed, detail, scanName, describedById }: CveWhatSectionProps) {
   const componentLine =
     seed.component_name && seed.component_version
-      ? `Detected in ${seed.component_name}@${seed.component_version}`
+      ? `Component: ${seed.component_name}@${seed.component_version}`
       : seed.component_name
-        ? `Detected in ${seed.component_name}`
+        ? `Component: ${seed.component_name}`
         : null;
 
   return (

@@ -8,9 +8,11 @@ Supports both pydantic v2 with pydantic-settings and standalone pydantic v2.
 """
 
 from pathlib import Path
-from typing import Any
+from typing import Any, Literal
 
 from pydantic import BaseModel, Field, SecretStr, field_validator, model_validator
+
+from app.core.sbom_quality_policy import DEFAULT_THRESHOLDS, DEFAULT_WEIGHTS, QualityPolicy
 
 PROJECT_ROOT = Path(__file__).resolve().parent.parent
 
@@ -38,6 +40,23 @@ class Settings(BaseSettings):
     Centralizes all configuration from environment variables with
     sensible defaults and validation.
     """
+
+    # Deterministic SBOM repair. AI extensions remain disabled in Phase 1.
+    sbom_auto_repair_enabled: bool = Field(default=True)
+    sbom_repair_max_passes: int = Field(default=3, ge=1, le=10)
+    sbom_repair_auto_apply_confidence: float = Field(default=1.0, ge=0, le=1)
+    sbom_repair_max_bytes: int = Field(default=5 * 1024 * 1024, ge=1024, le=50 * 1024 * 1024)
+    sbom_repair_max_seconds: float = Field(default=30.0, ge=1, le=120)
+
+    # Advisory quality defaults are centralized and validated independently of upload gates.
+    sbom_quality_enabled: bool = True
+    sbom_quality_weights: dict[str, float] = Field(default_factory=lambda: dict(DEFAULT_WEIGHTS))
+    sbom_quality_thresholds: dict[str, float] = Field(default_factory=lambda: dict(DEFAULT_THRESHOLDS))
+
+    @model_validator(mode='after')
+    def validate_quality_configuration(self):
+        QualityPolicy(weights=self.sbom_quality_weights, thresholds=self.sbom_quality_thresholds)
+        return self
 
     # API Keys and Credentials
     nvd_api_key: str = Field(default="", description="NVD API key for enhanced rate limits")
@@ -162,6 +181,8 @@ class Settings(BaseSettings):
         default=None,
         description="Xeol CLI path for scheduled sync jobs only (not used in request path).",
     )
+    lifecycle_cache_max_stale_days: int = Field(default=7, ge=0, description="Maximum stale retention after expiry; refresh does not extend it.")
+    lifecycle_egress_allowed_hosts: str = Field(default="", description="Operator-approved exact enterprise lifecycle hosts; private addresses allowed except metadata/loopback.")
     lifecycle_cache_ttl_known_days: int = Field(default=14, ge=1, description="Cache TTL for known EOL/EOS dates.")
     lifecycle_cache_ttl_unknown_hours: int = Field(default=24, ge=1, description="Cache TTL for unknown lifecycle results.")
     lifecycle_cache_ttl_provider_failure_minutes: int = Field(
@@ -194,14 +215,9 @@ class Settings(BaseSettings):
         ),
     )
 
-    # Authentication Configuration (Finding A — opt-in bearer token auth)
-    #
-    # `api_auth_mode` is "none" by default so existing dev environments are
-    # not broken. Set it to "bearer" in production to require an
-    # `Authorization: Bearer <token>` header on every state-touching or
-    # data-exposing endpoint. `api_auth_tokens` is a comma-separated allowlist
-    # of valid tokens — multiple values let you rotate per-client without
-    # downtime.
+    # Legacy binary-auth fields are retained for local configuration compatibility.
+    # Protected operations use AUTH_ENABLED and the database-authorized HCL,
+    # Native or Entra context; these fields cannot substitute for production IAM.
     api_auth_mode: str = Field(
         default="none",
         description="Auth: none | bearer (allowlist) | jwt (HS256 via JWT_SECRET_KEY).",
@@ -217,9 +233,17 @@ class Settings(BaseSettings):
     jwt_audience: str = Field(default="", description="Optional expected aud claim")
     jwt_issuer: str = Field(default="", description="Optional expected iss claim")
 
-    # HCL IAM / OIDC. AUTH_ENABLED=false is restricted to local development
-    # and tests; production validation uses asymmetric JWTs from JWKS.
-    auth_enabled: bool = Field(default=False, description="Require HCL IAM authentication")
+    # Authentication is enabled by default. AUTH_ENABLED=false requires explicit
+    # local development/test configuration; providers remain individually selectable.
+    app_environment: Literal["development", "test", "staging", "production"] = "development"
+    auth_enabled: bool = Field(default=True, description="Require authenticated database authorization (HCL IAM, Native or Entra)")
+    hcl_auth_enabled: bool = True
+    # One workforce directory; application tenants remain database-owned.
+    entra_enabled: bool = False
+    entra_tenant_id: str = ""
+    entra_frontend_client_id: str = ""
+    entra_api_client_id: str = ""
+    entra_api_scope: str = ""
     hcl_iam_issuer: str = Field(default="", description="Expected HCL IAM token issuer")
     hcl_iam_audience: str = Field(default="", description="Expected API audience")
     hcl_iam_discovery_url: str = Field(default="", description="OIDC discovery URL; derived from issuer when empty")
@@ -249,7 +273,35 @@ class Settings(BaseSettings):
         default="",
         description="Informational support contact shown during identity onboarding",
     )
+    email_provider: str = "smtp"
+    native_platform_bootstrap_enabled: bool = False
     email_delivery_enabled: bool = False
+    # Foundation only: these flags do not expose native login/creation routes.
+    native_jwt_issuer: str = ""
+    native_jwt_audience: str = "sbom-analyser-api"
+    native_jwt_algorithm: str = "RS256"
+    native_jwt_public_key: str = Field(default="", repr=False)
+    native_jwt_private_key: str = Field(default="", repr=False)
+    native_jwt_access_token_ttl_seconds: int = Field(default=86400, ge=60, le=86400)
+    native_login_max_failed_attempts: int = Field(default=5, ge=1, le=100)
+    native_login_lockout_seconds: int = Field(default=900, ge=60, le=86400)
+    native_password_reset_ttl_seconds: int = Field(default=3600, ge=300, le=86400)
+    native_password_reset_frontend_url: str = "https://localhost:3000/reset-password"
+    native_auth_rate_limit_enabled: bool = True
+    native_auth_rate_limit_storage_uri: str = "memory://"
+    native_auth_ip_limit_per_minute: int = Field(default=30, ge=1, le=1000)
+    native_auth_account_limit_per_minute: int = Field(default=10, ge=1, le=100)
+    native_jwt_active_kid: str = "native-v1"
+    native_jwt_verification_keys_json: str = Field(default="{}", repr=False)
+    native_password_min_length: int = Field(default=12, ge=12, le=128)
+    native_activation_frontend_url: str = "https://localhost:3000/activate-account"
+    native_iam_production: bool = False
+    native_security_outbox_enabled: bool = False
+    native_security_outbox_key: str = Field(default="", repr=False)
+    native_security_outbox_max_attempts: int = Field(default=5, ge=1, le=10)
+    native_auth_enabled: bool = False
+    native_user_creation_enabled: bool = False
+    native_account_activation_ttl_seconds: int = Field(default=18000, ge=18000, le=18000)
     report_notifications_enabled: bool = False
     report_notification_base_url: str = ""
     report_max_sboms_per_digest: int = Field(default=250, ge=1, le=10000)
@@ -759,6 +811,8 @@ class Settings(BaseSettings):
     def validate_email_delivery_configuration(self):
         from urllib.parse import urlsplit
 
+        if self.email_provider != "smtp":
+            raise ValueError("Unsupported EMAIL_PROVIDER")
         if self.smtp_use_tls and self.smtp_use_starttls:
             raise ValueError("SMTP_USE_TLS and SMTP_USE_STARTTLS cannot both be enabled")
         parsed = urlsplit(self.email_verification_frontend_url.strip())

@@ -7,6 +7,9 @@ from app.db import SessionLocal
 from app.models import AnalysisRun, Product, Projects, SBOMSource
 from app.services.analysis_service import persist_analysis_run
 from scripts.backfill_products_for_existing_sboms import run_backfill
+from sqlalchemy import select
+
+from tests.tenant_fixture_scope import verified_fixture_tenant
 
 
 def _name(prefix: str) -> str:
@@ -106,22 +109,24 @@ def test_upload_requires_matching_project_product_and_returns_product(client):
     mismatch = client.post(
         "/api/sboms/upload",
         data={"sbom_name": _name("bad"), "project_id": str(project_a["id"]), "product_id": str(product_b["id"])},
-        files={"file": ("sbom.cdx.json", json.dumps({"bomFormat": "CycloneDX", "specVersion": "1.5"}), "application/json")},
+        files={
+            "file": ("sbom.cdx.json", json.dumps({"bomFormat": "CycloneDX", "specVersion": "1.5"}), "application/json")
+        },
     )
     assert mismatch.status_code == 409
 
 
-def test_upload_current_sbom_selection_is_explicit_and_first_upload_is_safe_default(client):
+def test_upload_does_not_promote_until_analysis_or_explicit_pin(client):
     project = _project(client)
     product = _product(client, project["id"], "Versioned Controller")
 
     first = _upload(client, project_id=project["id"], product_id=product["id"], set_as_current=False)
-    assert first["is_current"] is True
-    assert client.get(f"/api/products/{product['id']}").json()["current_sbom_id"] == first["sbom_id"]
+    assert first["is_current"] is False
+    assert client.get(f"/api/products/{product['id']}").json()["current_sbom_id"] is None
 
     historical = _upload(client, project_id=project["id"], product_id=product["id"], set_as_current=False)
     assert historical["is_current"] is False
-    assert client.get(f"/api/products/{product['id']}").json()["current_sbom_id"] == first["sbom_id"]
+    assert client.get(f"/api/products/{product['id']}").json()["current_sbom_id"] is None
 
     replacement = _upload(client, project_id=project["id"], product_id=product["id"], set_as_current=True)
     assert replacement["is_current"] is True
@@ -132,7 +137,7 @@ def test_upload_current_sbom_selection_is_explicit_and_first_upload_is_safe_defa
 def test_soft_deleting_current_sbom_clears_product_pointer(client):
     project = _project(client)
     product = _product(client, project["id"], "Delete Current")
-    uploaded = _upload(client, project_id=project["id"], product_id=product["id"])
+    uploaded = _upload(client, project_id=project["id"], product_id=product["id"], set_as_current=True)
     assert client.get(f"/api/products/{product['id']}").json()["current_sbom_id"] == uploaded["sbom_id"]
 
     deleted = client.delete(f"/api/sboms/{uploaded['sbom_id']}?confirm=yes")
@@ -174,8 +179,8 @@ def test_analysis_run_inherits_product_id(client):
     project = _project(client)
     product = _product(client, project["id"], "Run Product")
     accepted = _upload(client, project_id=project["id"], product_id=product["id"])
-    with SessionLocal() as db:
-        sbom = db.get(SBOMSource, accepted["sbom_id"])
+    with SessionLocal() as db, verified_fixture_tenant(db, 1):
+        sbom = db.scalar(select(SBOMSource).where(SBOMSource.public_id == uuid.UUID(accepted["sbom_id"])))
         run = persist_analysis_run(
             db,
             sbom,
@@ -188,7 +193,7 @@ def test_analysis_run_inherits_product_id(client):
             1,
         )
         db.commit()
-        assert run.product_id == product["id"]
+        assert str(db.get(Product, run.product_id).public_id) == product["id"]
 
 
 def test_product_sbom_list_carries_latest_analysis(client):
@@ -206,8 +211,8 @@ def test_product_sbom_list_carries_latest_analysis(client):
     assert listed.status_code == 200, listed.text
     assert listed.json()[0]["latest_analysis"] is None
 
-    with SessionLocal() as db:
-        sbom = db.get(SBOMSource, sbom_id)
+    with SessionLocal() as db, verified_fixture_tenant(db, 1):
+        sbom = db.scalar(select(SBOMSource).where(SBOMSource.public_id == uuid.UUID(sbom_id)))
         run = AnalysisRun(
             sbom_id=sbom.id,
             project_id=sbom.projectid,
@@ -224,13 +229,13 @@ def test_product_sbom_list_carries_latest_analysis(client):
         )
         db.add(run)
         db.commit()
-        run_id = run.id
+        run_public_id = str(run.public_id)
 
     listed = client.get(f"/api/products/{product['id']}/sboms")
     assert listed.status_code == 200, listed.text
     latest = listed.json()[0]["latest_analysis"]
     assert latest is not None
-    assert latest["run_id"] == run_id
+    assert latest["run_id"] == run_public_id
     assert latest["status"] == "completed"
     assert latest["result"] == "findings"
     assert latest["finding_count"] == 2
@@ -249,7 +254,7 @@ def test_product_sbom_list_delete_policy_and_backfill_idempotent(client):
     delete_blocked = client.delete(f"/api/products/{product['id']}")
     assert delete_blocked.status_code == 409
 
-    with SessionLocal() as db:
+    with SessionLocal() as db, verified_fixture_tenant(db, 1):
         legacy_project = Projects(
             tenant_id=1,
             project_name=_name("legacy-project"),
@@ -270,11 +275,16 @@ def test_product_sbom_list_delete_policy_and_backfill_idempotent(client):
         legacy_id = legacy.id
         legacy_project_id = legacy_project.id
 
-    first = run_backfill(apply=True)
-    second = run_backfill(apply=True)
+    from app.services.maintenance_scope import maintenance_tenant
+
+    # This fixture owns tenant 1; exercise maintenance separately in that
+    # verified owner, rather than invoking a global unscoped backfill.
+    with maintenance_tenant(1, "test.product_backfill"):
+        first = run_backfill(apply=True)
+        second = run_backfill(apply=True)
     assert first.sboms_linked >= 1
     assert second.sboms_linked == 0
-    with SessionLocal() as db:
+    with SessionLocal() as db, verified_fixture_tenant(db, 1):
         legacy = db.get(SBOMSource, legacy_id)
         assert legacy.projectid == legacy_project_id
         assert legacy.product_id is not None

@@ -1,0 +1,28 @@
+{
+  "verifiedAt": "2026-10-21T02:51:19.784210+00:00",
+  "repository": "https://github.com/feroz-hub/sbom",
+  "branch": "feat/native-user-management",
+  "originalHead": "2f48ff835d9e692fc84b31aaa951aad2495888ac",
+  "localHead": "b0217bf90c178c3e4b74edac00b764798bc8c983",
+  "remoteHead": "b0217bf90c178c3e4b74edac00b764798bc8c983",
+  "remoteBranchRef": "refs/heads/feat/native-user-management",
+  "commitShasVerifiedViaGitHub": [
+    "d88ea570418787bc899ce08e26086b40fc28642e",
+    "b0217bf90c178c3e4b74edac00b764798bc8c983"
+  ],
+  "fastForwardPush": true,
+  "filesCommittedBeforeAttestation": 801,
+  "attestationAddsFiles": 2,
+  "finalUniqueDeliveryFileCount": 803,
+  "sourceFilesStillMatchFrozenRun": 1593,
+  "excludedFilesPreserved": 1901,
+  "trackedUncommittedBeforeAttestation": 0,
+  "ci": {
+    "checkRuns": 0,
+    "workflowRuns": 0,
+    "status": "No GitHub CI run available for the verified documentation head"
+  },
+  "reportCarrier": "The subsequent documentation commit containing GIT_DELIVERY_REPORT.md and this verification snapshot. Its hash cannot be embedded into itself; verify carrier HEAD against origin and GitHub after push. Exact final carrier hash is reported in the delivery response and private post-push attestation.",
+  "merge": false,
+  "deployment": false
+}

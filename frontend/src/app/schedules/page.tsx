@@ -1,5 +1,10 @@
 'use client';
 
+import { useAnalysisScope } from '@/hooks/useAnalysisScope';
+import { addPendingAnalysis } from '@/lib/pendingAnalysis';
+import { invalidateScheduleLists, invalidateAnalysisSubmission } from '@/lib/queryInvalidation';
+import { PermissionButton } from '@/components/ui/PermissionButton';
+
 import { useCallback, useMemo, useState } from 'react';
 import { useMutation, useQuery, useQueryClient } from '@tanstack/react-query';
 import Link from 'next/link';
@@ -15,7 +20,7 @@ import {
 import { TopBar } from '@/components/layout/TopBar';
 import { Card } from '@/components/ui/Card';
 import { Badge } from '@/components/ui/Badge';
-import { Button } from '@/components/ui/Button';
+import { PermissionButton as Button } from '@/components/ui/PermissionButton';
 import { Select } from '@/components/ui/Select';
 import { Alert } from '@/components/ui/Alert';
 import { DeleteConfirmDialog } from '@/components/ui/DeleteConfirmDialog';
@@ -47,11 +52,6 @@ import { getApiErrorMessage } from '@/lib/notifications';
 import { formatRelative } from '@/lib/utils';
 import { matchesMultiField } from '@/lib/tableFilters';
 import { canonicalRunStatus } from '@/lib/analysisRunStatusLabels';
-import {
-  invalidateDashboardTiles,
-  invalidateRunLists,
-  invalidateSbomLists,
-} from '@/lib/queryInvalidation';
 import type { AnalysisSchedule, Project, SBOMSource } from '@/types';
 
 type ScopeFilter = 'all' | 'TENANT' | 'PROJECT' | 'PRODUCT' | 'SBOM';
@@ -79,6 +79,7 @@ const WEEKDAYS = ['Mon', 'Tue', 'Wed', 'Thu', 'Fri', 'Sat', 'Sun'];
 
 export default function SchedulesPage() {
   const queryClient = useQueryClient();
+  const analysisScope = useAnalysisScope();
   const { showToast } = useToast();
 
   const [scope, setScope] = useState<ScopeFilter>('all');
@@ -113,22 +114,22 @@ export default function SchedulesPage() {
   });
 
   const projectById = useMemo(
-    () => new Map<number, Project>((projectsQuery.data ?? []).map((p) => [p.id, p])),
+    () => new Map<string | number, Project>((projectsQuery.data ?? []).map((p) => [p.id, p])),
     [projectsQuery.data],
   );
   const sbomById = useMemo(
-    () => new Map<number, SBOMSource>((sbomsQuery.data ?? []).map((s) => [s.id, s])),
+    () => new Map<string | number, SBOMSource>((sbomsQuery.data ?? []).map((s) => [s.id, s])),
     [sbomsQuery.data],
   );
 
   const targetLabel = useCallback((sched: AnalysisSchedule): string => {
-    if (sched.scope === 'TENANT') return `Tenant #${sched.tenant_id ?? ''}`;
-    if (sched.scope === 'PRODUCT') return sched.product_name ?? `Product #${sched.product_id ?? ''}`;
+    if (sched.scope === 'TENANT') return 'Selected tenant';
+    if (sched.scope === 'PRODUCT') return sched.product_name ?? 'Selected application';
     if (sched.scope === 'PROJECT' && sched.project_id != null) {
-      return sched.project_name ?? projectById.get(sched.project_id)?.project_name ?? `Project #${sched.project_id}`;
+      return sched.project_name ?? projectById.get(sched.project_id)?.project_name ?? 'Selected project';
     }
     if (sched.scope === 'SBOM' && sched.sbom_id != null) {
-      const name = sched.sbom_name ?? sbomById.get(sched.sbom_id)?.sbom_name ?? `SBOM #${sched.sbom_id}`;
+      const name = sched.sbom_name ?? sbomById.get(sched.sbom_id)?.sbom_name ?? 'Selected SBOM';
       return `${name}${sched.sbom_version ? ` ${sched.sbom_version}` : ''}`;
     }
     return '—';
@@ -152,16 +153,13 @@ export default function SchedulesPage() {
   // canonical source for this page; the per-target schedule queries (used
   // by the project/SBOM cards) are also keyed under "schedule" so they
   // refresh together.
-  const invalidate = () => {
-    queryClient.invalidateQueries({ queryKey: ['schedules'] });
-    queryClient.invalidateQueries({ queryKey: ['schedule'] });
-  };
+  const invalidate = () => invalidateScheduleLists(queryClient);
 
   const pauseM = useMutation({
     mutationFn: (id: number) => pauseSchedule(id),
     onSuccess: () => {
       showToast('Paused', 'success');
-      invalidate();
+      return invalidate();
     },
     onError: (error: unknown) => showToast(getApiErrorMessage(error, 'Schedule pause failed.'), 'error'),
   });
@@ -169,13 +167,16 @@ export default function SchedulesPage() {
     mutationFn: (id: number) => resumeSchedule(id),
     onSuccess: () => {
       showToast('Resumed', 'success');
-      invalidate();
+      return invalidate();
     },
     onError: (error: unknown) => showToast(getApiErrorMessage(error, 'Schedule resume failed.'), 'error'),
   });
   const runNowM = useMutation({
+    onMutate: () => ({ isCurrent: analysisScope.capture(), scopeKey: analysisScope.key }),
     mutationFn: (id: number) => runScheduleNow(id),
-    onSuccess: (res) => {
+    onSuccess: (res, _variables, context) => {
+      if (!context?.isCurrent()) return;
+      for (const id of res.sbom_ids) addPendingAnalysis(id, 'Scheduled SBOM', context.scopeKey);
       showToast(
         `Enqueued ${res.sbom_ids.length} SBOM analysis${res.sbom_ids.length === 1 ? '' : 'es'}`,
         'success',
@@ -183,9 +184,7 @@ export default function SchedulesPage() {
       // Enqueuing creates new runs and flips affected SBOMs into RUNNING —
       // refresh runs list, SBOM analysis badges, and dashboard counts so
       // every surface reflects the in-flight work.
-      invalidateRunLists(queryClient);
-      invalidateSbomLists(queryClient);
-      invalidateDashboardTiles(queryClient);
+      return invalidateAnalysisSubmission(queryClient);
     },
     onError: (error: unknown) => showToast(getApiErrorMessage(error, 'The scheduled analysis could not be queued.'), 'error'),
   });
@@ -210,7 +209,7 @@ export default function SchedulesPage() {
         'success',
       );
       setConfirmDelete(null);
-      invalidate();
+      return invalidate();
     },
     onError: (error: unknown) => showToast(getApiErrorMessage(error, 'Schedule deletion failed.'), 'error'),
   });
@@ -404,7 +403,7 @@ export default function SchedulesPage() {
                           <Eye className="h-4 w-4" />
                           Preview
                         </Button>
-                        <Button
+                        <Button permission={["schedule:write","product:manage_schedule"]}
                           size="sm"
                           variant="secondary"
                           disabled={s.state === 'EXCLUDED'}
@@ -415,7 +414,7 @@ export default function SchedulesPage() {
                           Run now
                         </Button>
                         {s.state === 'EXCLUDED' ? null : s.enabled ? (
-                          <Button
+                          <Button permission={["schedule:write","product:manage_schedule"]}
                             size="sm"
                             variant="secondary"
                             loading={pauseM.isPending && pauseM.variables === s.id}
@@ -425,7 +424,7 @@ export default function SchedulesPage() {
                             Pause
                           </Button>
                         ) : (
-                          <Button
+                          <Button permission={["schedule:write","product:manage_schedule"]}
                             size="sm"
                             variant="secondary"
                             loading={resumeM.isPending && resumeM.variables === s.id}
@@ -435,22 +434,22 @@ export default function SchedulesPage() {
                             Resume
                           </Button>
                         )}
-                        <button
+                        <PermissionButton size="sm" variant="ghost" permission={["schedule:write","product:manage_schedule"]}
                           onClick={() => setEditing(s)}
                           aria-label="Edit"
                           className="inline-flex items-center gap-1.5 rounded-lg px-2 py-1.5 text-xs font-medium text-hcl-muted transition-colors hover:bg-hcl-light hover:text-hcl-blue"
                         >
                           <Pencil className="h-4 w-4" />
                           Edit
-                        </button>
-                        <button
+                        </PermissionButton>
+                        <PermissionButton size="sm" variant="ghost" permission={["schedule:write","product:manage_schedule"]}
                           onClick={() => setConfirmDelete(s)}
                           aria-label="Remove"
                           className="inline-flex items-center gap-1.5 rounded-lg px-2 py-1.5 text-xs font-medium text-hcl-muted transition-colors hover:bg-red-50 hover:text-red-600 dark:hover:bg-red-950/40"
                         >
                           <Trash2 className="h-4 w-4" />
                           Remove
-                        </button>
+                        </PermissionButton>
                       </div>
                     </Td>
                   </tr>

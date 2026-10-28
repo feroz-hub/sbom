@@ -1,8 +1,10 @@
 'use client';
 
+import { PermissionButton } from '@/components/ui/PermissionButton';
+
 import { useRef, useState } from 'react';
 import { AlertTriangle, CheckCircle2, Upload, X } from 'lucide-react';
-import { Button } from '@/components/ui/Button';
+import { PermissionButton as Button } from '@/components/ui/PermissionButton';
 import { previewVexDocument } from '@/lib/vexPreview';
 
 /** Guard against someone dropping a 200MB file into a textarea. */
@@ -77,7 +79,7 @@ export function VexDocumentImport({
           Import VEX document
         </label>
         <div className="flex items-center gap-2">
-          <button
+          <PermissionButton size="sm" variant="ghost" permission={"vex:write"}
             type="button"
             onClick={() => fileRef.current?.click()}
             disabled={importing}
@@ -85,7 +87,7 @@ export function VexDocumentImport({
           >
             <Upload className="h-3.5 w-3.5" aria-hidden />
             Choose file
-          </button>
+          </PermissionButton>
           {value ? (
             <button
               type="button"
@@ -176,7 +178,7 @@ export function VexDocumentImport({
 
       <div className="mt-2 flex items-center justify-between gap-3">
         <p className="text-xs text-hcl-muted">{message}</p>
-        <Button size="sm" onClick={onImport} loading={importing} disabled={!canImport}>
+        <Button permission={"vex:write"} size="sm" onClick={onImport} loading={importing} disabled={!canImport}>
           Import VEX
         </Button>
       </div>

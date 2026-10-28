@@ -8,7 +8,7 @@ from __future__ import annotations
 from collections import defaultdict
 from datetime import UTC, date, datetime, timedelta
 
-from sqlalchemy import func, or_, select
+from sqlalchemy import case, func, or_, select
 from sqlalchemy.orm import Session
 
 from ..models import AnalysisFinding, AnalysisRun, Product, Projects, SBOMComponent
@@ -488,3 +488,27 @@ def _bucket_severities(rows) -> dict[str, int]:
         else:
             buckets["unknown"] += int(count or 0)
     return buckets
+
+
+def dashboard_priority_findings(db: Session, *, limit: int = 5) -> list[dict]:
+    """Bounded current-posture instances, severity then CVSS then stable row ID.
+
+    Reuses the canonical latest-run set; no historical row summation, enrichment
+    or raw report loading. The installed DashboardScope enforces tenant/hierarchy.
+    """
+    tier = func.lower(func.coalesce(AnalysisFinding.severity, "unknown"))
+    priority = case(
+        (tier == "critical", 0), (tier == "high", 1),
+        (tier == "medium", 2), (tier == "low", 3), else_=4,
+    )
+    rows = db.execute(
+        select(
+            AnalysisFinding.id, AnalysisFinding.analysis_run_id, AnalysisFinding.component_id,
+            AnalysisFinding.vuln_id, AnalysisFinding.component_name,
+            AnalysisFinding.component_version, AnalysisFinding.severity,
+            AnalysisFinding.score, AnalysisFinding.source,
+        ).where(AnalysisFinding.analysis_run_id.in_(latest_run_per_sbom_subquery()))
+        .order_by(priority, func.coalesce(AnalysisFinding.score, -1).desc(), AnalysisFinding.id.asc())
+        .limit(limit)
+    ).mappings().all()
+    return [dict(row) for row in rows]

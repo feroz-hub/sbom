@@ -62,6 +62,8 @@ def override_db_with_failing_commit(app):
 
 
 def test_500_from_db_error_returns_generic_envelope(client, seeded_sbom, override_db_with_failing_commit, caplog):
+    from fastapi.testclient import TestClient
+    client = TestClient(client.app, raise_server_exceptions=False)
     sbom_id = seeded_sbom["id"]
     override_db_with_failing_commit["raise"] = sa_exc.IntegrityError(
         "synthetic-stmt UNIQUE constraint violated", "synthetic_params", Exception("synthetic_orig")
@@ -85,12 +87,14 @@ def test_500_from_db_error_returns_generic_envelope(client, seeded_sbom, overrid
     assert detail.get("code") == "internal_error", f"500 envelope drifted: {detail!r}"
 
     server_log = "\n".join(rec.getMessage() for rec in caplog.records)
-    assert "update_sbom failed" in server_log or "IntegrityError" in server_log, (
+    assert any(record.exc_info and isinstance(record.exc_info[1], sa_exc.IntegrityError) for record in caplog.records), (
         f"server-side log did not capture the failure; records: {[r.getMessage() for r in caplog.records]!r}"
     )
 
 
 def test_500_from_generic_exception_returns_generic_envelope(client, seeded_sbom, override_db_with_failing_commit):
+    from fastapi.testclient import TestClient
+    client = TestClient(client.app, raise_server_exceptions=False)
     sbom_id = seeded_sbom["id"]
     override_db_with_failing_commit["raise"] = RuntimeError(_LEAKABLE_TOKEN)
 

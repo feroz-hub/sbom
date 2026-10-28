@@ -1,0 +1,13 @@
+[
+  {
+    "id": "R1-VEX-UI-PERSISTED-READBACK",
+    "role": "admin",
+    "expected": "Reopened real dialog displays persisted Developer determination and audit reason",
+    "actual": {
+      "statusValue": "AFFECTED",
+      "savedReasonVisible": true
+    },
+    "result": "PASS",
+    "time": "2026-10-20T05:58:10.429Z"
+  }
+]

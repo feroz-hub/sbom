@@ -1,6 +1,6 @@
 'use client';
 
-import { useEffect, useMemo, useRef, useState } from 'react';
+import { useEffect, useRef, useState } from 'react';
 import Link from 'next/link';
 import { useRouter } from 'next/navigation';
 import { useForm } from 'react-hook-form';
@@ -11,15 +11,17 @@ import { Upload, AlertCircle, AlertOctagon, ArrowRight } from 'lucide-react';
 import { Dialog, DialogBody, DialogFooter } from '@/components/ui/Dialog';
 import { Input, Textarea } from '@/components/ui/Input';
 import { Select } from '@/components/ui/Select';
-import { Button } from '@/components/ui/Button';
-import { createProduct, getProducts, getProjects, getSbomTypes, HttpError } from '@/lib/api';
+import { PermissionFields } from '@/components/ui/PermissionGate';
+import { PermissionButton as Button } from '@/components/ui/PermissionButton';
+import { createProduct, getProducts, getProjects, getSbomTypes, getLogicalSbomChoices, getLogicalSbomVersions, HttpError } from '@/lib/api';
 import { getRepairWorkspaceUrl, repairWorkspaceLabel } from '@/lib/repairWorkspace';
 import { detectSbomFormatFromText, formatFamily, formatSbomFormatLabel, type SbomFormatDetection } from '@/lib/sbomFormat';
 import { useToast } from '@/hooks/useToast';
 import { getApiErrorMessage } from '@/lib/notifications';
-import { useSbomsList } from '@/hooks/useSbomsList';
+import { usePermissions } from '@/hooks/usePermission';
 import { useUploadSbom } from '@/hooks/useSbomMutations';
-import { invalidateProductSurfaces, invalidateUploadSurfaces } from '@/lib/queryInvalidation';
+import { invalidateUploadSurfaces } from '@/lib/queryInvalidation';
+import { SbomAutoRepairPanel } from './SbomAutoRepairPanel';
 import { stageLabel, stageNumber } from '@/lib/sbomValidation';
 import {
   isUnsupportedUploadStatus,
@@ -79,8 +81,8 @@ const schema = z.object({
   productid: z.string().min(1, 'Application is required'),
   sbom_version: z.string().optional(),
   product_version: z.string().optional(),
-  parent_sbom_id: z.string().optional(),
-  set_as_current: z.boolean().default(true),
+  logical_sbom_id: z.string().optional(),
+  set_as_current: z.boolean().default(false),
 });
 
 type FormInput = z.input<typeof schema>;
@@ -96,7 +98,7 @@ function matchSbomTypeIdForFormat(format: string | null | undefined, types: { id
 function formatUploadError(err: unknown): string {
   if (err instanceof HttpError) {
     if (err.status === 409)
-      return `An SBOM with this name already exists. Rename your file or delete the existing SBOM first.`;
+      return err.message || 'This SBOM version already exists. Choose a different revision.';
     if (err.status === 413)
       return 'File too large. Maximum size is 20 MB.';
     return err.message || 'Upload failed. Please try again.';
@@ -107,14 +109,17 @@ function formatUploadError(err: unknown): string {
 interface SbomUploadModalProps {
   open: boolean;
   onClose: () => void;
-  initialProjectId?: number | null;
-  initialProductId?: number | null;
+  initialProjectId?: (string | number) | null;
+  initialProductId?: (string | number) | null;
   /** Called after upload succeeds so parent views can refresh/optimistically insert. */
   onSuccess?: (sbom: SBOMSource) => void;
 }
 
 export function SbomUploadModal({ open, onClose, initialProjectId, initialProductId, onSuccess }: SbomUploadModalProps) {
   const fileRef = useRef<HTMLInputElement>(null);
+  const dragDepth = useRef(0);
+  const [draggingFile, setDraggingFile] = useState(false);
+  const { can } = usePermissions();
   const handledUploadResultRef = useRef(false);
   const [uploadError, setUploadError] = useState<string | null>(null);
   const [validationFailure, setValidationFailure] = useState<SbomValidationFailureDetail | null>(null);
@@ -133,6 +138,7 @@ export function SbomUploadModal({ open, onClose, initialProjectId, initialProduc
   const { showToast } = useToast();
   const uploadMutation = useUploadSbom();
   const uploading = uploadMutation.isPending;
+  const canSelectFile = !uploading && can('sbom:upload') && can('product:assign_sbom');
 
   const { data: projects } = useQuery({
     queryKey: ['projects'],
@@ -140,7 +146,6 @@ export function SbomUploadModal({ open, onClose, initialProjectId, initialProduc
     enabled: open,
   });
 
-  const { data: existingSboms } = useSbomsList({ enabled: open });
 
   const { data: sbomTypes } = useQuery({
     queryKey: ['sbom-types'],
@@ -160,8 +165,8 @@ export function SbomUploadModal({ open, onClose, initialProjectId, initialProduc
     resolver: zodResolver(schema),
     defaultValues: {
       sbom_name: '', sbom_data: '', sbom_type_id: '',
-      projectid: '', productid: '', sbom_version: '', product_version: '', parent_sbom_id: '',
-      set_as_current: true,
+      projectid: '', productid: '', sbom_version: '', product_version: '', logical_sbom_id: '',
+      set_as_current: false,
     },
   });
   const selectedProjectId = watch('projectid');
@@ -169,47 +174,25 @@ export function SbomUploadModal({ open, onClose, initialProjectId, initialProduc
   const sbomNameValue = watch('sbom_name');
   const sbomDataValue = watch('sbom_data');
   const selectedSbomTypeId = watch('sbom_type_id');
-  const selectedParentSbomId = watch('parent_sbom_id');
+  const selectedLogicalSbomId = watch('logical_sbom_id');
+  const mastersQuery = useQuery({ queryKey: ['logical-sboms', selectedProductId, 'choices'], queryFn: ({ signal }) => getLogicalSbomChoices(selectedProductId, signal), enabled: open && Boolean(selectedProductId) });
+  const selectedVersionsQuery = useQuery({ queryKey: ['logical-sbom-versions', selectedLogicalSbomId], queryFn: ({ signal }) => getLogicalSbomVersions(selectedLogicalSbomId!, signal), enabled: open && Boolean(selectedLogicalSbomId) });
   const sbomVersionValue = watch('sbom_version');
 
-  /**
-   * Duplicate check, matching the database constraint exactly.
-   *
-   * The unique index is `(tenant_id, sbom_name, sbom_version)` — the same name
-   * at a *different* version is legal, and is precisely what uploading a new
-   * version looks like. This used to reject on name alone, which was stricter
-   * than the server and blocked the versioning workflow outright: you could
-   * pick "New version of - Telemetry Service 1.0.0" and still be told the name
-   * was taken.
-   *
-   * Only an exact name + version collision blocks, because only that would
-   * actually fail on insert.
-   */
-  const duplicateNameError = useMemo(() => {
-    const name = sbomNameValue?.trim();
-    const version = (sbomVersionValue ?? '').trim();
-    if (!name || !existingSboms?.length) return null;
-    const clash = existingSboms.find(
-      (s) =>
-        s.sbom_name.trim().toLowerCase() === name.toLowerCase() &&
-        (s.sbom_version ?? '').trim().toLowerCase() === version.toLowerCase(),
-    );
-    if (!clash) return null;
-    return version
-      ? `"${name}" version ${version} already exists. Use a different version, or delete the existing SBOM first.`
-      : `An unversioned SBOM named "${name}" already exists. Give this upload a version, or choose a different name.`;
-  }, [sbomNameValue, sbomVersionValue, existingSboms]);
+  const duplicateNameError = selectedLogicalSbomId && selectedVersionsQuery.data?.some(
+    version => (version.sbom_version ?? '') === (sbomVersionValue ?? '').trim()
+  ) ? `This SBOM version already exists. Choose a different revision.` : null;
 
   const canSubmit = Boolean(
     selectedProjectId &&
     selectedProductId &&
     sbomNameValue?.trim() &&
     (selectedFile || sbomDataValue?.trim()) &&
-    !duplicateNameError,
+    !duplicateNameError && !mastersQuery.isLoading && !mastersQuery.isError && !selectedVersionsQuery.isError && (!selectedLogicalSbomId || !selectedVersionsQuery.isLoading),
   );
   const uploadRepairUrl = uploadResult ? getRepairWorkspaceUrl(uploadResult) : null;
   const validationFailureRepairUrl = validationFailure ? getRepairWorkspaceUrl(validationFailure) : null;
-  const selectedProjectNumber = selectedProjectId ? Number(selectedProjectId) : undefined;
+  const selectedProjectNumber = selectedProjectId ? selectedProjectId : undefined;
 
   const productsQuery = useQuery({
     queryKey: ['products', selectedProjectNumber],
@@ -256,9 +239,9 @@ export function SbomUploadModal({ open, onClose, initialProjectId, initialProduc
     return detection;
   };
 
-  const handleFileChange = async (e: React.ChangeEvent<HTMLInputElement>) => {
-    const file = e.target.files?.[0];
-    if (!file) return;
+  const selectFile = async (file: File) => {
+    if (!canSelectFile) return;
+    setUploadError(null);
     setSelectedFile(file);
     const preview = await file.slice(0, FILE_PREVIEW_BYTES).text();
     const previewLines = preview ? preview.split(/\r?\n/).length : 0;
@@ -268,6 +251,30 @@ export function SbomUploadModal({ open, onClose, initialProjectId, initialProduc
     if (!watch('sbom_name')) {
       setValue('sbom_name', file.name.replace(/\.[^/.]+$/, ''));
     }
+  };
+
+  const handleFileChange = (event: React.ChangeEvent<HTMLInputElement>) => {
+    const file = event.target.files?.[0];
+    if (file) void selectFile(file);
+    event.target.value = '';
+  };
+
+  const handleFileDrop = (event: React.DragEvent<HTMLDivElement>) => {
+    event.preventDefault();
+    event.stopPropagation();
+    dragDepth.current = 0;
+    setDraggingFile(false);
+    if (!canSelectFile || !event.dataTransfer.files.length) return;
+    if (event.dataTransfer.files.length !== 1) {
+      setUploadError('Drop one SBOM file at a time.');
+      return;
+    }
+    const file = event.dataTransfer.files[0];
+    if (!/\.(json|xml|spdx)$/i.test(file.name)) {
+      setUploadError('Choose an SBOM file in JSON, XML, or SPDX format.');
+      return;
+    }
+    void selectFile(file);
   };
 
   const handlePaste = (event: React.ClipboardEvent<HTMLTextAreaElement>) => {
@@ -295,10 +302,11 @@ export function SbomUploadModal({ open, onClose, initialProjectId, initialProduc
         sbom_data: selectedFile ? '' : (values.sbom_data || ''),
         sbom_file: selectedFile || undefined,
         sbom_type: values.sbom_type_id ? Number(values.sbom_type_id) : undefined,
-        projectid: values.projectid ? Number(values.projectid) : undefined,
-        project_id: values.projectid ? Number(values.projectid) : undefined,
-        product_id: values.productid ? Number(values.productid) : undefined,
-        parent_sbom_id: values.parent_sbom_id ? Number(values.parent_sbom_id) : undefined,
+        projectid: values.projectid ? values.projectid : undefined,
+        project_id: values.projectid ? values.projectid : undefined,
+        product_id: values.productid ? values.productid : undefined,
+        logical_sbom_id: values.logical_sbom_id ? values.logical_sbom_id : undefined,
+        create_new_logical_sbom: !values.logical_sbom_id,
         sbom_version: values.sbom_version || undefined,
         product_version: values.product_version || undefined,
         set_as_current: values.set_as_current,
@@ -318,8 +326,7 @@ export function SbomUploadModal({ open, onClose, initialProjectId, initialProduc
           });
           const status = sbom.validation_status ?? sbom.upload_status ?? sbom.status;
           const repairUrl = getRepairWorkspaceUrl(sbom);
-          invalidateUploadSurfaces(queryClient, sbom.project_id ?? sbom.projectid);
-          invalidateProductSurfaces(queryClient, sbom.product_id);
+          void invalidateUploadSurfaces(queryClient, sbom.project_id ?? sbom.projectid, sbom.product_id);
           queryClient.invalidateQueries({ queryKey: ['schedule-targets'] });
           queryClient.invalidateQueries({ queryKey: ['schedule'] });
 
@@ -404,6 +411,8 @@ export function SbomUploadModal({ open, onClose, initialProjectId, initialProduc
     setValidationFailure(null);
     setUploadResult(null);
     setSelectedFile(null);
+    dragDepth.current = 0;
+    setDraggingFile(false);
     setNewProductName('');
     setDocumentPreviewMeta(null);
     setFormatDetection(null);
@@ -433,39 +442,14 @@ export function SbomUploadModal({ open, onClose, initialProjectId, initialProduc
   const projectRegistration = register('projectid');
   const productRegistration = register('productid');
 
-  /**
-   * Candidate parents: SBOMs already on the selected product.
-   *
-   * Scoped to the product because the server refuses a parent from a different
-   * project or product — a chain that hops between products would make "all
-   * versions of this SBOM" meaningless on the product screen.
-   */
-  const versionParentOptions = useMemo(() => {
-    if (!selectedProductId) return [];
-    const productId = Number(selectedProductId);
-    return (existingSboms ?? [])
-      .filter((sbom) => sbom.product_id === productId)
-      .sort((a, b) => b.id - a.id)
-      .map((sbom) => ({
-        id: sbom.id,
-        label: `${sbom.sbom_name}${sbom.sbom_version ? ` \u00b7 ${sbom.sbom_version}` : ''}`,
-      }));
-  }, [existingSboms, selectedProductId]);
-
-  // A parent that is no longer offered would be rejected on submit; drop it
-  // when the product changes rather than failing at the end of the form.
-  useEffect(() => {
-    if (!selectedParentSbomId) return;
-    if (!versionParentOptions.some((option) => String(option.id) === selectedParentSbomId)) {
-      setValue('parent_sbom_id', '');
-    }
-  }, [versionParentOptions, selectedParentSbomId, setValue]);
+  // Scope changes discard the prior logical selection.
+  useEffect(() => { setValue('logical_sbom_id', ''); }, [selectedProductId, setValue]);
 
   const selectedTypeName = sbomTypes?.find((type) => String(type.id) === selectedSbomTypeId)?.typename;
 
   return (
     <Dialog open={open} onClose={handleClose} title="Upload SBOM" maxWidth="lg">
-      <form onSubmit={handleSubmit(onSubmit)}>
+      <PermissionFields permission={["sbom:upload", "product:assign_sbom"]}><form onSubmit={handleSubmit(onSubmit)}>
         <DialogBody className="space-y-4">
 
           {/* Structured validation failure — surfaces the persisted report
@@ -510,6 +494,9 @@ export function SbomUploadModal({ open, onClose, initialProjectId, initialProduc
                         {validationFailure.entries[0].message}
                       </p>
                     </div>
+                  )}
+                  {validationFailure.session_id && validationFailure.can_edit !== false && (
+                    <div className="mt-3"><SbomAutoRepairPanel sessionId={validationFailure.session_id} /></div>
                   )}
                   <div className="mt-3 flex flex-wrap items-center gap-3">
                     {validationFailureRepairUrl && validationFailure.can_edit !== false ? (
@@ -572,81 +559,6 @@ export function SbomUploadModal({ open, onClose, initialProjectId, initialProduc
             </div>
           )}
 
-          <Input
-            label="SBOM Name"
-            required
-            placeholder="e.g. my-app-sbom"
-            error={errors.sbom_name?.message ?? duplicateNameError ?? undefined}
-            disabled={uploading}
-            {...register('sbom_name')}
-          />
-
-          <div className="flex flex-col gap-1.5">
-            <label className="text-sm font-medium text-hcl-navy">
-              SBOM Content (JSON / XML) <span className="text-red-500">*</span>
-            </label>
-            <div className="flex items-center gap-2 mb-2">
-              <button
-                type="button"
-                onClick={() => fileRef.current?.click()}
-                disabled={uploading}
-                className="inline-flex items-center gap-2 px-3 py-1.5 text-xs font-medium text-hcl-navy bg-surface border border-hcl-border rounded-lg hover:bg-hcl-light transition-colors disabled:opacity-50"
-              >
-                <Upload className="h-3.5 w-3.5" />
-                Upload from file
-              </button>
-              <span className="text-xs text-hcl-muted">or paste small JSON / XML below</span>
-              <input
-                ref={fileRef}
-                type="file"
-                accept=".json,.xml,.spdx"
-                onChange={handleFileChange}
-                className="hidden"
-              />
-            </div>
-            {documentPreviewMeta ? (
-              <p className="mb-2 text-xs text-hcl-muted">
-                Preview only. Validation uses full backend-stored file. {documentPreviewMeta.filename} · preview{' '}
-                {documentPreviewMeta.lines.toLocaleString()} lines · full size {(documentPreviewMeta.bytes / 1024).toFixed(1)} KB.
-              </p>
-            ) : null}
-            <div className="rounded-lg border border-border bg-surface-muted px-3 py-2 text-xs text-hcl-muted">
-              <div>
-                Detected format:{' '}
-                <span className="font-medium text-hcl-navy">
-                  {formatSbomFormatLabel(formatDetection?.detected_format)}
-                  {formatDetection?.detected_spec_version ? ` ${formatDetection.detected_spec_version}` : ''}
-                </span>
-                {formatDetection ? (
-                  <span> · Confidence {Math.round(formatDetection.detection_confidence * 100)}%</span>
-                ) : (
-                  <span> · Auto-detect runs when content is selected or pasted.</span>
-                )}
-              </div>
-              {formatDetection?.detected_format === 'unknown' && (
-                <p className="mt-1 text-amber-700">
-                  Format could not be detected automatically. The upload will not default to CycloneDX.
-                </p>
-              )}
-              {userManuallyOverrodeFormat && selectedTypeName && (
-                <p className="mt-1 text-amber-700">
-                  Manual format override enabled. Validation metadata will keep the backend-detected format.
-                </p>
-              )}
-            </div>
-            <Textarea
-              placeholder='Paste a small SPDX, CycloneDX, or XML SBOM preview'
-              error={errors.sbom_data?.message}
-              className="font-mono text-xs min-h-[160px]"
-              disabled={uploading}
-              onPaste={handlePaste}
-              {...sbomDataRegistration}
-            />
-            <p className="text-xs text-hcl-muted">
-              Preview only. Validation and repair use the full file stored by the backend.
-            </p>
-          </div>
-
           <div className="grid grid-cols-2 gap-4">
             <Select
               label="Project"
@@ -701,7 +613,7 @@ export function SbomUploadModal({ open, onClose, initialProjectId, initialProduc
                 onChange={(event) => setNewProductName(event.target.value)}
                 disabled={uploading || createProductMutation.isPending}
               />
-              <Button
+              <Button permission="product:create"
                 type="button"
                 variant="secondary"
                 loading={createProductMutation.isPending}
@@ -712,6 +624,128 @@ export function SbomUploadModal({ open, onClose, initialProjectId, initialProduc
               </Button>
             </div>
           )}
+
+          <Select label="SBOM" disabled={uploading || !selectedProductId || mastersQuery.isLoading} value={selectedLogicalSbomId || ''} onChange={event => {
+            const value = event.target.value;
+            setValue('logical_sbom_id', value);
+            const master = mastersQuery.data?.find(item => String(item.id) === value);
+            setValue('sbom_name', master?.name ?? '');
+            clearErrors('sbom_name');
+          }}>
+            <option value="">+ Create New SBOM</option>
+            {mastersQuery.data?.map(master => <option key={master.id} value={master.id}>{master.name} ({master.version_count} versions)</option>)}
+          </Select>
+          <p className="text-xs text-hcl-muted">{selectedLogicalSbomId ? 'Upload another revision of the selected SBOM. Previous versions remain available.' : 'Create an independent logical SBOM under this application.'}</p>
+          {mastersQuery.isError && <p role="alert">Could not load existing SBOMs. <button type="button" onClick={() => mastersQuery.refetch()}>Retry</button></p>}
+          {duplicateNameError && <p role="alert">{duplicateNameError}</p>}
+          {selectedVersionsQuery.isError && <p role="alert">Could not check version history. <button type="button" onClick={() => selectedVersionsQuery.refetch()}>Retry</button></p>}
+          {!selectedLogicalSbomId && <Input
+            label="SBOM Name"
+            required
+            placeholder="e.g. my-app-sbom"
+            error={errors.sbom_name?.message ?? duplicateNameError ?? undefined}
+            disabled={uploading}
+            {...register('sbom_name')}
+          />}
+
+          <div className="grid grid-cols-2 gap-4">
+            <Input label="SBOM Version" placeholder="e.g. 1.0.0" disabled={uploading} {...register('sbom_version')} />
+            <Input label="Product Version" placeholder="e.g. 2.3.1" disabled={uploading} {...register('product_version')} />
+          </div>
+
+          <div className="flex flex-col gap-1.5">
+            <label className="text-sm font-medium text-hcl-navy">
+              SBOM Content (JSON / XML) <span className="text-red-500">*</span>
+            </label>
+            <div
+              role="region"
+              aria-label="SBOM file drop zone"
+              onDragEnter={event => {
+                event.preventDefault();
+                if (!canSelectFile || !Array.from(event.dataTransfer.types).includes('Files')) return;
+                dragDepth.current += 1;
+                setDraggingFile(true);
+              }}
+              onDragOver={event => {
+                event.preventDefault();
+                event.dataTransfer.dropEffect = canSelectFile ? 'copy' : 'none';
+              }}
+              onDragLeave={event => {
+                event.preventDefault();
+                dragDepth.current = Math.max(0, dragDepth.current - 1);
+                if (!dragDepth.current) setDraggingFile(false);
+              }}
+              onDrop={handleFileDrop}
+              className={`mb-2 rounded-xl border-2 border-dashed px-4 py-5 text-center transition-colors ${draggingFile && canSelectFile ? 'border-hcl-blue bg-hcl-light' : 'border-hcl-border bg-surface'} ${!canSelectFile ? 'text-hcl-muted' : ''}`}
+            >
+              <Upload className="mx-auto mb-2 h-6 w-6 text-hcl-muted" aria-hidden />
+              <p className="text-sm font-medium text-hcl-navy">{draggingFile && canSelectFile ? 'Drop your SBOM file here' : 'Drag and drop your SBOM file here'}</p>
+              <p className="mt-1 text-xs text-hcl-muted">JSON, XML, or SPDX · One file at a time</p>
+              <Button
+                type="button"
+                permission={['sbom:upload', 'product:assign_sbom']}
+                variant="outline"
+                size="sm"
+                onClick={() => fileRef.current?.click()}
+                disabled={uploading}
+                className="mt-3"
+              >
+                {selectedFile ? 'Choose another file' : 'Upload from file'}
+              </Button>
+              {selectedFile && <p role="status" className="mt-2 break-all text-xs text-hcl-navy">Selected: {selectedFile.name}</p>}
+              <input
+                ref={fileRef}
+                type="file"
+                aria-label="Choose SBOM file"
+                accept=".json,.xml,.spdx"
+                disabled={!canSelectFile}
+                onChange={handleFileChange}
+                className="hidden"
+              />
+            </div>
+            <p className="mb-2 text-xs text-hcl-muted">Or paste small JSON / XML below.</p>
+            {documentPreviewMeta ? (
+              <p className="mb-2 text-xs text-hcl-muted">
+                Preview only. Validation uses full backend-stored file. {documentPreviewMeta.filename} · preview{' '}
+                {documentPreviewMeta.lines.toLocaleString()} lines · full size {(documentPreviewMeta.bytes / 1024).toFixed(1)} KB.
+              </p>
+            ) : null}
+            <div className="rounded-lg border border-border bg-surface-muted px-3 py-2 text-xs text-hcl-muted">
+              <div>
+                Detected format:{' '}
+                <span className="font-medium text-hcl-navy">
+                  {formatSbomFormatLabel(formatDetection?.detected_format)}
+                  {formatDetection?.detected_spec_version ? ` ${formatDetection.detected_spec_version}` : ''}
+                </span>
+                {formatDetection ? (
+                  <span> · Confidence {Math.round(formatDetection.detection_confidence * 100)}%</span>
+                ) : (
+                  <span> · Auto-detect runs when content is selected or pasted.</span>
+                )}
+              </div>
+              {formatDetection?.detected_format === 'unknown' && (
+                <p className="mt-1 text-amber-700">
+                  Format could not be detected automatically. The upload will not default to CycloneDX.
+                </p>
+              )}
+              {userManuallyOverrodeFormat && selectedTypeName && (
+                <p className="mt-1 text-amber-700">
+                  Manual format override enabled. Validation metadata will keep the backend-detected format.
+                </p>
+              )}
+            </div>
+            <Textarea
+              placeholder='Paste a small SPDX, CycloneDX, or XML SBOM preview'
+              error={errors.sbom_data?.message}
+              className="font-mono text-xs min-h-[160px]"
+              disabled={uploading}
+              onPaste={handlePaste}
+              {...sbomDataRegistration}
+            />
+            <p className="text-xs text-hcl-muted">
+              Preview only. Validation and repair use the full file stored by the backend.
+            </p>
+          </div>
 
           <div className="grid grid-cols-2 gap-4">
             <Select
@@ -727,11 +761,6 @@ export function SbomUploadModal({ open, onClose, initialProjectId, initialProduc
             </Select>
           </div>
 
-          <div className="grid grid-cols-2 gap-4">
-            <Input label="SBOM Version" placeholder="e.g. 1.0.0" disabled={uploading} {...register('sbom_version')} />
-            <Input label="Product Version" placeholder="e.g. 2.3.1" disabled={uploading} {...register('product_version')} />
-          </div>
-
           <label className="flex items-start gap-2 rounded-lg border border-hcl-border p-3">
             <input
               type="checkbox"
@@ -742,38 +771,11 @@ export function SbomUploadModal({ open, onClose, initialProjectId, initialProduc
             <span>
               <span className="block text-sm font-medium text-hcl-navy">Set as current SBOM</span>
               <span className="block text-xs text-hcl-muted">
-                CURRENT_ONLY parent schedules will target this version on future runs.
+                Leave unchecked to preserve the designated Current SBOM. Selecting this version also changes CURRENT_ONLY schedules; pending analysis retains the last known posture.
               </span>
             </span>
           </label>
 
-          {/* Version lineage is declared, never inferred from a matching name:
-              silently merging two different SBOMs is far harder to notice than
-              a missing link. Only SBOMs on the chosen product are offered — the
-              server refuses a parent from elsewhere. */}
-          <div>
-            <Select
-              label="New version of (optional)"
-              disabled={uploading || !selectedProductId}
-              {...register('parent_sbom_id')}
-            >
-              <option value="">Standalone SBOM — not a new version</option>
-              {versionParentOptions.map((option) => (
-                <option key={option.id} value={option.id}>
-                  {option.label}
-                </option>
-              ))}
-            </Select>
-            <p className="mt-1 text-xs text-hcl-muted">
-              {!selectedProductId
-                ? 'Choose an application first to link this upload to an earlier version.'
-                : versionParentOptions.length === 0
-                  ? 'No earlier SBOMs on this application yet.'
-                  : selectedParentSbomId
-                    ? 'Adds this upload to that SBOM\u2019s version history, so you can compare and restore across releases.'
-                    : 'Leave as standalone unless this file supersedes an existing SBOM.'}
-            </p>
-          </div>
         </DialogBody>
 
         <DialogFooter>
@@ -784,7 +786,7 @@ export function SbomUploadModal({ open, onClose, initialProjectId, initialProduc
             {uploading ? 'Uploading…' : 'Upload SBOM'}
           </Button>
         </DialogFooter>
-      </form>
+      </form></PermissionFields>
     </Dialog>
   );
 }

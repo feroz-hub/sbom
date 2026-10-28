@@ -18,6 +18,7 @@ from .types import DEPRECATED, UNKNOWN, LifecycleResult, NormalizedComponent, no
 LIFECYCLE_CACHE_IDENTITY_CONSTRAINT = "uq_component_lifecycle_cache_identity"
 
 IDENTITY_COLUMNS = (
+    "configuration_namespace",
     "normalized_name",
     "normalized_version",
     "ecosystem",
@@ -66,19 +67,22 @@ def lifecycle_cache_identity_key(
 def _cache_ttl_for_result(result: LifecycleResult) -> timedelta:
     settings = get_settings()
     evidence = result.evidence if isinstance(result.evidence, dict) else {}
+    policy = evidence.get("cache_policy") or {}
     if evidence.get("provider_failure") or evidence.get("provider_error") or evidence.get("provider_errors"):
-        minutes = int(getattr(settings, "lifecycle_cache_ttl_provider_failure_minutes", 30))
+        minutes = int(
+            policy.get("failure_minutes") or getattr(settings, "lifecycle_cache_ttl_provider_failure_minutes", 30)
+        )
         return timedelta(minutes=minutes)
     if result.lifecycle_status == UNKNOWN:
-        hours = int(getattr(settings, "lifecycle_cache_ttl_unknown_hours", 24))
+        hours = int(policy.get("unknown_hours") or getattr(settings, "lifecycle_cache_ttl_unknown_hours", 24))
         return timedelta(hours=hours)
     if result.lifecycle_status == DEPRECATED or result.deprecated:
-        days = int(getattr(settings, "lifecycle_cache_ttl_deprecated_days", 7))
+        days = int(policy.get("deprecated_days") or getattr(settings, "lifecycle_cache_ttl_deprecated_days", 7))
         return timedelta(days=days)
     if result.eol_date or result.eos_date or result.eof_date or result.lifecycle_status not in {UNKNOWN}:
-        days = int(getattr(settings, "lifecycle_cache_ttl_known_days", 14))
+        days = int(policy.get("known_days") or getattr(settings, "lifecycle_cache_ttl_known_days", 14))
         return timedelta(days=days)
-    hours = int(getattr(settings, "lifecycle_cache_ttl_unknown_hours", 24))
+    hours = int(policy.get("unknown_hours") or getattr(settings, "lifecycle_cache_ttl_unknown_hours", 24))
     return timedelta(hours=hours)
 
 
@@ -87,14 +91,21 @@ def lifecycle_cache_row_from_result(
     result: LifecycleResult,
     *,
     cache_ttl_days: int | None = None,
+    configuration_namespace: str = "legacy",
 ) -> dict[str, Any]:
     """Serialize a provider result into a cache row payload."""
     name, version, ecosystem, purl, cpe = component.cache_identity
     ttl = _cache_ttl_for_result(result)
-    if cache_ttl_days is not None and result.lifecycle_status != UNKNOWN:
+    if (
+        cache_ttl_days is not None
+        and result.lifecycle_status != UNKNOWN
+        and not result.evidence.get("cache_policy")
+        and not any(result.evidence.get(k) for k in ("provider_error", "provider_errors", "provider_failure"))
+    ):
         ttl = timedelta(days=cache_ttl_days)
     expires_at = (datetime.now(UTC).replace(microsecond=0) + ttl).isoformat()
     return {
+        "configuration_namespace": configuration_namespace,
         "lookup_key": build_lifecycle_lookup_key(component),
         "normalized_name": name,
         "normalized_version": version,
@@ -132,7 +143,7 @@ def _dedupe_rows(rows: list[dict[str, Any]]) -> list[dict[str, Any]]:
             row.get("ecosystem"),
             row.get("purl"),
         )
-        deduped[key] = row
+        deduped[(row.get("configuration_namespace", "legacy"), *key)] = row
     return list(deduped.values())
 
 
@@ -156,6 +167,7 @@ def _upsert_with_on_conflict(db: Session, rows: list[dict[str, Any]], *, dialect
     else:
         stmt = stmt.on_conflict_do_update(
             index_elements=[
+                table.c.configuration_namespace,
                 table.c.normalized_name,
                 table.c.normalized_version,
                 table.c.ecosystem,
@@ -169,11 +181,14 @@ def _upsert_with_on_conflict(db: Session, rows: list[dict[str, Any]], *, dialect
 def _upsert_with_select_merge(db: Session, rows: list[dict[str, Any]]) -> None:
     """Fallback for dialects without INSERT ON CONFLICT support."""
     identity_keys = [
-        lifecycle_cache_identity_key(
-            row["normalized_name"],
-            row.get("normalized_version"),
-            row.get("ecosystem"),
-            row.get("purl"),
+        (
+            row.get("configuration_namespace", "legacy"),
+            *lifecycle_cache_identity_key(
+                row["normalized_name"],
+                row.get("normalized_version"),
+                row.get("ecosystem"),
+                row.get("purl"),
+            ),
         )
         for row in rows
     ]
@@ -181,6 +196,7 @@ def _upsert_with_select_merge(db: Session, rows: list[dict[str, Any]]) -> None:
         db.execute(
             select(ComponentLifecycleCache).where(
                 tuple_(
+                    ComponentLifecycleCache.configuration_namespace,
                     ComponentLifecycleCache.normalized_name,
                     ComponentLifecycleCache.normalized_version,
                     ComponentLifecycleCache.ecosystem,
@@ -192,24 +208,31 @@ def _upsert_with_select_merge(db: Session, rows: list[dict[str, Any]]) -> None:
         .all()
     )
     existing_by_key = {
-        lifecycle_cache_identity_key(
-            row.normalized_name,
-            row.normalized_version,
-            row.ecosystem,
-            row.purl,
+        (
+            row.configuration_namespace,
+            *lifecycle_cache_identity_key(
+                row.normalized_name,
+                row.normalized_version,
+                row.ecosystem,
+                row.purl,
+            ),
         ): row
         for row in existing_rows
     }
     for row in rows:
-        key = lifecycle_cache_identity_key(
-            row["normalized_name"],
-            row.get("normalized_version"),
-            row.get("ecosystem"),
-            row.get("purl"),
+        key = (
+            row.get("configuration_namespace", "legacy"),
+            *lifecycle_cache_identity_key(
+                row["normalized_name"],
+                row.get("normalized_version"),
+                row.get("ecosystem"),
+                row.get("purl"),
+            ),
         )
         cache_entry = existing_by_key.get(key)
         if cache_entry is None:
             cache_entry = ComponentLifecycleCache(
+                configuration_namespace=row.get("configuration_namespace", "legacy"),
                 normalized_name=row["normalized_name"],
                 normalized_version=row.get("normalized_version"),
                 ecosystem=row.get("ecosystem"),
@@ -227,6 +250,8 @@ def upsert_lifecycle_cache_entries(db: Session, entries: list[dict[str, Any]]) -
         return
 
     rows = _dedupe_rows(entries)
+    for row in rows:
+        row.setdefault("configuration_namespace", "legacy")
     dialect = db.get_bind().dialect.name
     if dialect in {"postgresql", "sqlite"}:
         _upsert_with_on_conflict(db, rows, dialect=dialect)

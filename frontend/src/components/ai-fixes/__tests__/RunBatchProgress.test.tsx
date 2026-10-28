@@ -47,7 +47,7 @@ vi.mock('@/lib/api', () => ({
 }));
 
 const DEFAULT_ESTIMATE = {
-  run_id: 42,
+  run_id: '00000000-0000-4000-8000-00000000002a',
   scope_label: null,
   total_findings_in_scope: 0,
   cached_count: 0,
@@ -65,8 +65,8 @@ const DEFAULT_ESTIMATE = {
   blocked_reason: null,
 };
 
-const NO_ACTIVE_BATCHES = { run_id: 42, items: [], total: 0 };
-const NO_RUN_FIXES = { run_id: 42, items: [], total: 0 };
+const NO_ACTIVE_BATCHES = { run_id: '00000000-0000-4000-8000-00000000002a', items: [], total: 0 };
+const NO_RUN_FIXES = { run_id: '00000000-0000-4000-8000-00000000002a', items: [], total: 0 };
 
 beforeEach(() => {
   getRunAiFixProgress.mockReset();
@@ -93,7 +93,7 @@ afterEach(() => {
 describe('RunBatchProgress — in-flight banner', () => {
   it('shows the in-progress banner with cache + generated counts', async () => {
     getRunAiFixProgress.mockResolvedValue(makeBatchProgress());
-    renderWithProviders(<RunBatchProgress runId={42} />);
+    renderWithProviders(<RunBatchProgress runId={'00000000-0000-4000-8000-00000000002a'} />);
 
     await waitFor(() => {
       expect(screen.getByText(/Generating AI remediation/i)).toBeInTheDocument();
@@ -111,7 +111,7 @@ describe('RunBatchProgress — in-flight banner', () => {
         scope_label: 'Critical findings',
       } as unknown as Record<string, unknown>),
     );
-    renderWithProviders(<RunBatchProgress runId={42} />);
+    renderWithProviders(<RunBatchProgress runId={'00000000-0000-4000-8000-00000000002a'} />);
     await waitFor(() => {
       expect(screen.getByTestId('ai-batch-scope-label')).toHaveTextContent(
         'Critical findings',
@@ -144,7 +144,7 @@ describe('RunBatchProgress — terminal batch vs run-level fixes', () => {
     // (e.g. OpenSSL CVE-2014-0160 + zlib CVE-2022-37434) — the same data
     // that lights up the findings-table AI column.
     listRunAiFixes.mockResolvedValue({
-      run_id: 42,
+      run_id: '00000000-0000-4000-8000-00000000002a',
       total: 2,
       items: [
         {
@@ -172,7 +172,7 @@ describe('RunBatchProgress — terminal batch vs run-level fixes', () => {
       ],
     });
 
-    renderWithProviders(<RunBatchProgress runId={42} />);
+    renderWithProviders(<RunBatchProgress runId={'00000000-0000-4000-8000-00000000002a'} />);
 
     await waitFor(() =>
       expect(screen.getByText(/AI remediation cancelled/i)).toBeInTheDocument(),
@@ -190,11 +190,11 @@ describe('RunBatchProgress — terminal batch vs run-level fixes', () => {
   it('omits the run-level line while a batch is actively running', async () => {
     getRunAiFixProgress.mockResolvedValue(makeBatchProgress({ status: 'in_progress' }));
     listRunAiFixes.mockResolvedValue({
-      run_id: 42,
+      run_id: '00000000-0000-4000-8000-00000000002a',
       total: 5,
       items: [],
     });
-    renderWithProviders(<RunBatchProgress runId={42} />);
+    renderWithProviders(<RunBatchProgress runId={'00000000-0000-4000-8000-00000000002a'} />);
     await waitFor(() =>
       expect(screen.getByText(/Generating AI remediation/i)).toBeInTheDocument(),
     );
@@ -218,7 +218,7 @@ describe('RunBatchProgress — idle run (backend 204)', () => {
       cached_count: 0,
       llm_call_count: 50,
     });
-    renderWithProviders(<RunBatchProgress runId={7} />);
+    renderWithProviders(<RunBatchProgress runId={'00000000-0000-4000-8000-000000000007'} />);
     await waitFor(() =>
       expect(
         screen.getByText(/Generate AI fixes for 50 findings in this run/i),
@@ -254,7 +254,7 @@ describe('RunBatchProgress — idle CTA (no scope)', () => {
       cached_count: 0,
       llm_call_count: 513,
     });
-    renderWithProviders(<RunBatchProgress runId={1} />);
+    renderWithProviders(<RunBatchProgress runId={'00000000-0000-4000-8000-000000000001'} />);
     await waitFor(() =>
       expect(
         screen.getByText(/Generate AI fixes for 513 findings in this run/i),
@@ -283,7 +283,7 @@ describe('RunBatchProgress — idle CTA (no scope)', () => {
       cached_count: 0,
       llm_call_count: 24,
     });
-    renderWithProviders(<RunBatchProgress runId={1} totalFindings={48} />);
+    renderWithProviders(<RunBatchProgress runId={'00000000-0000-4000-8000-000000000001'} totalFindings={48} />);
     await waitFor(() =>
       expect(
         screen.getByText(/Generate AI fixes for 24 of 48 findings eligible/i),
@@ -295,7 +295,7 @@ describe('RunBatchProgress — idle CTA (no scope)', () => {
     getRunAiFixProgress.mockResolvedValue(
       makeBatchProgress({ status: 'paused_budget' }),
     );
-    renderWithProviders(<RunBatchProgress runId={42} />);
+    renderWithProviders(<RunBatchProgress runId={'00000000-0000-4000-8000-00000000002a'} />);
     await waitFor(() =>
       expect(screen.getByText(/Daily AI budget reached/i)).toBeInTheDocument(),
     );
@@ -303,7 +303,7 @@ describe('RunBatchProgress — idle CTA (no scope)', () => {
 
   it('renders nothing when disabled', () => {
     const { container } = renderWithProviders(
-      <RunBatchProgress runId={1} enabled={false} />,
+      <RunBatchProgress runId={'00000000-0000-4000-8000-000000000001'} enabled={false} />,
     );
     expect(container.firstChild).toBeNull();
   });
@@ -332,7 +332,7 @@ describe('RunBatchProgress — scope-aware CTA', () => {
     });
     renderWithProviders(
       <RunBatchProgress
-        runId={4}
+        runId={'00000000-0000-4000-8000-000000000004'}
         filter={{ ...DEFAULT_FILTERS, severityFilter: 'CRITICAL' }}
       />,
     );
@@ -361,7 +361,7 @@ describe('RunBatchProgress — scope-aware CTA', () => {
     });
     renderWithProviders(
       <RunBatchProgress
-        runId={4}
+        runId={'00000000-0000-4000-8000-000000000004'}
         filter={{ ...DEFAULT_FILTERS, search: 'definitely-no-match' }}
       />,
     );
@@ -392,7 +392,7 @@ describe('RunBatchProgress — scope-aware CTA', () => {
     });
     renderWithProviders(
       <RunBatchProgress
-        runId={4}
+        runId={'00000000-0000-4000-8000-000000000004'}
         filter={{ ...DEFAULT_FILTERS, severityFilter: 'CRITICAL' }}
       />,
     );
@@ -421,12 +421,12 @@ describe('RunBatchProgress — scope-aware CTA', () => {
       llm_call_count: 50,
     });
     listRunAiBatches.mockResolvedValue({
-      run_id: 4,
+      run_id: '00000000-0000-4000-8000-000000000004',
       total: 3,
       items: [
         {
           batch_id: 'b1',
-          run_id: 4,
+          run_id: '00000000-0000-4000-8000-000000000004',
           status: 'in_progress',
           scope_label: 'Critical',
           provider_name: 'anthropic',
@@ -442,7 +442,7 @@ describe('RunBatchProgress — scope-aware CTA', () => {
         },
         {
           batch_id: 'b2',
-          run_id: 4,
+          run_id: '00000000-0000-4000-8000-000000000004',
           status: 'in_progress',
           scope_label: 'KEV',
           provider_name: 'anthropic',
@@ -458,7 +458,7 @@ describe('RunBatchProgress — scope-aware CTA', () => {
         },
         {
           batch_id: 'b3',
-          run_id: 4,
+          run_id: '00000000-0000-4000-8000-000000000004',
           status: 'queued',
           scope_label: 'High',
           provider_name: 'anthropic',
@@ -474,7 +474,7 @@ describe('RunBatchProgress — scope-aware CTA', () => {
         },
       ],
     });
-    renderWithProviders(<RunBatchProgress runId={4} />);
+    renderWithProviders(<RunBatchProgress runId={'00000000-0000-4000-8000-000000000004'} />);
     await waitFor(() =>
       expect(
         screen.getByText(/3 active batches on this run \(max concurrent reached\)/i),
@@ -514,7 +514,7 @@ describe('RunBatchProgress — selection precedence', () => {
 
     renderWithProviders(
       <RunBatchProgress
-        runId={4}
+        runId={'00000000-0000-4000-8000-000000000004'}
         filter={{ ...DEFAULT_FILTERS, severityFilter: 'CRITICAL' }}
         selectedIds={[1, 2, 3, 4, 5, 6, 7, 8, 9, 10, 11, 12]}
       />,
@@ -558,7 +558,7 @@ describe('RunBatchProgress — selection precedence', () => {
     });
     renderWithProviders(
       <RunBatchProgress
-        runId={4}
+        runId={'00000000-0000-4000-8000-000000000004'}
         selectedIds={[1, 2, 3]}
         onClearSelection={onClearSelection}
       />,
@@ -600,7 +600,7 @@ describe('RunBatchProgress — trigger payload', () => {
     });
     renderWithProviders(
       <RunBatchProgress
-        runId={5}
+        runId={'00000000-0000-4000-8000-000000000005'}
         filter={{ ...DEFAULT_FILTERS, severityFilter: 'CRITICAL' }}
       />,
     );
@@ -651,7 +651,7 @@ describe('RunBatchProgress — trigger payload', () => {
       cached_count: 200,
     });
 
-    renderWithProviders(<RunBatchProgress runId={42} />);
+    renderWithProviders(<RunBatchProgress runId={'00000000-0000-4000-8000-00000000002a'} />);
     await waitFor(() => expect(estimateRunAiFixesScoped).toHaveBeenCalled());
     await waitFor(() =>
       screen.getByRole('button', { name: /Generate AI fixes/i }),
@@ -668,3 +668,5 @@ describe('RunBatchProgress — trigger payload', () => {
     await waitFor(() => expect(triggerRunAiFixes).toHaveBeenCalledTimes(1));
   });
 });
+
+vi.mock('@/hooks/useAuth', async () => ({ useAuth: (await import('@/test/authorizedAuth')).authorizedAuth }));

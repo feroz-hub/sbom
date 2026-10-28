@@ -13,8 +13,6 @@ enforcement is PR-6's hardening pass.
 """
 
 import pytest
-from sqlalchemy import select, text
-
 from app.db import SessionLocal
 from app.models import (
     AnalysisFinding,
@@ -27,6 +25,10 @@ from app.models import (
 )
 from app.services.lifecycle.vex_provider import vex_dashboard_summary
 from app.services.vex.reconciliation import recompute_for_sbom
+from sqlalchemy import select
+
+from tests.tenant_fixture_scope import verified_fixture_tenant
+from tests.vex_foreign_fixture import foreign_vex_fixture, foreign_vex_snapshot
 
 NOW = "2026-09-24T00:00:00Z"
 BASE = "/api/vex/investigations"
@@ -36,8 +38,10 @@ BASE = "/api/vex/investigations"
 def db():
     session = SessionLocal()
     try:
-        yield session
+        with verified_fixture_tenant(session, 1):
+            yield session
     finally:
+        session.rollback()
         session.close()
 
 
@@ -49,45 +53,68 @@ def seeded(db):
     db.flush()
 
     openssl = SBOMComponent(
-        sbom_id=sbom.id, name="openssl", version="1.1.1", tenant_id=1,
+        sbom_id=sbom.id,
+        name="openssl",
+        version="1.1.1",
+        tenant_id=1,
         purl="pkg:generic/openssl@1.1.1",
     )
     zlib = SBOMComponent(sbom_id=sbom.id, name="zlib", version="1.2.11", tenant_id=1)
     db.add_all([openssl, zlib])
     db.flush()
 
-    run = AnalysisRun(
-        sbom_id=sbom.id, tenant_id=1, run_status="OK", started_on=NOW, completed_on=NOW
-    )
+    run = AnalysisRun(sbom_id=sbom.id, tenant_id=1, run_status="OK", started_on=NOW, completed_on=NOW)
     db.add(run)
     db.flush()
 
     db.add(
         AnalysisFinding(
-            analysis_run_id=run.id, component_id=openssl.id, vuln_id="CVE-2026-5001",
-            tenant_id=1, source="NVD", severity="HIGH", description="analyser finding",
+            analysis_run_id=run.id,
+            component_id=openssl.id,
+            vuln_id="CVE-2026-5001",
+            tenant_id=1,
+            source="NVD",
+            severity="HIGH",
+            description="analyser finding",
+            match_confidence=0.95,
             reference_url="https://example.test/1",
         )
     )
     db.add(
         AnalysisFinding(
-            analysis_run_id=run.id, component_id=zlib.id, vuln_id="CVE-2026-5002",
-            tenant_id=1, source="OSV", severity="LOW",
+            analysis_run_id=run.id,
+            component_id=zlib.id,
+            vuln_id="CVE-2026-5002",
+            tenant_id=1,
+            source="OSV",
+            severity="LOW",
         )
     )
     document = VexDocument(
-        sbom_id=sbom.id, tenant_id=1, source_type="uploaded", format="openvex",
-        author="Supplier A", source_document_id="doc-a", uploaded_at=NOW,
+        sbom_id=sbom.id,
+        tenant_id=1,
+        source_type="uploaded",
+        format="openvex",
+        author="Supplier A",
+        source_document_id="doc-a",
+        uploaded_at=NOW,
     )
     db.add(document)
     db.flush()
     db.add(
         VexStatement(
-            vex_document_id=document.id, sbom_id=sbom.id, component_id=zlib.id,
-            vulnerability_id="CVE-2026-5002", tenant_id=1, status="not_affected",
-            normalized_status="NOT_AFFECTED", source_status="not_affected",
-            source_format="openvex", justification="vulnerable_code_not_present",
-            source_name="Supplier A", created_at=NOW,
+            vex_document_id=document.id,
+            sbom_id=sbom.id,
+            component_id=zlib.id,
+            vulnerability_id="CVE-2026-5002",
+            tenant_id=1,
+            status="not_affected",
+            normalized_status="NOT_AFFECTED",
+            source_status="not_affected",
+            source_format="openvex",
+            justification="vulnerable_code_not_present",
+            source_name="Supplier A",
+            created_at=NOW,
         )
     )
     db.commit()
@@ -104,14 +131,14 @@ def seeded(db):
 
 
 def context_for(db, vuln_id):
-    return db.scalar(
-        select(VexInvestigation).where(
-            VexInvestigation.canonical_vulnerability_id == vuln_id
-        )
-    )
+    return db.scalar(select(VexInvestigation).where(VexInvestigation.canonical_vulnerability_id == vuln_id))
 
 
 def fetch(client, **params):
+    from tests.public_id_fixture import public_membership_key
+
+    if isinstance(params.get("assignee"), str) and params["assignee"].startswith("membership:"):
+        params["assignee"] = public_membership_key(params["assignee"])
     response = client.get(BASE, params=params)
     assert response.status_code == 200, response.text
     return response.json()
@@ -124,7 +151,9 @@ def fetch(client, **params):
 
 def test_returns_the_paginated_envelope__VEX_UI_001(client, seeded):
     payload = fetch(client)
-    assert sorted(payload) == ["items", "limit", "offset", "total"]
+    assert {"items", "limit", "offset", "total"} <= payload.keys()
+    assert payload["version_scope"] == "current"
+    assert isinstance(payload["posture"], list)
     assert payload["total"] == 2
     assert len(payload["items"]) == 2
 
@@ -132,10 +161,20 @@ def test_returns_the_paginated_envelope__VEX_UI_001(client, seeded):
 def test_rows_carry_the_section_27_columns__VEX_UI_001(client, seeded):
     row = fetch(client)["items"][0]
     for field in (
-        "canonical_vulnerability_id", "aliases", "severity", "component_name",
-        "component_version", "sbom_name", "analyzer_detection_state", "vex_source",
-        "native_vex_status", "effective_status", "reconciliation_status",
-        "assigned_to", "row_version", "needs_review",
+        "canonical_vulnerability_id",
+        "aliases",
+        "severity",
+        "component_name",
+        "component_version",
+        "sbom_name",
+        "analyzer_detection_state",
+        "vex_source",
+        "native_vex_status",
+        "effective_status",
+        "reconciliation_status",
+        "assigned_to",
+        "row_version",
+        "needs_review",
     ):
         assert field in row
 
@@ -158,8 +197,43 @@ def test_filter_by_component__VEX_UI_002(client, seeded):
 
 
 def test_filter_by_sbom__VEX_UI_002(client, seeded):
-    assert fetch(client, sbom_id=seeded["sbom"].id)["total"] == 2
-    assert fetch(client, sbom_id=seeded["sbom"].id + 9999)["total"] == 0
+    assert fetch(client, sbom_id=str(seeded["sbom"].public_id))["total"] == 2
+    from uuid import uuid4
+
+    assert client.get(BASE, params={"sbom_id": str(uuid4())}).status_code == 404
+
+
+def test_integer_resource_ids_are_rejected_at_public_boundary(client, seeded, db):
+    """SBO-54: UUID fixture corrections must not re-enable integer API IDs."""
+    sbom, component = seeded["sbom"], seeded["zlib"]
+    assert client.get(BASE, params={"sbom_id": sbom.id}).status_code == 422
+    assert client.get(f"/api/sboms/{sbom.id}/vex").status_code == 422
+    assert (
+        client.get(
+            RESOLVE,
+            params={
+                "sbom_id": str(sbom.public_id),
+                "component_id": component.id,
+                "vulnerability_id": "CVE-2026-5002",
+            },
+        ).status_code
+        == 422
+    )
+    context = context_for(db, "CVE-2026-5002")
+    before = context.row_version
+    assert (
+        client.put(
+            f"{BASE}/{context.id}/component",
+            json={
+                "component_id": component.id,
+                "row_version": before,
+                "reason": "Integer ID negative control",
+            },
+        ).status_code
+        == 422
+    )
+    db.refresh(context)
+    assert context.row_version == before
 
 
 def test_search_by_vulnerability_id__VEX_UI_002(client, seeded):
@@ -202,7 +276,7 @@ def test_sort_order_is_honoured(client, seeded):
 
 def test_tile_counts_equal_row_counts_for_the_same_filters__VEX_DASH_004(client, seeded, db):
     summary = vex_dashboard_summary(db, tenant_id=1, sbom_ids=[seeded["sbom"].id])
-    rows = fetch(client, sbom_id=seeded["sbom"].id)
+    rows = fetch(client, sbom_id=str(seeded["sbom"].public_id))
     assert summary["total_contexts"] == rows["total"]
 
 
@@ -221,8 +295,12 @@ def detail(client, db, vuln_id="CVE-2026-5002"):
 def test_sections_are_present_and_separate__VEX_UI_003(client, seeded, db):
     payload = detail(client, db)
     for section in (
-        "vulnerability", "component", "analyzer_evidence",
-        "imported_vex", "internal_decision", "history",
+        "vulnerability",
+        "component",
+        "analyzer_evidence",
+        "imported_vex",
+        "internal_decision",
+        "history",
     ):
         assert section in payload
     assert payload["reconciliation_status"] == "MATCHED"
@@ -248,7 +326,7 @@ def test_severity_comes_from_the_vulnerability__VEX_DATA_005(client, seeded, db)
 def test_analyzer_evidence_is_reported(client, seeded, db):
     evidence = detail(client, db, "CVE-2026-5001")["analyzer_evidence"]
     assert evidence["detection_state"] == "DETECTED"
-    assert evidence["analysis_run_id"] == seeded["run"].id
+    assert evidence["analysis_run_id"] == str(seeded["run"].public_id)
 
 
 def test_unknown_id_is_404(client, seeded):
@@ -256,27 +334,10 @@ def test_unknown_id_is_404(client, seeded):
 
 
 def test_cross_tenant_detail_is_404_not_403__VEX_SEC_002(client, seeded, db):
-    """404 rather than 403: 403 would confirm the row exists elsewhere."""
-    db.execute(
-        text(
-            "INSERT INTO tenants (id, name, slug, external_iam_tenant_id, status, "
-            "created_at, updated_at) VALUES (2, 'Other', 'other', 'other', 'ACTIVE', "
-            ":now, :now) ON CONFLICT (id) DO NOTHING"
-        ),
-        {"now": NOW},
-    )
-    context = context_for(db, "CVE-2026-5001")
-    db.execute(
-        text("UPDATE vex_investigation SET tenant_id = 2 WHERE id = :id"),
-        {"id": context.id},
-    )
-    db.commit()
-    assert client.get(f"{BASE}/{context.id}").status_code == 404
-    db.execute(
-        text("UPDATE vex_investigation SET tenant_id = 1 WHERE id = :id"),
-        {"id": context.id},
-    )
-    db.commit()
+    foreign = foreign_vex_fixture(db)
+    before = foreign_vex_snapshot(db, 2, foreign["context_id"])
+    assert client.get(f"{BASE}/{foreign['context_id']}").status_code == 404
+    assert foreign_vex_snapshot(db, 2, foreign["context_id"]) == before
 
 
 # ---------------------------------------------------------------------------
@@ -321,7 +382,8 @@ def test_not_affected_without_evidence_is_rejected__VEX_VAL_001(client, seeded, 
     response = client.put(
         f"{BASE}/{context.id}/decision",
         json={
-            "status": "NOT_AFFECTED", "row_version": context.row_version,
+            "status": "NOT_AFFECTED",
+            "row_version": context.row_version,
             "reason": "no evidence supplied",
         },
     )
@@ -333,8 +395,10 @@ def test_fixed_without_remediation_evidence_is_rejected__VEX_VAL_002(client, see
     response = client.put(
         f"{BASE}/{context.id}/decision",
         json={
-            "status": "FIXED", "row_version": context.row_version,
-            "reason": "trust me", "fixed_version": " ",
+            "status": "FIXED",
+            "row_version": context.row_version,
+            "reason": "trust me",
+            "fixed_version": " ",
         },
     )
     assert response.status_code == 422
@@ -365,14 +429,14 @@ def test_decision_survives_reconciliation__VEX_INV_004(client, seeded, db):
 
 def test_component_vulnerabilities_endpoint_still_responds(client, seeded):
     response = client.get(
-        f"/api/sboms/{seeded['sbom'].id}/components/{seeded['zlib'].id}/vulnerabilities"
+        f"/api/sboms/{seeded['sbom'].public_id}/components/{seeded['zlib'].public_id}/vulnerabilities"
     )
     assert response.status_code == 200, response.text
     assert "vulnerabilities" in response.json()
 
 
 def test_sbom_vex_list_endpoint_still_responds(client, seeded):
-    response = client.get(f"/api/sboms/{seeded['sbom'].id}/vex")
+    response = client.get(f"/api/sboms/{seeded['sbom'].public_id}/vex")
     assert response.status_code == 200, response.text
     assert "statements" in response.json()
 
@@ -389,8 +453,8 @@ def resolve(client, seeded, vuln_id, component=None):
     return client.get(
         RESOLVE,
         params={
-            "sbom_id": seeded["sbom"].id,
-            "component_id": (component or seeded["zlib"]).id,
+            "sbom_id": str(seeded["sbom"].public_id),
+            "component_id": str((component or seeded["zlib"]).public_id),
             "vulnerability_id": vuln_id,
         },
     )
@@ -401,7 +465,7 @@ def test_resolve_finds_the_context_for_a_pair(client, seeded, db):
     assert response.status_code == 200, response.text
     payload = response.json()
     assert payload["vulnerability"]["canonical_vulnerability_id"] == "CVE-2026-5002"
-    assert payload["component"]["component_id"] == seeded["zlib"].id
+    assert payload["component"]["component_id"] == str(seeded["zlib"].public_id)
     # Carries the concurrency token the SBOM page previously had no way to get.
     assert payload["row_version"] >= 1
 
@@ -422,24 +486,20 @@ def test_resolve_matches_an_alias__VEX_CTX_002(client, seeded, db):
 
 
 def test_resolve_is_tenant_scoped__VEX_SEC_002(client, seeded, db):
-    db.execute(
-        text(
-            "INSERT INTO tenants (id, name, slug, external_iam_tenant_id, status, "
-            "created_at, updated_at) VALUES (2, 'Other', 'other', 'other', 'ACTIVE', "
-            ":now, :now) ON CONFLICT (id) DO NOTHING"
-        ),
-        {"now": NOW},
+    foreign = foreign_vex_fixture(db, vuln_id="CVE-2026-5002")
+    before = foreign_vex_snapshot(db, 2, foreign["context_id"])
+    assert (
+        client.get(
+            f"{BASE}/resolve",
+            params={
+                "sbom_id": foreign["sbom_public_id"],
+                "component_id": foreign["component_public_id"],
+                "vulnerability_id": "CVE-2026-5002",
+            },
+        ).status_code
+        == 404
     )
-    context = context_for(db, "CVE-2026-5002")
-    db.execute(
-        text("UPDATE vex_investigation SET tenant_id = 2 WHERE id = :id"), {"id": context.id}
-    )
-    db.commit()
-    assert resolve(client, seeded, "CVE-2026-5002").status_code == 404
-    db.execute(
-        text("UPDATE vex_investigation SET tenant_id = 1 WHERE id = :id"), {"id": context.id}
-    )
-    db.commit()
+    assert foreign_vex_snapshot(db, 2, foreign["context_id"]) == before
 
 
 def test_resolve_does_not_create_a_context(client, seeded, db):
@@ -466,8 +526,6 @@ def test_mitigation_survives_the_decision_endpoint(client, seeded, db):
     )
     assert response.status_code == 200, response.text
     statement = db.scalars(
-        select(VexStatement)
-        .where(VexStatement.vulnerability_id == "CVE-2026-5001")
-        .order_by(VexStatement.id.desc())
+        select(VexStatement).where(VexStatement.vulnerability_id == "CVE-2026-5001").order_by(VexStatement.id.desc())
     ).first()
     assert statement.mitigation == "Disable the legacy TLS listener until patched."

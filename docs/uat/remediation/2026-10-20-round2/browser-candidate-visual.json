@@ -1,0 +1,62 @@
+[
+  {
+    "id": "R2-CANDIDATE-VISUAL-1440",
+    "role": "admin",
+    "preconditions": "Clean Chrome context; real Native BFF authentication fixture; TLS validation enabled",
+    "steps": "R2-CANDIDATE-VISUAL-1440",
+    "expected": "Popup reserves layout space above an accessible footer; normal pointer Cancel closes",
+    "actual": {
+      "viewport": {
+        "width": 1440,
+        "height": 1000
+      },
+      "bounds": {
+        "popup": {
+          "x": 489,
+          "y": 546,
+          "width": 462,
+          "height": 58
+        },
+        "cancel": {
+          "x": 745.453125,
+          "y": 637,
+          "width": 77.484375,
+          "height": 40
+        }
+      },
+      "cancelIsPointerTarget": true,
+      "closed": true
+    },
+    "result": "PASS"
+  },
+  {
+    "id": "R2-CANDIDATE-VISUAL-390",
+    "role": "admin",
+    "preconditions": "Clean Chrome context; real Native BFF authentication fixture; TLS validation enabled",
+    "steps": "R2-CANDIDATE-VISUAL-390",
+    "expected": "Popup reserves layout space above an accessible footer; normal pointer Cancel closes",
+    "actual": {
+      "viewport": {
+        "width": 390,
+        "height": 844
+      },
+      "bounds": {
+        "popup": {
+          "x": 25,
+          "y": 696,
+          "width": 340,
+          "height": 58
+        },
+        "cancel": {
+          "x": 159.453125,
+          "y": 787,
+          "width": 77.484375,
+          "height": 40
+        }
+      },
+      "cancelIsPointerTarget": true,
+      "closed": true
+    },
+    "result": "PASS"
+  }
+]

@@ -1,0 +1,67 @@
+[
+  {
+    "originalNode": "test_vex_investigations_api.py::test_filter_by_sbom__VEX_UI_002",
+    "round3Result": "PASS",
+    "evidence": "pytest-round1-round2-protection.xml"
+  },
+  {
+    "originalNode": "test_vex_investigations_api.py::test_tile_counts_equal_row_counts_for_the_same_filters__VEX_DASH_004",
+    "round3Result": "PASS",
+    "evidence": "pytest-round1-round2-protection.xml"
+  },
+  {
+    "originalNode": "test_vex_investigations_api.py::test_component_vulnerabilities_endpoint_still_responds",
+    "round3Result": "PASS",
+    "evidence": "pytest-round1-round2-protection.xml"
+  },
+  {
+    "originalNode": "test_vex_investigations_api.py::test_sbom_vex_list_endpoint_still_responds",
+    "round3Result": "PASS",
+    "evidence": "pytest-round1-round2-protection.xml"
+  },
+  {
+    "originalNode": "test_vex_investigations_api.py::test_resolve_finds_the_context_for_a_pair",
+    "round3Result": "PASS",
+    "evidence": "pytest-round1-round2-protection.xml"
+  },
+  {
+    "originalNode": "test_vex_investigations_api.py::test_resolve_returns_404_when_nothing_has_asserted_it",
+    "round3Result": "PASS",
+    "evidence": "pytest-round1-round2-protection.xml"
+  },
+  {
+    "originalNode": "test_vex_investigations_api.py::test_resolve_matches_an_alias__VEX_CTX_002",
+    "round3Result": "PASS",
+    "evidence": "pytest-round1-round2-protection.xml"
+  },
+  {
+    "originalNode": "test_vex_investigations_api.py::test_resolve_is_tenant_scoped__VEX_SEC_002",
+    "round3Result": "PASS",
+    "evidence": "pytest-round1-round2-protection.xml"
+  },
+  {
+    "originalNode": "test_vex_audit_concurrency.py::test_analyst_can_bind_an_unresolved_assertion__VEX_MAP_001",
+    "round3Result": "PASS",
+    "evidence": "pytest-round1-round2-protection.xml"
+  },
+  {
+    "originalNode": "test_vex_audit_concurrency.py::test_binding_is_audited_while_component_was_null__VEX_AUD_001",
+    "round3Result": "PASS",
+    "evidence": "pytest-round1-round2-protection.xml"
+  },
+  {
+    "originalNode": "test_vex_audit_concurrency.py::test_binding_a_resolved_context_is_refused",
+    "round3Result": "PASS",
+    "evidence": "pytest-round1-round2-protection.xml"
+  },
+  {
+    "originalNode": "test_vex_audit_concurrency.py::test_binding_to_a_component_in_another_sbom_is_refused__VEX_CTX_001",
+    "round3Result": "PASS",
+    "evidence": "pytest-round1-round2-protection.xml"
+  },
+  {
+    "originalNode": "test_vex_audit_concurrency.py::test_cross_tenant_mutations_are_rejected__VEX_SEC_002",
+    "round3Result": "PASS",
+    "evidence": "pytest-round1-round2-protection.xml"
+  }
+]

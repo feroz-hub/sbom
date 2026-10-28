@@ -1,0 +1,920 @@
+{
+  "raw_logs_remain_private": true,
+  "runs": [
+    {
+      "acceptance_note": "Development/focused or interrupted evidence; not the final full-inventory acceptance.",
+      "duration_seconds": 180.482,
+      "failed_functions": [
+        {
+          "function": "test_warm_cache_second_run_zero_llm_calls",
+          "module": "tests.ai.test_batch_load",
+          "status": "FAIL"
+        }
+      ],
+      "observed_case_outcomes": {
+        "FAIL": 1,
+        "PASS": 71
+      },
+      "private_evidence": "backend-complete.xml",
+      "separate_subtest_count_from_suite": 0,
+      "sha256": "b1e3c0ba9bb9dea8cf56a70843266fe6ab02511e1435ac520f34d5d20a72e4c6"
+    },
+    {
+      "acceptance_note": "Development/focused or interrupted evidence; not the final full-inventory acceptance.",
+      "duration_seconds": 2408.199,
+      "failed_functions": [
+        {
+          "function": "test_trigger_returns_409_when_ai_disabled",
+          "module": "tests.ai.test_ai_fixes_router",
+          "status": "FAIL"
+        },
+        {
+          "function": "test_kill_switch_returns_409",
+          "module": "tests.ai.test_ai_fixes_router",
+          "status": "FAIL"
+        },
+        {
+          "function": "test_404_on_unknown_run",
+          "module": "tests.ai.test_ai_fixes_router",
+          "status": "FAIL"
+        },
+        {
+          "function": "test_trigger_runs_inline_when_celery_unavailable",
+          "module": "tests.ai.test_ai_fixes_router",
+          "status": "FAIL"
+        },
+        {
+          "function": "test_progress_endpoint_round_trips",
+          "module": "tests.ai.test_ai_fixes_router",
+          "status": "FAIL"
+        },
+        {
+          "function": "test_progress_endpoint_returns_204_when_no_batch",
+          "module": "tests.ai.test_ai_fixes_router",
+          "status": "FAIL"
+        },
+        {
+          "function": "test_progress_endpoint_returns_404_when_run_missing",
+          "module": "tests.ai.test_ai_fixes_router",
+          "status": "FAIL"
+        },
+        {
+          "function": "test_cancel_endpoint_sets_flag",
+          "module": "tests.ai.test_ai_fixes_router",
+          "status": "FAIL"
+        },
+        {
+          "function": "test_cancel_writes_terminal_envelope_for_phantom",
+          "module": "tests.ai.test_ai_fixes_router",
+          "status": "FAIL"
+        },
+        {
+          "function": "test_legacy_stream_phantom_fast_path",
+          "module": "tests.ai.test_ai_fixes_router",
+          "status": "FAIL"
+        },
+        {
+          "function": "test_list_run_fixes_after_generation",
+          "module": "tests.ai.test_ai_fixes_router",
+          "status": "FAIL"
+        },
+        {
+          "function": "test_sse_stream_does_not_pin_db_connection",
+          "module": "tests.ai.test_ai_fixes_router",
+          "status": "FAIL"
+        },
+        {
+          "function": "test_scenario1_filter_driven_critical_batch_returns_resolved_count",
+          "module": "tests.ai.test_phase5_e2e_scenarios",
+          "status": "FAIL"
+        },
+        {
+          "function": "test_scenario2_two_concurrent_batches_have_distinct_ids_and_labels",
+          "module": "tests.ai.test_phase5_e2e_scenarios",
+          "status": "FAIL"
+        },
+        {
+          "function": "test_scenario3_selection_driven_uses_finding_ids",
+          "module": "tests.ai.test_phase5_e2e_scenarios",
+          "status": "FAIL"
+        },
+        {
+          "function": "test_scenario4_cache_overlap_reduces_second_batch_llm_calls",
+          "module": "tests.ai.test_phase5_e2e_scenarios",
+          "status": "FAIL"
+        },
+        {
+          "function": "test_scenario6_fourth_concurrent_batch_returns_typed_409",
+          "module": "tests.ai.test_phase5_e2e_scenarios",
+          "status": "FAIL"
+        },
+        {
+          "function": "test_scenario8_cancel_one_batch_does_not_affect_others",
+          "module": "tests.ai.test_phase5_e2e_scenarios",
+          "status": "FAIL"
+        },
+        {
+          "function": "test_scenario9_selection_across_severities_resolves_to_supplied_ids",
+          "module": "tests.ai.test_phase5_e2e_scenarios",
+          "status": "FAIL"
+        },
+        {
+          "function": "test_scenario10_all_cached_scope_reports_zero_llm_calls",
+          "module": "tests.ai.test_phase5_e2e_scenarios",
+          "status": "FAIL"
+        },
+        {
+          "function": "test_legacy_get_estimate_endpoint_still_returns_full_run_count",
+          "module": "tests.ai.test_phase5_e2e_scenarios",
+          "status": "FAIL"
+        },
+        {
+          "function": "test_legacy_get_progress_endpoint_returns_latest_batch",
+          "module": "tests.ai.test_phase5_e2e_scenarios",
+          "status": "FAIL"
+        },
+        {
+          "function": "test_legacy_post_cancel_sets_run_level_flag",
+          "module": "tests.ai.test_phase5_e2e_scenarios",
+          "status": "FAIL"
+        },
+        {
+          "function": "test_trigger_without_scope_processes_all_findings",
+          "module": "tests.ai.test_phase5_e2e_scenarios",
+          "status": "FAIL"
+        },
+        {
+          "function": "test_progress_envelope_carries_batch_id_and_scope_label",
+          "module": "tests.ai.test_phase5_e2e_scenarios",
+          "status": "FAIL"
+        },
+        {
+          "function": "test_router_kill_switch_returns_409",
+          "module": "tests.ai.test_rollout",
+          "status": "FAIL"
+        },
+        {
+          "function": "test_router_canary_excluded_returns_409",
+          "module": "tests.ai.test_rollout",
+          "status": "FAIL"
+        },
+        {
+          "function": "test_router_master_flag_off_returns_409",
+          "module": "tests.ai.test_rollout",
+          "status": "FAIL"
+        },
+        {
+          "function": "test_fourth_batch_on_run_returns_409",
+          "module": "tests.ai.test_scope_and_multi_batch",
+          "status": "FAIL"
+        },
+        {
+          "function": "test_empty_scope_returns_400",
+          "module": "tests.ai.test_scope_and_multi_batch",
+          "status": "FAIL"
+        },
+        {
+          "function": "test_trigger_with_scope_creates_batch_row_and_runs_inline",
+          "module": "tests.ai.test_scope_and_multi_batch",
+          "status": "FAIL"
+        },
+        {
+          "function": "test_estimate_post_with_severity_scope_returns_scoped_count",
+          "module": "tests.ai.test_scope_and_multi_batch",
+          "status": "FAIL"
+        },
+        {
+          "function": "test_estimate_post_no_scope_returns_full_run",
+          "module": "tests.ai.test_scope_and_multi_batch",
+          "status": "FAIL"
+        },
+        {
+          "function": "test_legacy_get_estimate_still_works",
+          "module": "tests.ai.test_scope_and_multi_batch",
+          "status": "FAIL"
+        },
+        {
+          "function": "test_list_batches_endpoint",
+          "module": "tests.ai.test_scope_and_multi_batch",
+          "status": "FAIL"
+        },
+        {
+          "function": "test_batch_detail_404_for_unknown_batch",
+          "module": "tests.ai.test_scope_and_multi_batch",
+          "status": "FAIL"
+        },
+        {
+          "function": "test_per_batch_cancel_endpoint_sets_flag",
+          "module": "tests.ai.test_scope_and_multi_batch",
+          "status": "FAIL"
+        },
+        {
+          "function": "test_per_batch_stream_404_for_unknown_batch",
+          "module": "tests.ai.test_scope_and_multi_batch",
+          "status": "FAIL"
+        },
+        {
+          "function": "test_legacy_consolidated_returns_existing_active_run",
+          "module": "tests.test_analyze_endpoints_snapshot",
+          "status": "FAIL"
+        },
+        {
+          "function": "test_post_compare_returns_full_payload",
+          "module": "tests.test_compare_router",
+          "status": "FAIL"
+        },
+        {
+          "function": "test_post_compare_400_on_same_run",
+          "module": "tests.test_compare_router",
+          "status": "FAIL"
+        },
+        {
+          "function": "test_post_compare_404_on_missing_run",
+          "module": "tests.test_compare_router",
+          "status": "FAIL"
+        },
+        {
+          "function": "test_post_compare_409_on_running_run",
+          "module": "tests.test_compare_router",
+          "status": "FAIL"
+        },
+        {
+          "function": "test_export_cycle_markdown_csv_json",
+          "module": "tests.test_compare_router",
+          "status": "FAIL"
+        },
+        {
+          "function": "test_runs_recent_returns_compact_summaries",
+          "module": "tests.test_compare_router",
+          "status": "FAIL"
+        },
+        {
+          "function": "test_runs_search_matches_sbom_name",
+          "module": "tests.test_compare_router",
+          "status": "FAIL"
+        }
+      ],
+      "observed_case_outcomes": {
+        "FAIL": 46,
+        "PASS": 1304,
+        "SKIP": 4
+      },
+      "private_evidence": "backend-development.xml",
+      "separate_subtest_count_from_suite": 4,
+      "sha256": "d9525b8acb4a97c646a7979bea3f2f98d2ad9d32fae6d235a07a58d65d5b207d"
+    },
+    {
+      "acceptance_note": "Development/focused or interrupted evidence; not the final full-inventory acceptance.",
+      "duration_seconds": 2235.549,
+      "failed_functions": [
+        {
+          "function": "test_nvd_finding_carries_confidence_dict_to_row",
+          "module": "tests.test_match_confidence_integration",
+          "status": "FAIL"
+        },
+        {
+          "function": "test_each_strategy_tag_flows_dict_to_row",
+          "module": "tests.test_match_strategy_per_source_integration",
+          "status": "FAIL"
+        },
+        {
+          "function": "test_each_strategy_tag_flows_dict_to_row",
+          "module": "tests.test_match_strategy_per_source_integration",
+          "status": "FAIL"
+        },
+        {
+          "function": "test_each_strategy_tag_flows_dict_to_row",
+          "module": "tests.test_match_strategy_per_source_integration",
+          "status": "FAIL"
+        },
+        {
+          "function": "test_runs_filter_matches_canonical_status_and_legacy_alias_rows",
+          "module": "tests.test_metric_consistency",
+          "status": "FAIL"
+        },
+        {
+          "function": "test_persist_analysis_run_forwards_match_strategy",
+          "module": "tests.test_persist_match_strategy_regression",
+          "status": "FAIL"
+        },
+        {
+          "function": "test_persist_analysis_run_tolerates_missing_match_strategy",
+          "module": "tests.test_persist_match_strategy_regression",
+          "status": "FAIL"
+        }
+      ],
+      "observed_case_outcomes": {
+        "FAIL": 7,
+        "PASS": 1541,
+        "SKIP": 2
+      },
+      "private_evidence": "backend-final-focused.xml",
+      "separate_subtest_count_from_suite": 4,
+      "sha256": "1ce60af8239eaacdb1dab924207b4ec94b49fa68f0bf61d882d4bfc0c06d8ae3"
+    },
+    {
+      "acceptance_note": "Development/focused or interrupted evidence; not the final full-inventory acceptance.",
+      "duration_seconds": 2856.274,
+      "failed_functions": [
+        {
+          "function": "test_acceptance_auto_81_to_15_with_http_decisions_assignment_and_inactive_fallback",
+          "module": "tests.test_sbom_selection_policy",
+          "status": "FAIL"
+        },
+        {
+          "function": "test_post_sbom_analyze_returns_existing_active_run",
+          "module": "tests.test_sboms_analyze_snapshot",
+          "status": "FAIL"
+        },
+        {
+          "function": "test_cross_tenant_mutations_are_rejected__VEX_SEC_002",
+          "module": "tests.test_vex_audit_concurrency",
+          "status": "FAIL"
+        }
+      ],
+      "observed_case_outcomes": {
+        "FAIL": 3,
+        "PASS": 2365,
+        "SKIP": 7
+      },
+      "private_evidence": "backend-final-primary-v5.xml",
+      "separate_subtest_count_from_suite": 8,
+      "sha256": "01c97c247535e57ff7b95f597e8d26a88481deb7eb5762ec5de4627534a12ad4"
+    },
+    {
+      "acceptance_note": "Development/focused or interrupted evidence; not the final full-inventory acceptance.",
+      "duration_seconds": 1464.32,
+      "failed_functions": [
+        {
+          "function": "test_get_scan_variant_200",
+          "module": "tests.test_cves_router",
+          "status": "FAIL"
+        },
+        {
+          "function": "test_scan_variant_forwards_component_constraint",
+          "module": "tests.test_cves_router",
+          "status": "FAIL"
+        }
+      ],
+      "observed_case_outcomes": {
+        "FAIL": 2,
+        "PASS": 1125,
+        "SKIP": 6
+      },
+      "private_evidence": "backend-final-primary.xml",
+      "separate_subtest_count_from_suite": 0,
+      "sha256": "9dfcb721f13f8630da5a0e4981e1ade190d42f44a48a2f94e010156b43fefed6"
+    },
+    {
+      "acceptance_note": "Development/focused or interrupted evidence; not the final full-inventory acceptance.",
+      "duration_seconds": 231.867,
+      "failed_functions": [],
+      "observed_case_outcomes": {
+        "PASS": 174
+      },
+      "private_evidence": "backend-frozen-final.xml",
+      "separate_subtest_count_from_suite": 0,
+      "sha256": "9b5e1fa62fd30f9c9ba4738e5af99b4c864633d72eb9b6cb111a0adf562ab232"
+    },
+    {
+      "acceptance_note": "Development/focused or interrupted evidence; not the final full-inventory acceptance.",
+      "duration_seconds": 57.946,
+      "failed_functions": [],
+      "observed_case_outcomes": {
+        "PASS": 46
+      },
+      "private_evidence": "backend-frozen-focused-v2.xml",
+      "separate_subtest_count_from_suite": 0,
+      "sha256": "9cb115e9702a5231ed451f569f49c93c145f8d72f83770c00498edc7b7de31f6"
+    },
+    {
+      "acceptance_note": "Development/focused or interrupted evidence; not the final full-inventory acceptance.",
+      "duration_seconds": 233.927,
+      "failed_functions": [
+        {
+          "function": "test_progress_envelope_carries_batch_id_and_scope_label",
+          "module": "tests.ai.test_phase5_e2e_scenarios",
+          "status": "FAIL"
+        },
+        {
+          "function": "test_router_kill_switch_returns_409",
+          "module": "tests.ai.test_rollout",
+          "status": "FAIL"
+        },
+        {
+          "function": "test_router_canary_excluded_returns_409",
+          "module": "tests.ai.test_rollout",
+          "status": "FAIL"
+        },
+        {
+          "function": "test_router_master_flag_off_returns_409",
+          "module": "tests.ai.test_rollout",
+          "status": "FAIL"
+        }
+      ],
+      "observed_case_outcomes": {
+        "FAIL": 4,
+        "PASS": 185
+      },
+      "private_evidence": "backend-frozen-focused.xml",
+      "separate_subtest_count_from_suite": 0,
+      "sha256": "468e96ea11fab61a68f938570990d1fa38364cc6f96010d5d899c52bc6a90ecb"
+    },
+    {
+      "acceptance_note": "Development/focused or interrupted evidence; not the final full-inventory acceptance.",
+      "duration_seconds": 822.307,
+      "failed_functions": [
+        {
+          "function": "test_v1_compare_response_carries_deprecation_headers",
+          "module": "tests.test_compare_v1_deprecation",
+          "status": "FAIL"
+        },
+        {
+          "function": "test_v1_compare_increments_telemetry_counter",
+          "module": "tests.test_compare_v1_deprecation",
+          "status": "FAIL"
+        },
+        {
+          "function": "test_v1_compare_409_on_running_run",
+          "module": "tests.test_compare_v1_deprecation",
+          "status": "FAIL"
+        },
+        {
+          "function": "test_v1_compare_preserves_legacy_response_shape",
+          "module": "tests.test_compare_v1_deprecation",
+          "status": "FAIL"
+        }
+      ],
+      "observed_case_outcomes": {
+        "FAIL": 4,
+        "PASS": 666,
+        "SKIP": 4
+      },
+      "private_evidence": "backend-frozen-primary.xml",
+      "separate_subtest_count_from_suite": 0,
+      "sha256": "18272a5db6b57b590a11a2d8553e0a46add1c434ee96ff86628b24d676817d9e"
+    },
+    {
+      "acceptance_note": "Development/focused or interrupted evidence; not the final full-inventory acceptance.",
+      "duration_seconds": 197.256,
+      "failed_functions": [
+        {
+          "function": "test_trigger_runs_inline_when_celery_unavailable",
+          "module": "tests.ai.test_ai_fixes_router",
+          "status": "FAIL"
+        },
+        {
+          "function": "test_progress_endpoint_round_trips",
+          "module": "tests.ai.test_ai_fixes_router",
+          "status": "FAIL"
+        },
+        {
+          "function": "test_legacy_stream_phantom_fast_path",
+          "module": "tests.ai.test_ai_fixes_router",
+          "status": "FAIL"
+        },
+        {
+          "function": "test_sse_stream_does_not_pin_db_connection",
+          "module": "tests.ai.test_ai_fixes_router",
+          "status": "FAIL"
+        },
+        {
+          "function": "test_post_compare_returns_full_payload",
+          "module": "tests.test_compare_router",
+          "status": "FAIL"
+        },
+        {
+          "function": "test_post_compare_404_on_missing_run",
+          "module": "tests.test_compare_router",
+          "status": "FAIL"
+        },
+        {
+          "function": "test_runs_recent_returns_compact_summaries",
+          "module": "tests.test_compare_router",
+          "status": "FAIL"
+        },
+        {
+          "function": "test_runs_search_matches_sbom_name",
+          "module": "tests.test_compare_router",
+          "status": "FAIL"
+        },
+        {
+          "function": "test_membership_lifecycle_validation_and_audit",
+          "module": "tests.test_identity_administration",
+          "status": "FAIL"
+        },
+        {
+          "function": "test_last_active_tenant_admin_is_protected",
+          "module": "tests.test_identity_administration",
+          "status": "FAIL"
+        },
+        {
+          "function": "test_tenant_admin_cannot_remove_tenant_admin_role",
+          "module": "tests.test_identity_administration",
+          "status": "FAIL"
+        },
+        {
+          "function": "test_assignment_matrix_http",
+          "module": "tests.test_vex_scoped_authorization",
+          "status": "FAIL"
+        },
+        {
+          "function": "test_candidates_invalid_targets_and_payload_bypass",
+          "module": "tests.test_vex_scoped_authorization",
+          "status": "FAIL"
+        },
+        {
+          "function": "test_assignment_history_unassignment_and_separate_decision",
+          "module": "tests.test_vex_scoped_authorization",
+          "status": "FAIL"
+        },
+        {
+          "function": "test_no_broad_developer_bypass_or_legacy_owner_authority",
+          "module": "tests.test_vex_scoped_authorization",
+          "status": "FAIL"
+        },
+        {
+          "function": "test_platform_override_stays_tenant_bound",
+          "module": "tests.test_vex_scoped_authorization",
+          "status": "FAIL"
+        },
+        {
+          "function": "test_analyst_unassignment_and_removed_membership",
+          "module": "tests.test_vex_scoped_authorization",
+          "status": "FAIL"
+        },
+        {
+          "function": "test_work_modes_combination_counts_and_pagination",
+          "module": "tests.test_vex_work_queue",
+          "status": "FAIL"
+        },
+        {
+          "function": "test_assignee_discovery_search_pagination_and_cross_tenant_guard",
+          "module": "tests.test_vex_work_queue",
+          "status": "FAIL"
+        },
+        {
+          "function": "test_assignee_discovery_search_pagination_and_cross_tenant_guard",
+          "module": "tests.test_vex_work_queue",
+          "status": "FAIL"
+        },
+        {
+          "function": "test_assignee_discovery_search_pagination_and_cross_tenant_guard",
+          "module": "tests.test_vex_work_queue",
+          "status": "FAIL"
+        },
+        {
+          "function": "test_inactive_and_legacy_ownership_remains_readable_without_being_active_assignment",
+          "module": "tests.test_vex_work_queue",
+          "status": "FAIL"
+        },
+        {
+          "function": "test_scope_and_owner_filters_intersect_before_pagination",
+          "module": "tests.test_vex_work_queue",
+          "status": "FAIL"
+        }
+      ],
+      "observed_case_outcomes": {
+        "FAIL": 23,
+        "PASS": 63
+      },
+      "private_evidence": "contracts3.xml",
+      "separate_subtest_count_from_suite": 0,
+      "sha256": "0bc3fa093733a03e9991a13f18a5b0242c8fa6c211fbc23ce3c6225cf45741ec"
+    },
+    {
+      "acceptance_note": "Development/focused or interrupted evidence; not the final full-inventory acceptance.",
+      "duration_seconds": 216.874,
+      "failed_functions": [
+        {
+          "function": "test_legacy_stream_phantom_fast_path",
+          "module": "tests.ai.test_ai_fixes_router",
+          "status": "FAIL"
+        },
+        {
+          "function": "test_candidates_invalid_targets_and_payload_bypass",
+          "module": "tests.test_vex_scoped_authorization",
+          "status": "FAIL"
+        },
+        {
+          "function": "test_assignee_discovery_search_pagination_and_cross_tenant_guard",
+          "module": "tests.test_vex_work_queue",
+          "status": "FAIL"
+        },
+        {
+          "function": "test_assignee_discovery_search_pagination_and_cross_tenant_guard",
+          "module": "tests.test_vex_work_queue",
+          "status": "FAIL"
+        },
+        {
+          "function": "test_assignee_discovery_search_pagination_and_cross_tenant_guard",
+          "module": "tests.test_vex_work_queue",
+          "status": "FAIL"
+        }
+      ],
+      "observed_case_outcomes": {
+        "FAIL": 5,
+        "PASS": 83
+      },
+      "private_evidence": "contracts4.xml",
+      "separate_subtest_count_from_suite": 0,
+      "sha256": "2771affafd3610c522dfaaa6bb3fbe8eff51ea2e32a4ee6a0a2bb6dbb553b5a2"
+    },
+    {
+      "acceptance_note": "Development/focused or interrupted evidence; not the final full-inventory acceptance.",
+      "duration_seconds": 568.76,
+      "failed_functions": [
+        {
+          "function": "test_candidates_invalid_targets_and_payload_bypass",
+          "module": "tests.test_vex_scoped_authorization",
+          "status": "FAIL"
+        },
+        {
+          "function": "test_scope_and_owner_filters_intersect_before_pagination",
+          "module": "tests.test_vex_work_queue",
+          "status": "ERROR"
+        }
+      ],
+      "observed_case_outcomes": {
+        "ERROR": 1,
+        "FAIL": 1,
+        "PASS": 89
+      },
+      "private_evidence": "contracts5.xml",
+      "separate_subtest_count_from_suite": 0,
+      "sha256": "25a98be6f0e23be8ef371e49b0e4146acdabcbf7bbac3bfb2a47fb1c55ab927c"
+    },
+    {
+      "acceptance_note": "Development/focused or interrupted evidence; not the final full-inventory acceptance.",
+      "duration_seconds": 115.405,
+      "failed_functions": [],
+      "observed_case_outcomes": {
+        "PASS": 66
+      },
+      "private_evidence": "contracts6.xml",
+      "separate_subtest_count_from_suite": 0,
+      "sha256": "fd59bd697ff27ae8c0634a4062722350ccfc7d8c50e1d7c01d04066afcb9829e"
+    },
+    {
+      "acceptance_note": "Development/focused or interrupted evidence; not the final full-inventory acceptance.",
+      "duration_seconds": 22.188,
+      "failed_functions": [],
+      "observed_case_outcomes": {
+        "PASS": 17
+      },
+      "private_evidence": "cve-scan-foreign-scope.xml",
+      "separate_subtest_count_from_suite": 0,
+      "sha256": "8fd84df771cfa6f84d65986e44aa31e094a40873ee3daf6f4fd85c92f2bee648"
+    },
+    {
+      "acceptance_note": "Development/focused or interrupted evidence; not the final full-inventory acceptance.",
+      "duration_seconds": 86.385,
+      "failed_functions": [
+        {
+          "function": "test_product_sbom_list_carries_latest_analysis",
+          "module": "tests.test_product_hierarchy",
+          "status": "FAIL"
+        },
+        {
+          "function": "test_analyze_stream_returns_existing_active_run_without_duplicate",
+          "module": "tests.test_sboms_analyze_stream",
+          "status": "FAIL"
+        },
+        {
+          "function": "test_legacy_valid_uuid_returns_existing_run_with_public_successor",
+          "module": "tests.test_legacy_analysis_public_identity",
+          "status": "FAIL"
+        },
+        {
+          "function": "test_legacy_valid_uuid_returns_existing_run_with_public_successor",
+          "module": "tests.test_legacy_analysis_public_identity",
+          "status": "FAIL"
+        },
+        {
+          "function": "test_legacy_valid_uuid_returns_existing_run_with_public_successor",
+          "module": "tests.test_legacy_analysis_public_identity",
+          "status": "FAIL"
+        },
+        {
+          "function": "test_legacy_valid_uuid_returns_existing_run_with_public_successor",
+          "module": "tests.test_legacy_analysis_public_identity",
+          "status": "FAIL"
+        }
+      ],
+      "observed_case_outcomes": {
+        "FAIL": 6,
+        "PASS": 65
+      },
+      "private_evidence": "final-boundary-corrections.xml",
+      "separate_subtest_count_from_suite": 0,
+      "sha256": "571e44fbd0f4165b73843755abf6fa5bc8c62fa95c02c84769ff4cb90ba3706e"
+    },
+    {
+      "acceptance_note": "Development/focused or interrupted evidence; not the final full-inventory acceptance.",
+      "duration_seconds": 238.39,
+      "failed_functions": [],
+      "observed_case_outcomes": {
+        "PASS": 161
+      },
+      "private_evidence": "final-boundary-corrections2.xml",
+      "separate_subtest_count_from_suite": 0,
+      "sha256": "352541bf33d5661c5a11c9f03dd255df3955d24b0bdb3e1576170be7676050c3"
+    },
+    {
+      "acceptance_note": "Development/focused or interrupted evidence; not the final full-inventory acceptance.",
+      "duration_seconds": 118.066,
+      "failed_functions": [],
+      "observed_case_outcomes": {
+        "PASS": 65
+      },
+      "private_evidence": "fixture-boundary-reconciliation.xml",
+      "separate_subtest_count_from_suite": 0,
+      "sha256": "41dcd4b7475fbacc8fe7d72d7f79511da94e9901c4fe3f559f21d11291a1ff33"
+    },
+    {
+      "acceptance_note": "Development/focused or interrupted evidence; not the final full-inventory acceptance.",
+      "duration_seconds": 69.807,
+      "failed_functions": [
+        {
+          "function": "test_analysis_create_read_list_and_integer_rejection",
+          "module": "tests.test_public_resource_uuid",
+          "status": "FAIL"
+        }
+      ],
+      "observed_case_outcomes": {
+        "FAIL": 1,
+        "PASS": 51
+      },
+      "private_evidence": "focused1.xml",
+      "separate_subtest_count_from_suite": 0,
+      "sha256": "4941cc55e02463b6353a3be3ed27cb7c34c50f2cc201f726e3680ed1daf63b45"
+    },
+    {
+      "acceptance_note": "Development/focused or interrupted evidence; not the final full-inventory acceptance.",
+      "duration_seconds": 71.102,
+      "failed_functions": [
+        {
+          "function": "test_populated_100_101_102_preserves_every_existing_value_and_foreign_key",
+          "module": "tests.test_public_resource_uuid_migration",
+          "status": "FAIL"
+        },
+        {
+          "function": "test_revision102_precommit_failure_rolls_back_columns_backfill_guards_and_marker",
+          "module": "tests.test_public_resource_uuid_migration",
+          "status": "FAIL"
+        }
+      ],
+      "observed_case_outcomes": {
+        "FAIL": 2,
+        "PASS": 53
+      },
+      "private_evidence": "focused2.xml",
+      "separate_subtest_count_from_suite": 0,
+      "sha256": "a84fde26adb619200a1a0d0f49d39ee6c5888ab99adc9feb01143102143bad9e"
+    },
+    {
+      "acceptance_note": "Development/focused or interrupted evidence; not the final full-inventory acceptance.",
+      "duration_seconds": 41.506,
+      "failed_functions": [
+        {
+          "function": "test_member_search_add_roles_membership_detail_and_remove",
+          "module": "tests.test_iam_user_public_uuid",
+          "status": "FAIL"
+        },
+        {
+          "function": "test_user_serialization_is_batched_and_other_ids_stay_integer",
+          "module": "tests.test_iam_user_public_uuid",
+          "status": "FAIL"
+        },
+        {
+          "function": "test_openapi_contract_is_user_uuid_but_analysis_and_membership_stay_integer",
+          "module": "tests.test_iam_user_public_uuid",
+          "status": "FAIL"
+        }
+      ],
+      "observed_case_outcomes": {
+        "FAIL": 3,
+        "PASS": 23
+      },
+      "private_evidence": "iam-contract-before.xml",
+      "separate_subtest_count_from_suite": 0,
+      "sha256": "83b6df06ce9d876db1f9585743037300baf2231cf08071cb51f37233a014bcf8"
+    },
+    {
+      "acceptance_note": "Development/focused or interrupted evidence; not the final full-inventory acceptance.",
+      "duration_seconds": 48.901,
+      "failed_functions": [],
+      "observed_case_outcomes": {
+        "PASS": 2
+      },
+      "private_evidence": "load-isolated.xml",
+      "separate_subtest_count_from_suite": 0,
+      "sha256": "48f38ac6962358a0d6480219963303c37b790d586376c187fcaf8dd324310f88"
+    },
+    {
+      "acceptance_note": "Development/focused or interrupted evidence; not the final full-inventory acceptance.",
+      "duration_seconds": 7.687,
+      "failed_functions": [
+        {
+          "function": "test_populated_100_101_102_preserves_every_existing_value_and_foreign_key",
+          "module": "tests.test_public_resource_uuid_migration",
+          "status": "FAIL"
+        },
+        {
+          "function": "test_revision102_precommit_failure_rolls_back_columns_backfill_guards_and_marker",
+          "module": "tests.test_public_resource_uuid_migration",
+          "status": "FAIL"
+        }
+      ],
+      "observed_case_outcomes": {
+        "FAIL": 2,
+        "PASS": 1
+      },
+      "private_evidence": "migration3.xml",
+      "separate_subtest_count_from_suite": 0,
+      "sha256": "7a6ce21ca76511d0be05be828fa033b64e870a4b01669e3cd4a5fce991003e73"
+    },
+    {
+      "acceptance_note": "Development/focused or interrupted evidence; not the final full-inventory acceptance.",
+      "duration_seconds": 8.038,
+      "failed_functions": [],
+      "observed_case_outcomes": {
+        "PASS": 3
+      },
+      "private_evidence": "migration4.xml",
+      "separate_subtest_count_from_suite": 0,
+      "sha256": "bb8eca9b0145fdb65434110c2b88375613d9c66fd4156dd6a9081552bd634ee3"
+    },
+    {
+      "acceptance_note": "Development/focused or interrupted evidence; not the final full-inventory acceptance.",
+      "duration_seconds": 83.578,
+      "failed_functions": [],
+      "observed_case_outcomes": {
+        "PASS": 58
+      },
+      "private_evidence": "persistence-fixture-reconciliation.xml",
+      "separate_subtest_count_from_suite": 0,
+      "sha256": "c7b78c38b94222ba52ad0f80683666ea1e2ea1dfb57952191d2f6f251c14ac06"
+    },
+    {
+      "acceptance_note": "Development/focused or interrupted evidence; not the final full-inventory acceptance.",
+      "duration_seconds": 69.662,
+      "failed_functions": [],
+      "observed_case_outcomes": {
+        "PASS": 44
+      },
+      "private_evidence": "primary-last-fixtures.xml",
+      "separate_subtest_count_from_suite": 0,
+      "sha256": "b0e43bcb202d3cb225a764f0e1540c0588ee46ae955f5218bb89d2d4cd1501d2"
+    },
+    {
+      "acceptance_note": "Development/focused or interrupted evidence; not the final full-inventory acceptance.",
+      "duration_seconds": 44.241,
+      "failed_functions": [
+        {
+          "function": "test_v1_compare_response_carries_deprecation_headers",
+          "module": "tests.test_compare_v1_deprecation",
+          "status": "FAIL"
+        },
+        {
+          "function": "test_v1_compare_increments_telemetry_counter",
+          "module": "tests.test_compare_v1_deprecation",
+          "status": "FAIL"
+        },
+        {
+          "function": "test_v1_compare_409_on_running_run",
+          "module": "tests.test_compare_v1_deprecation",
+          "status": "FAIL"
+        },
+        {
+          "function": "test_v1_compare_preserves_legacy_response_shape",
+          "module": "tests.test_compare_v1_deprecation",
+          "status": "FAIL"
+        },
+        {
+          "function": "test_analysis_create_read_list_and_integer_rejection",
+          "module": "tests.test_public_resource_uuid",
+          "status": "FAIL"
+        }
+      ],
+      "observed_case_outcomes": {
+        "FAIL": 5,
+        "PASS": 34
+      },
+      "private_evidence": "query-only-boundary.xml",
+      "separate_subtest_count_from_suite": 0,
+      "sha256": "c7966885721d2878d52a185fc5cfd4d73272c89cf14822d9d9a6ced5f0124f06"
+    },
+    {
+      "acceptance_note": "Development/focused or interrupted evidence; not the final full-inventory acceptance.",
+      "duration_seconds": 40.74,
+      "failed_functions": [],
+      "observed_case_outcomes": {
+        "PASS": 39
+      },
+      "private_evidence": "query-only-boundary2.xml",
+      "separate_subtest_count_from_suite": 0,
+      "sha256": "031170b4e0b84a550211eac003b2c13ad848a59358b15be39d26993064c6d93c"
+    }
+  ]
+}

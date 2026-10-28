@@ -1,0 +1,22 @@
+[
+  {
+    "file": "app/routers/tenants.py",
+    "unchanged": true
+  },
+  {
+    "file": "app/services/user_management_service.py",
+    "unchanged": true
+  },
+  {
+    "file": "app/services/platform_service.py",
+    "unchanged": true
+  },
+  {
+    "file": "app/services/authorization_catalog_service.py",
+    "unchanged": true
+  },
+  {
+    "file": "docs/uat/remediation/2026-10-20-round2/SBO-73_DECISION_PROPOSAL.md",
+    "unchanged": true
+  }
+]

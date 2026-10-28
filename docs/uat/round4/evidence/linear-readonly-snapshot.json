@@ -1,0 +1,20 @@
+[
+  {
+    "id": "SBO-54",
+    "title": "Run full backend/frontend regression against latest source and classify baseline failures",
+    "url": "https://linear.app/sbom-analyzer/issue/SBO-54/run-full-backendfrontend-regression-against-latest-source-and-classify",
+    "status": "In Progress",
+    "updatedAt": "2026-10-20T11:18:12.411Z",
+    "acceptance": "## Acceptance / outcome\n\nRun current FastAPI/Pytest, Vitest, TS, lint, migrations and production build on clean isolated test env. Preserve exact passed/failed/skipped counts, link logs; compare historical 58 baseline failures and discover new regressions. Do not claim green from overlapping focused selections.\n\n## Evidence reference\n\n[https://github.com/feroz-hub/sbom/blob/feat/native-user-management/docs/sbom-auto-repair-phase3-release-validation.md](<https://github.com/feroz-hub/sbom/blob/feat/native-user-management/docs/sbom-auto-repair-phase3-release-validation.md>)\n\nRecord commit/version, date, environment, verification commands and independently reproducible output. Do not alter a production database solely to close this issue.\n\n",
+    "readOnly": true
+  },
+  {
+    "id": "SBO-55",
+    "title": "Build and execute full browser E2E acceptance on isolated Ubuntu test tenant",
+    "url": "https://linear.app/sbom-analyzer/issue/SBO-55/build-and-execute-full-browser-e2e-acceptance-on-isolated-ubuntu-test",
+    "status": "In Progress",
+    "updatedAt": "2026-10-20T11:18:18.371Z",
+    "acceptance": "## Acceptance / outcome\n\nPlaywright real Next.js/FastAPI/PostgreSQL/Redis and Celery flows. Execute scenarios A–I: onboarding, tenant roles, dashboard, inventories, analysis/VEX, AI/jobs, reports, cross-tenant isolation. Attach artifacts/logs and coverage matrix. Avoid modifying live customer records.\n\n## Evidence reference\n\n[https://github.com/feroz-hub/sbom/blob/feat/native-user-management/docs/engineering/phase1-ui-sync-acceptance.md](<https://github.com/feroz-hub/sbom/blob/feat/native-user-management/docs/engineering/phase1-ui-sync-acceptance.md>)\n\nRecord commit/version, date, environment, verification commands and independently reproducible output. Do not alter a production database solely to close this issue.\n\n",
+    "readOnly": true
+  }
+]

@@ -1,0 +1,36 @@
+[
+  {
+    "cell": null,
+    "code": "I001",
+    "end_location": {
+      "column": 72,
+      "row": 22
+    },
+    "filename": "/Users/ferozebasha/sbom/tests/test_native_backup_acceptance.py",
+    "fix": {
+      "applicability": "safe",
+      "edits": [
+        {
+          "content": "import base64\nimport os\nimport shutil\nimport subprocess\nimport uuid\nfrom pathlib import Path\n\nimport pytest\nfrom app.db import SessionLocal\nfrom app.models import SecurityMailOutbox\nfrom app.services import native_auth_service as auth\nfrom app.services import native_enrollment_service as enrollment\nfrom app.services import native_password_service as passwords\nfrom app.settings import get_settings\nfrom scripts.greenfield_uuid import REVISION\nfrom sqlalchemy import create_engine, inspect, select, text\nfrom sqlalchemy.engine import make_url\n\nfrom tests.test_native_iam_phase2 import PASSWORD, context, payload\nfrom tests.test_native_iam_phase2 import native_config as native_config\n\n",
+          "end_location": {
+            "column": 1,
+            "row": 24
+          },
+          "location": {
+            "column": 1,
+            "row": 3
+          }
+        }
+      ],
+      "message": "Organize imports"
+    },
+    "location": {
+      "column": 1,
+      "row": 3
+    },
+    "message": "Import block is un-sorted or un-formatted",
+    "noqa_row": 3,
+    "severity": "error",
+    "url": "https://docs.astral.sh/ruff/rules/unsorted-imports"
+  }
+]

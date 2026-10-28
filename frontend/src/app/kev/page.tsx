@@ -7,7 +7,7 @@ import { useRouter, useSearchParams } from 'next/navigation';
 import { TopBar } from '@/components/layout/TopBar';
 import { Alert } from '@/components/ui/Alert';
 import { Badge } from '@/components/ui/Badge';
-import { Button } from '@/components/ui/Button';
+import { PermissionButton as Button } from '@/components/ui/PermissionButton';
 import { Card } from '@/components/ui/Card';
 import { Dialog, DialogBody } from '@/components/ui/Dialog';
 import { Input } from '@/components/ui/Input';
@@ -311,6 +311,7 @@ function KevCatalogContent() {
         subtitle="Known Exploited Vulnerabilities catalog"
         action={
           <Button
+            permission="platform:admin" disabledReason="The global KEV catalog is synchronized by a Platform Administrator."
             onClick={() => syncMutation.mutate()}
             loading={syncMutation.isPending}
             loadingLabel="Syncing KEV catalog"

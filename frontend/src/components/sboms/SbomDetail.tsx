@@ -1,12 +1,21 @@
 'use client';
 
+import { recordIdLabel } from '@/components/ui/RecordIdDisplay';
+import { usePermissions } from '@/hooks/usePermission';
+import { PermissionFields } from '@/components/ui/PermissionGate';
+import { PermissionButton } from '@/components/ui/PermissionButton';
+
 import { useQuery, useQueryClient } from '@tanstack/react-query';
 import { useRouter } from 'next/navigation';
 import Link from 'next/link';
 import { useEffect, useMemo, useState } from 'react';
 import { Play, ArrowLeft, ExternalLink, Edit2, GitBranch, History, Layers, Download, Check, RefreshCw, Eye, ArrowRight, X } from 'lucide-react';
+import { SbomPostureNotice } from '@/components/sboms/SbomPostureNotice';
 import { Card, CardHeader, CardTitle, CardContent } from '@/components/ui/Card';
-import { Button } from '@/components/ui/Button';
+import { PermissionButton as Button } from '@/components/ui/PermissionButton';
+import { SbomLifecycleControls } from './SbomLifecycleControls';
+import { Alert } from '@/components/ui/Alert';
+import { sbomEligibility } from '@/lib/sbomEligibility';
 import { Dialog, DialogBody } from '@/components/ui/Dialog';
 import { StatusBadge } from '@/components/ui/Badge';
 import { Input, Textarea } from '@/components/ui/Input';
@@ -66,7 +75,7 @@ import {
   invalidateAnalysisCompletion,
   invalidateLifecycleOverrideSurfaces,
   invalidateProjectAssignmentSurfaces,
-  invalidateSbomVersionSurfaces,
+  invalidateSbomRevisionCreated,
   invalidateVexSurfaces,
 } from '@/lib/queryInvalidation';
 import { useTableSort } from '@/hooks/useTableSort';
@@ -218,17 +227,10 @@ function triggerDownload(blob: Blob, filename: string) {
   URL.revokeObjectURL(url);
 }
 
-function canManageEvidenceFromClient() {
-  if (typeof window === 'undefined') return true;
-  const configured = window.localStorage.getItem('sbom-role') || window.localStorage.getItem('sbom:user-role');
-  if (!configured) return true;
-  return configured
-    .split(/[,\s]+/)
-    .map((role) => role.trim().toLowerCase())
-    .some((role) => role === 'admin' || role === 'security');
-}
-
 export function SbomDetail({ sbom }: SbomDetailProps) {
+  const eligibility = sbomEligibility(sbom);
+  const processingUnavailable = !eligibility.eligible;
+  const reportUnavailable = processingUnavailable || Boolean(sbom.analysis_requires_reanalysis);
   const router = useRouter();
   const queryClient = useQueryClient();
   const { showToast } = useToast();
@@ -255,7 +257,7 @@ export function SbomDetail({ sbom }: SbomDetailProps) {
   const [editError, setEditError] = useState('');
   const [isOpeningWorkspace, setIsOpeningWorkspace] = useState(false);
   const [isRefreshingLifecycle, setIsRefreshingLifecycle] = useState(false);
-  const [refreshingComponentId, setRefreshingComponentId] = useState<number | null>(null);
+  const [refreshingComponentId, setRefreshingComponentId] = useState<string | number | null>(null);
   const [lifecycleMessage, setLifecycleMessage] = useState('');
   const [vexDocumentText, setVexDocumentText] = useState('');
   const [vexMessage, setVexMessage] = useState('');
@@ -282,10 +284,11 @@ export function SbomDetail({ sbom }: SbomDetailProps) {
   const [isSavingVexOverride, setIsSavingVexOverride] = useState(false);
   const [vexOverrideHistory, setVexOverrideHistory] = useState<VexOverrideAuditEntry[]>([]);
   const [isLoadingVexHistory, setIsLoadingVexHistory] = useState(false);
-  const [canManageEvidence] = useState(canManageEvidenceFromClient);
+  const { can } = usePermissions();
+  const canManageEvidence = can("vex:write");
 
   // Version Comparison State
-  const [selectedVersions, setSelectedVersions] = useState<number[]>([]);
+  const [selectedVersions, setSelectedVersions] = useState<(string | number)[]>([]);
   const [compareData, setCompareData] = useState<any>(null);
   const [isComparing, setIsComparing] = useState(false);
   const [restoreMessage, setRestoreMessage] = useState('');
@@ -303,19 +306,19 @@ export function SbomDetail({ sbom }: SbomDetailProps) {
   const [isEditDetailsModalOpen, setIsEditDetailsModalOpen] = useState(false);
   
   // Assign Project Form State
-  const [selectedProjectId, setSelectedProjectId] = useState<number | null>(null);
-  const [selectedProductId, setSelectedProductId] = useState<number | null>(null);
+  const [selectedProjectId, setSelectedProjectId] = useState<string | number | null>(null);
+  const [selectedProductId, setSelectedProductId] = useState<string | number | null>(null);
   const [assignChangeReason, setAssignChangeReason] = useState('');
   const [isSavingAssign, setIsSavingAssign] = useState(false);
   const [assignError, setAssignError] = useState('');
 
   // Edit Details Form State
   const [detailName, setDetailName] = useState('');
-  const [detailProductId, setDetailProductId] = useState<number | null>(null);
+  const [detailProductId, setDetailProductId] = useState<string | number | null>(null);
   const [detailProductVersion, setDetailProductVersion] = useState('');
   const [detailSbomVersion, setDetailSbomVersion] = useState('');
   const [detailDescription, setDetailDescription] = useState('');
-  const [detailProjectId, setDetailProjectId] = useState<number | null>(null);
+  const [detailProjectId, setDetailProjectId] = useState<string | number | null>(null);
   const [detailChangeReason, setDetailChangeReason] = useState('');
   const [isSavingDetails, setIsSavingDetails] = useState(false);
   const [detailsError, setDetailsError] = useState('');
@@ -354,16 +357,18 @@ export function SbomDetail({ sbom }: SbomDetailProps) {
     setIsSavingAssign(true);
     setAssignError('');
     try {
-      await updateSbom(sbom.id, {
+      const updatedSbom = await updateSbom(sbom.id, {
         project_id: selectedProjectId,
         product_id: selectedProductId,
         change_reason: assignChangeReason || undefined,
       });
 
-      invalidateProjectAssignmentSurfaces(queryClient, {
+      await invalidateProjectAssignmentSurfaces(queryClient, {
         sbomId: sbom.id,
         previousProjectId: sbom.projectid,
-        nextProjectId: selectedProjectId,
+        nextProjectId: updatedSbom.projectid,
+        previousProductId: sbom.product_id,
+        nextProductId: updatedSbom.product_id,
       });
 
       setIsAssignModalOpen(false);
@@ -393,12 +398,14 @@ export function SbomDetail({ sbom }: SbomDetailProps) {
         change_reason: detailChangeReason.trim() || undefined,
       };
 
-      await updateSbom(sbom.id, payload);
+      const updatedSbom = await updateSbom(sbom.id, payload);
 
-      invalidateProjectAssignmentSurfaces(queryClient, {
+      await invalidateProjectAssignmentSurfaces(queryClient, {
         sbomId: sbom.id,
         previousProjectId: sbom.projectid,
-        nextProjectId: detailProjectId,
+        nextProjectId: updatedSbom.projectid,
+        previousProductId: sbom.product_id,
+        nextProductId: updatedSbom.product_id,
       });
 
       setIsEditDetailsModalOpen(false);
@@ -558,7 +565,7 @@ export function SbomDetail({ sbom }: SbomDetailProps) {
       getVexInvestigationByTriple(
         {
           sbom_id: sbom.id,
-          component_id: Number(vexOverrideComponentId),
+          component_id: vexOverrideComponentId,
           vulnerability_id: vexOverrideVulnerability,
         },
         signal,
@@ -567,8 +574,8 @@ export function SbomDetail({ sbom }: SbomDetailProps) {
   });
 
   const componentVex = useQuery({
-    queryKey: ['component-vulnerabilities', sbom.id, Number(vexOverrideComponentId)],
-    queryFn: ({ signal }) => getComponentVulnerabilities(sbom.id, Number(vexOverrideComponentId), signal),
+    queryKey: ['component-vulnerabilities', sbom.id, vexOverrideComponentId],
+    queryFn: ({ signal }) => getComponentVulnerabilities(sbom.id, vexOverrideComponentId, signal),
     enabled: isVexOverrideOpen && Boolean(vexOverrideComponentId),
   });
   const vulnerabilityOptions = useMemo(
@@ -646,7 +653,8 @@ export function SbomDetail({ sbom }: SbomDetailProps) {
   }, [runs?.length]);
 
   const handleRunAnalysis = () => {
-    startAnalysis({ sources: ['NVD', 'OSV', 'GITHUB'] });
+    if (processingUnavailable) return;
+    startAnalysis();
   };
 
   const handleReset = () => {
@@ -771,7 +779,7 @@ export function SbomDetail({ sbom }: SbomDetailProps) {
   };
 
   // Handle checkbox select for version comparison
-  const handleSelectVersion = (versionId: number) => {
+  const handleSelectVersion = (versionId: string | number) => {
     setSelectedVersions(prev => {
       if (prev.includes(versionId)) {
         return prev.filter(id => id !== versionId);
@@ -786,12 +794,13 @@ export function SbomDetail({ sbom }: SbomDetailProps) {
 
   // Perform version comparison
   const handleCompare = async () => {
+    if (reportUnavailable || versions?.some(version => selectedVersions.includes(version.id) && (!sbomEligibility(version).eligible || version.analysis_requires_reanalysis))) return;
     if (selectedVersions.length !== 2) return;
     setIsComparing(true);
     setCompareData(null);
     try {
       // Sort so A is earlier than B (using index or database order)
-      const sorted = [...selectedVersions].sort((a, b) => a - b);
+      const sorted = (versions ?? []).filter(version => selectedVersions.includes(version.id)).map(version => version.id).reverse();
       const res = await compareSbomVersions(sorted[0], sorted[1]);
       setCompareData(res);
     } catch (err: any) {
@@ -802,12 +811,12 @@ export function SbomDetail({ sbom }: SbomDetailProps) {
   };
 
   // Restore previous version
-  const handleRestore = async (versionId: number) => {
+  const handleRestore = async (versionId: string | number) => {
     setRestoreMessage('');
     try {
       const restoredVersion = await restoreSbomVersion(sbom.id, versionId, sbom.created_by ?? undefined);
-      setRestoreMessage('Version restored successfully as new HEAD! Refreshing...');
-      invalidateSbomVersionSurfaces(queryClient, sbom.id);
+      setRestoreMessage('Version restored successfully as a new revision. Refreshing...');
+      await invalidateSbomRevisionCreated(queryClient, sbom, restoredVersion);
       setTimeout(() => {
         setRestoreMessage('');
         router.push(`/sboms/${restoredVersion.id}`);
@@ -817,16 +826,14 @@ export function SbomDetail({ sbom }: SbomDetailProps) {
     }
   };
 
-  const invalidateLifecycleQueries = () => {
-    invalidateLifecycleOverrideSurfaces(queryClient, sbom.id);
-  };
+  const invalidateLifecycleQueries = () => invalidateLifecycleOverrideSurfaces(queryClient, sbom.id);
 
   const handleRefreshLifecycle = async () => {
     setIsRefreshingLifecycle(true);
     setLifecycleMessage('');
     try {
       const result = await refreshSbomLifecycle(sbom.id, true);
-      invalidateLifecycleQueries();
+      await invalidateLifecycleQueries();
       setLifecycleMessage(
         `Lifecycle refreshed: ${result.updated_components} components, ${result.cache_hits} cache hits, ${result.provider_lookups} provider lookups.`,
       );
@@ -842,7 +849,7 @@ export function SbomDetail({ sbom }: SbomDetailProps) {
     setLifecycleMessage('');
     try {
       await refreshComponentLifecycle(component.id, true);
-      invalidateLifecycleQueries();
+      await invalidateLifecycleQueries();
       setLifecycleMessage(`Lifecycle refreshed for ${component.name}.`);
     } catch (err: any) {
       setLifecycleMessage(err.message || 'Component lifecycle refresh failed.');
@@ -871,7 +878,7 @@ export function SbomDetail({ sbom }: SbomDetailProps) {
         `Imported ${result.statements_imported} VEX statements; ${result.unmatched_statements ?? 0} unmatched.`,
       );
       setVexDocumentText('');
-      invalidateVexSurfaces(queryClient, sbom.id);
+      await invalidateVexSurfaces(queryClient, sbom.id);
     } catch (err: any) {
       setVexMessage(err.message || 'VEX import failed.');
     } finally {
@@ -884,7 +891,7 @@ export function SbomDetail({ sbom }: SbomDetailProps) {
     setVexMessage('');
     try {
       const result = await discoverSbomVexDocuments(sbom.id, true);
-      invalidateVexSurfaces(queryClient, sbom.id);
+      await invalidateVexSurfaces(queryClient, sbom.id);
       const errorSuffix = result.errors?.length ? ` ${result.errors.length} provider error(s) recorded.` : '';
       setVexMessage(
         `Discovery imported ${result.statements_imported} statements from ${result.discovered_documents} document(s); ${result.unmatched_statements} unmatched.${errorSuffix}`,
@@ -921,6 +928,7 @@ export function SbomDetail({ sbom }: SbomDetailProps) {
   };
 
   const handleDownload = async (label: string, loader: () => Promise<{ blob: Blob; filename: string }>) => {
+    if (reportUnavailable) return;
     setDownloadMessage(`Preparing ${label}…`);
     try {
       const { blob, filename } = await loader();
@@ -933,6 +941,7 @@ export function SbomDetail({ sbom }: SbomDetailProps) {
 
   return (
     <div className="space-y-6">
+      {sbom.projectid && sbom.product_id && <SbomPostureNotice scope={{projectId: sbom.projectid, applicationId: sbom.product_id, sbomId: sbom.id}} />}
       {/* Back button */}
       <button
         onClick={() => router.back()}
@@ -988,10 +997,10 @@ export function SbomDetail({ sbom }: SbomDetailProps) {
         <div className="space-y-6">
           <Card>
             <CardHeader className="flex flex-row items-center justify-between">
-              <CardTitle>SBOM Details</CardTitle>
+              <div className="space-y-2"><CardTitle>SBOM Details</CardTitle><SbomLifecycleControls sbom={sbom} showHistory /></div>
               <div className="flex gap-2">
                 {canUseWorkspace ? (
-                  <Button
+                  <Button permission={canBackfillWorkspace ? "sbom:repair:update" : "sbom:repair:read"}
                     onClick={() => void handleOpenRepairWorkspace()}
                     loading={isOpeningWorkspace}
                     disabled={isOpeningWorkspace}
@@ -1001,7 +1010,7 @@ export function SbomDetail({ sbom }: SbomDetailProps) {
                     {workspaceButtonLabel}
                   </Button>
                 ) : null}
-                <Button
+                <Button permission={"sbom:update"}
 	                  onClick={() => {
 	                    setDetailName(sbom.sbom_name || '');
 	                    setDetailProductId(sbom.product_id || null);
@@ -1028,19 +1037,22 @@ export function SbomDetail({ sbom }: SbomDetailProps) {
                     ? 'Export Original SPDX'
                     : 'Export CycloneDX'}
                 </a>
-                <Button
+                <Button permission={"sbom:export"}
                   onClick={() =>
                     handleDownload('vulnerability Excel', () => exportSbomVulnerabilityExcel(sbom.id))
                   }
+                  disabled={reportUnavailable}
+                  title={reportUnavailable ? 'Report generation unavailable for this SBOM.' : undefined}
                   variant="outline"
                   size="sm"
                 >
                   <Download className="h-3.5 w-3.5" /> Export Vulnerability Excel
                 </Button>
-                <Button
+                <Button permission="analysis:run" disabledReason={eligibility.reason || "Analysis is already running."}
                   onClick={handleRunAnalysis}
                   loading={isAnalyzing}
-                  disabled={isAnalyzing}
+                  disabled={isAnalyzing || processingUnavailable}
+                  title={eligibility.reason ?? undefined}
                   size="sm"
                 >
                   <Play className="h-4 w-4" />
@@ -1049,6 +1061,8 @@ export function SbomDetail({ sbom }: SbomDetailProps) {
               </div>
             </CardHeader>
             <CardContent>
+              {processingUnavailable && <div id="sbom-processing-unavailable" className="mb-4"><Alert variant="warning">{eligibility.reason} Comparison and new report generation are also unavailable. Historical data remains readable.</Alert></div>}
+              {sbom.analysis_requires_reanalysis && <div className="mb-4"><Alert variant="warning">Previous analysis is stale or cannot be verified. Run a new analysis before trusting current findings.</Alert></div>}
               <dl className="grid grid-cols-2 md:grid-cols-4 gap-4">
                 {[
                   { label: 'Name', value: sbom.sbom_name },
@@ -1060,8 +1074,8 @@ export function SbomDetail({ sbom }: SbomDetailProps) {
                     label: 'Project',
                     value: (
                       <div className="flex items-center gap-2">
-                        <span>{sbom.project_name || (sbom.projectid ? `Project #${sbom.projectid}` : '—')}</span>
-                        <button
+                        <span>{sbom.project_name || (sbom.projectid ? recordIdLabel('Project', sbom.project_display_id) : '—')}</span>
+                        <PermissionButton size="sm" variant="ghost" permission={["sbom:update","product:assign_sbom"]}
                           type="button"
 	                          onClick={() => {
 	                            setSelectedProjectId(sbom.projectid || null);
@@ -1073,7 +1087,7 @@ export function SbomDetail({ sbom }: SbomDetailProps) {
                           className="text-xs text-hcl-blue hover:underline font-semibold"
                         >
                           {sbom.projectid ? 'Change' : 'Assign'}
-                        </button>
+                        </PermissionButton>
                       </div>
                     ),
                   },
@@ -1091,7 +1105,7 @@ export function SbomDetail({ sbom }: SbomDetailProps) {
             </CardContent>
           </Card>
 
-          <ScheduleCard scope="SBOM" targetId={sbom.id} />
+          <ScheduleCard scope="SBOM" targetId={sbom.id} processingReason={eligibility.reason} />
           <NotifyMeLink scope="SBOM" targetId={sbom.id} />
 
           <SbomConversionCard sbom={sbom} formatLabel={info?.format} />
@@ -1102,7 +1116,7 @@ export function SbomDetail({ sbom }: SbomDetailProps) {
             workspaceUnavailableReason={workspaceUnavailableReason}
             workspaceAction={
               canUseWorkspace ? (
-                <Button
+                <Button permission={canBackfillWorkspace ? "sbom:repair:update" : "sbom:repair:read"}
                   size="sm"
                   variant="outline"
                   onClick={() => void handleOpenRepairWorkspace()}
@@ -1223,33 +1237,39 @@ export function SbomDetail({ sbom }: SbomDetailProps) {
                 {downloadMessage ? <p className="mt-1 text-xs text-hcl-muted">{downloadMessage}</p> : null}
               </div>
               <div className="flex flex-wrap justify-end gap-2">
-                <Button
+                <Button permission={"vex:read"}
                   size="sm"
                   variant="outline"
                   onClick={() => handleDownload('VEX JSON', () => exportSbomVexReportJson(sbom.id))}
+                  disabled={reportUnavailable}
+                  title={reportUnavailable ? "Report generation unavailable for this SBOM." : undefined}
                 >
                   <Download className="h-3.5 w-3.5" /> JSON
                 </Button>
-                <Button
+                <Button permission={"vex:read"}
                   size="sm"
                   variant="outline"
                   onClick={() => handleDownload('VEX CSV', () => exportSbomVexReportCsv(sbom.id))}
+                  disabled={reportUnavailable}
+                  title={reportUnavailable ? "Report generation unavailable for this SBOM." : undefined}
                 >
                   <Download className="h-3.5 w-3.5" /> CSV
                 </Button>
-                <Button
+                <Button permission={"vex:read"}
                   size="sm"
                   variant="outline"
                   onClick={() => handleDownload('VEX report pack', () => exportSbomVexReportPack(sbom.id))}
+                  disabled={reportUnavailable}
+                  title={reportUnavailable ? "Report generation unavailable for this SBOM." : undefined}
                 >
                   <Download className="h-3.5 w-3.5" /> Pack
                 </Button>
                 {canManageEvidence ? (
                   <>
-                    <Button size="sm" variant="outline" onClick={handleDiscoverVexDocuments} loading={isDiscoveringVex}>
+                    <Button permission={"vex:write"} size="sm" variant="outline" onClick={handleDiscoverVexDocuments} loading={isDiscoveringVex}>
                       <RefreshCw className="h-3.5 w-3.5" /> Discover
                     </Button>
-                    <Button size="sm" onClick={() => openVexOverrideModal()}>
+                    <Button permission={"vex:write"} size="sm" onClick={() => openVexOverrideModal()}>
                       <Edit2 className="h-3.5 w-3.5" /> Manage VEX
                     </Button>
                   </>
@@ -1331,13 +1351,13 @@ export function SbomDetail({ sbom }: SbomDetailProps) {
                               <Eye className="h-3 w-3" /> Evidence
                             </button>
                             {canManageEvidence ? (
-                              <button
+                              <PermissionButton size="sm" variant="ghost" permission={"vex:write"}
                                 type="button"
                                 onClick={() => openVexOverrideModal(statement)}
                                 className="inline-flex items-center gap-1 text-xs font-medium text-hcl-blue transition-colors hover:text-hcl-navy"
                               >
                                 <Edit2 className="h-3 w-3" /> Manage VEX
-                              </button>
+                              </PermissionButton>
                             ) : null}
                           </Td>
                         </tr>
@@ -1416,21 +1436,25 @@ export function SbomDetail({ sbom }: SbomDetailProps) {
                   {showDuplicates ? 'Hide Duplicates' : 'Show Duplicates'}
                 </Button>
               ) : null}
-              <Button
+              <Button permission={"lifecycle:read"}
                 size="sm"
                 variant="outline"
                 onClick={() => handleDownload('lifecycle CSV', () => exportSbomLifecycleReportCsv(sbom.id))}
+                  disabled={reportUnavailable}
+                  title={reportUnavailable ? "Report generation unavailable for this SBOM." : undefined}
               >
                 <Download className="h-3.5 w-3.5" /> Lifecycle CSV
               </Button>
-              <Button
+              <Button permission={"lifecycle:read"}
                 size="sm"
                 variant="outline"
                 onClick={() => handleDownload('lifecycle report pack', () => exportSbomLifecycleReportPack(sbom.id))}
+                  disabled={reportUnavailable}
+                  title={reportUnavailable ? "Report generation unavailable for this SBOM." : undefined}
               >
                 <Download className="h-3.5 w-3.5" /> Lifecycle Pack
               </Button>
-              <Button size="sm" variant="outline" onClick={handleRefreshLifecycle} loading={isRefreshingLifecycle}>
+              <Button permission={"lifecycle:override"} size="sm" variant="outline" onClick={handleRefreshLifecycle} loading={isRefreshingLifecycle}>
                 <RefreshCw className="h-3.5 w-3.5" /> Refresh EOL / EOS Details
               </Button>
             </div>
@@ -1565,25 +1589,25 @@ export function SbomDetail({ sbom }: SbomDetailProps) {
                             >
                               <Eye className="h-3 w-3" /> Evidence
                             </button>
-                            <button
+                            <PermissionButton size="sm" variant="ghost" permission={"lifecycle:override"}
                               onClick={() => handleRefreshComponentLifecycle(c)}
                               disabled={refreshingComponentId === c.id}
                               className="inline-flex items-center gap-1 text-xs font-medium text-hcl-muted transition-colors hover:text-hcl-navy disabled:opacity-60"
                             >
                               <RefreshCw className={`h-3 w-3 ${refreshingComponentId === c.id ? 'animate-spin' : ''}`} /> Refresh
-                            </button>
-                            <button
+                            </PermissionButton>
+                            <PermissionButton size="sm" variant="ghost" permission={"vex:write"}
                               onClick={() => setManagedVexComponent(c)}
                               className="inline-flex items-center gap-1 text-xs font-medium text-hcl-blue"
                             >
                               Manage VEX
-                            </button>
-                            <button
+                            </PermissionButton>
+                            <PermissionButton size="sm" variant="ghost" permission={"lifecycle:override"}
                               onClick={() => openEditModal(c)}
                               className="inline-flex items-center gap-1 text-xs text-hcl-blue hover:text-hcl-navy transition-colors font-medium"
                             >
                               <Edit2 className="h-3 w-3" /> Edit
-                            </button>
+                            </PermissionButton>
                           </div>
                         </Td>
                     </tr>
@@ -1689,11 +1713,13 @@ export function SbomDetail({ sbom }: SbomDetailProps) {
           {/* Versions Table */}
           <Card>
             <CardHeader className="flex flex-row items-center justify-between">
-              <CardTitle>Linage &amp; Versions History</CardTitle>
+              <CardTitle>SBOM Version History</CardTitle>
+              {sbom.logical_sbom_id && <Link className="text-sm text-hcl-blue hover:underline" href={`/sboms/logical/${sbom.logical_sbom_id}`}>Open logical SBOM history</Link>}
               <div className="flex gap-2">
                 <Button
                   onClick={handleCompare}
-                  disabled={selectedVersions.length !== 2 || isComparing}
+                  disabled={selectedVersions.length !== 2 || isComparing || reportUnavailable || versions?.some(version => selectedVersions.includes(version.id) && (!sbomEligibility(version).eligible || version.analysis_requires_reanalysis))}
+                  title={processingUnavailable ? "Comparison unavailable for this SBOM." : undefined}
                   size="sm"
                   variant="outline"
                 >
@@ -1707,7 +1733,8 @@ export function SbomDetail({ sbom }: SbomDetailProps) {
                 <TableHead>
                   <tr>
                     <Th className="w-12" resizable={false}><span className="sr-only">Select</span></Th>
-                    <Th>Version</Th>
+                    <Th>SBOM Version</Th>
+                    <Th>Product Version</Th>
                     <Th>Change Summary</Th>
                     <Th>Created By</Th>
                     <Th>Date Created</Th>
@@ -1716,7 +1743,7 @@ export function SbomDetail({ sbom }: SbomDetailProps) {
                 </TableHead>
                 <TableBody>
                   {!versions?.length ? (
-                    <EmptyRow cols={6} message="No versions found" />
+                    <EmptyRow cols={7} message="No versions found" />
                   ) : (
                     versions.map((v) => {
                       const isCurrent = v.id === sbom.id;
@@ -1734,10 +1761,11 @@ export function SbomDetail({ sbom }: SbomDetailProps) {
                             {v.sbom_version}
                             {isCurrent && (
                               <span className="ml-2 inline-flex items-center px-1.5 py-0.5 rounded text-[10px] font-semibold bg-hcl-blue/10 text-hcl-blue border border-hcl-blue/20">
-                                Current (HEAD)
+                                Viewing this version
                               </span>
                             )}
                           </Td>
+                          <Td className="font-mono text-xs">{v.product_version || v.productver || '—'}</Td>
                           <Td className="max-w-[250px] truncate text-xs text-hcl-navy">{v.change_summary || 'Initial creation'}</Td>
                           <Td className="text-xs text-hcl-muted">{v.created_by || '—'}</Td>
                           <Td className="text-xs text-hcl-muted whitespace-nowrap">{formatDate(v.created_on)}</Td>
@@ -1751,12 +1779,12 @@ export function SbomDetail({ sbom }: SbomDetailProps) {
                               Export CycloneDX
                             </a>
                             {!isCurrent && (
-                              <button
+                              <PermissionButton size="sm" variant="ghost" permission={"sbom:update"}
                                 onClick={() => handleRestore(v.id)}
                                 className="inline-flex items-center gap-1 text-xs text-hcl-blue hover:underline font-semibold"
                               >
                                 Restore
-                              </button>
+                              </PermissionButton>
                             )}
                           </Td>
                         </tr>
@@ -1883,7 +1911,7 @@ export function SbomDetail({ sbom }: SbomDetailProps) {
                 ) : (
                   runPagination.pageItems.map((run) => (
                     <tr key={run.id} className="hover:bg-hcl-light/40">
-                      <Td className="font-mono text-xs text-hcl-muted">#{run.id}</Td>
+                      <Td className="font-mono text-xs text-hcl-muted">{recordIdLabel('Run', run.display_id)}</Td>
                       <Td><StatusBadge status={run.run_status} /></Td>
                       <Td className="text-foreground/90">{run.total_findings ?? '—'}</Td>
                       <Td className="text-hcl-muted">{formatDuration(run.duration_ms)}</Td>
@@ -1931,7 +1959,7 @@ export function SbomDetail({ sbom }: SbomDetailProps) {
             <div className="flex items-center justify-end gap-2 px-6 py-4">
               {canManageEvidence ? (
                 <>
-                  <Button
+                  <Button permission={"lifecycle:override"}
                     size="sm"
                     variant="outline"
                     onClick={() => evidenceModal && handleRefreshComponentLifecycle(evidenceModal.component)}
@@ -1939,7 +1967,7 @@ export function SbomDetail({ sbom }: SbomDetailProps) {
                   >
                     <RefreshCw className="h-3.5 w-3.5" /> Refresh
                   </Button>
-                  <Button
+                  <Button permission={"lifecycle:override"}
                     size="sm"
                     onClick={() => {
                       if (evidenceModal?.kind === 'lifecycle') {
@@ -1956,7 +1984,7 @@ export function SbomDetail({ sbom }: SbomDetailProps) {
           ) : evidenceModal?.kind === 'vex' ? (
             <div className="flex items-center justify-end gap-2 px-6 py-4">
               {canManageEvidence ? (
-                <Button
+                <Button permission={"vex:write"}
                   size="sm"
                   onClick={() => {
                     if (evidenceModal?.kind === 'vex') {
@@ -2052,7 +2080,7 @@ export function SbomDetail({ sbom }: SbomDetailProps) {
       </Dialog>
 
       {managedVexComponent && !isVexOverrideOpen && <ComponentVexManager
-        key={managedVexComponent.id} sbomId={sbom.id} component={managedVexComponent}
+        key={managedVexComponent.id} sbomId={sbom.id} sbomDisplayId={sbom.display_id} component={managedVexComponent}
         canEdit={canManageEvidence} onClose={() => setManagedVexComponent(null)}
         onDecision={(vulnerability, statement, manual) => openVexOverrideModal(statement, managedVexComponent, vulnerability, manual)}
       />}
@@ -2132,7 +2160,7 @@ export function SbomDetail({ sbom }: SbomDetailProps) {
           {vexOverrideComponentId && vexOverrideVulnerability ? (
           <VexDecisionEditor
             sbomId={sbom.id}
-            componentId={Number(vexOverrideComponentId)}
+            componentId={vexOverrideComponentId}
             componentLabel={
               selectedOverrideComponent
                 ? `${selectedOverrideComponent.name}${selectedOverrideComponent.version ? ` ${selectedOverrideComponent.version}` : ''}`
@@ -2185,6 +2213,7 @@ export function SbomDetail({ sbom }: SbomDetailProps) {
               </button>
             </CardHeader>
             <CardContent className="p-6 space-y-4">
+              <PermissionFields permission="lifecycle:override">
               {editError && (
                 <div className="p-3 bg-red-50 text-red-800 text-xs rounded border border-red-200">
                   {editError}
@@ -2365,11 +2394,12 @@ export function SbomDetail({ sbom }: SbomDetailProps) {
                 </div>
               </div>
 
+              </PermissionFields>
               <div className="flex justify-end gap-2 pt-4 border-t">
                 <Button variant="outline" onClick={() => setEditingComp(null)} size="sm">
                   Cancel
                 </Button>
-                <Button onClick={saveComponentEdits} loading={isSavingEdit} size="sm">
+                <Button permission={"lifecycle:override"} onClick={saveComponentEdits} loading={isSavingEdit} size="sm">
                   Save Override
                 </Button>
               </div>
@@ -2516,13 +2546,14 @@ export function SbomDetail({ sbom }: SbomDetailProps) {
             <Button size="sm" variant="ghost" onClick={() => setIsAssignModalOpen(false)}>
               Cancel
             </Button>
-	            <Button size="sm" onClick={handleAssignProjectSubmit} loading={isSavingAssign} disabled={!selectedProjectId || !selectedProductId}>
+	            <Button permission={["sbom:update","product:assign_sbom"]} size="sm" onClick={handleAssignProjectSubmit} loading={isSavingAssign} disabled={!selectedProjectId || !selectedProductId}>
 	              Save Assignment
             </Button>
           </div>
         }
       >
         <DialogBody className="space-y-4">
+          <PermissionFields permission={["sbom:update", "product:assign_sbom"]}>
           {assignError && (
             <div className="rounded-lg border border-red-200 bg-red-50 p-3 text-xs font-medium text-red-800">
               {assignError}
@@ -2535,7 +2566,7 @@ export function SbomDetail({ sbom }: SbomDetailProps) {
 	            required
 	            value={selectedProjectId || ''}
 	            onChange={(e) => {
-	              setSelectedProjectId(e.target.value ? Number(e.target.value) : null);
+	              setSelectedProjectId(e.target.value || null);
 	              setSelectedProductId(null);
 	            }}
 	          >
@@ -2552,7 +2583,7 @@ export function SbomDetail({ sbom }: SbomDetailProps) {
 	            required
 	            value={selectedProductId || ''}
 	            disabled={!selectedProjectId || selectedProductsQuery.isLoading}
-	            onChange={(e) => setSelectedProductId(e.target.value ? Number(e.target.value) : null)}
+	            onChange={(e) => setSelectedProductId(e.target.value || null)}
 	          >
 	            {selectedProductsQuery.data?.items.map((p) => (
 	              <option key={p.id} value={p.id}>
@@ -2567,6 +2598,7 @@ export function SbomDetail({ sbom }: SbomDetailProps) {
             value={assignChangeReason}
             onChange={(e) => setAssignChangeReason(e.target.value)}
           />
+                  </PermissionFields>
         </DialogBody>
       </Dialog>
 
@@ -2581,13 +2613,14 @@ export function SbomDetail({ sbom }: SbomDetailProps) {
             <Button size="sm" variant="ghost" onClick={() => setIsEditDetailsModalOpen(false)}>
               Cancel
             </Button>
-            <Button size="sm" onClick={handleEditDetailsSubmit} loading={isSavingDetails}>
+            <Button permission={"sbom:update"} size="sm" onClick={handleEditDetailsSubmit} loading={isSavingDetails}>
               Save Details
             </Button>
           </div>
         }
       >
         <DialogBody className="space-y-4">
+          <PermissionFields permission={"sbom:update"}>
           {detailsError && (
             <div className="rounded-lg border border-red-200 bg-red-50 p-3 text-xs font-medium text-red-800">
               {detailsError}
@@ -2606,7 +2639,7 @@ export function SbomDetail({ sbom }: SbomDetailProps) {
               placeholder="Select project..."
               value={detailProjectId || ''}
 	              onChange={(e) => {
-	                setDetailProjectId(e.target.value ? Number(e.target.value) : null);
+	                setDetailProjectId(e.target.value || null);
 	                setDetailProductId(null);
 	              }}
 	            >
@@ -2624,7 +2657,7 @@ export function SbomDetail({ sbom }: SbomDetailProps) {
 	              placeholder="Select product..."
 	              value={detailProductId || ''}
 	              disabled={!detailProjectId || detailProductsQuery.isLoading}
-	              onChange={(e) => setDetailProductId(e.target.value ? Number(e.target.value) : null)}
+	              onChange={(e) => setDetailProductId(e.target.value || null)}
 	            >
 	              {detailProductsQuery.data?.items.map((p) => (
 	                <option key={p.id} value={p.id}>
@@ -2657,6 +2690,7 @@ export function SbomDetail({ sbom }: SbomDetailProps) {
             value={detailChangeReason}
             onChange={(e) => setDetailChangeReason(e.target.value)}
           />
+                  </PermissionFields>
         </DialogBody>
       </Dialog>
     </div>

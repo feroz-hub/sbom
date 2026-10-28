@@ -1,0 +1,128 @@
+{
+  "timestamp": "2026-10-21T07:28:05.296316+00:00",
+  "revision": [
+    "100_greenfield_uuid_final"
+  ],
+  "iam_public_id_exists": false,
+  "iam_users_count": 19,
+  "user_identities_count": 19,
+  "native_user_credentials_count": 18,
+  "tenant_users_count": 21,
+  "tenant_user_role_assignments_count": 21,
+  "platform_user_roles_count": 4,
+  "iam_foreign_keys": [
+    {
+      "relation": "account_action_tokens",
+      "conname": "fk_account_action_tokens_user_id_iam_users",
+      "definition": "FOREIGN KEY (user_id) REFERENCES iam_users(id) ON DELETE CASCADE"
+    },
+    {
+      "relation": "audit_log",
+      "conname": "fk_audit_log_user_ref_id_iam_users",
+      "definition": "FOREIGN KEY (user_ref_id) REFERENCES iam_users(id) ON DELETE SET NULL"
+    },
+    {
+      "relation": "authorization_audit_log",
+      "conname": "fk_authorization_audit_log_actor_user_id_iam_users",
+      "definition": "FOREIGN KEY (actor_user_id) REFERENCES iam_users(id) ON DELETE SET NULL"
+    },
+    {
+      "relation": "authorization_audit_log",
+      "conname": "fk_authorization_audit_log_target_user_id_iam_users",
+      "definition": "FOREIGN KEY (target_user_id) REFERENCES iam_users(id) ON DELETE SET NULL"
+    },
+    {
+      "relation": "authorization_role_permissions",
+      "conname": "fk_authorization_role_permissions_created_by_user_id_iam_users",
+      "definition": "FOREIGN KEY (created_by_user_id) REFERENCES iam_users(id) ON DELETE SET NULL"
+    },
+    {
+      "relation": "authorization_roles",
+      "conname": "fk_authorization_roles_created_by_user_id_iam_users",
+      "definition": "FOREIGN KEY (created_by_user_id) REFERENCES iam_users(id) ON DELETE SET NULL"
+    },
+    {
+      "relation": "authorization_roles",
+      "conname": "fk_authorization_roles_updated_by_user_id_iam_users",
+      "definition": "FOREIGN KEY (updated_by_user_id) REFERENCES iam_users(id) ON DELETE SET NULL"
+    },
+    {
+      "relation": "email_verification_tokens",
+      "conname": "fk_email_verification_tokens_user_id_iam_users",
+      "definition": "FOREIGN KEY (user_id) REFERENCES iam_users(id) ON DELETE CASCADE"
+    },
+    {
+      "relation": "lifecycle_provider_configs",
+      "conname": "fk_lifecycle_provider_configs_updated_by_user_id_iam_users",
+      "definition": "FOREIGN KEY (updated_by_user_id) REFERENCES iam_users(id) ON DELETE SET NULL"
+    },
+    {
+      "relation": "lifecycle_provider_secrets",
+      "conname": "fk_lifecycle_provider_secrets_updated_by_user_id_iam_users",
+      "definition": "FOREIGN KEY (updated_by_user_id) REFERENCES iam_users(id) ON DELETE SET NULL"
+    },
+    {
+      "relation": "lifecycle_vendor_records",
+      "conname": "fk_lifecycle_vendor_records_updated_by_user_id_iam_users",
+      "definition": "FOREIGN KEY (updated_by_user_id) REFERENCES iam_users(id) ON DELETE SET NULL"
+    },
+    {
+      "relation": "native_platform_bootstrap",
+      "conname": "fk_native_platform_bootstrap_user_id_iam_users",
+      "definition": "FOREIGN KEY (user_id) REFERENCES iam_users(id) ON DELETE RESTRICT"
+    },
+    {
+      "relation": "native_user_credentials",
+      "conname": "fk_native_user_credentials_user_id_iam_users",
+      "definition": "FOREIGN KEY (user_id) REFERENCES iam_users(id) ON DELETE CASCADE"
+    },
+    {
+      "relation": "platform_user_roles",
+      "conname": "fk_platform_user_roles_created_by_user_id_iam_users",
+      "definition": "FOREIGN KEY (created_by_user_id) REFERENCES iam_users(id) ON DELETE SET NULL"
+    },
+    {
+      "relation": "platform_user_roles",
+      "conname": "fk_platform_user_roles_user_id_iam_users",
+      "definition": "FOREIGN KEY (user_id) REFERENCES iam_users(id) ON DELETE CASCADE"
+    },
+    {
+      "relation": "report_subscription",
+      "conname": "fk_report_subscription_iam_user_id_iam_users",
+      "definition": "FOREIGN KEY (iam_user_id) REFERENCES iam_users(id) ON DELETE CASCADE"
+    },
+    {
+      "relation": "security_mail_outbox",
+      "conname": "fk_security_mail_outbox_user_id_iam_users",
+      "definition": "FOREIGN KEY (user_id) REFERENCES iam_users(id) ON DELETE CASCADE"
+    },
+    {
+      "relation": "tenant_user_role_assignment_history",
+      "conname": "fk_tenant_user_role_assignment_history_actor_user_id_iam_users",
+      "definition": "FOREIGN KEY (actor_user_id) REFERENCES iam_users(id) ON DELETE SET NULL"
+    },
+    {
+      "relation": "tenant_user_role_assignments",
+      "conname": "fk_tenant_user_role_assignments_assigned_by_user_id_iam_users",
+      "definition": "FOREIGN KEY (assigned_by_user_id) REFERENCES iam_users(id) ON DELETE SET NULL"
+    },
+    {
+      "relation": "tenant_user_role_assignments",
+      "conname": "fk_tenant_user_role_assignments_revoked_by_user_id_iam_users",
+      "definition": "FOREIGN KEY (revoked_by_user_id) REFERENCES iam_users(id) ON DELETE SET NULL"
+    },
+    {
+      "relation": "tenant_users",
+      "conname": "fk_tenant_users_user_id_iam_users",
+      "definition": "FOREIGN KEY (user_id) REFERENCES iam_users(id) ON DELETE CASCADE"
+    },
+    {
+      "relation": "user_identities",
+      "conname": "fk_user_identities_user_id_iam_users",
+      "definition": "FOREIGN KEY (user_id) REFERENCES iam_users(id) ON DELETE CASCADE"
+    }
+  ],
+  "observed_baseline_fields_preserved": true,
+  "read_only": true,
+  "main_api_original_pid_alive": true
+}

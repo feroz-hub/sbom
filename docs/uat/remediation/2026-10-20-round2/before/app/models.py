@@ -1,0 +1,2805 @@
+# models.py
+
+from sqlalchemy import (
+    JSON,
+    Boolean,
+    CheckConstraint,
+    Column,
+    DateTime,
+    Float,
+    ForeignKey,
+    ForeignKeyConstraint,
+    Index,
+    Integer,
+    LargeBinary,
+    String,
+    Text,
+    UniqueConstraint,
+    event,
+)
+from sqlalchemy import (
+    text as sql_text,
+)
+from sqlalchemy.orm import Session as _AdvisorSession
+from sqlalchemy.orm import relationship, synonym
+from sqlalchemy.sql import expression
+
+from .core.native_identity import canonicalize_email
+from .db import Base
+from .models_mixins import SoftDeleteMixin, TenantOwnedMixin
+from .public_identity import PublicIdentityMixin
+
+
+class Tenant(PublicIdentityMixin, Base):
+    __tablename__ = "tenants"
+
+    id = Column(Integer, primary_key=True)
+    name = Column(String(255), nullable=False)
+    slug = Column(String(128), nullable=False, index=True)
+    # Optional legacy/external metadata. Tenant authority is local membership,
+    # never a token claim matched to this value.
+    external_iam_tenant_id = Column(String(255), nullable=True, index=True)
+    status = Column(String(32), nullable=False, default="ACTIVE")
+    created_at = Column(DateTime(timezone=True), nullable=False)
+    updated_at = Column(DateTime(timezone=True), nullable=False)
+
+    __table_args__ = (
+        UniqueConstraint("slug", name="uq_tenants_slug"),
+        UniqueConstraint("external_iam_tenant_id", name="uq_tenants_external_iam_tenant_id"),
+        CheckConstraint("status IN ('ACTIVE','PENDING','DISABLED')", name="tenant_status"),
+    )
+
+
+class IAMUser(Base):
+    __tablename__ = "iam_users"
+
+    id = Column(Integer, primary_key=True)
+    # Deprecated compatibility identifier.  New HCL.CS identities are keyed
+    # by (external_issuer, external_subject), but this column remains available
+    # until every caller and deployment has completed the transition.
+    external_iam_user_id = Column(String(255), nullable=True, index=True)
+    external_issuer = Column(String(512), nullable=True)
+    external_subject = Column(String(255), nullable=True)
+    employee_id = Column(String(128), nullable=True, index=True)
+    user_principal_name = Column(String(320), nullable=True, index=True)
+    department = Column(String(255), nullable=True)
+    email = Column(String(320), nullable=True, index=True)
+    display_name = Column(String(255), nullable=True)
+    first_name = Column(String(255), nullable=True)
+    last_name = Column(String(255), nullable=True)
+    phone = Column(String(64), nullable=True)
+    # Derived profile search value; native login authority lives in
+    # UserIdentity.provider_identifier, not this non-unique HCL profile field.
+    normalized_email = Column(String(320), nullable=True, index=True)
+    status = Column(String(32), nullable=False, default="ACTIVE")
+    email_verified = Column(Boolean, nullable=False, default=False, server_default=expression.false())
+    email_verified_at = Column(DateTime(timezone=True), nullable=True)
+    verification_required = Column(Boolean, nullable=False, default=True, server_default=expression.true())
+    last_claim_sync_at = Column(DateTime(timezone=True), nullable=True)
+    last_login_at = Column(DateTime(timezone=True), nullable=True)
+    created_at = Column(DateTime(timezone=True), nullable=False)
+    updated_at = Column(DateTime(timezone=True), nullable=False)
+
+    __table_args__ = (
+        UniqueConstraint("external_iam_user_id", name="uq_iam_users_external_iam_user_id"),
+        UniqueConstraint("external_issuer", "external_subject", name="uq_iam_users_external_identity"),
+        Index("ix_iam_users_verification_status", "verification_required", "status"),
+        CheckConstraint(
+            "status IN ('ACTIVE','PENDING','DISABLED','PENDING_EMAIL_VERIFICATION','LOCKED','FORCE_PASSWORD_CHANGE','SUSPENDED')",
+            name="iam_user_status",
+        ),
+        CheckConstraint(
+            "external_issuer IS NULL OR length(trim(external_issuer)) > 0",
+            name="external_issuer_not_blank",
+        ),
+        CheckConstraint(
+            "external_subject IS NULL OR length(trim(external_subject)) > 0",
+            name="external_subject_not_blank",
+        ),
+        CheckConstraint(
+            "email_verified = false OR email_verified_at IS NOT NULL",
+            name="email_verification_timestamp",
+        ),
+    )
+
+    @property
+    def effective_external_subject(self) -> str | None:
+        """Return the composite subject, falling back during legacy transition."""
+        return self.external_subject or self.external_iam_user_id
+
+
+@event.listens_for(IAMUser, "before_insert")
+@event.listens_for(IAMUser, "before_update")
+def _normalize_user_email(_mapper, _connection, user: IAMUser) -> None:
+    user.normalized_email = canonicalize_email(user.email)
+
+
+class UserIdentity(Base):
+    """Provider identity owned by one local person; email never links people."""
+
+    __tablename__ = "user_identities"
+    id = Column(Integer, primary_key=True)
+    user_id = Column(Integer, ForeignKey("iam_users.id", ondelete="CASCADE"), nullable=False, index=True)
+    provider_type = Column(String(16), nullable=False)
+    issuer = Column(String(512), nullable=True)
+    subject = Column(String(255), nullable=True)
+    provider_identifier = Column(String(320), nullable=True)
+    provider_email = Column(String(320), nullable=True)
+    created_at = Column(DateTime(timezone=True), nullable=False)
+    updated_at = Column(DateTime(timezone=True), nullable=False)
+    last_authenticated_at = Column(DateTime(timezone=True), nullable=True)
+    user = relationship("IAMUser", backref="identities")
+
+    __table_args__ = (
+        UniqueConstraint("user_id", "provider_type", name="uq_user_identities_user_provider"),
+        UniqueConstraint("provider_type", "issuer", "subject", name="uq_user_identities_external"),
+        Index("uq_user_identities_native_email", "provider_identifier", unique=True,
+              postgresql_where=sql_text("provider_type = 'NATIVE'"),
+              sqlite_where=sql_text("provider_type = 'NATIVE'")),
+        CheckConstraint("provider_type IN ('HCL_CS','NATIVE','MICROSOFT_ENTRA')", name="identity_provider"),
+        CheckConstraint(
+            "(provider_type IN ('HCL_CS','MICROSOFT_ENTRA') AND issuer IS NOT NULL AND length(trim(issuer)) > 0 "
+            "AND subject IS NOT NULL AND length(trim(subject)) > 0) OR "
+            "(provider_type = 'NATIVE' AND issuer IS NULL AND subject IS NULL "
+            "AND provider_identifier IS NOT NULL AND length(trim(provider_identifier)) > 0 "
+            "AND provider_identifier = lower(trim(provider_identifier)))",
+            name="identity_provider_fields",
+        ),
+    )
+
+
+@event.listens_for(UserIdentity, "before_insert")
+@event.listens_for(UserIdentity, "before_update")
+def _normalize_native_identifier(_mapper, _connection, identity: UserIdentity) -> None:
+    if identity.provider_type == "NATIVE":
+        from .services.identity_service import normalize_email
+
+        identity.provider_identifier = normalize_email(identity.provider_identifier)
+
+
+class NativeUserCredential(Base):
+    __tablename__ = "native_user_credentials"
+    id = Column(Integer, primary_key=True)
+    user_id = Column(Integer, ForeignKey("iam_users.id", ondelete="CASCADE"), nullable=False, unique=True)
+    password_hash = Column(String(512), nullable=False)
+    password_hash_scheme = Column(String(32), nullable=False, default="argon2id")
+    password_changed_at = Column(DateTime(timezone=True), nullable=False)
+    failed_login_count = Column(Integer, nullable=False, default=0, server_default="0")
+    locked_at = Column(DateTime(timezone=True), nullable=True)
+    locked_until = Column(DateTime(timezone=True), nullable=True)
+    security_version = Column(Integer, nullable=False, default=1, server_default="1")
+    created_at = Column(DateTime(timezone=True), nullable=False)
+    updated_at = Column(DateTime(timezone=True), nullable=False)
+    user = relationship("IAMUser")
+    __table_args__ = (
+        CheckConstraint("failed_login_count >= 0 AND security_version >= 1", name="native_security_counters"),
+        CheckConstraint("password_hash_scheme = 'argon2id' AND password_hash LIKE '$argon2id$%'", name="native_password_scheme"),
+    )
+
+
+class AccountActionToken(Base):
+    """Separate from HCL email verification; only hashes are persisted."""
+
+    __tablename__ = "account_action_tokens"
+    id = Column(Integer, primary_key=True)
+    user_id = Column(Integer, ForeignKey("iam_users.id", ondelete="CASCADE"), nullable=False, index=True)
+    purpose = Column(String(32), nullable=False)
+    token_hash = Column(String(64), nullable=False, unique=True)
+    email_snapshot = Column(String(320), nullable=False)
+    expires_at = Column(DateTime(timezone=True), nullable=False, index=True)
+    created_at = Column(DateTime(timezone=True), nullable=False)
+    consumed_at = Column(DateTime(timezone=True), nullable=True)
+    invalidated_at = Column(DateTime(timezone=True), nullable=True)
+    user = relationship("IAMUser")
+    __table_args__ = (
+        CheckConstraint("purpose IN ('ACCOUNT_ACTIVATION','PASSWORD_RESET','EMAIL_CHANGE')", name="account_action_purpose"),
+        CheckConstraint("expires_at > created_at", name="account_action_expiry"),
+        CheckConstraint("consumed_at IS NULL OR consumed_at >= created_at", name="account_action_consumed_time"),
+        CheckConstraint("invalidated_at IS NULL OR invalidated_at >= created_at", name="account_action_invalidated_time"),
+        Index("uq_account_action_tokens_active", "user_id", "purpose", unique=True,
+              postgresql_where=sql_text("consumed_at IS NULL AND invalidated_at IS NULL"),
+              sqlite_where=sql_text("consumed_at IS NULL AND invalidated_at IS NULL")),
+    )
+
+
+class NativePlatformBootstrap(Base):
+    """Permanent singleton reservation; deleting an account cannot reopen bootstrap."""
+    __tablename__ = "native_platform_bootstrap"
+    id = Column(Integer, primary_key=True)
+    user_id = Column(Integer, ForeignKey("iam_users.id", ondelete="RESTRICT"), nullable=False, unique=True)
+    state = Column(String(16), nullable=False)
+    created_at = Column(DateTime(timezone=True), nullable=False)
+    completed_at = Column(DateTime(timezone=True))
+    operator_reference = Column(String(128), nullable=False)
+    __table_args__ = (
+        CheckConstraint("id = 1", name="native_bootstrap_singleton"),
+        CheckConstraint("state IN ('PENDING','COMPLETED')", name="native_bootstrap_state"),
+        CheckConstraint("(state = 'PENDING' AND completed_at IS NULL) OR (state = 'COMPLETED' AND completed_at IS NOT NULL)", name="native_bootstrap_completion"),
+    )
+
+
+class SecurityMailOutbox(Base):
+    """Encrypted, short-lived action delivery; never a plaintext token queue."""
+    __tablename__ = "security_mail_outbox"
+    id = Column(Integer, primary_key=True)
+    token_id = Column(Integer, ForeignKey("account_action_tokens.id", ondelete="CASCADE"), nullable=False, unique=True)
+    user_id = Column(Integer, ForeignKey("iam_users.id", ondelete="CASCADE"), nullable=False)
+    purpose = Column(String(32), nullable=False)
+    recipient = Column(String(320), nullable=False)
+    payload = Column(LargeBinary, nullable=True)
+    status = Column(String(16), nullable=False, default="PENDING")
+    attempts = Column(Integer, nullable=False, default=0)
+    next_attempt_at = Column(DateTime(timezone=True), nullable=False)
+    expires_at = Column(DateTime(timezone=True), nullable=False)
+    created_at = Column(DateTime(timezone=True), nullable=False)
+    sent_at = Column(DateTime(timezone=True))
+    failed_at = Column(DateTime(timezone=True))
+    __table_args__ = (
+        CheckConstraint("status IN ('PENDING','DELIVERED','FAILED','EXPIRED','CANCELLED')", name="security_mail_status"),
+        CheckConstraint("attempts >= 0", name="security_mail_attempts"),
+        Index("ix_security_mail_due", "status", "next_attempt_at"),
+    )
+
+
+class EmailVerificationToken(Base):
+    """Single-use, hashed credential for verifying one email snapshot."""
+
+    __tablename__ = "email_verification_tokens"
+
+    id = Column(Integer, primary_key=True)
+    user_id = Column(
+        Integer,
+        ForeignKey("iam_users.id", ondelete="CASCADE"),
+        nullable=False,
+        index=True,
+    )
+    token_hash = Column(String(64), nullable=False)
+    email_snapshot = Column(String(320), nullable=False)
+    expires_at = Column(DateTime(timezone=True), nullable=False, index=True)
+    consumed_at = Column(DateTime(timezone=True), nullable=True)
+    invalidated_at = Column(DateTime(timezone=True), nullable=True)
+    invalidation_reason = Column(String(64), nullable=True)
+    created_at = Column(DateTime(timezone=True), nullable=False)
+    created_by_ip_hash = Column(String(64), nullable=True)
+    consumed_by_ip_hash = Column(String(64), nullable=True)
+    correlation_id = Column(String(128), nullable=True)
+    delivery_status = Column(String(16), nullable=False, default="PENDING")
+    delivery_attempted_at = Column(DateTime(timezone=True), nullable=True)
+    delivery_error_code = Column(String(64), nullable=True)
+
+    user = relationship("IAMUser")
+
+    __table_args__ = (
+        UniqueConstraint("token_hash", name="uq_email_verification_tokens_token_hash"),
+        Index("ix_email_verification_tokens_user_created", "user_id", "created_at"),
+        Index("ix_email_verification_tokens_user_consumed", "user_id", "consumed_at"),
+        Index(
+            "uq_email_verification_tokens_active_user",
+            "user_id",
+            unique=True,
+            postgresql_where=sql_text("consumed_at IS NULL AND invalidated_at IS NULL"),
+            sqlite_where=sql_text("consumed_at IS NULL AND invalidated_at IS NULL"),
+        ),
+        CheckConstraint("expires_at > created_at", name="email_verification_expiry"),
+        CheckConstraint(
+            "consumed_at IS NULL OR consumed_at >= created_at",
+            name="email_verification_consumed_time",
+        ),
+        CheckConstraint(
+            "invalidated_at IS NULL OR invalidated_at >= created_at",
+            name="email_verification_invalidated_time",
+        ),
+        CheckConstraint(
+            "delivery_status IN ('PENDING','SENT','FAILED','SKIPPED')",
+            name="email_verification_delivery_status",
+        ),
+    )
+
+
+class TenantUser(Base):
+    __tablename__ = "tenant_users"
+
+    id = Column(Integer, primary_key=True)
+    tenant_id = Column(Integer, ForeignKey("tenants.id", ondelete="CASCADE"), nullable=False, index=True)
+    user_id = Column(Integer, ForeignKey("iam_users.id", ondelete="CASCADE"), nullable=False, index=True)
+    role = Column(String(64), nullable=False)
+    role_assignment_version = Column(
+        Integer,
+        nullable=False,
+        default=1,
+        server_default="1",
+    )
+    status = Column(String(32), nullable=False, default="ACTIVE")
+    created_at = Column(DateTime(timezone=True), nullable=False)
+    updated_at = Column(DateTime(timezone=True), nullable=False)
+
+    tenant = relationship("Tenant")
+    user = relationship("IAMUser")
+
+    __table_args__ = (
+        UniqueConstraint("tenant_id", "user_id", name="uq_tenant_users_tenant_user"),
+        UniqueConstraint("id", "tenant_id", name="uq_tenant_users_id_tenant"),
+        Index("ix_tenant_users_tenant_status", "tenant_id", "status"),
+        CheckConstraint(
+            "length(trim(role)) > 0 AND role = upper(role)",
+            name="tenant_user_role_normalized",
+        ),
+        CheckConstraint(
+            "role_assignment_version >= 1",
+            name="tenant_user_role_assignment_version",
+        ),
+        CheckConstraint("status IN ('ACTIVE','PENDING','DISABLED')", name="tenant_user_status"),
+    )
+
+
+class PlatformUserRole(Base):
+    """Explicit database authority for platform-wide SBOM administration."""
+
+    __tablename__ = "platform_user_roles"
+
+    id = Column(Integer, primary_key=True)
+    user_id = Column(Integer, ForeignKey("iam_users.id", ondelete="CASCADE"), nullable=False, unique=True, index=True)
+    role = Column(String(64), nullable=False, default="PLATFORM_ADMIN")
+    status = Column(String(32), nullable=False, default="ACTIVE", index=True)
+    created_by_user_id = Column(Integer, ForeignKey("iam_users.id", ondelete="SET NULL"), nullable=True)
+    created_at = Column(DateTime(timezone=True), nullable=False)
+    updated_at = Column(DateTime(timezone=True), nullable=False)
+
+    user = relationship("IAMUser", foreign_keys=[user_id])
+    created_by = relationship("IAMUser", foreign_keys=[created_by_user_id])
+
+    __table_args__ = (
+        CheckConstraint("role = 'PLATFORM_ADMIN'", name="platform_user_role"),
+        CheckConstraint("status IN ('ACTIVE','DISABLED')", name="platform_user_role_status"),
+    )
+
+
+class AuthorizationRole(Base):
+    """Global, database-backed role catalogue entry."""
+
+    __tablename__ = "authorization_roles"
+
+    id = Column(Integer, primary_key=True)
+    code = Column(String(64), nullable=False)
+    name = Column(String(128), nullable=False)
+    description = Column(Text, nullable=True)
+    scope = Column(String(16), nullable=False, index=True)
+    status = Column(String(16), nullable=False, default="ACTIVE", server_default="ACTIVE", index=True)
+    is_system = Column(Boolean, nullable=False, default=True, server_default=expression.true())
+    is_assignable = Column(Boolean, nullable=False, default=True, server_default=expression.true())
+    version = Column(Integer, nullable=False, default=1, server_default="1")
+    created_by_user_id = Column(Integer, ForeignKey("iam_users.id", ondelete="SET NULL"), nullable=True)
+    updated_by_user_id = Column(Integer, ForeignKey("iam_users.id", ondelete="SET NULL"), nullable=True)
+    created_at = Column(DateTime(timezone=True), nullable=False)
+    updated_at = Column(DateTime(timezone=True), nullable=False)
+
+    permissions = relationship(
+        "AuthorizationRolePermission",
+        back_populates="role",
+        cascade="all, delete-orphan",
+    )
+
+    __table_args__ = (
+        UniqueConstraint("scope", "code", name="uq_authorization_roles_scope_code"),
+        CheckConstraint("scope IN ('PLATFORM','TENANT')", name="authorization_role_scope"),
+        CheckConstraint(
+            "status IN ('ACTIVE','DISABLED','DRAFT')",
+            name="authorization_role_status",
+        ),
+        CheckConstraint("version >= 1", name="authorization_role_version"),
+        CheckConstraint("length(trim(code)) > 0", name="authorization_role_code_not_blank"),
+        CheckConstraint("length(trim(name)) > 0", name="authorization_role_name_not_blank"),
+        CheckConstraint("code = upper(code)", name="authorization_role_code_normalized"),
+    )
+
+
+class AuthorizationPermission(Base):
+    """Global permission catalogue entry."""
+
+    __tablename__ = "authorization_permissions"
+
+    id = Column(Integer, primary_key=True)
+    code = Column(String(128), nullable=False, unique=True, index=True)
+    name = Column(String(128), nullable=False)
+    description = Column(Text, nullable=True)
+    scope = Column(String(16), nullable=False, index=True)
+    resource = Column(String(128), nullable=False, index=True)
+    action = Column(String(64), nullable=False, index=True)
+    status = Column(String(16), nullable=False, default="ACTIVE", server_default="ACTIVE", index=True)
+    is_system = Column(Boolean, nullable=False, default=True, server_default=expression.true())
+    created_at = Column(DateTime(timezone=True), nullable=False)
+    updated_at = Column(DateTime(timezone=True), nullable=False)
+
+    roles = relationship(
+        "AuthorizationRolePermission",
+        back_populates="permission",
+        cascade="all, delete-orphan",
+    )
+
+    __table_args__ = (
+        CheckConstraint("scope IN ('PLATFORM','TENANT')", name="authorization_permission_scope"),
+        CheckConstraint("status IN ('ACTIVE','DISABLED')", name="authorization_permission_status"),
+        CheckConstraint("length(trim(code)) > 0", name="authorization_permission_code_not_blank"),
+        CheckConstraint(
+            "length(trim(name)) > 0",
+            name="authorization_permission_name_not_blank",
+        ),
+        CheckConstraint(
+            "code = lower(code) AND code NOT LIKE '% %'",
+            name="authorization_permission_code_normalized",
+        ),
+    )
+
+
+class AuthorizationRolePermission(Base):
+    """Many-to-many role-to-permission catalogue mapping."""
+
+    __tablename__ = "authorization_role_permissions"
+
+    id = Column(Integer, primary_key=True)
+    role_id = Column(
+        Integer,
+        ForeignKey("authorization_roles.id", ondelete="RESTRICT"),
+        nullable=False,
+        index=True,
+    )
+    permission_id = Column(
+        Integer,
+        ForeignKey("authorization_permissions.id", ondelete="RESTRICT"),
+        nullable=False,
+        index=True,
+    )
+    is_protected = Column(Boolean, nullable=False, default=False, server_default=expression.false())
+    created_by_user_id = Column(Integer, ForeignKey("iam_users.id", ondelete="SET NULL"), nullable=True)
+    created_at = Column(DateTime(timezone=True), nullable=False)
+    updated_at = Column(DateTime(timezone=True), nullable=False)
+
+    role = relationship("AuthorizationRole", back_populates="permissions")
+    permission = relationship("AuthorizationPermission", back_populates="roles")
+
+    __table_args__ = (
+        UniqueConstraint(
+            "role_id",
+            "permission_id",
+            name="uq_authorization_role_permissions_role_permission",
+        ),
+    )
+
+
+class TenantUserRoleAssignment(Base, TenantOwnedMixin):
+    """Current tenant-scoped role assignment state for one membership."""
+
+    __tablename__ = "tenant_user_role_assignments"
+
+    id = Column(Integer, primary_key=True)
+    tenant_id = Column(
+        Integer,
+        ForeignKey("tenants.id", ondelete="CASCADE"),
+        nullable=False,
+        index=True,
+    )
+    tenant_user_id = Column(Integer, nullable=False, index=True)
+    role_id = Column(
+        Integer,
+        ForeignKey("authorization_roles.id", ondelete="RESTRICT"),
+        nullable=False,
+        index=True,
+    )
+    status = Column(String(16), nullable=False, default="ACTIVE", server_default="ACTIVE")
+    is_primary = Column(Boolean, nullable=False, default=False, server_default=expression.false())
+    assignment_source = Column(String(32), nullable=False)
+    assigned_by_user_id = Column(Integer, ForeignKey("iam_users.id", ondelete="SET NULL"), nullable=True)
+    assigned_at = Column(DateTime(timezone=True), nullable=False)
+    revoked_by_user_id = Column(Integer, ForeignKey("iam_users.id", ondelete="SET NULL"), nullable=True)
+    revoked_at = Column(DateTime(timezone=True), nullable=True)
+    revocation_reason = Column(String(512), nullable=True)
+    version = Column(Integer, nullable=False, default=1, server_default="1")
+    created_at = Column(DateTime(timezone=True), nullable=False)
+    updated_at = Column(DateTime(timezone=True), nullable=False)
+
+    membership = relationship("TenantUser")
+    role = relationship("AuthorizationRole")
+
+    __table_args__ = (
+        ForeignKeyConstraint(
+            ["tenant_user_id", "tenant_id"],
+            ["tenant_users.id", "tenant_users.tenant_id"],
+            name="fk_tenant_role_assignment_membership_tenant",
+            ondelete="CASCADE",
+        ),
+        UniqueConstraint(
+            "tenant_user_id",
+            "role_id",
+            name="uq_tenant_user_role_assignments_membership_role",
+        ),
+        Index(
+            "uq_tenant_user_role_assignments_active_primary",
+            "tenant_user_id",
+            unique=True,
+            postgresql_where=sql_text("status = 'ACTIVE' AND is_primary"),
+            sqlite_where=sql_text("status = 'ACTIVE' AND is_primary = 1"),
+        ),
+        Index(
+            "ix_tenant_user_role_assignments_tenant_status",
+            "tenant_id",
+            "status",
+        ),
+        CheckConstraint(
+            "status IN ('ACTIVE','REVOKED')",
+            name="tenant_role_assignment_status",
+        ),
+        CheckConstraint(
+            "assignment_source IN ('MIGRATION','TENANT_CREATION','TENANT_ADMIN','PLATFORM_ADMIN','SYSTEM','API')",
+            name="tenant_role_assignment_source",
+        ),
+        CheckConstraint("version >= 1", name="tenant_role_assignment_version"),
+        CheckConstraint(
+            "(status = 'ACTIVE' AND revoked_at IS NULL AND revoked_by_user_id IS NULL) "
+            "OR (status = 'REVOKED' AND revoked_at IS NOT NULL AND is_primary = false)",
+            name="tenant_role_assignment_revocation_state",
+        ),
+    )
+
+
+class TenantUserRoleAssignmentHistory(Base, TenantOwnedMixin):
+    """Append-only role-assignment lifecycle record."""
+
+    __tablename__ = "tenant_user_role_assignment_history"
+
+    id = Column(Integer, primary_key=True)
+    tenant_id = Column(
+        Integer,
+        ForeignKey("tenants.id", ondelete="RESTRICT"),
+        nullable=False,
+        index=True,
+    )
+    tenant_user_id = Column(
+        Integer,
+        ForeignKey("tenant_users.id", ondelete="SET NULL"),
+        nullable=True,
+        index=True,
+    )
+    assignment_id = Column(
+        Integer,
+        ForeignKey("tenant_user_role_assignments.id", ondelete="SET NULL"),
+        nullable=True,
+        index=True,
+    )
+    role_id = Column(
+        Integer,
+        ForeignKey("authorization_roles.id", ondelete="SET NULL"),
+        nullable=True,
+    )
+    role_code_snapshot = Column(String(64), nullable=False)
+    event_type = Column(String(32), nullable=False)
+    previous_status = Column(String(16), nullable=True)
+    new_status = Column(String(16), nullable=True)
+    previous_primary = Column(Boolean, nullable=True)
+    new_primary = Column(Boolean, nullable=True)
+    actor_user_id = Column(Integer, ForeignKey("iam_users.id", ondelete="SET NULL"), nullable=True)
+    assignment_source = Column(String(32), nullable=False)
+    reason = Column(String(512), nullable=True)
+    before_membership_version = Column(Integer, nullable=False)
+    after_membership_version = Column(Integer, nullable=False)
+    correlation_id = Column(String(128), nullable=True)
+    occurred_at = Column(DateTime(timezone=True), nullable=False)
+    metadata_json = Column(JSON, nullable=True)
+
+    __table_args__ = (
+        Index(
+            "ix_tenant_role_assignment_history_membership_time",
+            "tenant_id",
+            "tenant_user_id",
+            "occurred_at",
+        ),
+        CheckConstraint(
+            "event_type IN ('MIGRATED','GRANTED','REACTIVATED','REVOKED','PRIMARY_SELECTED','PRIMARY_CHANGED','ROLE_SET_REPLACED','ASSIGNMENT_REJECTED')",
+            name="tenant_role_assignment_history_event",
+        ),
+        CheckConstraint(
+            "assignment_source IN ('MIGRATION','TENANT_CREATION','TENANT_ADMIN','PLATFORM_ADMIN','SYSTEM','API')",
+            name="tenant_role_assignment_history_source",
+        ),
+        CheckConstraint(
+            "before_membership_version >= 1 AND after_membership_version >= before_membership_version",
+            name="tenant_role_assignment_history_versions",
+        ),
+    )
+
+
+class Projects(PublicIdentityMixin, Base, SoftDeleteMixin, TenantOwnedMixin):
+    __tablename__ = "projects"
+
+    id = Column(Integer, primary_key=True, index=True)
+    project_name = Column(String, nullable=False, index=True)
+    project_details = Column(String, nullable=True)
+    project_status = Column(Integer, nullable=False, default=1)  # 1-Active, 0-Inactive
+    created_on = Column(String, nullable=True)
+    created_by = Column(String, nullable=True, index=True)
+    modified_on = Column(String, nullable=True)
+    modified_by = Column(String, nullable=True)
+
+    sboms = relationship("SBOMSource", back_populates="project")
+    products = relationship("Product", back_populates="project")
+    analysis_runs = relationship("AnalysisRun", back_populates="project")
+    schedules = relationship(
+        "AnalysisSchedule",
+        primaryjoin="Projects.id == foreign(AnalysisSchedule.project_id)",
+        viewonly=True,
+    )
+
+    __table_args__ = (
+        UniqueConstraint("tenant_id", "project_name", name="uq_projects_tenant_name"),
+        Index("ix_projects_tenant_created", "tenant_id", "created_on"),
+    )
+
+    @property
+    def sbom_count(self) -> int:
+        return len([sbom for sbom in (self.sboms or []) if not getattr(sbom, "deleted_at", None)])
+
+    @property
+    def latest_sbom_id(self) -> int | None:
+        active_sboms = [sbom for sbom in (self.sboms or []) if not getattr(sbom, "deleted_at", None)]
+        if not active_sboms:
+            return None
+        return max(active_sboms, key=lambda sbom: sbom.id or 0).id
+
+    @property
+    def latest_sbom_version(self) -> str | None:
+        active_sboms = [sbom for sbom in (self.sboms or []) if not getattr(sbom, "deleted_at", None)]
+        if not active_sboms:
+            return None
+        latest = max(active_sboms, key=lambda sbom: sbom.id or 0)
+        return latest.sbom_version or latest.productver
+
+
+
+class Product(PublicIdentityMixin, Base, SoftDeleteMixin, TenantOwnedMixin):
+    __tablename__ = "products"
+
+    id = Column(Integer, primary_key=True, index=True)
+    project_id = Column(Integer, ForeignKey("projects.id", ondelete="CASCADE"), nullable=False, index=True)
+    name = Column(String(255), nullable=False)
+    normalized_name = Column(String(255), nullable=False)
+    slug = Column(String(255), nullable=False)
+    description = Column(Text, nullable=True)
+    product_key = Column(String(128), nullable=True, index=True)
+    vendor = Column(String(255), nullable=True)
+    category = Column(String(128), nullable=True)
+    status = Column(String(32), nullable=False, default="active", server_default="active", index=True)
+    latest_version = Column(String(128), nullable=True)
+    metadata_json = Column(JSON, nullable=True)
+    created_by = Column(String(128), nullable=True, index=True)
+    created_at = Column(String, nullable=False, index=True)
+    updated_at = Column(String, nullable=True)
+    deleted_at = Column(String, nullable=True, index=True)
+    # Explicit scheduler target.  Version strings are intentionally not used
+    # to infer "latest/current" because product versions are not reliably
+    # sortable (for example R2.1, 2026.09, or Firmware-22A).
+    current_sbom_id = Column(
+        Integer,
+        ForeignKey("sbom_source.id", ondelete="SET NULL"),
+        nullable=True,
+        index=True,
+    )
+
+    current_sbom_mode = Column(String(16), nullable=False, default="AUTO", server_default="AUTO")
+
+    project = relationship("Projects", back_populates="products")
+    sboms = relationship(
+        "SBOMSource",
+        back_populates="product",
+        foreign_keys="SBOMSource.product_id",
+    )
+    current_sbom = relationship(
+        "SBOMSource",
+        foreign_keys=[current_sbom_id],
+        post_update=True,
+    )
+    analysis_runs = relationship("AnalysisRun", back_populates="product")
+    schedules = relationship(
+        "AnalysisSchedule",
+        primaryjoin="Product.id == foreign(AnalysisSchedule.product_id)",
+        viewonly=True,
+    )
+
+    __table_args__ = (
+        CheckConstraint("current_sbom_mode IN ('AUTO','MANUAL_PIN')", name="ck_products_current_sbom_mode"),
+        UniqueConstraint("tenant_id", "project_id", "slug", name="uq_products_tenant_project_slug"),
+        UniqueConstraint("id", "tenant_id", name="uq_products_id_tenant"),
+        Index("ix_products_tenant_project_name", "tenant_id", "project_id", "normalized_name"),
+        Index("ix_products_tenant_project", "tenant_id", "project_id"),
+    )
+
+    @property
+    def sbom_count(self) -> int:
+        return len([sbom for sbom in (self.sboms or []) if not getattr(sbom, "deleted_at", None)])
+
+
+class SBOMType(Base):
+    __tablename__ = "sbom_type"
+
+    id = Column(Integer, primary_key=True, index=True)
+    typename = Column(String, nullable=False, unique=True)
+    type_details = Column(String, nullable=True)
+    created_on = Column(String, nullable=True)
+    created_by = Column(String, nullable=True)
+    modified_on = Column(String, nullable=True)
+    modified_by = Column(String, nullable=True)
+
+    sboms = relationship("SBOMSource", back_populates="sbom_type_rel")
+
+
+class LogicalSBOM(PublicIdentityMixin, Base, TenantOwnedMixin):
+    """A named SBOM identity; uploaded evidence lives on SBOMSource versions."""
+    __tablename__ = "logical_sbom"
+    id = Column(Integer, primary_key=True)
+    product_id = Column(Integer, ForeignKey("products.id", ondelete="CASCADE"), nullable=True, index=True)
+    name = Column(String, nullable=False)
+    description = Column(Text, nullable=True)
+    created_by = Column(String, nullable=True)
+    created_at = Column(String, nullable=False)
+    updated_at = Column(String, nullable=False)
+    product = relationship("Product", foreign_keys=[product_id])
+    versions = relationship("SBOMSource", back_populates="logical_sbom", foreign_keys="SBOMSource.logical_sbom_id")
+    __table_args__ = (
+        UniqueConstraint("id", "tenant_id", name="uq_logical_sbom_id_tenant"),
+        UniqueConstraint("id", "tenant_id", "product_id", name="uq_logical_sbom_id_tenant_product"),
+        ForeignKeyConstraint(["product_id", "tenant_id"], ["products.id", "products.tenant_id"], name="fk_logical_sbom_product_tenant", ondelete="CASCADE"),
+        Index("ix_logical_sbom_tenant_product", "tenant_id", "product_id"),
+    )
+
+
+class SBOMSource(PublicIdentityMixin, Base, SoftDeleteMixin, TenantOwnedMixin):
+    __tablename__ = "sbom_source"
+
+    id = Column(Integer, primary_key=True, index=True)
+    logical_sbom_id = Column(Integer, ForeignKey("logical_sbom.id"), nullable=False, index=True)
+    logical_sbom = relationship("LogicalSBOM", back_populates="versions", foreign_keys=[logical_sbom_id])
+    sbom_name = Column(String, nullable=False, index=True)
+    sbom_data = Column(Text, nullable=True)
+    sbom_type = Column(Integer, ForeignKey("sbom_type.id"), nullable=True)
+    projectid = Column(Integer, ForeignKey("projects.id"), nullable=True)
+    product_id = Column(Integer, ForeignKey("products.id"), nullable=True, index=True)
+    created_on = Column(String, nullable=True)
+    sbom_version = Column(String, nullable=True)
+    created_by = Column(String, nullable=True, index=True)
+    productver = Column(String, nullable=True)
+    modified_on = Column(String, nullable=True)
+    modified_by = Column(String, nullable=True)
+    parent_id = Column(Integer, ForeignKey("sbom_source.id"), nullable=True)
+    change_summary = Column(String, nullable=True)
+    completeness_score = Column(Float, nullable=True, default=100.0)
+    completeness_report = Column(JSON, nullable=True)
+    dedupe_report_json = Column(JSON, nullable=True)
+    product_name = Column(String, nullable=True)
+    description = Column(String, nullable=True)
+
+    # Operational lifecycle is independent of validation and soft deletion.
+    lifecycle_status = Column(String(8), nullable=False, default="ACTIVE", server_default="ACTIVE", index=True)
+    lifecycle_revision = Column(Integer, nullable=False, default=0, server_default="0")
+    analysis_requires_reanalysis = Column(Boolean, nullable=False, default=False, server_default=sql_text("false"))
+
+    @property
+    def processing_eligibility(self) -> dict:
+        from .services.sbom_lifecycle import processing_eligibility
+        return processing_eligibility(self)
+
+    # 8-stage validation outcome — see migration 012.
+    # ``server_default`` mirrors migration 012's literals so test-path
+    # schemas built via ``Base.metadata.create_all`` carry the same
+    # NOT NULL safety net that production migrations install.
+    status = Column(
+        String(24),
+        nullable=False,
+        default="validated",
+        server_default="validated",
+        index=True,
+    )
+    failed_stage = Column(String(32), nullable=True, index=True)
+    validation_errors = Column(JSON, nullable=True)
+    error_count = Column(Integer, nullable=False, default=0, server_default="0")
+    warning_count = Column(Integer, nullable=False, default=0, server_default="0")
+    validated_at = Column(String, nullable=True)
+
+    # SPDX → CycloneDX conversion tracking — see migration 029.
+    original_format = Column(String(32), nullable=True)
+    current_format = Column(String(32), nullable=True)
+    converted_from_format = Column(String(32), nullable=True)
+    source_sbom_id = Column(Integer, ForeignKey("sbom_source.id"), nullable=True, index=True)
+    converted_sbom_id = Column(Integer, ForeignKey("sbom_source.id"), nullable=True, index=True)
+    conversion_status = Column(String(32), nullable=True, index=True)
+    conversion_warnings_json = Column(JSON, nullable=True)
+    conversion_report_json = Column(JSON, nullable=True)
+    converted_at = Column(String, nullable=True)
+    converted_by = Column(String, nullable=True)
+    enrichment_status = Column(String(32), nullable=True, index=True)
+    conversion_started_at = Column(String, nullable=True)
+    conversion_completed_at = Column(String, nullable=True)
+    enrichment_started_at = Column(String, nullable=True)
+    enrichment_completed_at = Column(String, nullable=True)
+    conversion_error = Column(Text, nullable=True)
+    enrichment_error = Column(Text, nullable=True)
+    component_extraction_status = Column(String(32), nullable=True, index=True)
+    component_extraction_error = Column(Text, nullable=True)
+    component_extraction_attempted_at = Column(String, nullable=True)
+    component_extraction_completed_at = Column(String, nullable=True)
+
+    project = relationship("Projects", back_populates="sboms")
+    product = relationship("Product", back_populates="sboms", foreign_keys=[product_id])
+    sbom_type_rel = relationship("SBOMType", back_populates="sboms")
+    analysis_reports = relationship("SBOMAnalysisReport", back_populates="sbom")
+    components = relationship("SBOMComponent", back_populates="sbom")
+    vex_documents = relationship("VexDocument", back_populates="sbom")
+    analysis_runs = relationship("AnalysisRun", back_populates="sbom")
+    schedules = relationship(
+        "AnalysisSchedule",
+        primaryjoin="SBOMSource.id == foreign(AnalysisSchedule.sbom_id)",
+        viewonly=True,
+    )
+
+    __table_args__ = (
+        CheckConstraint("lifecycle_status IN ('ACTIVE','INACTIVE')", name="sbom_operational_lifecycle"),
+        UniqueConstraint("logical_sbom_id", "sbom_version", name="uq_sbom_source_logical_version"),
+        ForeignKeyConstraint(["logical_sbom_id", "tenant_id"], ["logical_sbom.id", "logical_sbom.tenant_id"], name="fk_sbom_source_logical_tenant"),
+        ForeignKeyConstraint(["logical_sbom_id", "tenant_id", "product_id"], ["logical_sbom.id", "logical_sbom.tenant_id", "logical_sbom.product_id"], name="fk_sbom_source_logical_product"),
+        Index("uq_sbom_source_logical_unversioned", "logical_sbom_id", unique=True,
+              postgresql_where=sql_text("sbom_version IS NULL"), sqlite_where=sql_text("sbom_version IS NULL")),
+        Index("ix_sbom_source_tenant_project", "tenant_id", "projectid"),
+        Index("ix_sbom_source_tenant_product", "tenant_id", "product_id"),
+        Index("ix_sbom_source_tenant_created", "tenant_id", "created_on"),
+    )
+
+    @property
+    def project_id(self) -> int | None:
+        return self.projectid
+
+    @property
+    def project_name(self) -> str | None:
+        return self.project.project_name if self.project else None
+
+    @property
+    def component_count(self) -> int:
+        return len([component for component in (self.components or []) if not getattr(component, "deleted_at", None)])
+
+    @property
+    def name(self) -> str:
+        return self.sbom_name
+
+    @property
+    def product_version(self) -> str | None:
+        return self.productver
+
+    @property
+    def created_at(self) -> str | None:
+        return self.created_on
+
+    @property
+    def updated_at(self) -> str | None:
+        return self.modified_on
+
+    @property
+    def last_enriched_at(self) -> str | None:
+        return self.enrichment_completed_at
+
+    @property
+    def format(self) -> str:
+        import json
+
+        if not self.sbom_data:
+            return "—"
+        try:
+            as_dict = json.loads(self.sbom_data) if isinstance(self.sbom_data, str) else self.sbom_data
+            if isinstance(as_dict, dict):
+                if as_dict.get("bomFormat") == "CycloneDX":
+                    return "cyclonedx"
+                if "spdxVersion" in as_dict:
+                    return "spdx"
+        except (TypeError, json.JSONDecodeError):
+            return "—"
+        return "—"
+
+    @property
+    def spec_version(self) -> str:
+        import json
+
+        if not self.sbom_data:
+            return "—"
+        try:
+            as_dict = json.loads(self.sbom_data) if isinstance(self.sbom_data, str) else self.sbom_data
+            if isinstance(as_dict, dict):
+                if as_dict.get("bomFormat") == "CycloneDX":
+                    return str(as_dict.get("specVersion") or "—")
+                if "spdxVersion" in as_dict:
+                    return str(as_dict.get("spdxVersion") or "—")
+        except (TypeError, json.JSONDecodeError):
+            return "—"
+        return "—"
+
+
+class SBOMValidationSession(Base, TenantOwnedMixin):
+    """Temporary repair workspace for SBOMs that failed validation.
+
+    Rows in this table are not trusted SBOM records. They hold staged content
+    only until the same validation pipeline passes and import creates an
+    ``SBOMSource`` row.
+    """
+
+    __tablename__ = "sbom_validation_sessions"
+
+    id = Column(String(36), primary_key=True, index=True)
+    project_id = Column(Integer, ForeignKey("projects.id"), nullable=True, index=True)
+    user_id = Column(String(128), nullable=True, index=True)
+    original_filename = Column(String(255), nullable=True)
+    sbom_name = Column(String(255), nullable=True)
+    sbom_type = Column(Integer, ForeignKey("sbom_type.id"), nullable=True)
+    content_type = Column(String(255), nullable=True)
+    file_size_bytes = Column(Integer, nullable=True)
+    sha256 = Column(String(64), nullable=True, index=True)
+    original_size_bytes = Column(Integer, nullable=True)
+    original_sha256 = Column(String(64), nullable=True, index=True)
+    stored_size_bytes = Column(Integer, nullable=True)
+    stored_sha256 = Column(String(64), nullable=True, index=True)
+    storage_backend = Column(String(32), nullable=True)
+    detected_format = Column(String(64), nullable=True)
+    detected_version = Column(String(64), nullable=True)
+    detection_confidence = Column(Float, nullable=True)
+    detection_evidence_json = Column(JSON, nullable=True)
+    raw_content_text = Column(Text, nullable=True)
+    raw_content_blob = Column(LargeBinary, nullable=True)
+    raw_storage_path = Column(String(1024), nullable=True)
+    sanitized_content = Column(Text, nullable=True)
+    current_content = Column(Text, nullable=True)
+    repair_content_text = Column(Text, nullable=True)
+    repair_content_blob = Column(LargeBinary, nullable=True)
+    repair_storage_path = Column(String(1024), nullable=True)
+    validation_status = Column(String(32), nullable=False, default="failed", server_default="failed", index=True)
+    validation_errors_json = Column(JSON, nullable=True)
+    stage_results_json = Column(JSON, nullable=True)
+    latest_error_report_json = Column(JSON, nullable=True)
+    total_lines = Column(Integer, nullable=True)
+    is_large_file = Column(Boolean, nullable=False, default=False, server_default=expression.false())
+    full_editor_allowed = Column(Boolean, nullable=False, default=True, server_default=expression.true())
+    can_edit = Column(Boolean, nullable=False, default=True, server_default=expression.true())
+    can_ai_fix = Column(Boolean, nullable=False, default=True, server_default=expression.true())
+    security_blocked_reason = Column(Text, nullable=True)
+    content_sha256 = Column(String(64), nullable=True, index=True)
+    created_at = Column(String, nullable=False, index=True)
+    updated_at = Column(String, nullable=False)
+    expires_at = Column(String, nullable=False, index=True)
+    imported_sbom_id = Column(Integer, ForeignKey("sbom_source.id"), nullable=True, index=True)
+
+    events = relationship(
+        "SBOMValidationSessionEvent",
+        back_populates="session",
+        cascade="all, delete-orphan",
+        order_by="SBOMValidationSessionEvent.id",
+    )
+    imported_sbom = relationship("SBOMSource", foreign_keys=[imported_sbom_id])
+
+
+class SBOMValidationSessionEvent(Base, TenantOwnedMixin):
+    """Append-only audit history for validation repair sessions."""
+
+    __tablename__ = "sbom_validation_session_events"
+
+    id = Column(Integer, primary_key=True, index=True)
+    session_id = Column(
+        String(36),
+        ForeignKey("sbom_validation_sessions.id", ondelete="CASCADE"),
+        nullable=False,
+        index=True,
+    )
+    event_type = Column(String(64), nullable=False, index=True)
+    actor_user_id = Column(String(128), nullable=True, index=True)
+    timestamp = Column(String, nullable=False, index=True)
+    summary = Column(Text, nullable=True)
+    before_hash = Column(String(64), nullable=True)
+    after_hash = Column(String(64), nullable=True)
+    metadata_json = Column(JSON, nullable=True)
+
+    session = relationship("SBOMValidationSession", back_populates="events")
+
+
+class SBOMRepairJob(Base, TenantOwnedMixin):
+    """Immutable candidate and reports; approval/rejection is a separate decision."""
+    __tablename__ = "sbom_repair_jobs"
+    id = Column(String(36), primary_key=True)
+    session_id = Column(String(36), ForeignKey("sbom_validation_sessions.id", ondelete="CASCADE"), nullable=False, index=True)
+    source_sha256 = Column(String(64), nullable=False)
+    original_sha256 = Column(String(64), nullable=False)
+    source_sbom_sha256 = Column(String(64), nullable=True)
+    source_sbom_id = Column(Integer, ForeignKey("sbom_source.id"), nullable=True)
+    candidate_sha256 = Column(String(64), nullable=False)
+    candidate_content = Column(Text, nullable=False)
+    report_json = Column(JSON, nullable=False)
+    validation_options_json = Column(JSON, nullable=False)
+    status = Column(String(32), nullable=False)
+    approval_status = Column(String(16), nullable=False, default="PENDING", server_default="PENDING")
+    created_at = Column(String, nullable=False)
+    decided_at = Column(String, nullable=True)
+    actor_user_id = Column(String(128), nullable=True)
+    decided_by = Column(String(128), nullable=True)
+    imported_sbom_id = Column(Integer, ForeignKey("sbom_source.id"), nullable=True)
+
+
+class SBOMAnalysisReport(Base, SoftDeleteMixin, TenantOwnedMixin):
+    __tablename__ = "sbom_analysis_report"
+
+    id = Column(Integer, primary_key=True, index=True)
+    sbom_ref_id = Column(Integer, ForeignKey("sbom_source.id"), nullable=True)
+    sbom_result = Column(String, nullable=True)
+    project_id = Column(String, nullable=True)  # kept for backward compatibility
+    created_on = Column(String, nullable=True)
+    analysis_details = Column(Text, nullable=True)
+    reference_source = Column(String, nullable=True)
+    sbom_analysis_level = Column(Integer, nullable=True)
+
+    sbom = relationship("SBOMSource", back_populates="analysis_reports")
+
+
+class SBOMComponent(PublicIdentityMixin, Base, SoftDeleteMixin, TenantOwnedMixin):
+    __tablename__ = "sbom_component"
+
+    id = Column(Integer, primary_key=True, index=True)
+    sbom_id = Column(Integer, ForeignKey("sbom_source.id"), nullable=False, index=True)
+    bom_ref = Column(String, nullable=True)
+    component_type = Column(String, nullable=True)
+    component_group = Column(String, nullable=True)
+    name = Column(String, nullable=False, index=True)
+    version = Column(String, nullable=True, index=True)
+    purl = Column(String, nullable=True)
+    cpe = Column(String, nullable=True, index=True)
+    cpe_source = Column(String(32), nullable=True, index=True)
+    supplier = Column(String, nullable=True)
+    scope = Column(String, nullable=True)
+    created_on = Column(String, nullable=True)
+    ecosystem = Column(String, nullable=True, index=True)
+
+    original_name = Column(String, nullable=True)
+    normalized_name = Column(String, nullable=True, index=True)
+    original_version = Column(String, nullable=True)
+    normalized_version = Column(String, nullable=True, index=True)
+    normalized_ecosystem = Column(String, nullable=True, index=True)
+    original_purl = Column(String, nullable=True)
+    normalized_purl = Column(String, nullable=True, index=True)
+    purl_type = Column(String, nullable=True)
+    purl_namespace = Column(String, nullable=True)
+    purl_name = Column(String, nullable=True)
+    purl_version = Column(String, nullable=True)
+    purl_qualifiers_json = Column(JSON, nullable=True)
+    purl_subpath = Column(String, nullable=True)
+    normalized_cpes = Column(JSON, nullable=True)
+    primary_cpe = Column(String, nullable=True, index=True)
+    cpe_evidence_json = Column(JSON, nullable=True)
+    normalized_supplier = Column(String, nullable=True)
+    normalized_package_key = Column(String, nullable=True, index=True)
+    canonical_identity_confidence = Column(String, nullable=True)
+
+    license = Column(String, nullable=True)
+    hashes = Column(Text, nullable=True)
+    lifecycle_status = Column(String, nullable=True)
+    eos_date = Column(String, nullable=True)
+    eol_date = Column(String, nullable=True)
+    eof_date = Column(String, nullable=True)
+    is_deprecated = Column(Boolean, default=False)
+    deprecated = Column(Boolean, nullable=True, default=False)
+    unsupported = Column(Boolean, nullable=True, default=False)
+    maintenance_status = Column(String, nullable=True)
+    latest_version = Column(String, nullable=True)
+    latest_supported_version = Column(String, nullable=True)
+    recommended_version = Column(String, nullable=True)
+    lifecycle_recommendation = Column(Text, nullable=True)
+    lifecycle_source = Column(String, nullable=True)
+    lifecycle_source_url = Column(String, nullable=True)
+    lifecycle_confidence = Column(String, nullable=True)
+    lifecycle_checked_at = Column(String, nullable=True, index=True)
+    lifecycle_evidence_json = Column(JSON, nullable=True)
+    lifecycle_is_stale = Column(Boolean, nullable=False, default=False)
+    lifecycle_manual_override = Column(Boolean, nullable=False, default=False)
+    #: Functional description declared by the SBOM itself (CycloneDX / SPDX
+    #: ``description``). Purpose evidence of source SBOM (FR-SCA-009, migration 068).
+    description = Column(Text, nullable=True)
+
+    normalized_component_key = Column(String, nullable=True, index=True)
+    dedupe_canonical_id = Column(String, nullable=True, index=True)
+    dedupe_group_id = Column(String, nullable=True, index=True)
+    is_duplicate = Column(Boolean, nullable=False, default=False)
+    duplicate_of_component_id = Column(Integer, ForeignKey("sbom_component.id", ondelete="CASCADE"), nullable=True)
+    dedupe_reason = Column(String, nullable=True)
+    dedupe_confidence = Column(String, nullable=True)
+    normalization_notes_json = Column(JSON, nullable=True)
+    dedupe_evidence_json = Column(JSON, nullable=True)
+
+    sbom = relationship("SBOMSource", back_populates="components")
+    findings = relationship("AnalysisFinding", back_populates="component")
+    vex_statements = relationship("VexStatement", back_populates="component")
+
+    @property
+    def lifecycle_provider(self) -> str | None:
+        """Backward-compatible alias for the provider/source display name."""
+        return self.lifecycle_source
+
+    __table_args__ = (
+        UniqueConstraint(
+            "tenant_id",
+            "sbom_id",
+            "bom_ref",
+            "name",
+            "version",
+            "cpe",
+            name="uq_sbom_component_fingerprint",
+        ),
+        Index("ix_sbom_component_sbom_name", "sbom_id", "name"),
+        Index("ix_sbom_component_lifecycle", "lifecycle_status", "ecosystem"),
+        Index("ix_sbom_component_sbom_normalized_key", "sbom_id", "normalized_component_key"),
+        Index("ix_sbom_component_sbom_is_duplicate", "sbom_id", "is_duplicate"),
+        # Secure Component Advisor grouping (migration 067, FR-SCA-001).
+        Index("ix_sbom_component_tenant_canonical", "tenant_id", "dedupe_canonical_id"),
+        Index("ix_sbom_component_tenant_package_key", "tenant_id", "normalized_package_key"),
+        Index(
+            "ix_sbom_component_normalized_identity",
+            "normalized_ecosystem",
+            "normalized_name",
+            "normalized_version",
+        ),
+    )
+
+
+class ComponentLifecycleCache(Base):
+    """Normalized lifecycle enrichment cache shared across SBOMs."""
+
+    __tablename__ = "component_lifecycle_cache"
+
+    id = Column(Integer, primary_key=True, index=True)
+    configuration_namespace = Column(String(128), nullable=False, default="legacy", server_default="legacy")
+    lookup_key = Column(String, nullable=True, index=True)
+    normalized_name = Column(String, nullable=False, index=True)
+    normalized_version = Column(String, nullable=True, index=True)
+    ecosystem = Column(String, nullable=True, index=True)
+    purl = Column(String, nullable=True, index=True)
+    cpe = Column(String, nullable=True, index=True)
+    lifecycle_status = Column(String, nullable=True)
+    eos_date = Column(String, nullable=True)
+    eol_date = Column(String, nullable=True)
+    eof_date = Column(String, nullable=True)
+    deprecated = Column(Boolean, nullable=True, default=False)
+    unsupported = Column(Boolean, nullable=True, default=False)
+    maintenance_status = Column(String, nullable=True)
+    latest_version = Column(String, nullable=True)
+    latest_supported_version = Column(String, nullable=True)
+    recommended_version = Column(String, nullable=True)
+    recommendation = Column(Text, nullable=True)
+    source_name = Column(String, nullable=True)
+    source_url = Column(String, nullable=True)
+    evidence_json = Column(JSON, nullable=True)
+    confidence = Column(String, nullable=True)
+    checked_at = Column(String, nullable=False, index=True)
+    expires_at = Column(String, nullable=False, index=True)
+    is_stale = Column(Boolean, nullable=False, default=False)
+
+    __table_args__ = (
+        UniqueConstraint(
+            "configuration_namespace",
+            "normalized_name",
+            "normalized_version",
+            "ecosystem",
+            "purl",
+            name="uq_component_lifecycle_cache_identity",
+        ),
+        Index("ix_component_lifecycle_cache_lookup", "ecosystem", "normalized_name", "normalized_version"),
+    )
+
+
+class LifecycleProviderConfig(Base):
+    """Global runtime configuration for lifecycle enrichment providers."""
+
+    __tablename__ = "lifecycle_provider_configs"
+
+    id = Column(Integer, primary_key=True, index=True)
+    tenant_id = Column(Integer, ForeignKey("tenants.id", ondelete="CASCADE"), nullable=True, index=True)
+    provider_key = Column(String(64), nullable=False, index=True)
+    display_name = Column(String(128), nullable=False)
+    provider_type = Column(String(64), nullable=False, index=True)
+    enabled = Column(Boolean, nullable=False, default=True)
+    priority = Column(Integer, nullable=False, default=100)
+    base_url = Column(String(512), nullable=True)
+    feed_urls_json = Column(JSON, nullable=True)
+    config_json = Column(JSON, nullable=True)
+    timeout_seconds = Column(Integer, nullable=False, default=5)
+    max_retries = Column(Integer, nullable=False, default=0)
+    circuit_breaker_enabled = Column(Boolean, nullable=False, default=True)
+    cache_ttl_known_days = Column(Integer, nullable=True)
+    cache_ttl_unknown_hours = Column(Integer, nullable=True)
+    cache_ttl_failure_minutes = Column(Integer, nullable=True)
+    cache_ttl_deprecated_days = Column(Integer, nullable=True)
+    last_probe_json = Column(JSON, nullable=True)
+    last_lookup_at = Column(String, nullable=True)
+    last_success_at = Column(String, nullable=True)
+    last_failure_at = Column(String, nullable=True)
+    last_failure_message = Column(Text, nullable=True)
+    health_status = Column(String(32), nullable=False, default="unknown", index=True)
+    created_at = Column(String, nullable=False)
+    updated_at = Column(String, nullable=False)
+    updated_by_user_id = Column(Integer, ForeignKey("iam_users.id", ondelete="SET NULL"), nullable=True)
+
+    __table_args__ = (
+        Index("uq_lifecycle_provider_platform", "provider_key", unique=True, postgresql_where=sql_text("tenant_id IS NULL"), sqlite_where=sql_text("tenant_id IS NULL")),
+        UniqueConstraint("tenant_id", "provider_key", name="uq_lifecycle_provider_tenant"),
+        CheckConstraint("priority BETWEEN 1 AND 1000", name="ck_lifecycle_provider_config_priority"),
+        CheckConstraint("timeout_seconds BETWEEN 1 AND 60", name="ck_lifecycle_provider_config_timeout"),
+        CheckConstraint("max_retries BETWEEN 0 AND 10", name="ck_lifecycle_provider_config_retries"),
+        CheckConstraint(
+            "health_status IN ('healthy','degraded','disabled','unknown')",
+            name="ck_lifecycle_provider_config_health",
+        ),
+        Index("ix_lifecycle_provider_configs_enabled_priority", "enabled", "priority"),
+    )
+
+
+class LifecycleProviderSecret(Base):
+    """Encrypted provider API keys/tokens. Raw secret values never leave the server."""
+
+    __tablename__ = "lifecycle_provider_secrets"
+
+    id = Column(Integer, primary_key=True, index=True)
+    tenant_id = Column(Integer, ForeignKey("tenants.id", ondelete="CASCADE"), nullable=True, index=True)
+    provider_key = Column(String(64), nullable=False, index=True)
+    secret_name = Column(String(64), nullable=False)
+    encrypted_value = Column(Text, nullable=False)
+    value_preview = Column(String(64), nullable=True)
+    created_at = Column(String, nullable=False)
+    updated_at = Column(String, nullable=False)
+    updated_by_user_id = Column(Integer, ForeignKey("iam_users.id", ondelete="SET NULL"), nullable=True)
+
+    __table_args__ = (
+        Index("uq_lifecycle_secret_platform", "provider_key", "secret_name", unique=True, postgresql_where=sql_text("tenant_id IS NULL"), sqlite_where=sql_text("tenant_id IS NULL")),
+        UniqueConstraint("tenant_id", "provider_key", "secret_name", name="uq_lifecycle_secret_tenant"),
+        Index("ix_lifecycle_provider_secrets_provider", "provider_key"),
+    )
+
+
+class LifecycleVendorRecord(Base):
+    """UI-managed custom vendor lifecycle evidence."""
+
+    __tablename__ = "lifecycle_vendor_records"
+
+    id = Column(Integer, primary_key=True, index=True)
+    vendor_name = Column(String(128), nullable=False, index=True)
+    product_name = Column(String(255), nullable=False, index=True)
+    product_aliases_json = Column(JSON, nullable=True)
+    ecosystem = Column(String(64), nullable=True, index=True)
+    version_pattern = Column(String(128), nullable=True)
+    version_start = Column(String(64), nullable=True)
+    version_end = Column(String(64), nullable=True)
+    lifecycle_status = Column(String(64), nullable=False)
+    maintenance_status = Column(String(128), nullable=True)
+    eol_date = Column(String, nullable=True)
+    eos_date = Column(String, nullable=True)
+    eof_date = Column(String, nullable=True)
+    deprecated = Column(Boolean, nullable=False, default=False)
+    unsupported = Column(Boolean, nullable=False, default=False)
+    latest_supported_version = Column(String(128), nullable=True)
+    recommended_version = Column(String(128), nullable=True)
+    evidence_url = Column(String(512), nullable=True)
+    evidence_json = Column(JSON, nullable=True)
+    confidence = Column(String(32), nullable=False, default="High")
+    enabled = Column(Boolean, nullable=False, default=True, index=True)
+    created_at = Column(String, nullable=False)
+    updated_at = Column(String, nullable=False)
+    updated_by_user_id = Column(Integer, ForeignKey("iam_users.id", ondelete="SET NULL"), nullable=True)
+
+    __table_args__ = (
+        Index("ix_lifecycle_vendor_records_lookup", "enabled", "ecosystem", "product_name"),
+    )
+
+
+class VexDocument(Base, TenantOwnedMixin):
+    """Imported VEX document scoped to an SBOM/product context."""
+
+    __tablename__ = "vex_documents"
+
+    id = Column(Integer, primary_key=True, index=True)
+    sbom_id = Column(Integer, ForeignKey("sbom_source.id", ondelete="CASCADE"), nullable=False, index=True)
+    source_type = Column(String, nullable=False, default="uploaded", index=True)
+    format = Column(String, nullable=True, index=True)
+    author = Column(String, nullable=True)
+    source_url = Column(String, nullable=True)
+    discovery_evidence_json = Column(JSON, nullable=True)
+    last_refresh_status = Column(String, nullable=True)
+    provider_errors_json = Column(JSON, nullable=True)
+    uploaded_by = Column(String, nullable=True, index=True)
+    uploaded_at = Column(String, nullable=False, index=True)
+    raw_document_json = Column(JSON, nullable=True)
+    validation_status = Column(String, nullable=False, default="accepted", index=True)
+
+    # Provenance and idempotency (VEX-ING-002/003, spec sections 33-34).
+    # ``source_hash`` is a SHA-256 over the canonicalised document body, so a
+    # byte-different but semantically identical re-upload is still recognised
+    # as already imported. ``superseded_by_id`` chains document versions: a new
+    # version appends and points the prior row at itself rather than deleting.
+    source_document_id = Column(String, nullable=True, index=True)
+    source_document_version = Column(String, nullable=True)
+    source_hash = Column(String(64), nullable=True, index=True)
+    asserted_at = Column(String, nullable=True, index=True)
+    superseded_by_id = Column(
+        Integer, ForeignKey("vex_documents.id", ondelete="SET NULL"), nullable=True, index=True
+    )
+
+    sbom = relationship("SBOMSource", back_populates="vex_documents")
+    statements = relationship(
+        "VexStatement",
+        back_populates="vex_document",
+        cascade="all, delete-orphan",
+        order_by="VexStatement.id",
+    )
+
+
+class VexStatement(Base, TenantOwnedMixin):
+    """Component/vulnerability exploitability statement."""
+
+    __tablename__ = "vex_statements"
+
+    id = Column(Integer, primary_key=True, index=True)
+    vex_document_id = Column(Integer, ForeignKey("vex_documents.id", ondelete="CASCADE"), nullable=True, index=True)
+    sbom_id = Column(Integer, ForeignKey("sbom_source.id", ondelete="CASCADE"), nullable=False, index=True)
+    component_id = Column(Integer, ForeignKey("sbom_component.id", ondelete="SET NULL"), nullable=True, index=True)
+    vulnerability_id = Column(String, nullable=False, index=True)
+    cve_id = Column(String, nullable=True, index=True)
+    status = Column(String, nullable=False, index=True)
+    justification = Column(Text, nullable=True)
+    impact_statement = Column(Text, nullable=True)
+    action_statement = Column(Text, nullable=True)
+    fixed_version = Column(String, nullable=True)
+    mitigation = Column(Text, nullable=True)
+    source_name = Column(String, nullable=True)
+    source_url = Column(String, nullable=True)
+    confidence = Column(String, nullable=True)
+    evidence_json = Column(JSON, nullable=True)
+    created_at = Column(String, nullable=False, index=True)
+
+    # Source-native status preserved beside the normalized one (VEX-STAT-002).
+    # ``status`` stays as-is for backward compatibility and remains the column
+    # existing reports and exports read; ``normalized_status`` carries the
+    # canonical EffectiveVexStatus value, and ``source_status`` the untouched
+    # vendor term (e.g. CycloneDX ``false_positive``).
+    source_format = Column(String(32), nullable=True, index=True)
+    source_status = Column(String(64), nullable=True)
+    normalized_status = Column(String(32), nullable=True, index=True)
+    asserted_at = Column(String, nullable=True)
+    # Component-mapping provenance (VEX-MAP-001/002). Populated by the matcher
+    # in PR-2; nullable so PR-1 rows and the backfill stay valid.
+    match_strategy = Column(String(32), nullable=True)
+    match_confidence = Column(String(16), nullable=True)
+    #: NULL = applicability not evaluated yet; False = statement retained as
+    #: evidence but not eligible to become the effective determination.
+    version_applicable = Column(Boolean, nullable=True)
+
+    vex_document = relationship("VexDocument", back_populates="statements")
+    component = relationship("SBOMComponent", back_populates="vex_statements")
+
+    __table_args__ = (
+        Index("ix_vex_statement_sbom_status", "sbom_id", "status"),
+        Index("ix_vex_statement_component_vuln", "component_id", "vulnerability_id"),
+    )
+
+
+class VexInvestigation(Base, TenantOwnedMixin):
+    """One vulnerability context: the unit a VEX decision applies to.
+
+    Spec section 35 (VEX-DATA-001). This is the entity that joins the three
+    independent evidence streams — ``AnalysisFinding`` (scanner),
+    ``VexStatement`` (imported assertions) and manual decisions — and carries
+    the reconciled outcome. ``VexStatement`` remains the assertion/history
+    store; ``AnalysisFinding`` remains scanner evidence. Neither is modified or
+    deleted by reconciliation (VEX-DATA-003/004/005).
+
+    Identity is tenant + SBOM + component + canonical vulnerability
+    (VEX-CTX-001): the same CVE on two components, or on two versions of one
+    component, is two contexts. A CVE alone is never global.
+    """
+
+    __tablename__ = "vex_investigation"
+
+    id = Column(Integer, primary_key=True, index=True)
+    sbom_id = Column(Integer, ForeignKey("sbom_source.id", ondelete="CASCADE"), nullable=False, index=True)
+    #: NULL for an assertion whose component could not be resolved
+    #: unambiguously (VEX-MAP-001) — the context still exists and is counted
+    #: separately as UNRESOLVED_MAPPING.
+    component_id = Column(Integer, ForeignKey("sbom_component.id", ondelete="SET NULL"), nullable=True, index=True)
+
+    canonical_vulnerability_id = Column(String(255), nullable=False, index=True)
+    aliases_json = Column(Text, nullable=True)
+
+    effective_status = Column(String(32), nullable=False, index=True)
+    reconciliation_status = Column(String(32), nullable=False, index=True)
+    analyzer_detection_state = Column(String(32), nullable=True, index=True)
+    #: JSON array of the analyser sources that contributed evidence, e.g.
+    #: ``["NVD","OSV","GITHUB"]``. VEX-REC-003 collapses aliases of one
+    #: vulnerability into a single context, so the contributing sources have
+    #: to be recorded here or they are lost in the dedup.
+    analyzer_sources_json = Column(Text, nullable=True)
+    effective_vex_statement_id = Column(
+        Integer, ForeignKey("vex_statements.id", ondelete="SET NULL"), nullable=True, index=True
+    )
+
+    #: ``component_id`` mirrored with NULL collapsed to 0, because SQL treats
+    #: NULL as distinct from NULL: a unique key over the nullable column would
+    #: never fire for unresolved contexts and every recompute would insert a
+    #: fresh duplicate. The unique key uses this column instead; keep the two
+    #: in step via :meth:`assign_component`.
+    component_key = Column(Integer, nullable=False, default=0, server_default="0")
+
+    #: Distinguishes several unresolved assertions for the same vulnerability
+    #: in one SBOM. "" for mapped contexts, a stable per-assertion value
+    #: otherwise, which is what keeps ``recompute_for_sbom`` idempotent.
+    unresolved_discriminator = Column(String(64), nullable=False, default="", server_default="")
+
+    #: False once the context is absent from the latest successful run. Rows
+    #: are never deleted (VEX-INV-001/002): the current queue and dashboard
+    #: tiles filter on this, history keeps everything.
+    is_current = Column(Boolean, nullable=False, default=True, server_default=sql_text("true"), index=True)
+
+    first_seen_at = Column(String, nullable=False, index=True)
+    last_seen_at = Column(String, nullable=False, index=True)
+    last_analysis_run_id = Column(
+        Integer, ForeignKey("analysis_run.id", ondelete="SET NULL"), nullable=True, index=True
+    )
+
+    assigned_to = Column(String, nullable=True, index=True)
+    reviewed_by = Column(String, nullable=True)
+    reviewed_at = Column(String, nullable=True)
+
+    created_at = Column(String, nullable=False)
+    updated_at = Column(String, nullable=True)
+
+    #: Optimistic concurrency (VEX-AUD-002). Every write bumps this; mutation
+    #: endpoints require the caller's value and return 409 on mismatch.
+    row_version = Column(Integer, nullable=False, default=1, server_default="1")
+
+    sbom = relationship("SBOMSource")
+    component = relationship("SBOMComponent")
+    effective_statement = relationship("VexStatement")
+
+    __table_args__ = (
+        UniqueConstraint(
+            "tenant_id",
+            "sbom_id",
+            "component_key",
+            "canonical_vulnerability_id",
+            "unresolved_discriminator",
+            name="uq_vex_investigation_context",
+        ),
+        Index("ix_vex_investigation_queue", "tenant_id", "is_current", "reconciliation_status"),
+        Index("ix_vex_investigation_status", "tenant_id", "is_current", "effective_status"),
+        Index("ix_vex_investigation_sbom_current", "sbom_id", "is_current"),
+    )
+
+    def assign_component(self, component_id: int | None) -> None:
+        """Set ``component_id`` and keep ``component_key`` consistent."""
+        self.component_id = component_id
+        self.component_key = component_id or 0
+
+
+@event.listens_for(VexInvestigation, "before_insert")
+@event.listens_for(VexInvestigation, "before_update")
+def _sync_vex_investigation_component_key(mapper, connection, target):
+    """Derive ``component_key`` from ``component_id`` on every write.
+
+    Belt and braces for :meth:`VexInvestigation.assign_component`: the unique
+    key depends on these two staying in step, so a caller that sets
+    ``component_id`` directly must not be able to corrupt context identity.
+    """
+    target.component_key = target.component_id or 0
+
+
+class ComponentLifecycleOverrideAudit(Base, TenantOwnedMixin):
+    """Dedicated audit trail for lifecycle override changes."""
+
+    __tablename__ = "component_lifecycle_override_audit"
+
+    id = Column(Integer, primary_key=True, index=True)
+    component_id = Column(Integer, ForeignKey("sbom_component.id", ondelete="CASCADE"), nullable=False, index=True)
+    old_value_json = Column(JSON, nullable=True)
+    new_value_json = Column(JSON, nullable=True)
+    reason = Column(Text, nullable=False)
+    evidence_url = Column(String, nullable=True)
+    changed_by = Column(String, nullable=True, index=True)
+    changed_at = Column(String, nullable=False, index=True)
+
+
+class VexInvestigationSnapshot(Base, TenantOwnedMixin):
+    """Immutable reconciliation/assignment evidence at analysis completion."""
+    __tablename__ = "vex_investigation_snapshot"
+    id = Column(Integer, primary_key=True)
+    sbom_id = Column(Integer, ForeignKey("sbom_source.id", ondelete="CASCADE"), nullable=False, index=True)
+    analysis_run_id = Column(Integer, ForeignKey("analysis_run.id", ondelete="CASCADE"), nullable=False, index=True)
+    investigation_id = Column(Integer, ForeignKey("vex_investigation.id", ondelete="CASCADE"), nullable=False)
+    payload_json = Column(JSON, nullable=False)
+    captured_at = Column(String, nullable=False)
+    __table_args__ = (UniqueConstraint("analysis_run_id", "investigation_id", name="uq_vex_run_context_snapshot"),)
+
+
+class VexOverrideAudit(Base, TenantOwnedMixin):
+    """Append-only audit trail for manual VEX actions (VEX-AUD-001).
+
+    Spec section 40 requires tenant, SBOM, component, vulnerability, previous
+    status, new status, reason, evidence, changed-by and changed-at. The
+    statuses were previously only readable inside ``old_value_json`` /
+    ``new_value_json``; they are now first-class columns so "who changed this
+    to AFFECTED and when" is a query rather than a JSON scan. Those JSON blobs
+    stay as the full before/after record.
+
+    ``component_id`` is nullable because an analyst can act on a context whose
+    component could not be resolved (VEX-MAP-001) — binding that assertion to
+    a component is itself an audited action, and it happens while
+    ``component_id`` is still NULL.
+
+    Rows are never updated or deleted.
+    """
+
+    __tablename__ = "vex_override_audit"
+
+    #: What the actor did. Decisions, assignments and mapping resolutions all
+    #: land here so one query reconstructs a context's human history.
+    ACTION_DECISION = "DECISION"
+    ACTION_ASSIGNMENT = "ASSIGNMENT"
+    ACTION_MAPPING_RESOLUTION = "MAPPING_RESOLUTION"
+
+    id = Column(Integer, primary_key=True, index=True)
+    component_id = Column(Integer, ForeignKey("sbom_component.id", ondelete="CASCADE"), nullable=True, index=True)
+    sbom_id = Column(Integer, ForeignKey("sbom_source.id", ondelete="CASCADE"), nullable=True, index=True)
+    investigation_id = Column(
+        Integer, ForeignKey("vex_investigation.id", ondelete="SET NULL"), nullable=True, index=True
+    )
+    vulnerability_id = Column(String, nullable=False, index=True)
+    action = Column(String(32), nullable=False, default=ACTION_DECISION, server_default="DECISION", index=True)
+    previous_status = Column(String(32), nullable=True)
+    new_status = Column(String(32), nullable=True)
+    old_value_json = Column(JSON, nullable=True)
+    new_value_json = Column(JSON, nullable=True)
+    reason = Column(Text, nullable=False)
+    evidence_url = Column(String, nullable=True)
+    changed_by = Column(String, nullable=True, index=True)
+    changed_at = Column(String, nullable=False, index=True)
+
+
+class AnalysisRun(Base, SoftDeleteMixin, TenantOwnedMixin):
+    __tablename__ = "analysis_run"
+
+    id = Column(Integer, primary_key=True, index=True)
+    sbom_id = Column(Integer, ForeignKey("sbom_source.id"), nullable=False, index=True)
+    project_id = Column(Integer, ForeignKey("projects.id"), nullable=True, index=True)
+    product_id = Column(Integer, ForeignKey("products.id"), nullable=True, index=True)
+
+    run_status = Column(String, nullable=False, index=True)
+    sbom_name = Column(String, nullable=True)
+    source = Column(String, nullable=False, default="NVD")
+    trigger_source = Column(String(32), nullable=False, default="unknown", server_default="unknown", index=True)
+
+    started_on = Column(String, nullable=False)
+    completed_on = Column(String, nullable=False)
+    duration_ms = Column(Integer, nullable=False, default=0)
+
+    total_components = Column(Integer, nullable=False, default=0)
+    components_with_cpe = Column(Integer, nullable=False, default=0)
+    total_findings = Column(Integer, nullable=False, default=0)
+
+    critical_count = Column(Integer, nullable=False, default=0)
+    high_count = Column(Integer, nullable=False, default=0)
+    medium_count = Column(Integer, nullable=False, default=0)
+    low_count = Column(Integer, nullable=False, default=0)
+    unknown_count = Column(Integer, nullable=False, default=0)
+    query_error_count = Column(Integer, nullable=False, default=0)
+
+    raw_report = Column(Text, nullable=True)
+
+    # Obsolete/stale runs remain readable, but cannot enter current metrics.
+    is_current = Column(Boolean, nullable=False, default=True, server_default=sql_text("true"), index=True)
+    analysis_input_fingerprint = Column(JSON, nullable=True)
+
+    sbom = relationship("SBOMSource", back_populates="analysis_runs")
+    project = relationship("Projects", back_populates="analysis_runs")
+    product = relationship("Product", back_populates="analysis_runs")
+    findings = relationship("AnalysisFinding", back_populates="analysis_run")
+    ai_fix_batches = relationship(
+        "AiFixBatch",
+        primaryjoin="AnalysisRun.id == foreign(AiFixBatch.run_id)",
+        viewonly=True,
+    )
+
+    @property
+    def processing_eligibility(self) -> dict:
+        from .services.sbom_lifecycle import processing_eligibility
+        if not self.sbom:
+            return {"eligible": False, "reason_code": "SBOM_NOT_FOUND", "reason": "SBOM no longer available."}
+        verdict = processing_eligibility(self.sbom)
+        if not verdict["eligible"]:
+            return verdict
+        if not self.is_current or self.sbom.analysis_requires_reanalysis:
+            return {"eligible": False, "reason_code": "SBOM_ANALYSIS_OBSOLETE",
+                    "reason": "This analysis is historical. Run a new analysis before generating comparisons or reports."}
+        return verdict
+
+    @property
+    def product_name(self) -> str | None:
+        return self.product.name if self.product else None
+
+
+class AnalysisFinding(Base, SoftDeleteMixin, TenantOwnedMixin):
+    __tablename__ = "analysis_finding"
+
+    id = Column(Integer, primary_key=True, index=True)
+    analysis_run_id = Column(Integer, ForeignKey("analysis_run.id"), nullable=False, index=True)
+    component_id = Column(Integer, ForeignKey("sbom_component.id"), nullable=True, index=True)
+
+    vuln_id = Column(String(255), nullable=False, index=True)
+    source = Column(String(128), nullable=True)
+    title = Column(String, nullable=True)
+    description = Column(Text, nullable=True)
+    severity = Column(String(16), nullable=True, index=True)
+    score = Column(Float, nullable=True)
+    vector = Column(Text, nullable=True)
+    published_on = Column(String, nullable=True)
+    reference_url = Column(Text, nullable=True)
+    cwe = Column(Text, nullable=True)
+
+    cpe = Column(String, nullable=True, index=True)
+    component_name = Column(Text, nullable=True)
+    component_version = Column(Text, nullable=True)
+
+    fixed_versions = Column(Text, nullable=True)  # JSON array stored as string
+    attack_vector = Column(String(64), nullable=True)
+    cvss_version = Column(String(16), nullable=True)
+    aliases = Column(Text, nullable=True)  # JSON array as string
+
+    # Version-range match verdict from app.sources.version_range. NULL for
+    # rows written before migration 016. Some providers add source-specific
+    # reason labels, so keep enough headroom while validating pre-flush.
+    match_reason = Column(String(255), nullable=True, index=True)
+    matched_range = Column(Text, nullable=True)
+
+    # Roadmap #3 — name/version/vendor token-overlap score in [0.0, 1.0].
+    # NULL on pre-migration-017 rows and on sources not yet wired into
+    # the scorer; the scorer in PR-B is the source of truth for the
+    # bound (no DB CHECK, matching migration 016's posture — see
+    # migration 017's docstring for the rationale).
+    match_confidence = Column(Float, nullable=True)
+
+    # Roadmap #6 — which search strategy produced this finding.
+    # Values (enforced in Python, not the DB): cpe_name,
+    # virtual_match_string, keyword_search (NVD); purl_direct (OSV);
+    # ghsa_alias (GHSA). Width VARCHAR(64) leaves headroom for future
+    # source-strategy additions while remaining a bounded provenance tag.
+    # Indexed so triage queries
+    # ("show everything produced by keyword_search") don't table-scan.
+    match_strategy = Column(String(64), nullable=True, index=True)
+
+    evidence_json = Column(JSON, nullable=True)
+    reconciliation_key = Column(String(64), nullable=True)
+
+    analysis_run = relationship("AnalysisRun", back_populates="findings")
+    component = relationship("SBOMComponent", back_populates="findings")
+
+    __table_args__ = (
+        UniqueConstraint("analysis_run_id", "reconciliation_key", name="uq_analysis_finding_run_reconciliation"),
+        Index("ix_analysis_finding_run_severity", "analysis_run_id", "severity"),
+    )
+
+
+class RunCache(Base, TenantOwnedMixin):
+    """
+    Persists the raw JSON payload returned by the ad-hoc analysis endpoints
+    (NVD / GitHub / OSV / Consolidated).  The id returned here IS the runId
+    clients use to request a PDF report — no more in-memory-only storage.
+    """
+
+    __tablename__ = "run_cache"
+
+    id = Column(Integer, primary_key=True, index=True)
+    run_json = Column(Text, nullable=False)
+    created_on = Column(String, nullable=True)
+    source = Column(String, nullable=True)  # "consolidated"|"nvd"|"osv"|"ghsa"
+    sbom_id = Column(Integer, nullable=True)  # for cache invalidation
+
+
+class KevEntry(Base):
+    """
+    Cached row from the CISA Known Exploited Vulnerabilities catalog
+    (https://www.cisa.gov/known-exploited-vulnerabilities-catalog).
+
+    ``KevEntry`` is kept as the Python class name for backwards-compatible
+    imports.  The canonical database table is ``kev_vulnerabilities``.
+    """
+
+    __tablename__ = "kev_vulnerabilities"
+
+    cve_id = Column(String(32), primary_key=True, index=True)
+    vendor_project = Column(String(255), nullable=True)
+    product = Column(String(255), nullable=True)
+    vulnerability_name = Column(Text, nullable=True)
+    date_added = Column(String(10), nullable=True)
+    short_description = Column(Text, nullable=True)
+    required_action = Column(Text, nullable=True)
+    due_date = Column(String(10), nullable=True)
+    known_ransomware_campaign_use = Column(String(32), nullable=True)  # "Known"/"Unknown"
+    known_ransomware_use = synonym("known_ransomware_campaign_use")
+    notes = Column(Text, nullable=True)
+    cwes = Column(JSON, nullable=True)
+    catalog_version = Column(String(32), nullable=True)
+    catalog_date_released = Column(String(64), nullable=True)
+    refreshed_at = Column(String, nullable=False)  # ISO timestamp
+    first_seen_at = Column(String, nullable=True)
+    updated_at = Column(String, nullable=True)
+
+    __table_args__ = (
+        Index("ix_kev_vulnerabilities_date_added", "date_added"),
+        Index("ix_kev_vulnerabilities_ransomware", "known_ransomware_campaign_use"),
+    )
+
+
+class AnalysisSchedule(Base, SoftDeleteMixin, TenantOwnedMixin):
+    """
+    Periodic analysis schedule. One active row per scope target.
+
+    Resolution is SBOM > PRODUCT > PROJECT > TENANT. Missing child rows
+    inherit, paused custom rows block inheritance, and EXCLUDED rows opt out.
+    """
+
+    __tablename__ = "analysis_schedule"
+
+    id = Column(Integer, primary_key=True, index=True)
+    scope = Column(String(16), nullable=False)  # TENANT|PROJECT|PRODUCT|SBOM
+
+    project_id = Column(Integer, ForeignKey("projects.id", ondelete="CASCADE"), nullable=True, index=True)
+    product_id = Column(Integer, ForeignKey("products.id", ondelete="CASCADE"), nullable=True, index=True)
+    sbom_id = Column(Integer, ForeignKey("sbom_source.id", ondelete="CASCADE"), nullable=True, index=True)
+
+    cadence = Column(String(16), nullable=False)  # DAILY|WEEKLY|BIWEEKLY|MONTHLY|QUARTERLY|CUSTOM
+    cron_expression = Column(String(128), nullable=True)  # set only when cadence='CUSTOM'
+    day_of_week = Column(Integer, nullable=True)  # 0=Mon..6=Sun for WEEKLY/BIWEEKLY
+    day_of_month = Column(Integer, nullable=True)  # 1..28 for MONTHLY/QUARTERLY
+    hour_utc = Column(Integer, nullable=False, default=2)
+    timezone = Column(String(64), nullable=False, default="UTC")
+
+    # A missing child row means INHERIT.  CUSTOM rows may be enabled or
+    # paused; EXCLUDED rows explicitly block all parent inheritance.
+    mode = Column(String(16), nullable=False, default="CUSTOM", server_default="CUSTOM")
+    target_version_policy = Column(
+        String(32),
+        nullable=False,
+        default="CURRENT_ONLY",
+        server_default="CURRENT_ONLY",
+    )
+
+    enabled = Column(Boolean, nullable=False, default=True)
+
+    next_run_at = Column(String, nullable=True, index=True)
+    last_run_at = Column(String, nullable=True)
+    last_run_status = Column(String(16), nullable=True)
+    last_run_id = Column(Integer, ForeignKey("analysis_run.id", ondelete="SET NULL"), nullable=True)
+
+    consecutive_failures = Column(Integer, nullable=False, default=0)
+    min_gap_minutes = Column(Integer, nullable=False, default=60)
+
+    created_on = Column(String, nullable=True)
+    created_by = Column(String, nullable=True)
+    modified_on = Column(String, nullable=True)
+    modified_by = Column(String, nullable=True)
+
+    project = relationship("Projects", foreign_keys=[project_id])
+    product = relationship("Product", foreign_keys=[product_id])
+    sbom = relationship("SBOMSource", foreign_keys=[sbom_id])
+
+    __table_args__ = (
+        CheckConstraint("scope IN ('TENANT','PROJECT','PRODUCT','SBOM')", name="ck_analysis_schedule_scope"),
+        CheckConstraint(
+            "cadence IN ('DAILY','WEEKLY','BIWEEKLY','MONTHLY','QUARTERLY','CUSTOM')",
+            name="ck_analysis_schedule_cadence",
+        ),
+        CheckConstraint("mode IN ('CUSTOM','EXCLUDED')", name="ck_analysis_schedule_mode"),
+        CheckConstraint(
+            "target_version_policy IN ('CURRENT_ONLY','ALL_ACTIVE_VERSIONS')",
+            name="ck_analysis_schedule_target_version_policy",
+        ),
+        CheckConstraint(
+            "(scope = 'TENANT' AND project_id IS NULL AND product_id IS NULL AND sbom_id IS NULL) "
+            "OR (scope = 'PROJECT' AND project_id IS NOT NULL AND product_id IS NULL AND sbom_id IS NULL) "
+            "OR (scope = 'PRODUCT' AND product_id IS NOT NULL AND project_id IS NULL AND sbom_id IS NULL) "
+            "OR (scope = 'SBOM' AND sbom_id IS NOT NULL AND project_id IS NULL AND product_id IS NULL)",
+            name="ck_analysis_schedule_target",
+        ),
+        CheckConstraint("hour_utc BETWEEN 0 AND 23", name="ck_analysis_schedule_hour_range"),
+        CheckConstraint(
+            "day_of_week IS NULL OR day_of_week BETWEEN 0 AND 6",
+            name="ck_analysis_schedule_dow_range",
+        ),
+        CheckConstraint(
+            "day_of_month IS NULL OR day_of_month BETWEEN 1 AND 28",
+            name="ck_analysis_schedule_dom_range",
+        ),
+        Index("ix_analysis_schedule_due", "enabled", "next_run_at"),
+    )
+
+
+class EpssScore(Base):
+    """
+    Cached EPSS (Exploit Prediction Scoring System) score for a CVE.
+    Source: FIRST.org EPSS API (https://api.first.org/data/v1/epss).
+
+    Each row is a per-CVE snapshot. We refresh per-CVE on-demand on a
+    24h TTL to keep the cache hot for active SBOMs without bulk-syncing
+    the full ~250k-CVE catalog. Missing rows = "not yet looked up" — the
+    scorer treats them as 0.0 (median EPSS is ~0.001 anyway, so the
+    impact of a miss is small).
+    """
+
+    __tablename__ = "epss_score"
+
+    cve_id = Column(String, primary_key=True, index=True)
+    epss = Column(Float, nullable=False, default=0.0)  # probability 0..1
+    percentile = Column(Float, nullable=True)  # 0..1
+    score_date = Column(String, nullable=True)  # date EPSS published
+    refreshed_at = Column(String, nullable=False)  # ISO timestamp of our pull
+
+
+class CveCache(Base):
+    """
+    Merged CVE detail payload (OSV + GHSA + NVD + EPSS + KEV).
+
+    Keyed by canonical ``CVE-YYYY-NNNN+`` ID. Holds the full ``CveDetail``
+    JSON the modal renders. TTL is enforced at upsert time by
+    ``CveDetailService`` — readers just compare ``expires_at`` to ``now()``.
+    A row with non-null ``fetch_error`` is a negative cache entry kept for a
+    short window (15 min) so we don't hammer upstreams during outages.
+    """
+
+    __tablename__ = "cve_cache"
+
+    cve_id = Column(String(32), primary_key=True, index=True)
+    payload = Column(JSON, nullable=False)
+    sources_used = Column(String(128), nullable=False)  # comma-joined
+    fetched_at = Column(String, nullable=False)
+    expires_at = Column(String, nullable=False, index=True)
+    fetch_error = Column(Text, nullable=True)
+    schema_version = Column(Integer, nullable=False, default=1)
+
+
+class SourceResponseCache(Base):
+    """
+    Per-(source, component) RAW response cache (roadmap #2, PR-A).
+
+    Composite primary key on (source, component_key); ``component_key`` is
+    the canonical PURL string so identical components across SBOMs share one
+    cached row. ``payload`` holds the source's raw response — opaque JSON
+    that PR-B's wiring step reprocesses on hit, so #1/#3/#6 logic stays
+    fresh on every read.
+
+    TTL is enforced at the repository layer at READ time: a row whose
+    ``expires_at`` is in the past is treated as a miss (and silently
+    overwritten on the next ``set``). ``ix_source_response_cache_expires_at``
+    supports a future periodic sweep job for housekeeping; today's readers
+    don't depend on it.
+
+    NOT to be confused with ``cve_cache`` (per-CVE-ID detail payloads) or
+    ``run_cache`` (per-SBOM whole-run JSON) — both are different concerns
+    with different key spaces.
+    """
+
+    __tablename__ = "source_response_cache"
+
+    source = Column(String(32), primary_key=True)
+    component_key = Column(String(512), primary_key=True)
+    payload = Column(JSON, nullable=False)
+    fetched_at = Column(String, nullable=False)
+    expires_at = Column(String, nullable=False)
+
+    __table_args__ = (Index("ix_source_response_cache_expires_at", "expires_at"),)
+
+
+class NvdLookupCache(Base):
+    """Cache of NVD lookup results and short-lived provider failures."""
+
+    __tablename__ = "nvd_lookup_cache"
+
+    id = Column(Integer, primary_key=True)
+    lookup_type = Column(String(16), nullable=False)
+    identifier = Column(String(2048), nullable=False)
+    identifier_hash = Column(String(64), nullable=False)
+    status = Column(String(16), nullable=False)
+    response_json = Column(JSON, nullable=True)
+    http_status = Column(Integer, nullable=True)
+    error_message = Column(Text, nullable=True)
+    checked_at = Column(String, nullable=False)
+    expires_at = Column(String, nullable=False)
+    created_at = Column(String, nullable=False)
+    updated_at = Column(String, nullable=False)
+
+    __table_args__ = (
+        UniqueConstraint("lookup_type", "identifier_hash", name="uq_nvd_lookup_cache_type_hash"),
+        Index("ix_nvd_lookup_cache_expires_at", "expires_at"),
+        Index("ix_nvd_lookup_cache_status", "status"),
+        Index("ix_nvd_lookup_cache_identifier", "identifier"),
+    )
+
+
+class CompareCache(Base, TenantOwnedMixin):
+    """
+    Cached ``CompareResult`` payload (ADR-0008).
+
+    Keyed by ``sha256(f"{min(a,b)}:{max(a,b)}")`` so the same cache row is
+    reused regardless of which order the user picks the runs. Run-id indices
+    on both sides support O(1) invalidation when either run is reanalysed
+    (Celery completion hook deletes ``WHERE run_a_id = :id OR run_b_id = :id``).
+    """
+
+    __tablename__ = "compare_cache"
+
+    cache_key = Column(String(64), primary_key=True)
+    run_a_id = Column(Integer, nullable=False, index=True)
+    run_b_id = Column(Integer, nullable=False, index=True)
+    payload = Column(JSON, nullable=False)
+    computed_at = Column(String, nullable=False)
+    expires_at = Column(String, nullable=False, index=True)
+    schema_version = Column(Integer, nullable=False, default=1)
+
+
+class AiUsageLog(Base, TenantOwnedMixin):
+    """
+    Append-only ledger of every LLM call (success and failure).
+
+    Phase 1 of the AI-driven remediation feature. Every provider call —
+    cache hit, cache miss, or failure — writes one row. Reads are always
+    aggregations (cost dashboards, daily totals, cache hit ratio); the
+    table is therefore optimised for fast inserts and time-range scans.
+    """
+
+    __tablename__ = "ai_usage_log"
+
+    id = Column(Integer, primary_key=True, index=True)
+    request_id = Column(String(64), nullable=False)
+    provider = Column(String(32), nullable=False, index=True)
+    model = Column(String(256), nullable=False)
+    purpose = Column(String(48), nullable=False, index=True)
+    finding_cache_key = Column(String(64), nullable=True, index=True)
+    input_tokens = Column(Integer, nullable=False, default=0)
+    output_tokens = Column(Integer, nullable=False, default=0)
+    cost_usd = Column(Float, nullable=False, default=0.0)
+    latency_ms = Column(Integer, nullable=False, default=0)
+    cache_hit = Column(Boolean, nullable=False, default=False)
+    error = Column(Text, nullable=True)
+    created_at = Column(String, nullable=False, index=True)
+
+
+class AiProviderConfig(Base):
+    """
+    Legacy per-provider runtime overrides retained for compatibility.
+
+    New DB-backed credentials and selection metadata live in
+    ``ai_provider_credentials`` and are resolved through ``AiConfigLoader``.
+    This table is intentionally not a credential store.
+    """
+
+    __tablename__ = "ai_provider_config"
+
+    provider_name = Column(String(32), primary_key=True)
+    enabled = Column(Boolean, nullable=True)
+    default_model = Column(String(256), nullable=True)
+    base_url = Column(String(256), nullable=True)
+    max_concurrent = Column(Integer, nullable=True)
+    rate_per_minute = Column(Float, nullable=True)
+    notes = Column(Text, nullable=True)
+    updated_at = Column(String, nullable=True)
+    updated_by = Column(String, nullable=True)
+
+
+class AiFixCache(Base):
+    """
+    Cached AI fix bundle, keyed on (vuln_id, component, version, prompt_version).
+
+    The cache is tenant-shared by design — the AI advice for
+    ``CVE-2021-44832`` on ``log4j-core@2.16.0`` is the same regardless of
+    which user asks. This is the lever that makes the feature affordable:
+    a 1,000-finding scan typically reduces to ~50-150 net-new generations
+    with even a modest population of historical runs.
+
+    TTL policy enforced at upsert time:
+      * KEV-listed CVE → 7 days  (KEV status / exploitability narrative
+                                  may change)
+      * Non-KEV        → 30 days
+      * Negative cache → 1 hour  (LLM call failed; retry sooner)
+    """
+
+    __tablename__ = "ai_fix_cache"
+
+    cache_key = Column(String(64), primary_key=True)
+    vuln_id = Column(String(64), nullable=False, index=True)
+    component_name = Column(String(255), nullable=False)
+    component_version = Column(String(128), nullable=False)
+    prompt_version = Column(String(32), nullable=False)
+    schema_version = Column(Integer, nullable=False, default=1)
+
+    remediation_prose = Column(JSON, nullable=False)
+    upgrade_command = Column(JSON, nullable=False)
+    decision_recommendation = Column(JSON, nullable=False)
+    # Model's self-assessed confidence in the whole bundle ("high"/"medium"/
+    # "low"). Nullable so historical rows (pre-019) and fresh-install paths
+    # that skip the migration read back as the neutral default in
+    # ``app.ai.cache.read_cache``. New rows are always written non-null.
+    overall_confidence = Column(String(16), nullable=True)
+
+    provider_used = Column(String(32), nullable=False)
+    model_used = Column(String(256), nullable=False)
+    total_cost_usd = Column(Float, nullable=False, default=0.0)
+
+    generated_at = Column(String, nullable=False)
+    expires_at = Column(String, nullable=False, index=True)
+    last_accessed_at = Column(String, nullable=False)
+
+    __table_args__ = (
+        Index(
+            "ix_ai_fix_cache_vuln_component",
+            "vuln_id",
+            "component_name",
+            "component_version",
+        ),
+    )
+
+
+class AiFixBatch(Base, SoftDeleteMixin, TenantOwnedMixin):
+    """
+    Durable record of a scope-aware AI fix batch (Phase 2 multi-batch).
+
+    Up to 3 active batches may exist for a single ``run_id`` at a time
+    (enforced at the router); this row holds the immutable
+    "what was the scope, when did it start, what was the outcome" data.
+    Live progress (counts updating in real time) lives in the
+    progress store; this row is the source of truth for batch identity
+    and historical lookups.
+
+    ``finding_ids_json`` is denormalised on purpose: the resolved set
+    at batch-creation time is the source of truth for what was
+    processed, even if findings are deleted later.
+    """
+
+    __tablename__ = "ai_fix_batch"
+
+    # 36-char UUID (hex with dashes), generated by the application.
+    id = Column(String(36), primary_key=True)
+    run_id = Column(
+        Integer,
+        ForeignKey("analysis_run.id", ondelete="CASCADE"),
+        nullable=False,
+    )
+    status = Column(String(24), nullable=False)
+    scope_label = Column(String(120), nullable=True)
+    scope_json = Column(JSON, nullable=True)
+    finding_ids_json = Column(JSON, nullable=False)
+    provider_name = Column(String(64), nullable=False)
+    total = Column(Integer, nullable=False, default=0)
+    cached_count = Column(Integer, nullable=False, default=0)
+    generated_count = Column(Integer, nullable=False, default=0)
+    failed_count = Column(Integer, nullable=False, default=0)
+    cost_usd = Column(Float, nullable=False, default=0.0)
+    started_at = Column(String, nullable=True)
+    completed_at = Column(String, nullable=True)
+    created_at = Column(String, nullable=False)
+    last_error = Column(String(240), nullable=True)
+
+    __table_args__ = (
+        Index("ix_ai_fix_batch_run_status", "run_id", "status"),
+        Index("ix_ai_fix_batch_created_at", "created_at"),
+    )
+
+
+class AiProviderCredential(Base):
+    """
+    AES-GCM-encrypted API credential for one AI provider (Phase 2 §2.2).
+
+    Tenant-shared by design (single-admin v1). ``provider_name`` + ``label``
+    identifies one credential, allowing deterministic default/fallback
+    selection even when a provider has multiple keys.
+
+    Hard rule: ``api_key_encrypted`` must NEVER be returned by any
+    endpoint. The router exposes ``api_key_preview`` (first 6 + last 4)
+    and ``api_key_present`` only.
+    """
+
+    __tablename__ = "ai_provider_credential"
+
+    id = Column(Integer, primary_key=True, index=True)
+    tenant_id = Column(Integer, ForeignKey("tenants.id", ondelete="CASCADE"), nullable=True, index=True)
+    provider_name = Column(String(32), nullable=False, index=True)
+    label = Column(String(64), nullable=False, default="default")
+    api_key_encrypted = Column(Text, nullable=True)
+    base_url = Column(String(512), nullable=True)
+    default_model = Column(String(256), nullable=True)
+    tier = Column(String(16), nullable=False, default="paid")
+    is_default = Column(Boolean, nullable=False, default=False)
+    is_fallback = Column(Boolean, nullable=False, default=False)
+    enabled = Column(Boolean, nullable=False, default=True)
+    cost_per_1k_input_usd = Column(Float, nullable=False, default=0.0)
+    cost_per_1k_output_usd = Column(Float, nullable=False, default=0.0)
+    is_local = Column(Boolean, nullable=False, default=False)
+    max_concurrent = Column(Integer, nullable=True)
+    rate_per_minute = Column(Float, nullable=True)
+    created_at = Column(String, nullable=False)
+    updated_at = Column(String, nullable=False)
+    last_test_at = Column(String, nullable=True)
+    last_test_success = Column(Boolean, nullable=True)
+    last_test_error = Column(Text, nullable=True)
+
+    __table_args__ = (
+        Index("uq_ai_credential_platform", "provider_name", "label", unique=True, postgresql_where=sql_text("tenant_id IS NULL"), sqlite_where=sql_text("tenant_id IS NULL")),
+        UniqueConstraint("tenant_id", "provider_name", "label", name="uq_ai_credential_tenant"),
+        Index("ix_ai_only_one_default", "is_default", unique=True, postgresql_where=sql_text("is_default = TRUE AND tenant_id IS NULL"), sqlite_where=sql_text("is_default = 1 AND tenant_id IS NULL")),
+        Index("ix_ai_only_one_fallback", "is_fallback", unique=True, postgresql_where=sql_text("is_fallback = TRUE AND tenant_id IS NULL"), sqlite_where=sql_text("is_fallback = 1 AND tenant_id IS NULL")),
+        Index("ix_ai_tenant_default", "tenant_id", unique=True, postgresql_where=sql_text("is_default = TRUE AND tenant_id IS NOT NULL"), sqlite_where=sql_text("is_default = 1 AND tenant_id IS NOT NULL")),
+        Index("ix_ai_tenant_fallback", "tenant_id", unique=True, postgresql_where=sql_text("is_fallback = TRUE AND tenant_id IS NOT NULL"), sqlite_where=sql_text("is_fallback = 1 AND tenant_id IS NOT NULL")),
+    )
+
+
+class AiProviderModel(Base):
+    """Persisted model discovered for one exact provider credential.
+
+    Discovery is intentionally historical: a model that disappears upstream is
+    marked unavailable rather than deleted. ``is_available`` is nullable so a
+    legacy configured model can remain selected with an explicit "not yet
+    verified" state until the first successful provider refresh.
+
+    ``provider_model_id`` preserves the identifier returned by the provider;
+    ``runtime_model_id`` is the adapter-owned identifier sent to generation
+    APIs (notably Gemini returns ``models/<id>`` but the OpenAI-compatible
+    runtime accepts ``<id>``).
+    """
+
+    __tablename__ = "ai_provider_model"
+
+    id = Column(Integer, primary_key=True, index=True)
+    provider_credential_id = Column(
+        Integer,
+        ForeignKey("ai_provider_credential.id", ondelete="CASCADE"),
+        nullable=False,
+        index=True,
+    )
+    provider_name = Column(String(32), nullable=False, index=True)
+    provider_model_id = Column(String(256), nullable=False)
+    runtime_model_id = Column(String(256), nullable=False)
+    display_name = Column(String(256), nullable=True)
+
+    is_available = Column(Boolean, nullable=True)
+    is_enabled = Column(Boolean, nullable=False, default=True)
+    is_selected = Column(Boolean, nullable=False, default=False)
+
+    supports_chat = Column(Boolean, nullable=True)
+    supports_structured_output = Column(Boolean, nullable=True)
+    supports_streaming = Column(Boolean, nullable=True)
+    supports_tools = Column(Boolean, nullable=True)
+    context_window = Column(Integer, nullable=True)
+    max_output_tokens = Column(Integer, nullable=True)
+
+    discovery_source = Column(String(24), nullable=False, default="live")
+    first_discovered_at = Column(String, nullable=True)
+    last_discovered_at = Column(String, nullable=True)
+    last_verified_at = Column(String, nullable=True)
+    last_test_success = Column(Boolean, nullable=True)
+    last_test_error = Column(String(240), nullable=True)
+    raw_metadata = Column(JSON, nullable=True)
+    created_at = Column(String, nullable=False)
+    updated_at = Column(String, nullable=False)
+
+    __table_args__ = (
+        UniqueConstraint(
+            "provider_credential_id",
+            "provider_model_id",
+            name="uq_ai_provider_model_credential_provider_model",
+        ),
+        Index(
+            "ix_ai_provider_model_only_one_selected",
+            "provider_credential_id",
+            unique=True,
+            sqlite_where=sql_text("is_selected = 1"),
+            postgresql_where=sql_text("is_selected = TRUE"),
+        ),
+        Index(
+            "ix_ai_provider_model_credential_available",
+            "provider_credential_id",
+            "is_available",
+        ),
+    )
+
+
+class AiSettings(Base):
+    """
+    One settings row per owner. NULL tenant is the platform default;
+    explicit tenant rows override it without modifying the platform row.
+    """
+
+    __tablename__ = "ai_settings"
+
+    id = Column(Integer, primary_key=True)
+    tenant_id = Column(Integer, ForeignKey("tenants.id", ondelete="CASCADE"), nullable=True, unique=True)
+    feature_enabled = Column(Boolean, nullable=False, default=True)
+    kill_switch_active = Column(Boolean, nullable=False, default=False)
+    budget_per_request_usd = Column(Float, nullable=False, default=0.10)
+    budget_per_scan_usd = Column(Float, nullable=False, default=5.00)
+    budget_daily_usd = Column(Float, nullable=False, default=5.00)
+    updated_at = Column(String, nullable=False)
+    updated_by_user_id = Column(String, nullable=True)
+
+    __table_args__ = (Index("uq_ai_settings_platform", sql_text("(1)"), unique=True, postgresql_where=sql_text("tenant_id IS NULL"), sqlite_where=sql_text("tenant_id IS NULL")),)
+
+
+class AiCredentialAuditLog(Base):
+    """
+    Append-only audit trail for credential / settings mutations
+    (Phase 2 §2.6).
+
+    Hard rule: this table NEVER stores credential payloads. Only the
+    user, action, target, provider name, and a short context string.
+    """
+
+    __tablename__ = "ai_credential_audit_log"
+
+    id = Column(Integer, primary_key=True, index=True)
+    tenant_id = Column(Integer, ForeignKey("tenants.id", ondelete="SET NULL"), nullable=True, index=True)
+    user_id = Column(String(128), nullable=True)
+    action = Column(String(48), nullable=False)
+    target_kind = Column(String(24), nullable=False)  # "credential" | "settings"
+    target_id = Column(Integer, nullable=True)
+    provider_name = Column(String(32), nullable=True)
+    detail = Column(String(240), nullable=True)
+    created_at = Column(String, nullable=False, index=True)
+
+
+class AuditLog(Base, TenantOwnedMixin):
+    """
+    Append-only general-purpose audit trail.
+
+    Distinct from ``AiCredentialAuditLog`` (which is the
+    security-specific surface for credential/settings mutations).
+    This table records lifecycle events on user-owned data —
+    soft-deletes, permanent deletes, and restores — so an admin can
+    answer "what happened to project X" after the fact.
+
+    Action vocabulary (Phase 3 of the soft-delete refactor):
+
+      * ``project.soft_delete`` / ``project.permanent_delete`` /
+        ``project.restore``
+      * ``sbom.soft_delete`` / ``sbom.permanent_delete`` / ``sbom.restore``
+      * ``schedule.soft_delete`` / ``schedule.permanent_delete``
+
+    The cascade row count is stored in ``metadata_json`` so an admin
+    can answer "how many findings were tombstoned with this run" without
+    re-walking the tree.
+    """
+
+    __tablename__ = "audit_log"
+
+    id = Column(Integer, primary_key=True, index=True)
+    user_id = Column(String(128), nullable=True)
+    action = Column(String(128), nullable=False, index=True)
+    target_kind = Column(String(128), nullable=False, index=True)
+    target_id = Column(Integer, nullable=True, index=True)
+    detail = Column(Text, nullable=True)
+    metadata_json = Column(JSON, nullable=True)
+    user_ref_id = Column(Integer, ForeignKey("iam_users.id", ondelete="SET NULL"), nullable=True, index=True)
+    entity_type = Column(String(128), nullable=True, index=True)
+    entity_id = Column(String(128), nullable=True, index=True)
+    old_value = Column(JSON, nullable=True)
+    new_value = Column(JSON, nullable=True)
+    ip_address = Column(String(64), nullable=True)
+    user_agent = Column(Text, nullable=True)
+    created_at = Column(String, nullable=False, index=True)
+
+
+class AuthorizationAuditLog(Base):
+    """Security audit stream for identity and platform events that may have no tenant."""
+
+    __tablename__ = "authorization_audit_log"
+
+    id = Column(Integer, primary_key=True)
+    actor_user_id = Column(Integer, ForeignKey("iam_users.id", ondelete="SET NULL"), nullable=True, index=True)
+    target_user_id = Column(Integer, ForeignKey("iam_users.id", ondelete="SET NULL"), nullable=True, index=True)
+    target_membership_id = Column(
+        Integer,
+        ForeignKey("tenant_users.id", ondelete="SET NULL"),
+        nullable=True,
+        index=True,
+    )
+    tenant_id = Column(Integer, ForeignKey("tenants.id", ondelete="SET NULL"), nullable=True, index=True)
+    action = Column(String(128), nullable=False, index=True)
+    outcome = Column(String(16), nullable=False, default="SUCCESS", index=True)
+    old_value = Column(JSON, nullable=True)
+    new_value = Column(JSON, nullable=True)
+    correlation_id = Column(String(128), nullable=True, index=True)
+    detail = Column(String(240), nullable=True)
+    created_at = Column(DateTime(timezone=True), nullable=False, index=True)
+
+    __table_args__ = (
+        CheckConstraint("outcome IN ('SUCCESS','DENIED','FAILED')", name="authorization_audit_outcome"),
+    )
+
+
+class VulnerabilityRemediation(Base, TenantOwnedMixin):
+    """
+    Tracks vulnerability fix / remediation status for findings.
+    """
+
+    __tablename__ = "vulnerability_remediation"
+
+    id = Column(Integer, primary_key=True, index=True)
+    project_id = Column(Integer, ForeignKey("projects.id", ondelete="CASCADE"), nullable=False, index=True)
+    vuln_id = Column(String, nullable=False, index=True)
+    component_name = Column(String, nullable=False, index=True)
+    component_version = Column(String, nullable=False)
+    fixed_version = Column(String, nullable=True)
+    status = Column(String, nullable=False, default="Open")  # Open, In Progress, Fixed, Accepted Risk, Closed
+    owner = Column(String, nullable=True)
+    due_date = Column(String, nullable=True)  # YYYY-MM-DD
+    resolution_date = Column(String, nullable=True)  # YYYY-MM-DD
+    fix_notes = Column(Text, nullable=True)
+    created_on = Column(String, nullable=False)
+    updated_on = Column(String, nullable=False)
+
+    history = relationship(
+        "VulnerabilityRemediationAudit",
+        back_populates="remediation",
+        cascade="all, delete-orphan",
+        order_by="VulnerabilityRemediationAudit.id",
+    )
+
+
+class VulnerabilityRemediationAudit(Base, TenantOwnedMixin):
+    """Append-only status/change trail for vulnerability remediation records."""
+
+    __tablename__ = "vulnerability_remediation_audit"
+
+    id = Column(Integer, primary_key=True, index=True)
+    remediation_id = Column(
+        Integer,
+        ForeignKey("vulnerability_remediation.id", ondelete="CASCADE"),
+        nullable=False,
+        index=True,
+    )
+    project_id = Column(Integer, ForeignKey("projects.id", ondelete="CASCADE"), nullable=False, index=True)
+    vuln_id = Column(String, nullable=False, index=True)
+    component_name = Column(String, nullable=False, index=True)
+    component_version = Column(String, nullable=False)
+    old_status = Column(String, nullable=True)
+    new_status = Column(String, nullable=False)
+    changed_by = Column(String(128), nullable=True)
+    changed_at = Column(String, nullable=False, index=True)
+    note = Column(Text, nullable=True)
+    remediation = relationship("VulnerabilityRemediation", back_populates="history")
+
+
+# Indexes created by historical Alembic revisions are declared here as
+# well so fresh metadata-created test schemas and Alembic autogeneration
+# agree with production. Partial predicates are dialect-specific but the
+# index names and covered columns remain identical across engines.
+for _model in (
+    Projects,
+    SBOMSource,
+    SBOMAnalysisReport,
+    SBOMComponent,
+    AnalysisRun,
+    AnalysisFinding,
+    AnalysisSchedule,
+    AiFixBatch,
+):
+    Index(
+        f"ix_{_model.__tablename__}_deactivated",
+        _model.is_active,
+        postgresql_where=sql_text("is_active = false"),
+        sqlite_where=sql_text("is_active = 0"),
+    )
+
+for _tenant_model in (
+    Projects,
+    SBOMSource,
+    SBOMValidationSession,
+    SBOMValidationSessionEvent,
+    SBOMAnalysisReport,
+    SBOMComponent,
+    VexDocument,
+    VexStatement,
+    ComponentLifecycleOverrideAudit,
+    VexOverrideAudit,
+    AnalysisRun,
+    AnalysisFinding,
+    RunCache,
+    AnalysisSchedule,
+    CompareCache,
+    AiUsageLog,
+    AiFixBatch,
+    AuditLog,
+    VulnerabilityRemediation,
+    VulnerabilityRemediationAudit,
+):
+    _pk_column = next(iter(_tenant_model.__table__.primary_key.columns))
+    Index(
+        f"ix_{_tenant_model.__tablename__}_tenant_identity",
+        _tenant_model.tenant_id,
+        _pk_column,
+    )
+
+Index("ix_ai_usage_log_provider_created", AiUsageLog.provider, AiUsageLog.created_at)
+Index("ix_ai_usage_log_purpose_created", AiUsageLog.purpose, AiUsageLog.created_at)
+Index("ix_sbom_component_bom_ref", SBOMComponent.bom_ref)
+Index("ix_sbom_component_duplicate_of_component_id", SBOMComponent.duplicate_of_component_id)
+Index("ix_sbom_source_converted_from_format", SBOMSource.converted_from_format)
+Index("ix_sbom_source_parent_id", SBOMSource.parent_id)
+Index("ix_sbom_source_sbom_type", SBOMSource.sbom_type)
+
+# ---------------------------------------------------------------------------
+# Secure Component Advisor (migration 068)
+# ---------------------------------------------------------------------------
+
+
+class AdvisorPolicy(Base):
+    """One advisor policy slot: platform default (NULL tenant) or tenant override.
+
+    FR-SCA-004 (accepted risk), FR-SCA-005 (trust), FR-SCA-017 (scoring).
+    Follows the scoped-configuration shape (``docs/scoped-configuration.md``):
+    one platform row per kind, at most one tenant row per kind. The slot holds
+    no rules — every change, including enable/disable, is a new immutable
+    :class:`AdvisorPolicyVersion`, so classifications stay traceable to the
+    exact version that produced them (NFR-SCA-007). ``row_version`` gives
+    optimistic concurrency for publishing a new version.
+    """
+
+    __tablename__ = "advisor_policy"
+
+    id = Column(Integer, primary_key=True)
+    tenant_id = Column(Integer, ForeignKey("tenants.id", ondelete="CASCADE"), nullable=True, index=True)
+    kind = Column(String(32), nullable=False)
+    row_version = Column(Integer, nullable=False, default=1, server_default="1")
+    created_at = Column(DateTime(timezone=True), nullable=False)
+    updated_at = Column(DateTime(timezone=True), nullable=False)
+    created_by = Column(String(128), nullable=True)
+    updated_by = Column(String(128), nullable=True)
+
+    versions = relationship("AdvisorPolicyVersion", back_populates="policy", order_by="AdvisorPolicyVersion.version")
+
+    __table_args__ = (
+        UniqueConstraint("tenant_id", "kind", name="uq_advisor_policy_tenant_kind"),
+        Index(
+            "uq_advisor_policy_platform_kind", "kind", unique=True,
+            postgresql_where=sql_text("tenant_id IS NULL"), sqlite_where=sql_text("tenant_id IS NULL"),
+        ),
+    )
+
+
+class AdvisorPolicyVersion(Base):
+    """Immutable policy version. Append-only: updates and deletes are rejected."""
+
+    __tablename__ = "advisor_policy_version"
+
+    id = Column(Integer, primary_key=True)
+    policy_id = Column(Integer, ForeignKey("advisor_policy.id"), nullable=False, index=True)
+    tenant_id = Column(Integer, ForeignKey("tenants.id", ondelete="CASCADE"), nullable=True, index=True)
+    kind = Column(String(32), nullable=False)
+    version = Column(Integer, nullable=False)
+    #: ACTIVE or DISABLED. A DISABLED latest version means "no policy" for the
+    #: slot; a tenant DISABLED version also stops the platform default applying.
+    status = Column(String(16), nullable=False)
+    rules_json = Column(JSON, nullable=False)
+    reason = Column(Text, nullable=False)
+    created_at = Column(DateTime(timezone=True), nullable=False)
+    created_by = Column(String(128), nullable=True)
+    correlation_id = Column(String(128), nullable=True)
+
+    policy = relationship("AdvisorPolicy", back_populates="versions")
+
+    __table_args__ = (UniqueConstraint("policy_id", "version", name="uq_advisor_policy_version_number"),)
+
+
+class ComponentPurposeMetadata(Base):
+    """Functional purpose for a component family, with provenance (FR-SCA-009).
+
+    NULL tenant = platform-curated; a tenant row overrides it for that tenant
+    only. ``source`` is PACKAGE, CURATED or AI. AI rows always carry
+    ``confidence`` and ``provenance_json`` and are never presented as
+    authoritative structured metadata.
+    """
+
+    __tablename__ = "component_purpose_metadata"
+
+    id = Column(Integer, primary_key=True)
+    tenant_id = Column(Integer, ForeignKey("tenants.id", ondelete="CASCADE"), nullable=True, index=True)
+    family_key = Column(String(512), nullable=False, index=True)
+    source = Column(String(16), nullable=False)
+    purpose = Column(Text, nullable=True)
+    primary_use_case = Column(String(255), nullable=True)
+    category = Column(String(128), nullable=True, index=True)
+    confidence = Column(String(16), nullable=False)
+    provenance_json = Column(JSON, nullable=True)
+    row_version = Column(Integer, nullable=False, default=1, server_default="1")
+    created_at = Column(DateTime(timezone=True), nullable=False)
+    updated_at = Column(DateTime(timezone=True), nullable=False)
+    created_by = Column(String(128), nullable=True)
+    updated_by = Column(String(128), nullable=True)
+
+    __table_args__ = (
+        UniqueConstraint("tenant_id", "family_key", "source", name="uq_component_purpose_tenant_family_source"),
+        Index(
+            "uq_component_purpose_platform_family_source", "family_key", "source", unique=True,
+            postgresql_where=sql_text("tenant_id IS NULL"), sqlite_where=sql_text("tenant_id IS NULL"),
+        ),
+    )
+
+
+class ComponentRecommendation(Base, TenantOwnedMixin):
+    """Recommendation work item for one source component version (FR-SCA-011).
+
+    Advisory only: a work item never changes the source SBOM, component,
+    manifest or package — accepting one changes recommendation state and
+    audit records only (spec §1.1).
+
+    Context: tenant + source canonical version + SBOM (``scope_key`` =
+    ``sbom_id`` or 0 for tenant-wide) + trigger. The partial unique index
+    ``uq_component_recommendation_open`` allows one *open* item per context,
+    so a re-run returns the existing item instead of duplicating it (T20,
+    decision D-10).
+    """
+
+    __tablename__ = "component_recommendation"
+
+    id = Column(Integer, primary_key=True)
+    project_id = Column(Integer, ForeignKey("projects.id", ondelete="SET NULL"), nullable=True, index=True)
+    product_id = Column(Integer, ForeignKey("products.id", ondelete="SET NULL"), nullable=True, index=True)
+    sbom_id = Column(Integer, ForeignKey("sbom_source.id", ondelete="SET NULL"), nullable=True, index=True)
+    #: ``sbom_id`` with NULL collapsed to 0 so the open-item unique key fires
+    #: for tenant-wide items (NULL is never equal to NULL in SQL).
+    scope_key = Column(Integer, nullable=False, default=0, server_default="0")
+    source_component_id = Column(Integer, ForeignKey("sbom_component.id", ondelete="SET NULL"), nullable=True)
+    source_canonical_key = Column(String(80), nullable=False, index=True)
+    source_family_key = Column(String(512), nullable=True, index=True)
+    source_name = Column(String(512), nullable=False)
+    source_version = Column(String(255), nullable=True)
+    source_ecosystem = Column(String(64), nullable=True)
+    trigger_type = Column(String(32), nullable=False)
+    #: Evidence that justified the trigger when it was raised (severity,
+    #: lifecycle, failed policy criteria, policy version) — NFR-SCA-002.
+    trigger_evidence_json = Column(JSON, nullable=True)
+    status = Column(String(32), nullable=False, index=True)
+    discovery_summary_json = Column(JSON, nullable=True)
+    evaluation_error = Column(Text, nullable=True)
+    correlation_id = Column(String(128), nullable=True, index=True)
+    created_by = Column(String(128), nullable=True)
+    created_at = Column(DateTime(timezone=True), nullable=False)
+    updated_at = Column(DateTime(timezone=True), nullable=False)
+    evaluated_at = Column(DateTime(timezone=True), nullable=True)
+    row_version = Column(Integer, nullable=False, default=1, server_default="1")
+    # Human review state (FR-SCA-021, migration 072). Candidate ids are plain
+    # integers: candidates of a RECOMMENDED / decided item are never replaced.
+    recommended_candidate_id = Column(Integer, nullable=True)
+    accepted_candidate_id = Column(Integer, nullable=True)
+    last_decision = Column(String(32), nullable=True)
+    last_decision_reason = Column(Text, nullable=True)
+    decided_by = Column(String(128), nullable=True)
+    decided_at = Column(DateTime(timezone=True), nullable=True)
+
+    candidates = relationship(
+        "ComponentRecommendationCandidate", back_populates="recommendation",
+        order_by="ComponentRecommendationCandidate.rank", cascade="all, delete-orphan",
+    )
+
+    __table_args__ = (
+        Index(
+            "uq_component_recommendation_open",
+            "tenant_id", "source_canonical_key", "scope_key", "trigger_type",
+            unique=True,
+            postgresql_where=sql_text("status IN ('OPEN','EVALUATING','REVIEW_REQUIRED','RECOMMENDED')"),
+            sqlite_where=sql_text("status IN ('OPEN','EVALUATING','REVIEW_REQUIRED','RECOMMENDED')"),
+        ),
+        Index("ix_component_recommendation_tenant_status", "tenant_id", "status"),
+    )
+
+
+class ComponentRecommendationCandidate(Base, TenantOwnedMixin):
+    """One candidate for a recommendation (FR-SCA-012/013).
+
+    ``candidate_kind`` SAME_FAMILY_VERSION is always evaluated before
+    ALTERNATIVE (FR-SCA-013, T21). Score, confidence and compatibility arrive
+    in Steps 6–7; until then they are NULL and the candidate cannot be
+    represented as an approved replacement.
+    """
+
+    __tablename__ = "component_recommendation_candidate"
+
+    id = Column(Integer, primary_key=True)
+    recommendation_id = Column(
+        Integer, ForeignKey("component_recommendation.id", ondelete="CASCADE"), nullable=False, index=True
+    )
+    candidate_kind = Column(String(32), nullable=False)
+    source_type = Column(String(32), nullable=False)
+    candidate_canonical_key = Column(String(80), nullable=True)
+    name = Column(String(512), nullable=False)
+    version = Column(String(255), nullable=True)
+    purl = Column(String(1024), nullable=True)
+    ecosystem = Column(String(64), nullable=True)
+    rank = Column(Integer, nullable=False)
+    #: Where the candidate came from: TENANT_OBSERVED, LIFECYCLE_LATEST,
+    #: LIFECYCLE_LATEST_SUPPORTED, LIFECYCLE_RECOMMENDED, FINDING_FIXED_VERSION.
+    evidence_sources_json = Column(JSON, nullable=False)
+    reasons_json = Column(JSON, nullable=False)
+    limitations_json = Column(JSON, nullable=False)
+    evaluation_json = Column(JSON, nullable=False)
+    score = Column(Float, nullable=True)
+    confidence = Column(String(32), nullable=True)
+    blocked = Column(Boolean, nullable=False, default=False, server_default=sql_text("false"))
+    created_at = Column(DateTime(timezone=True), nullable=False)
+
+    recommendation = relationship("ComponentRecommendation", back_populates="candidates")
+    compatibility_checks = relationship(
+        "ComponentRecommendationCompatibilityCheck", back_populates="candidate",
+        cascade="all, delete-orphan", order_by="ComponentRecommendationCompatibilityCheck.id",
+    )
+    factors = relationship(
+        "ComponentRecommendationFactor", back_populates="candidate",
+        cascade="all, delete-orphan", order_by="ComponentRecommendationFactor.id",
+    )
+
+
+class ComponentRecommendationCompatibilityCheck(Base, TenantOwnedMixin):
+    """One compatibility check result for a candidate (FR-SCA-014).
+
+    ``result`` is PASS | FAIL | REVIEW_REQUIRED | UNKNOWN; ``blocking`` FAILs
+    prevent any "approved replacement" representation and cannot be
+    overridden by a score (FR-SCA-015).
+    """
+
+    __tablename__ = "component_recommendation_compatibility_check"
+
+    id = Column(Integer, primary_key=True)
+    candidate_id = Column(
+        Integer, ForeignKey("component_recommendation_candidate.id", ondelete="CASCADE"), nullable=False, index=True
+    )
+    check_type = Column(String(32), nullable=False)
+    result = Column(String(16), nullable=False)
+    blocking = Column(Boolean, nullable=False, default=False, server_default=sql_text("false"))
+    reason = Column(Text, nullable=False)
+    limitation = Column(String(64), nullable=True)
+    evidence_json = Column(JSON, nullable=False)
+    evaluated_at = Column(DateTime(timezone=True), nullable=False)
+
+    candidate = relationship("ComponentRecommendationCandidate", back_populates="compatibility_checks")
+
+
+class ComponentRecommendationFactor(Base, TenantOwnedMixin):
+    """One scoring factor for a candidate (FR-SCA-017).
+
+    Persists what the score was made of — policy version, raw and normalized
+    values, weight, weighted contribution, missing-data treatment, evidence
+    source and time — so a ranking can be explained and re-derived later.
+    The score orders candidates only; it is never a safety score.
+    """
+
+    __tablename__ = "component_recommendation_factor"
+
+    id = Column(Integer, primary_key=True)
+    candidate_id = Column(
+        Integer, ForeignKey("component_recommendation_candidate.id", ondelete="CASCADE"), nullable=False, index=True
+    )
+    factor = Column(String(32), nullable=False)
+    raw_value_json = Column(JSON, nullable=True)
+    normalized_value = Column(Float, nullable=True)
+    weight = Column(Float, nullable=False)
+    contribution = Column(Float, nullable=False)
+    missing_data_treatment = Column(String(16), nullable=True)
+    evidence_source = Column(String(128), nullable=False)
+    evidence_at = Column(String(64), nullable=True)
+    policy_version_id = Column(Integer, ForeignKey("advisor_policy_version.id"), nullable=True)
+    policy_version_label = Column(String(64), nullable=False)
+
+    candidate = relationship("ComponentRecommendationCandidate", back_populates="factors")
+
+
+class ComponentRecommendationEvent(Base, TenantOwnedMixin):
+    """Append-only audit trail for Secure Component Advisor (FR-SCA-022, NFR-SCA-007).
+
+    One row per lifecycle event: creation, candidate discovery, compatibility
+    evaluation, scoring, moves to review, every human decision and policy
+    version publishes. Rows are never updated or deleted (ORM guard below).
+    ``candidate_id`` is deliberately not a foreign key — candidates can be
+    replaced by re-evaluation and an append-only row must never be rewritten
+    by ``ON DELETE SET NULL``; ``candidate_json`` keeps what the event saw.
+    """
+
+    __tablename__ = "component_recommendation_event"
+
+    id = Column(Integer, primary_key=True)
+    recommendation_id = Column(Integer, ForeignKey("component_recommendation.id"), nullable=True, index=True)
+    candidate_id = Column(Integer, nullable=True)
+    candidate_json = Column(JSON, nullable=True)
+    action = Column(String(48), nullable=False, index=True)
+    decision = Column(String(32), nullable=True)
+    actor = Column(String(128), nullable=False)
+    actor_user_id = Column(Integer, nullable=True)
+    reason = Column(Text, nullable=True)
+    old_status = Column(String(32), nullable=True)
+    new_status = Column(String(32), nullable=True)
+    policy_versions_json = Column(JSON, nullable=True)
+    score = Column(Float, nullable=True)
+    confidence = Column(String(32), nullable=True)
+    evidence_refs_json = Column(JSON, nullable=True)
+    details_json = Column(JSON, nullable=True)
+    correlation_id = Column(String(128), nullable=True, index=True)
+    source = Column(String(32), nullable=False)
+    created_at = Column(DateTime(timezone=True), nullable=False)
+
+
+Index("ix_component_recommendation_event_tenant_identity", ComponentRecommendationEvent.tenant_id, ComponentRecommendationEvent.id)
+Index("ix_component_recommendation_event_tenant_created", ComponentRecommendationEvent.tenant_id, ComponentRecommendationEvent.created_at)
+Index("ix_component_recommendation_tenant_identity", ComponentRecommendation.tenant_id, ComponentRecommendation.id)
+Index(
+    "ix_component_recommendation_candidate_tenant_identity",
+    ComponentRecommendationCandidate.tenant_id,
+    ComponentRecommendationCandidate.id,
+)
+Index(
+    "ix_component_recommendation_factor_tenant_identity",
+    ComponentRecommendationFactor.tenant_id,
+    ComponentRecommendationFactor.id,
+)
+Index(
+    "ix_component_recommendation_compatibility_check_tenant_identity",
+    ComponentRecommendationCompatibilityCheck.tenant_id,
+    ComponentRecommendationCompatibilityCheck.id,
+)
+
+
+@event.listens_for(_AdvisorSession, "before_flush")
+def _advisor_policy_versions_are_append_only(session, _flush_context, _instances) -> None:
+    """NFR-SCA-007: policy versions are append-only, enforced, not just documented."""
+    for instance in session.dirty | session.deleted:
+        if isinstance(instance, (AdvisorPolicyVersion, ComponentRecommendationEvent)) and (
+            instance in session.deleted or session.is_modified(instance, include_collections=False)
+        ):
+            raise RuntimeError(f"{instance.__tablename__} rows are append-only")
+
+
+@event.listens_for(_AdvisorSession, "before_flush")
+def _repair_candidate_is_immutable(session, _flush_context, _instances):
+    from sqlalchemy import inspect
+    immutable = ("tenant_id", "session_id", "source_sha256", "original_sha256", "source_sbom_sha256",
+                 "source_sbom_id", "candidate_sha256", "candidate_content", "report_json",
+                 "validation_options_json", "created_at", "actor_user_id")
+    for instance in session.dirty:
+        if isinstance(instance, SBOMRepairJob):
+            state = inspect(instance)
+            if any(state.attrs[key].history.has_changes() for key in immutable):
+                raise RuntimeError("Repair candidates and evidence are immutable")
+
+
+# Register report tables for Alembic and metadata-based test databases.
+from .models_reports import ReportArtifact, ReportDelivery, ReportSubscription  # noqa: E402,F401
+
+
+@event.listens_for(_AdvisorSession, 'before_flush')
+def _quality_history_is_immutable(session, _flush_context, _instances):
+    from sqlalchemy import inspect
+    for instance in session.dirty:
+        if isinstance(instance, SBOMValidationSessionEvent):
+            state = inspect(instance)
+            original = state.attrs.event_type.history.deleted
+            if instance.event_type == 'SBOM_QUALITY_CALCULATED' or 'SBOM_QUALITY_CALCULATED' in original:
+                raise RuntimeError('Quality assessments are immutable; append a new hash-bound snapshot')
+
+
+@event.listens_for(_AdvisorSession, "before_flush")
+def _assign_logical_sbom_identity(session, _flush_context, _instances):
+    # Covers upload, legacy creation, edit, restore and direct ORM import paths.
+    from .services.logical_sbom_service import assign_logical_identity
+    for row in list(session.new | session.dirty):
+        if isinstance(row, SBOMSource):
+            assign_logical_identity(session, row)
+
+
+@event.listens_for(_AdvisorSession, "before_flush")
+def _vex_run_snapshots_are_immutable(session, _flush_context, _instances):
+    for row in session.dirty:
+        if isinstance(row, VexInvestigationSnapshot) and session.is_modified(row):
+            raise RuntimeError("VEX analysis snapshots are immutable")

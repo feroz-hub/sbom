@@ -12,6 +12,8 @@ from app.services.component_deduplication_service import ComponentDeduplicationS
 from app.services.pdf_service import rebuild_run_from_db
 from app.services.sbom_service import now_iso
 
+from tests.tenant_fixture_scope import verified_fixture_tenant
+
 
 @pytest.fixture()
 def db(app):
@@ -34,7 +36,8 @@ def db(app):
         )
         session.commit()
     try:
-        yield session
+        with verified_fixture_tenant(session, 1):
+            yield session
     finally:
         session.rollback()
         session.close()

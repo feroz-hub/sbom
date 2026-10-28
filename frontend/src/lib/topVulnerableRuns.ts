@@ -1,4 +1,5 @@
 import type { AnalysisRun } from '@/types';
+import { recordIdLabel } from '@/lib/recordDisplay';
 import type { SeverityKey } from '@/lib/severityParam';
 
 export type { SeverityKey };
@@ -10,14 +11,14 @@ export type { SeverityKey };
  * on.
  */
 export interface SbomBucket {
-  sbomId: number;
+  sbomId: (string | number);
   sbomName: string;
   critical: number;
   high: number;
   medium: number;
   low: number;
   totalFindings: number;
-  latestRunId: number;
+  latestRunId: string;
   weighted: number;
 }
 
@@ -35,7 +36,7 @@ export interface SbomBucket {
  * below the weighted top 5).
  */
 export function aggregateRuns(runs: AnalysisRun[]): SbomBucket[] {
-  const buckets = new Map<number, SbomBucket>();
+  const buckets = new Map<string | number, SbomBucket>();
   for (const run of runs) {
     if (run.sbom_id == null) continue;
     if (buckets.has(run.sbom_id)) continue; // first seen = latest (desc by id)
@@ -47,7 +48,7 @@ export function aggregateRuns(runs: AnalysisRun[]): SbomBucket[] {
     if (totalFindings === 0) continue;
     buckets.set(run.sbom_id, {
       sbomId: run.sbom_id,
-      sbomName: run.sbom_name ?? `SBOM #${run.sbom_id}`,
+      sbomName: run.sbom_name ?? recordIdLabel('SBOM', run.sbom_display_id),
       critical,
       high,
       medium,

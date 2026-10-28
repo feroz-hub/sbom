@@ -1,0 +1,291 @@
+'use client';
+
+import Link from 'next/link';
+import { use, useState } from 'react';
+import { useMutation, useQuery, useQueryClient } from '@tanstack/react-query';
+import { Eye, Play, Upload } from 'lucide-react';
+import { SbomPostureNotice } from '@/components/sboms/SbomPostureNotice';
+import { TopBar } from '@/components/layout/TopBar';
+import { Alert } from '@/components/ui/Alert';
+import { PermissionButton as Button } from '@/components/ui/PermissionButton';
+import { Card, CardContent, CardHeader, CardTitle } from '@/components/ui/Card';
+import { Select } from '@/components/ui/Select';
+import { PageSpinner } from '@/components/ui/Spinner';
+import { Table, TableBody, TableHead, Td, Th, EmptyRow } from '@/components/ui/Table';
+import { SbomStatusBadge } from '@/components/sboms/SbomStatusBadge';
+import { SbomUploadModal } from '@/components/sboms/SbomUploadModal';
+import { useAnalysisStream } from '@/hooks/useAnalysisStream';
+import { getProduct, getProductSboms, getLogicalSboms, updateProduct } from '@/lib/api';
+import { NotifyMeLink } from '@/components/reports/NotifyMeLink';
+import { ScheduleCard } from '@/components/schedules/ScheduleCard';
+import { usePermission } from '@/hooks/usePermission';
+import { useToast } from '@/hooks/useToast';
+import { getApiErrorMessage } from '@/lib/notifications';
+import { invalidateProductSurfaces } from '@/lib/queryInvalidation';
+import { formatDate } from '@/lib/utils';
+import { sbomEligibility } from '@/lib/sbomEligibility';
+import type { AnalysisStatus } from '@/hooks/useBackgroundAnalysis';
+import type { SBOMSource, LogicalSBOM } from '@/types';
+
+/**
+ * One SBOM row, owning its own analysis stream so Run Analysis works here the
+ * same way it does on the SBOM detail screen. The hook stays inert until
+ * `startAnalysis` is called, so an idle row costs nothing.
+ */
+function ProductSbomRow({ sbom, master }: { sbom: SBOMSource; master: LogicalSBOM }) {
+  const { state, startAnalysis } = useAnalysisStream(sbom.id);
+  const isAnalyzing =
+    state.phase === 'connecting' || state.phase === 'parsing' || state.phase === 'running';
+
+  // While the stream is live the server has not refreshed `latest_analysis`
+  // yet — drive the badge off the stream phase until the refetch lands.
+  const optimisticStatus: AnalysisStatus | undefined = isAnalyzing
+    ? 'RUNNING'
+    : state.phase === 'error'
+      ? 'ERROR'
+      : undefined;
+
+  return (
+    <tr>
+      <Td className="font-mono text-xs text-hcl-muted">#{master.id}</Td>
+      <Td>
+        <Link
+          href={`/sboms/logical/${master.id}`}
+          className="font-medium text-hcl-navy hover:text-hcl-blue hover:underline"
+        >
+          {master.name}
+        </Link>
+      </Td>
+      <Td className="text-hcl-muted"><Link href={`/sboms/${sbom.id}`}>{sbom.sbom_version || 'Unversioned'}</Link></Td>
+      <Td>{master.version_count} · <Link className="text-hcl-blue hover:underline" href={`/sboms/logical/${master.id}`}>Version history</Link></Td>
+      <Td>
+        <SbomStatusBadge
+          sbomId={sbom.id}
+          latestAnalysis={sbom.latest_analysis}
+          initialStatus={optimisticStatus}
+          initialFindings={state.summary?.total}
+        />
+      </Td>
+      <Td className="text-hcl-muted">{sbom.created_by || '—'}</Td>
+      <Td className="text-hcl-muted">{formatDate(sbom.created_on)}</Td>
+      <Td className="text-right">
+        <div className="flex items-center justify-end gap-2">
+          <Link
+            href={`/sboms/${sbom.id}`}
+            className="inline-flex items-center gap-1.5 rounded-lg px-2 py-1.5 text-xs font-medium text-hcl-muted transition-colors hover:bg-row-hover hover:text-hcl-blue"
+            aria-label={`View ${sbom.sbom_name}`}
+          >
+            <Eye className="h-4 w-4" />
+            View SBOM
+          </Link>
+          <Button permission="analysis:run" disabledReason={sbomEligibility(sbom).reason || "Analysis is already running."}
+            onClick={() => startAnalysis({ sources: ['NVD', 'OSV', 'GITHUB'] })}
+            loading={isAnalyzing}
+            disabled={isAnalyzing || !sbomEligibility(sbom).eligible}
+            size="sm"
+          >
+            <Play className="h-4 w-4" />
+            {isAnalyzing ? 'Analyzing…' : 'Run Analysis'}
+          </Button>
+        </div>
+      </Td>
+    </tr>
+  );
+}
+
+interface ProductDetailPageProps {
+  params: Promise<{ id: string }>;
+}
+
+export default function ProductDetailPage({ params }: ProductDetailPageProps) {
+  const { id: idParam } = use(params);
+  const id = String(idParam);
+  const queryClient = useQueryClient();
+  const { showToast } = useToast();
+  const canSelectCurrent = usePermission('product:update');
+  const [masterPage, setMasterPage] = useState(1);
+  const [showUpload, setShowUpload] = useState(false);
+
+  const productQuery = useQuery({
+    queryKey: ['product', id],
+    queryFn: ({ signal }) => getProduct(id, signal),
+    enabled: Boolean(id),
+  });
+
+  const sbomsQuery = useQuery({
+    queryKey: ['product-sboms', id],
+    queryFn: ({ signal }) => getProductSboms(id, signal),
+    enabled: Boolean(id),
+  });
+
+  const logicalSbomsQuery = useQuery({ queryKey: ['logical-sboms', id, masterPage], queryFn: ({ signal }) => getLogicalSboms(id, signal, masterPage), enabled: Boolean(id) });
+
+  const selectionModeMutation = useMutation({
+    mutationFn: (mode: 'AUTO' | 'MANUAL_PIN') => updateProduct(id, { current_sbom_mode: mode }),
+    onSuccess: () => { invalidateProductSurfaces(queryClient, id); showToast('Selection policy updated', 'success'); },
+    onError: error => showToast(getApiErrorMessage(error, 'Selection policy update failed.'), 'error'),
+  });
+
+  const currentSbomMutation = useMutation({
+    mutationFn: (currentSbomId: (string | number)) => updateProduct(id, { current_sbom_id: currentSbomId }),
+    onSuccess: () => {
+      invalidateProductSurfaces(queryClient, id);
+      queryClient.invalidateQueries({ queryKey: ['product', id] });
+      queryClient.invalidateQueries({ queryKey: ['schedule-targets'] });
+      queryClient.invalidateQueries({ queryKey: ['schedule'] });
+      showToast('Current SBOM updated', 'success');
+    },
+    onError: (error: unknown) => showToast(getApiErrorMessage(error, 'Current SBOM update failed.'), 'error'),
+  });
+
+  if (productQuery.isLoading) {
+    return (
+      <div className="flex flex-col flex-1">
+        <TopBar title="Application" />
+        <div className="p-6">
+          <PageSpinner />
+        </div>
+      </div>
+    );
+  }
+
+  if (productQuery.error || !productQuery.data) {
+    return (
+      <div className="flex flex-col flex-1">
+        <TopBar title="Application" breadcrumbs={[{ label: 'Projects', href: '/projects' }]} />
+        <div className="p-6">
+          <Alert variant="error" title={productQuery.error ? 'Could not load application' : 'Not found'}>
+            {productQuery.error ? productQuery.error.message : 'This application does not exist or was removed.'}
+          </Alert>
+        </div>
+      </div>
+    );
+  }
+
+  const product = productQuery.data;
+  const sboms = sbomsQuery.data ?? [];
+
+  return (
+    <div className="flex flex-col flex-1">
+      <TopBar
+        title={product.name}
+        breadcrumbs={[{ label: 'Projects', href: '/projects' }]}
+        action={
+          <Button permission={["sbom:upload", "product:assign_sbom"]} onClick={() => setShowUpload(true)}>
+            <Upload className="h-4 w-4" />
+            Upload SBOM
+          </Button>
+        }
+      />
+      <div className="space-y-6 p-6">
+        <SbomPostureNotice scope={{projectId: product.project_id, applicationId: product.id, sbomId: null}} />
+        <NotifyMeLink scope="PRODUCT" targetId={product.id} />
+        <ScheduleCard scope="PRODUCT" targetId={product.id} />
+        <Card>
+          <CardHeader>
+            <CardTitle>Current SBOM</CardTitle>
+          </CardHeader>
+          <CardContent>
+            <Select label="Current SBOM selection policy" value={product.current_sbom_mode ?? 'MANUAL_PIN'} disabled={!canSelectCurrent || selectionModeMutation.isPending}
+              onChange={event => selectionModeMutation.mutate(event.target.value as 'AUTO' | 'MANUAL_PIN')}
+              hint="AUTO promotes eligible successful analyses in the selected lineage. MANUAL_PIN retains your selected version.">
+              <option value="AUTO">AUTO</option><option value="MANUAL_PIN" disabled={!product.current_sbom_id}>MANUAL_PIN</option>
+            </Select>
+            {sboms.length ? (
+              <div className="max-w-xl">
+                <Select
+                  label="Current version used by CURRENT_ONLY schedules"
+                  value={product.current_sbom_id ? String(product.current_sbom_id) : ''}
+                  disabled={!canSelectCurrent || currentSbomMutation.isPending}
+                  onChange={(event) => currentSbomMutation.mutate(event.target.value)}
+                  hint="Selecting a version creates a manual pin. New uploads and analyses cannot override it."
+                >
+                  <option value="" disabled>Select current SBOM…</option>
+                  {sboms.map((sbom) => (
+                    <option key={sbom.id} value={sbom.id}>
+                      {sbom.sbom_name} — {sbom.sbom_version || 'unversioned'} (Product {sbom.product_version || sbom.productver || '—'})
+                    </option>
+                  ))}
+                </Select>
+              </div>
+            ) : (
+              <p className="text-sm text-hcl-muted">Upload an SBOM before selecting the current version.</p>
+            )}
+          </CardContent>
+        </Card>
+        <Card>
+          <CardHeader>
+            <CardTitle>Application Details</CardTitle>
+          </CardHeader>
+          <CardContent>
+            <dl className="grid gap-4 sm:grid-cols-2 lg:grid-cols-4">
+              <div>
+                <dt className="text-xs font-medium uppercase text-hcl-muted">Project</dt>
+                <dd className="mt-1 text-hcl-navy">Project #{product.project_id}</dd>
+              </div>
+              <div>
+                <dt className="text-xs font-medium uppercase text-hcl-muted">SBOMs</dt>
+                <dd className="mt-1 text-hcl-navy">{logicalSbomsQuery.data?.total ?? "—"}</dd>
+              </div>
+              <div>
+                <dt className="text-xs font-medium uppercase text-hcl-muted">Product Version</dt>
+                <dd className="mt-1 text-hcl-navy">{product.latest_version || '—'}</dd>
+              </div>
+              <div>
+                <dt className="text-xs font-medium uppercase text-hcl-muted">Status</dt>
+                <dd className="mt-1 text-hcl-navy">{product.status || 'active'}</dd>
+              </div>
+              <div className="sm:col-span-2 lg:col-span-4">
+                <dt className="text-xs font-medium uppercase text-hcl-muted">Description</dt>
+                <dd className="mt-1 text-hcl-navy">{product.description || '—'}</dd>
+              </div>
+            </dl>
+          </CardContent>
+        </Card>
+
+        <Card>
+          <CardHeader>
+            <CardTitle>SBOMs</CardTitle>
+          </CardHeader>
+          <CardContent>
+            <Table ariaLabel="Application SBOMs">
+              <TableHead>
+                <tr>
+                  <Th>ID</Th>
+                  <Th>Name</Th>
+                  <Th>Latest SBOM Version</Th>
+                  <Th>Versions</Th>
+                  <Th>Analysis</Th>
+                  <Th>Created By</Th>
+                  <Th>Created On</Th>
+                  <Th className="text-right">Actions</Th>
+                </tr>
+              </TableHead>
+              <TableBody>
+                {logicalSbomsQuery.isLoading ? (
+                  <EmptyRow cols={8} message="Loading SBOMs..." />
+                ) : logicalSbomsQuery.isError ? (
+                  <EmptyRow cols={8} message="Could not load logical SBOMs." />
+                ) : !logicalSbomsQuery.data?.items.length ? (
+                  <EmptyRow cols={8} message="No SBOMs are linked to this application yet." />
+                ) : (
+                  logicalSbomsQuery.data.items.map(master => master.latest_version ? <ProductSbomRow key={master.id} sbom={master.latest_version} master={master} /> : <tr key={master.id}><Td>#{master.id}</Td><Td><Link href={`/sboms/logical/${master.id}`}>{master.name}</Link></Td><td colSpan={6} className="p-3 text-hcl-muted">No versions uploaded</td></tr>)
+                )}
+              </TableBody>
+            </Table>
+            <div className="mt-3 flex items-center gap-3"><Button variant="secondary" disabled={masterPage === 1} onClick={() => setMasterPage(page => page - 1)}>Previous</Button><span>Page {masterPage}</span><Button variant="secondary" disabled={!logicalSbomsQuery.data || masterPage * 50 >= logicalSbomsQuery.data.total} onClick={() => setMasterPage(page => page + 1)}>Next</Button></div>
+          </CardContent>
+        </Card>
+      </div>
+      <SbomUploadModal
+        open={showUpload}
+        onClose={() => setShowUpload(false)}
+        initialProjectId={product.project_id}
+        initialProductId={product.id}
+        onSuccess={() => {
+          invalidateProductSurfaces(queryClient, id);
+        }}
+      />
+    </div>
+  );
+}

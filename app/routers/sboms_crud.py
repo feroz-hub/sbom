@@ -18,11 +18,11 @@ import logging
 import re
 import time
 from datetime import UTC, datetime
-from typing import Any
+from typing import Any, Literal
 
 from fastapi import APIRouter, BackgroundTasks, Depends, Header, HTTPException, Path, Query, Request, Response, status
 from fastapi.responses import StreamingResponse
-from pydantic import BaseModel
+from pydantic import BaseModel, ConfigDict, Field
 from sqlalchemy import func, select
 from sqlalchemy.exc import IntegrityError, SQLAlchemyError
 from sqlalchemy.orm import Session
@@ -84,6 +84,7 @@ from ..services.sbom_document_service import (
     read_raw_chunk,
 )
 from ..services.sbom_enrichment_service import mark_enrichment_pending, run_post_upload_enrichment
+from ..services.sbom_lifecycle import lifecycle_history, require_processing, transition_lifecycle
 from ..services.sbom_service import (
     MISSING_SBOM_CONTENT_REASON,
     UNPARSEABLE_SBOM_CONTENT_REASON,
@@ -360,6 +361,7 @@ def _serialize_latest_analysis(
     medium_count = int(run.medium_count or 0)
     low_count = int(run.low_count or 0)
     return LatestAnalysisOut(
+        is_current=run.is_current,
         run_id=int(run.id),
         status=_analysis_result(run.run_status),
         result=_analysis_outcome(run.run_status),
@@ -699,7 +701,7 @@ def download_sbom_original(
     )
 
 
-@router.post("/sboms", response_model=SBOMSourceOut, status_code=status.HTTP_201_CREATED, deprecated=True)
+@router.post("/sboms", response_model=SBOMSourceOut, status_code=status.HTTP_201_CREATED, deprecated=True, include_in_schema=False)
 @workflow_event("sbom_upload", result_kind="sbom")
 def create_sbom(
     payload: SBOMSourceCreate,
@@ -720,16 +722,22 @@ def create_sbom(
         tenant_id=context.tenant_id,
         project_id=payload.projectid,
         product_id=payload.product_id,
-        actor=payload.created_by or context.actor_label(),
+        actor=context.actor_label(),
         require_project=True,
     )
     payload.projectid = resolved_project_id
     if payload.sbom_type is not None and db.get(SBOMType, payload.sbom_type) is None:
         raise HTTPException(status_code=404, detail="SBOM type not found")
 
+    if payload.logical_sbom_id is not None:
+        from ..services.logical_sbom_service import ensure_version_available, get_logical_sbom
+        master = get_logical_sbom(db, payload.logical_sbom_id, context.tenant_id, product_id=product.id, lock=True)
+        ensure_version_available(db, master, payload.sbom_version)
+        payload.sbom_name = master.name
+
     # --- Preflight duplicate check on name (global uniqueness) ---
-    if payload.sbom_name:
-        exists = db.execute(select(SBOMSource.id).where(SBOMSource.sbom_name == payload.sbom_name.strip())).first()
+    if payload.sbom_name and payload.logical_sbom_id is None:
+        exists = db.execute(select(SBOMSource.id).where(SBOMSource.sbom_name == payload.sbom_name.strip(), SBOMSource.product_id == product.id)).first()
         if exists:
             raise HTTPException(
                 status_code=status.HTTP_409_CONFLICT,
@@ -755,7 +763,9 @@ def create_sbom(
             original_filename=payload.sbom_name,
             project_id=payload.projectid,
             sbom_type=payload.sbom_type,
-            user_id=payload.created_by or context.actor_label(),
+            user_id=context.actor_label(),
+            product_id=product.id if product else None,
+            upload_options={"logical_sbom_id": payload.logical_sbom_id, "sbom_version": payload.sbom_version, "product_version": payload.productver, "used_default_product": _used_default_product},
         )
         if session is not None:
             audit_service.write_audit_log(
@@ -787,8 +797,10 @@ def create_sbom(
     try:
         data = payload.model_dump()
         set_as_current = bool(data.pop("set_as_current", False))
+        if set_as_current and not context.has_permission("product:update"):
+            raise HTTPException(403, "Current SBOM pinning requires product:update")
         data["sbom_data"] = raw_text or None
-        data["created_by"] = data.get("created_by") or context.actor_label()
+        data["created_by"] = context.actor_label()
         data["product_id"] = product.id if product else None
         data["product_name"] = product.name if product else data.get("product_name")
         obj = SBOMSource(
@@ -804,8 +816,10 @@ def create_sbom(
         mark_enrichment_pending(obj)
         db.add(obj)
         db.flush()
-        if product and (set_as_current or product.current_sbom_id is None):
+        if product and set_as_current:
+            db.refresh(product, with_for_update=True)
             previous_current_id = product.current_sbom_id
+            product.current_sbom_mode = "MANUAL_PIN"
             product.current_sbom_id = obj.id
             product.updated_at = now_iso()
             audit_service.write_audit_log(
@@ -815,7 +829,7 @@ def create_sbom(
                 entity_type="product",
                 entity_id=product.id,
                 old_value={"current_sbom_id": previous_current_id},
-                new_value={"current_sbom_id": obj.id, "source": "legacy_sbom_create"},
+                new_value={"current_sbom_id": obj.id, "source": "legacy_sbom_create", "mode": "MANUAL_PIN"},
             )
         db.commit()
         db.refresh(obj)
@@ -1350,6 +1364,10 @@ def update_sbom(
     if "description" in data:
         sbom.description = data["description"]
 
+    if "sbom_version" in data and sbom.logical_sbom_id and old_product_id == sbom.product_id:
+        from ..services.logical_sbom_service import ensure_version_available
+        ensure_version_available(db, sbom.logical_sbom, sbom.sbom_version, exclude_id=sbom.id)
+
     sbom.modified_on = now_iso()
     sbom.modified_by = actor
 
@@ -1383,6 +1401,12 @@ def update_sbom(
             },
         )
         return sbom
+    except HTTPException:
+        db.rollback()
+        raise
+    except IntegrityError as exc:
+        db.rollback()
+        raise HTTPException(409, detail={"code": "duplicate_sbom_version", "message": "This logical SBOM already has that revision."}) from exc
     except Exception:
         db.rollback()
         log.exception("update_sbom failed: sbom_id=%s user=%s", sbom_id, actor)
@@ -1443,7 +1467,7 @@ def delete_sbom(
                 "To proceed, resend the request with confirm=yes "
                 "(and add permanent=true to bypass soft delete)."
             ),
-            "example": f"/api/sboms/{sbom_id}?confirm=yes",
+            "example": f"/api/sboms/{sbom.public_id}?confirm=yes",
         }
 
     if permanent:
@@ -1471,6 +1495,33 @@ def delete_sbom(
             status_code=500,
             detail={"code": "internal_error", "message": "Internal server error."},
         )
+
+
+class SbomLifecycleChange(BaseModel):
+    model_config = ConfigDict(extra="forbid", str_strip_whitespace=True)
+    status: Literal["ACTIVE", "INACTIVE"]
+    reason: str = Field(min_length=1, max_length=2000)
+
+
+@router.post("/sboms/{sbom_id}/lifecycle", response_model=SBOMSourceOut)
+def change_sbom_lifecycle(
+    payload: SbomLifecycleChange,
+    request: Request,
+    sbom_id: int = Path(..., ge=1),
+    context: CurrentContext = Depends(require_permission("sbom:delete")),
+    db: Session = Depends(get_db),
+):
+    sbom = transition_lifecycle(db, context, sbom_id, payload.status, payload.reason, request)
+    return _serialize_sbom_out(sbom, db=db)
+
+
+@router.get("/sboms/{sbom_id}/lifecycle-history")
+def get_sbom_lifecycle_history(
+    sbom_id: int = Path(..., ge=1),
+    context: CurrentContext = Depends(require_permission("sbom:read")),
+    db: Session = Depends(get_db),
+):
+    return lifecycle_history(db, context.tenant_id, sbom_id)
 
 
 @router.post("/sboms/{sbom_id}/restore", status_code=status.HTTP_200_OK)
@@ -1591,6 +1642,8 @@ async def run_analysis_for_sbom(
     idempotency_key: str | None = Header(None, alias="Idempotency-Key"),
     db: Session = Depends(get_db),
 ):
+    require_processing(db.get(SBOMSource, sbom_id))
+
     async def _execute() -> dict:
         log.info(
             "Manual analysis triggered for SBOM id=%d (force_refresh=%s)",
@@ -1601,6 +1654,7 @@ async def run_analysis_for_sbom(
         if not sbom:
             log.warning("Analysis requested for unknown SBOM id=%d", sbom_id)
             raise HTTPException(status_code=404, detail="SBOM not found")
+        require_processing(sbom)
         existing = get_active_analysis_run(db, sbom_id)
         if existing:
             response.status_code = status.HTTP_200_OK
@@ -1613,6 +1667,9 @@ async def run_analysis_for_sbom(
             return analysis_run_to_dict(existing)
         try:
             report = await create_auto_report(db, sbom, force_refresh=force_refresh, trigger_source="manual")
+        except HTTPException:
+            db.rollback()
+            raise
         except Exception as exc:
             db.rollback()
             log.error("Analysis run failed for SBOM id=%d: %s", sbom_id, exc, exc_info=True)
@@ -1668,6 +1725,7 @@ async def analyze_sbom_stream(
             headers={"Cache-Control": "no-cache", "X-Accel-Buffering": "no"},
         )
 
+    require_processing(sbom_row)
     existing = get_active_analysis_run(db, sbom_id)
     if existing:
 
@@ -1676,7 +1734,7 @@ async def analyze_sbom_stream(
                 "complete",
                 {
                     "status": "already_running",
-                    "runId": existing.id,
+                    "runId": str(existing.public_id),
                     "message": "Analysis is already running for this SBOM.",
                     "total": existing.total_findings,
                     "critical": existing.critical_count,
@@ -1800,7 +1858,7 @@ async def analyze_sbom_stream(
             return {
                 "message": message,
                 "code": code,
-                "runId": run_id,
+                "runId": str(run.public_id),
                 "status": "ERROR",
                 "correlation_id": correlation_id,
             }
@@ -1813,7 +1871,7 @@ async def analyze_sbom_stream(
                 "progress",
                 {
                     "phase": "started",
-                    "runId": run.id,
+                    "runId": str(run.public_id),
                     "sources": sources,
                     "elapsed_ms": elapsed(),
                 },
@@ -1993,7 +2051,7 @@ async def analyze_sbom_stream(
             )
 
             complete_payload = {
-                "runId": run.id,
+                "runId": str(run.public_id),
                 "status": run_status,
                 "total": len(final_findings),
                 "critical": buckets["CRITICAL"],
@@ -2055,3 +2113,9 @@ def list_sbom_analysis_runs(
         .scalars()
         .all()
     )
+
+
+@router.get('/sboms/{sbom_id}/quality')
+def sbom_quality(sbom_id: int, context: CurrentContext = Depends(require_permission('sbom:read')), db: Session = Depends(get_db)):
+    from app.services.sbom.quality.service import QualityService
+    return QualityService(db, context).sbom_quality(sbom_id)

@@ -1,414 +1,92 @@
 'use client';
 
-import { Suspense, useCallback, useMemo, useState } from 'react';
-import { useRouter } from 'next/navigation';
+import Link from 'next/link';
+import { Suspense, useMemo, useState } from 'react';
 import { useQuery } from '@tanstack/react-query';
-import {
-  FileJson,
-  AlertTriangle,
-  CheckCircle2,
-  XCircle,
-  ActivityIcon,
-  Layers,
-  GitCompareArrows,
-} from 'lucide-react';
 import { TopBar } from '@/components/layout/TopBar';
-import { Button } from '@/components/ui/Button';
 import { Select } from '@/components/ui/Select';
-import { RunsTable } from '@/components/analysis/RunsTable';
-import {
-  ConsolidatedAnalysisPanel,
-  type SourceKey,
-} from '@/components/analysis/ConsolidatedAnalysisPanel';
-import { AnalysisHubTabs } from '@/components/analysis/AnalysisHubTabs';
-import { VulnerabilitiesByScope } from '@/components/analysis/VulnerabilitiesByScope';
 import { PageSpinner } from '@/components/ui/Spinner';
-import {
-  getRuns,
-  getRunsAggregate,
-  getProjects,
-  exportRunsJson,
-  getAnalysisConfig,
-} from '@/lib/api';
-import { runStatusShortLabel } from '@/lib/analysisRunStatusLabels';
-import { useToast } from '@/hooks/useToast';
-import { getApiErrorMessage } from '@/lib/notifications';
+import { Alert } from '@/components/ui/Alert';
+import { AnalysisHubTabs } from '@/components/analysis/AnalysisHubTabs';
+import { AnalysisRunsHistory } from '@/components/analysis/AnalysisRunsHistory';
+import { RunsTable } from '@/components/analysis/RunsTable';
+import { ConsolidatedAnalysisPanel, type SourceKey } from '@/components/analysis/ConsolidatedAnalysisPanel';
+import { VulnerabilitiesByScope } from '@/components/analysis/VulnerabilitiesByScope';
+import { getRuns, getProjects, getAnalysisConfig } from '@/lib/api';
+import { recordIdLabel } from '@/lib/recordDisplay';
 import { useAnalysisUrlState } from '@/hooks/useAnalysisUrlState';
 import { useSbomsList } from '@/hooks/useSbomsList';
-
-const DEFAULT_SOURCES: SourceKey[] = ['NVD', 'OSV', 'GITHUB'];
+import { useAuth } from '@/hooks/useAuth';
 
 function AnalysisPageInner() {
-  const { showToast } = useToast();
-  const router = useRouter();
-
-  const {
-    projectFilter,
-    productFilter,
-    sbomFilter,
-    statusFilter,
-    severityFilter,
-    hubTab,
-    setProjectFilter,
-    setProductFilter,
-    setSbomFilter,
-    setSeverityFilter,
-    setStatusFilter,
-    setHubTab,
-    clearFilters,
-  } = useAnalysisUrlState();
-
-  const [selectedForCompare, setSelectedForCompare] = useState<Set<number>>(new Set());
-  const [selectedSources, setSelectedSources] = useState<SourceKey[]>(DEFAULT_SOURCES);
-
-  const toggleSelectForCompare = useCallback((id: number) => {
-    setSelectedForCompare((prev) => {
-      const next = new Set(prev);
-      if (next.has(id)) {
-        next.delete(id);
-      } else {
-        if (next.size >= 2) {
-          const first = next.values().next().value;
-          if (first !== undefined) next.delete(first);
-        }
-        next.add(id);
-      }
-      return next;
-    });
-  }, []);
-
-  const handleCompare = () => {
-    if (selectedForCompare.size !== 2) return;
-    const [a, b] = Array.from(selectedForCompare);
-    router.push(`/analysis/compare?run_a=${a}&run_b=${b}`);
-  };
-
-  const { data: analysisConfig } = useQuery({
-    queryKey: ['analysis-config'],
-    queryFn: ({ signal }) => getAnalysisConfig(signal),
-    staleTime: 60_000,
+  const { activeTenantId } = useAuth();
+  const state = useAnalysisUrlState();
+  const { projectFilter, productFilter, sbomFilter, hubTab } = state;
+  const [selectedSources, setSelectedSources] = useState<SourceKey[]>(['NVD', 'OSV']);
+  const projects = useQuery({ queryKey: ['projects', 'analysis', activeTenantId], queryFn: ({ signal }) => getProjects(signal) });
+  const sboms = useSbomsList();
+  const config = useQuery({ queryKey: ['analysis-config', activeTenantId], queryFn: ({ signal }) => getAnalysisConfig(signal), enabled: hubTab === 'consolidated', staleTime: 60_000 });
+  const scope = { project_id: projectFilter || undefined, product_id: productFilter || undefined, sbom_id: sbomFilter || undefined };
+  const recent = useQuery({
+    queryKey: ['runs', 'consolidated-recent', activeTenantId, scope],
+    queryFn: ({ signal }) => getRuns({ ...scope, page: 1, page_size: 5, summary_only: true }, signal),
+    enabled: hubTab === 'consolidated',
   });
-
-  const { data: projects } = useQuery({
-    queryKey: ['projects'],
-    queryFn: ({ signal }) => getProjects(signal),
-  });
-
-  const { data: sboms } = useSbomsList();
-
-  // Product options come from the unfiltered SBOM list, NOT from the selected
-  // project — the Project and Product filters are independent, so picking a
-  // project must not shrink this list. Products with no SBOM can have no runs,
-  // so the SBOM list is the complete set of products worth offering.
-  const productOptions = useMemo(() => {
-    const byId = new Map<number, string>();
-    for (const sbom of sboms ?? []) {
-      if (sbom.product_id != null && !byId.has(sbom.product_id)) {
-        byId.set(sbom.product_id, sbom.product_name?.trim() || `Product #${sbom.product_id}`);
-      }
+  const products = useMemo(() => {
+    const byId = new Map<string, string>();
+    for (const sbom of sboms.data ?? []) {
+      if (hubTab === 'consolidated' && projectFilter && String(sbom.projectid ?? sbom.project_id) !== projectFilter) continue;
+      if (sbom.product_id != null) byId.set(String(sbom.product_id), sbom.product_name?.trim() || recordIdLabel('Application', sbom.product_display_id));
     }
-    return Array.from(byId, ([id, name]) => ({ id, name })).sort((a, b) =>
-      a.name.localeCompare(b.name),
-    );
-  }, [sboms]);
-
-  const { data: runs, isLoading, error, refetch } = useQuery({
-    queryKey: ['runs', { projectFilter, productFilter, sbomFilter, statusFilter }],
-    queryFn: ({ signal }) =>
-      getRuns(
-        {
-          project_id: projectFilter ? Number(projectFilter) : undefined,
-          product_id: productFilter ? Number(productFilter) : undefined,
-          sbom_id: sbomFilter ? Number(sbomFilter) : undefined,
-          run_status: statusFilter || undefined,
-          page: 1,
-          page_size: 100,
-        },
-        signal,
-      ),
-  });
-
-  // Tile values come from the server-side aggregate, NOT a reduce over the
-  // page-1 slice above. The aggregate ignores the status filter (the chips
-  // ARE the status breakdown) but honours scope filters so users can drill
-  // into one project / SBOM. Audit §I0.4-F1, F2; metrics layer call is in
-  // app/routers/runs.py::runs_aggregate_endpoint.
-  const { data: aggregate } = useQuery({
-    queryKey: ['runs-aggregate', { projectFilter, productFilter, sbomFilter }],
-    queryFn: ({ signal }) =>
-      getRunsAggregate(
-        {
-          project_id: projectFilter ? Number(projectFilter) : undefined,
-          product_id: productFilter ? Number(productFilter) : undefined,
-          sbom_id: sbomFilter ? Number(sbomFilter) : undefined,
-        },
-        signal,
-      ),
-  });
-
-  const handleAnalysisComplete = useCallback(
-    (runId: number) => {
-      showToast(`Analysis run #${runId} completed successfully.`, 'success');
-      refetch();
-    },
-    [showToast, refetch],
-  );
-
-  const handleExportJson = async () => {
-    try {
-      await exportRunsJson({
-        project_id: projectFilter ? Number(projectFilter) : undefined,
-        product_id: productFilter ? Number(productFilter) : undefined,
-        sbom_id: sbomFilter ? Number(sbomFilter) : undefined,
-        run_status: statusFilter || undefined,
-      });
-      showToast('Analysis runs were exported successfully.', 'success');
-    } catch (error) {
-      showToast(getApiErrorMessage(error, 'Analysis export failed. Please try again.'), 'error');
-    }
-  };
-
-  return (
-    <div className="flex flex-col flex-1">
-      <TopBar
-        title="Analysis Runs"
-        action={
-          <div className="flex items-center gap-2">
-            <Button
-              variant="secondary"
-              size="sm"
-              onClick={handleCompare}
-              disabled={selectedForCompare.size !== 2}
-              title={
-                selectedForCompare.size === 2
-                  ? 'Compare the two selected runs'
-                  : `Select exactly 2 runs to compare (${selectedForCompare.size}/2)`
-              }
-            >
-              <GitCompareArrows className="h-4 w-4" />
-              Compare {selectedForCompare.size > 0 ? `(${selectedForCompare.size}/2)` : ''}
-            </Button>
-            <Button variant="secondary" size="sm" onClick={handleExportJson}>
-              <FileJson className="h-4 w-4" />
-              Export JSON
-            </Button>
-          </div>
-        }
-      />
-      <div className="p-6 space-y-5">
-        <AnalysisHubTabs active={hubTab} onChange={setHubTab} />
-
-        {hubTab === 'consolidated' && (
-          <div
-            role="tabpanel"
-            id="analysis-panel-consolidated"
-            aria-labelledby="analysis-tab-consolidated"
-          >
-            <ConsolidatedAnalysisPanel
-              analysisConfig={analysisConfig}
-              sboms={sboms}
-              consolidatedSbomId={sbomFilter}
-              onConsolidatedSbomIdChange={setSbomFilter}
-              selectedSources={selectedSources}
-              onSelectedSourcesChange={setSelectedSources}
-              onComplete={handleAnalysisComplete}
-            />
-          </div>
-        )}
-
-        {hubTab === 'runs' && (
-          <div
-            role="tabpanel"
-            id="analysis-panel-runs"
-            aria-labelledby="analysis-tab-runs"
-            className="space-y-5"
-          >
-            {aggregate && (
-              <div className="grid grid-cols-2 sm:grid-cols-3 lg:grid-cols-6 gap-4">
-                {[
-                  {
-                    label: 'Total runs',
-                    hint: 'Every run on record (any outcome).',
-                    value: aggregate.total_runs,
-                    icon: Layers,
-                    color: 'text-hcl-blue  bg-hcl-light',
-                    border: 'border-l-hcl-blue',
-                  },
-                  {
-                    label: 'Runs — no issues',
-                    hint: 'Runs that reported zero vulnerabilities (OK).',
-                    value: aggregate.by_outcome.no_issues,
-                    icon: CheckCircle2,
-                    color: 'text-green-600 bg-green-50',
-                    border: 'border-l-green-500',
-                  },
-                  {
-                    label: 'Runs — with findings',
-                    hint: 'Runs where at least one vulnerability was reported (FINDINGS). Not a system failure.',
-                    value: aggregate.by_outcome.with_findings,
-                    icon: XCircle,
-                    color: 'text-red-600   bg-red-50',
-                    border: 'border-l-red-500',
-                  },
-                  {
-                    label: 'Runs — incomplete coverage',
-                    hint: 'Runs where a source errored or could not assess some/all components; findings may be incomplete (PARTIAL).',
-                    value: aggregate.by_outcome.source_errors,
-                    icon: ActivityIcon,
-                    color: 'text-amber-600 bg-amber-50',
-                    border: 'border-l-amber-500',
-                  },
-                  {
-                    label: 'Runs — failed',
-                    hint: 'Runs that ended in ERROR.',
-                    value: aggregate.by_outcome.failed,
-                    icon: AlertTriangle,
-                    color: 'text-orange-600 bg-orange-50',
-                    border: 'border-l-orange-500',
-                  },
-                  {
-                    label: 'Total findings',
-                    hint: 'Sum of vulnerability counts across every run on record.',
-                    value: aggregate.total_findings,
-                    icon: AlertTriangle,
-                    color: 'text-red-600   bg-red-50',
-                    border: 'border-l-red-500',
-                  },
-                ].map(({ label, hint, value, icon: Icon, color, border }) => (
-                  <div
-                    key={label}
-                    title={hint}
-                    className={`bg-surface rounded-xl border border-hcl-border shadow-card border-l-4 ${border} px-4 py-3`}
-                  >
-                    <div className="flex items-center justify-between">
-                      <div className="min-w-0">
-                        <p className="text-xs font-medium text-hcl-muted">{label}</p>
-                        <p className="mt-0.5 text-2xl font-bold text-hcl-navy">{value.toLocaleString()}</p>
-                      </div>
-                      <div className={`p-2 rounded-lg ${color}`}>
-                        <Icon className="h-4 w-4" />
-                      </div>
-                    </div>
-                  </div>
-                ))}
-              </div>
-            )}
-
-            <div className="flex flex-wrap items-end gap-3 bg-surface rounded-xl border border-hcl-border shadow-card p-4">
-              <Select
-                label="Project"
-                value={projectFilter}
-                onChange={(e) => setProjectFilter(e.target.value)}
-                className="w-52"
-              >
-                <option value="">All projects</option>
-                {projects?.map((p) => (
-                  <option key={p.id} value={p.id}>
-                    {p.project_name}
-                  </option>
-                ))}
-              </Select>
-
-              <Select
-                label="Product"
-                value={productFilter}
-                onChange={(e) => setProductFilter(e.target.value)}
-                className="w-52"
-              >
-                <option value="">All products</option>
-                {productOptions.map((p) => (
-                  <option key={p.id} value={p.id}>
-                    {p.name}
-                  </option>
-                ))}
-              </Select>
-
-              <Select
-                label="SBOM"
-                value={sbomFilter}
-                onChange={(e) => setSbomFilter(e.target.value)}
-                className="w-52"
-              >
-                <option value="">All SBOMs</option>
-                {sboms?.map((s) => (
-                  <option key={s.id} value={s.id}>
-                    {s.sbom_name}
-                  </option>
-                ))}
-              </Select>
-
-              <Select
-                label="Outcome"
-                value={statusFilter}
-                onChange={(e) => setStatusFilter(e.target.value)}
-                className="w-56"
-              >
-                <option value="">All outcomes</option>
-                <option value="OK">{runStatusShortLabel('OK')}</option>
-                <option value="FINDINGS">{runStatusShortLabel('FINDINGS')}</option>
-                <option value="PARTIAL">{runStatusShortLabel('PARTIAL')}</option>
-                <option value="NO_DATA">{runStatusShortLabel('NO_DATA')}</option>
-                <option value="ERROR">{runStatusShortLabel('ERROR')}</option>
-                <option value="RUNNING">{runStatusShortLabel('RUNNING')}</option>
-                <option value="PENDING">{runStatusShortLabel('PENDING')}</option>
-              </Select>
-
-              {(projectFilter || productFilter || sbomFilter || statusFilter) && (
-                <button
-                  type="button"
-                  onClick={clearFilters}
-                  className="h-10 text-sm text-hcl-muted hover:text-hcl-navy underline"
-                >
-                  Clear filters
-                </button>
-              )}
-            </div>
-
-            <RunsTable
-              runs={runs}
-              isLoading={isLoading}
-              error={error}
-              selectedIds={selectedForCompare}
-              onToggleSelect={toggleSelectForCompare}
-            />
-          </div>
-        )}
-
-        {hubTab === 'vulnerabilities' && (
-          <div
-            role="tabpanel"
-            id="analysis-panel-vulnerabilities"
-            aria-labelledby="analysis-tab-vulnerabilities"
-          >
-            <VulnerabilitiesByScope
-              severity={severityFilter}
-              onSeverityChange={setSeverityFilter}
-              scope={projectFilter ? {
-                projectId: projectFilter ? Number(projectFilter) : null,
-                applicationId: productFilter ? Number(productFilter) : null,
-                sbomId: productFilter && sbomFilter ? Number(sbomFilter) : null,
-              } : undefined}
-            />
-          </div>
-        )}
-      </div>
+    return [...byId].map(([id, name]) => ({ id, name })).sort((a, b) => a.name.localeCompare(b.name));
+  }, [sboms.data, projectFilter, hubTab]);
+  const scanSboms = (sboms.data ?? []).filter(sbom => (!projectFilter || String(sbom.projectid ?? sbom.project_id) === projectFilter)
+    && (!productFilter || String(sbom.product_id) === productFilter));
+  const scopeControls = <div className="grid min-w-0 gap-3 sm:grid-cols-2">
+    <Select label="Project" aria-label="Project" value={projectFilter} onChange={event => hubTab === 'consolidated' ? state.setScanScope(event.target.value, '', '') : state.setProjectFilter(event.target.value)}>
+      <option value="">All projects</option>{projects.data?.map(project => <option key={project.id} value={project.id}>{project.project_name}</option>)}
+    </Select>
+    <Select label="Product / Application" aria-label="Product / Application" value={productFilter} onChange={event => hubTab === 'consolidated' ? state.setScanScope(projectFilter, event.target.value, '') : state.setProductFilter(event.target.value)}>
+      <option value="">All products / applications</option>{products.map(product => <option key={product.id} value={product.id}>{product.name}</option>)}
+    </Select>
+  </div>;
+  return <div className="flex min-w-0 flex-1 flex-col">
+    <TopBar title={hubTab === 'consolidated' ? 'Consolidated Analysis' : hubTab === 'vulnerabilities' ? 'Analysis Vulnerabilities' : 'Analysis Runs'}
+      subtitle={hubTab === 'consolidated' ? 'Multi-source vulnerability analysis across supported databases.' : hubTab === 'runs' ? 'Review analysis history, investigate findings and compare results.' : 'Review findings across the selected portfolio scope.'} />
+    <div className="min-w-0 space-y-5 p-4 md:p-6">
+      <AnalysisHubTabs active={hubTab} onChange={state.setHubTab} />
+      {hubTab === 'consolidated' && <div role="tabpanel" id="analysis-panel-consolidated" aria-labelledby="analysis-tab-consolidated" className="space-y-5">
+        <ConsolidatedAnalysisPanel key={activeTenantId} analysisConfig={config.data} sboms={scanSboms} scopeControls={scopeControls}
+          isLoading={config.isLoading || sboms.isLoading || projects.isLoading} error={config.error || sboms.error || projects.error}
+          onRetry={() => { void config.refetch(); void sboms.refetch(); void projects.refetch(); }}
+          consolidatedSbomId={sbomFilter} onConsolidatedSbomIdChange={state.setSbomFilter}
+          selectedSources={selectedSources} onSelectedSourcesChange={setSelectedSources}
+          onComplete={() => { void recent.refetch(); }} />
+        <section aria-label="Recent runs" className="min-w-0 space-y-3">
+          <div className="flex flex-wrap items-center justify-between gap-2"><div><h2 className="text-base font-semibold text-hcl-navy">Recent runs</h2><p className="mt-1 text-xs text-hcl-muted">Up to five latest runs in this scope.</p></div>
+            <Link className="text-sm font-medium text-primary underline" href={`/analysis?${new URLSearchParams({ tab: 'runs', ...(projectFilter ? { project: projectFilter } : {}), ...(productFilter ? { product: productFilter } : {}), ...(sbomFilter ? { sbom: sbomFilter } : {}) })}`}>View all runs</Link></div>
+          <RunsTable compact runs={recent.data} isLoading={recent.isLoading} error={recent.error} onRetry={() => { void recent.refetch(); }} />
+        </section>
+      </div>}
+      {hubTab === 'runs' && <div role="tabpanel" id="analysis-panel-runs" aria-labelledby="analysis-tab-runs" className="min-w-0 space-y-4">
+        <div className="space-y-3 rounded-xl border border-border bg-surface p-4">
+          <div className="grid gap-3 lg:grid-cols-3 lg:items-end"><div className="lg:col-span-2">{scopeControls}</div><Select label="SBOM" aria-label="SBOM" value={sbomFilter} onChange={event => state.setSbomFilter(event.target.value)}>
+            <option value="">All SBOMs</option>{sboms.data?.map(sbom => <option key={sbom.id} value={sbom.id}>{sbom.sbom_name}{sbom.sbom_version ? ` · ${sbom.sbom_version}` : ''}</option>)}
+          </Select></div>
+          {(projectFilter || productFilter || sbomFilter) && <button type="button" className="text-sm text-primary underline" onClick={state.clearFilters}>Clear scope filters</button>}
+          {(projects.error || sboms.error) && <Alert variant="error">Could not load scope choices. Existing history remains available.</Alert>}
+        </div>
+        <AnalysisRunsHistory key={`${activeTenantId}:${projectFilter}:${productFilter}:${sbomFilter}`} scope={scope} status={state.statusFilter} onStatusChange={state.setStatusFilter} />
+      </div>}
+      {hubTab === 'vulnerabilities' && <div role="tabpanel" id="analysis-panel-vulnerabilities" aria-labelledby="analysis-tab-vulnerabilities">
+        <VulnerabilitiesByScope severity={state.severityFilter} onSeverityChange={state.setSeverityFilter} scope={projectFilter ? {
+          projectId: projectFilter || null, applicationId: productFilter || null, sbomId: productFilter && sbomFilter ? sbomFilter : null,
+        } : undefined} />
+      </div>}
     </div>
-  );
+  </div>;
 }
 
 export default function AnalysisPage() {
-  return (
-    <Suspense
-      fallback={
-        <div className="flex flex-col flex-1">
-          <TopBar title="Analysis Runs" />
-          <div className="flex flex-1 items-center justify-center p-12">
-            <PageSpinner />
-          </div>
-        </div>
-      }
-    >
-      <AnalysisPageInner />
-    </Suspense>
-  );
+  return <Suspense fallback={<div className="flex flex-1 flex-col"><TopBar title="Analysis" /><div className="p-12"><PageSpinner /></div></div>}><AnalysisPageInner /></Suspense>;
 }

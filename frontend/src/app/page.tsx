@@ -8,17 +8,19 @@ import { TopBar } from '@/components/layout/TopBar';
 import { Motion } from '@/components/ui/Motion';
 import { HeroPostureCard } from '@/components/dashboard/HeroPostureCard/HeroPostureCard';
 import { WhatsNewStrip } from '@/components/dashboard/WhatsNewStrip';
+import { DashboardOperations, PortfolioHealth, SeverityBars } from '@/components/dashboard/PortfolioOverview';
 import { CounterTiles } from '@/components/dashboard/CounterTiles';
 import { LifecycleHealthTiles } from '@/components/dashboard/LifecycleHealthTiles';
 import { SeverityChart } from '@/components/dashboard/SeverityChart';
 import { VulnerabilityAgePie } from '@/components/dashboard/VulnerabilityAgePie';
 import { TrendExplorer } from '@/components/dashboard/TrendExplorer';
 import { QuickActionsV2 } from '@/components/dashboard/QuickActionsV2/QuickActionsV2';
-import { FindingsTrendChart } from '@/components/dashboard/FindingsTrendChart/FindingsTrendChart';
+import { PortfolioTrend } from '@/components/dashboard/PortfolioTrend';
 import { LifetimeStats } from '@/components/dashboard/LifetimeStats/LifetimeStats';
 import { TopVulnerableSboms } from '@/components/dashboard/TopVulnerableSboms';
 import { ActivityFeed } from '@/components/dashboard/ActivityFeed';
 import { DashboardFilters } from '@/components/dashboard/DashboardFilters';
+import { DashboardEmptyState } from '@/components/dashboard/DashboardEmptyState';
 import { AiConfigBanner } from '@/components/dashboard/AiConfigBanner';
 import { CopilotPanel } from '@/components/dashboard/advanced/CopilotPanel';
 import { ForecastCard } from '@/components/dashboard/advanced/ForecastCard';
@@ -43,27 +45,9 @@ const DRILLABLE_SEVERITIES: readonly SeverityKey[] = [
   'low',
 ];
 
-/**
- * v3 dashboard — exploitability-led, decision-first.
- *
- * Hierarchy (top to bottom):
- *  1. HeroPostureCard — "what do I act on right now?" headline + the
- *     decision-relevant few signals (KEV · likely-exploited EPSS · Critical ·
- *     Fix) + severity distribution as supporting context.
- *  2. WhatsNewStrip — the delta since last week (drives action > static totals).
- *  3. QuickActionsV2 — the primary action.
- *  4. TopVulnerableSboms — where to look first.
- *  5. Supporting detail — trend, then lifetime + activity (most demoted).
- *
- * Every finding count is one click to those findings via the shared drill-down
- * (`useFindingsFilterFromUrl`): severity counts resolve the run with the most
- * of that tier; KEV/EPSS/Fix land on the most-vulnerable run with the matching
- * filter pre-applied. The portfolio count comes from `posture`; the target run
- * from `['top-vulnerable-runs']` (shared cache — no extra request).
- *
- * The likely-exploited (EPSS) tile and needs-review chip are feature-gated on
- * optional posture fields the endpoint doesn't expose yet — they appear when
- * the Phase 2 aggregates land.
+/** Portfolio overview backed by the canonical dashboard summary.
+ * Primary metrics and operations precede the retained advanced capabilities.
+ * Scope, lifecycle resolution and severity drill-down contracts stay shared.
  */
 export default function DashboardPage() {
   return <Suspense fallback={null}><DashboardContent /></Suspense>;
@@ -182,42 +166,37 @@ function DashboardContent() {
     <div className="dashboard-root flex flex-1 flex-col min-h-full">
       <TopBar
         title="Dashboard"
-        subtitle="Real-time security posture across your SBOM portfolio"
+        subtitle="Security overview of your SBOM portfolio"
       />
-      <div className="space-y-6 p-6">
+      <div className="min-w-0 space-y-5 p-4 md:p-6">
         <DashboardFilters scope={scope} onChange={changeScope} isUpdating={summaryQuery.isFetching} />
-        {summaryQuery.isError && <p role="alert" className="text-sm text-red-700">Unable to load this dashboard scope. Check the selected filters.</p>}
+        {summaryQuery.isError && <div role="alert" className="rounded-xl border border-border bg-surface p-4 text-sm text-hcl-muted">Unable to load this dashboard scope. <button className="rounded px-2 font-medium text-hcl-blue focus-visible:ring-2 focus-visible:ring-hcl-blue" onClick={() => void summaryQuery.refetch()} disabled={summaryQuery.isFetching}>Retry</button></div>}
+        {summaryQuery.isSuccess && summary?.posture?.total_sboms === 0 && <DashboardEmptyState filtered={!!(scope.projectId || scope.applicationId || scope.sbomId)} onClear={() => changeScope({ projectId: null, applicationId: null, sbomId: null })} />}
         {!summaryQuery.isPending && scope.sbomId && summary?.posture?.total_sboms_analysed === 0 &&
           <p className="rounded-lg border border-border bg-surface p-4 text-sm text-hcl-muted">No successful analysis is available for this SBOM.</p>}
         {!summaryQuery.isPending && summary?.posture?.total_sboms_analysed > 0 && summary?.posture?.total_findings === 0 &&
           <p className="rounded-lg border border-border bg-surface p-4 text-sm text-hcl-muted">No findings match the selected dashboard scope.</p>}
         <AiConfigBanner />
 
-        {/* Counter tiles — stored / scanned / analysed */}
-        <Motion preset="rise">
-          <CounterTiles posture={summary?.posture ?? null} isLoading={summaryQuery.isLoading} scope={scope} />
-        </Motion>
+        <section aria-label="Portfolio metrics" className="dashboard-kpis grid grid-cols-1 gap-4 sm:grid-cols-2 lg:grid-cols-3 2xl:grid-cols-6">
+          <CounterTiles posture={summary?.posture ?? null} isLoading={summaryQuery.isPending || (summaryQuery.isError && !summary)} scope={scope} />
+          <LifetimeStats completedOnly data={summary?.lifetime} findingsTotal={summary?.posture?.total_findings} isLoading={summaryQuery.isPending || (summaryQuery.isError && !summary)} />
+        </section>
 
-        {/* Lifetime growth — sits directly above the lifecycle box so the
-            portfolio-wide vulnerability total reads before the per-component
-            lifecycle breakdown. */}
-        <Motion preset="rise" delay={10}>
-          <LifetimeStats
-            data={summary?.lifetime}
-            findingsTotal={summary?.posture?.total_findings}
-            isLoading={summaryQuery.isLoading}
-          />
-        </Motion>
+        {summaryQuery.isSuccess && <>
+          <section aria-label="Vulnerability intelligence" className="dashboard-primary-charts grid min-w-0 grid-cols-1 gap-4 xl:grid-cols-[1.3fr_1.65fr_1fr]">
+            <SeverityChart compact data={summary?.posture?.severity} isLoading={false} onSliceClick={handleSegmentClick} interactiveSeverities={interactiveSeverities} />
+            <PortfolioTrend initial={summary?.trend} scope={scope} tenantId={tenantId} />
+            <SeverityBars data={summary?.posture?.severity} loading={false} onSelect={handleSegmentClick} />
+          </section>
+          <PortfolioHealth health={summary?.health} lifecycle={summary?.lifecycle} vex={summary?.vex} loading={false} hasInventory={(summary?.posture?.total_sboms ?? 0) > 0} />
+        </>}
+        {summaryQuery.isPending && <div role="status" aria-label="Loading portfolio charts" className="h-64 animate-pulse rounded-xl border border-border bg-surface motion-reduce:animate-none" />}
+        <DashboardOperations key={scopeKey.join(":")} scope={scope} tenantId={tenantId} />
 
-        <Motion preset="rise" delay={20}>
-          <LifecycleHealthTiles
-            lifecycle={summary?.lifecycle ?? null}
-            health={summary?.health ?? null}
-            vex={summary?.vex ?? null}
-            isLoading={summaryQuery.isLoading}
-          />
-        </Motion>
-
+        <details className="dashboard-advanced rounded-xl border border-border bg-surface p-4" open>
+          <summary className="cursor-pointer rounded text-sm font-semibold text-hcl-navy focus-visible:ring-2 focus-visible:ring-hcl-blue">Advanced security intelligence <span className="ml-2 text-xs font-normal text-hcl-muted">Prioritization, investigation and portfolio analytics</span></summary>
+          <div className="mt-5 space-y-5">
         {/* 1 — the decision */}
         <Motion preset="rise" delay={40}>
           <HeroPostureCard
@@ -250,26 +229,7 @@ function DashboardContent() {
           <CopilotPanel />
         </Motion>}
 
-        {/* Distribution pies — vulnerability by threat level + by age. Placed
-            ABOVE the vulnerable-SBOM list so the overview reads before the list. */}
-        <div className="grid grid-cols-1 gap-6 lg:grid-cols-2">
-          <Motion preset="rise" delay={180}>
-            <SeverityChart
-              data={summary?.posture?.severity}
-              isLoading={summaryQuery.isLoading}
-              onSliceClick={handleSegmentClick}
-              interactiveSeverities={interactiveSeverities}
-            />
-          </Motion>
-          <Motion preset="rise" delay={220}>
-            <VulnerabilityAgePie
-              vulnerabilityAge={summary?.vulnerability_age ?? null}
-              isLoading={summaryQuery.isLoading}
-              scope={scope}
-            />
-          </Motion>
-        </div>
-
+        <VulnerabilityAgePie vulnerabilityAge={summary?.vulnerability_age ?? null} isLoading={summaryQuery.isLoading || summaryQuery.isError} scope={scope} />
         {/* Where to look first */}
         <Motion preset="rise" delay={260}>
           <TopVulnerableSboms scope={scope} tenantId={tenantId} />
@@ -290,11 +250,6 @@ function DashboardContent() {
             </button>
           </Motion>
         )}
-
-        {/* 5 — supporting detail */}
-        <Motion preset="rise" delay={240}>
-          <FindingsTrendChart data={summary?.trend} isLoading={summaryQuery.isLoading} />
-        </Motion>
 
         {/* Trend explorer — granularity + application filter + fix/resolved */}
         <Motion preset="rise" delay={260}>
@@ -328,10 +283,17 @@ function DashboardContent() {
           </Motion>
         </div>
 
+        <details className="rounded-xl border border-border p-4">
+          <summary className="cursor-pointer rounded text-sm font-semibold text-hcl-navy focus-visible:ring-2 focus-visible:ring-hcl-blue">Detailed lifecycle, completeness and VEX evidence</summary>
+          <div className="mt-4"><LifecycleHealthTiles lifecycle={summary?.lifecycle ?? null} health={summary?.health ?? null} vex={summary?.vex ?? null} hasInventory={(summary?.posture?.total_sboms ?? 0) > 0} isLoading={summaryQuery.isLoading || summaryQuery.isError} /></div>
+        </details>
+
         {/* Recent activity — supporting detail at the foot of the dashboard. */}
         <Motion preset="rise" delay={400}>
           <ActivityFeed scope={scope} tenantId={tenantId} />
         </Motion>
+          </div>
+        </details>
       </div>
     </div>
   );

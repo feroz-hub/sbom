@@ -1,0 +1,7 @@
+<?xml version="1.0" encoding="utf-8"?><testsuites name="pytest tests"><testsuite name="pytest" errors="0" failures="1" skipped="0" tests="1" time="8.266" timestamp="2026-10-21T15:37:36.091710+05:30" hostname="Ferozes-MacBook-Air.local"><testcase classname="tests.test_component_advisor_review_api" name="test_T34_decision_events_carry_actor_reason_state_and_correlation__FR_SCA_022" time="5.771"><failure message="AttributeError: 'int' object has no attribute 'replace'">tests/test_component_advisor_review_api.py:272: in test_T34_decision_events_carry_actor_reason_state_and_correlation__FR_SCA_022
+    assert UUID(event["actor_user_id"]).version == 4
+           ^^^^^^^^^^^^^^^^^^^^^^^^^^^^
+/opt/anaconda3/lib/python3.12/uuid.py:175: in __init__
+    hex = hex.replace('urn:', '').replace('uuid:', '')
+          ^^^^^^^^^^^
+E   AttributeError: 'int' object has no attribute 'replace'</failure></testcase></testsuite></testsuites>

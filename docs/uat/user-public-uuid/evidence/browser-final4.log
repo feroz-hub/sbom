@@ -1,0 +1,9 @@
+admin: login, UUID context, refresh, logout/login stability PASS
+analyst: login, UUID context, refresh, logout/login stability PASS
+developer: login, UUID context, refresh, logout/login stability PASS
+viewer: login, UUID context, refresh, logout/login stability PASS
+foreign: login, UUID context, refresh, logout/login stability PASS
+platform: login, UUID context, refresh, logout/login stability PASS
+Tenant Admin: actual Users & Access find/add/change roles/remove UUID user PASS
+Platform Admin: purpose-limited UUID selection, actual grant/revoke UI PASS
+Admin UUID path syntax, missing identities and membership separation PASS

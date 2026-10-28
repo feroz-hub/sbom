@@ -91,7 +91,8 @@ export function SidebarStatus({ compact = false }: SidebarStatusProps) {
     // to escalate visual tone for an operator concern.
     return (
       <div
-        className="flex h-8 items-center justify-center"
+        className="flex h-8 items-center justify-center rounded-lg bg-white/5 focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-white"
+        tabIndex={0}
         title={`${meta.label}${lastChecked ? ` · checked ${lastChecked}` : ''}`}
         aria-label={`Status: ${meta.label}`}
       >
@@ -112,8 +113,8 @@ export function SidebarStatus({ compact = false }: SidebarStatusProps) {
       role="status"
       aria-live="polite"
       className={cn(
-        'flex items-center gap-2 rounded-lg border border-white/5 bg-white/5 px-3 py-2',
-        'text-[11px] text-slate-300 transition-colors',
+        'flex items-center gap-2.5 rounded-xl border border-white/10 bg-white/5 px-3 py-2.5 shadow-inner',
+        'text-[11px] text-white/80 transition-colors',
       )}
     >
       <span
@@ -126,7 +127,7 @@ export function SidebarStatus({ compact = false }: SidebarStatusProps) {
       />
       <div className="min-w-0 flex-1">
         <p className={cn('truncate font-semibold', meta.tone)}>{meta.label}</p>
-        <p className="truncate text-[10px] text-slate-500 font-metric tabular-nums">
+        <p className="mt-0.5 truncate text-[10px] text-white/70 font-metric tabular-nums">
           {lastChecked ? `Checked ${lastChecked}` : 'Live polling'}
         </p>
       </div>

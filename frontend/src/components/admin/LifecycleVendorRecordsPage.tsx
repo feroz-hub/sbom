@@ -3,8 +3,10 @@
 import { useMemo, useState } from 'react';
 import { useMutation, useQuery, useQueryClient } from '@tanstack/react-query';
 import { Download, Pencil, Plus, Trash2, Upload } from 'lucide-react';
-import { Button } from '@/components/ui/Button';
+import { PermissionButton as Button } from '@/components/ui/PermissionButton';
 import { Badge } from '@/components/ui/Badge';
+import { useMutationScope } from '@/hooks/useMutationScope';
+import { invalidateLifecycleVendorRecords } from '@/lib/queryInvalidation';
 import { useToast } from '@/hooks/useToast';
 import { getApiErrorMessage } from '@/lib/notifications';
 import {
@@ -32,6 +34,7 @@ const EMPTY_RECORD: LifecycleVendorRecordPayload = {
 export function LifecycleVendorRecordsPage() {
   const queryClient = useQueryClient();
   const { showToast } = useToast();
+  const mutationScope = useMutationScope();
   const [search, setSearch] = useState('');
   const [editing, setEditing] = useState<LifecycleVendorRecord | null>(null);
   const [creating, setCreating] = useState(false);
@@ -43,12 +46,14 @@ export function LifecycleVendorRecordsPage() {
     staleTime: 30_000,
   });
 
-  const invalidate = () => queryClient.invalidateQueries({ queryKey: ['lifecycle-vendor-records'] });
+  const invalidate = () => invalidateLifecycleVendorRecords(queryClient);
 
   const createMutation = useMutation({
+    onMutate: () => mutationScope.capture(),
     mutationFn: (payload: LifecycleVendorRecordPayload) => createLifecycleVendorRecord(payload),
-    onSuccess: () => {
-      invalidate();
+    onSuccess: async (_result, _variables, isCurrent) => {
+      if (!isCurrent?.()) return;
+      await invalidate();
       setCreating(false);
       showToast('Vendor record created', 'success');
     },
@@ -56,10 +61,12 @@ export function LifecycleVendorRecordsPage() {
   });
 
   const updateMutation = useMutation({
+    onMutate: () => mutationScope.capture(),
     mutationFn: ({ id, payload }: { id: number; payload: LifecycleVendorRecordPayload }) =>
       updateLifecycleVendorRecord(id, payload),
-    onSuccess: () => {
-      invalidate();
+    onSuccess: async (_result, _variables, isCurrent) => {
+      if (!isCurrent?.()) return;
+      await invalidate();
       setEditing(null);
       showToast('Vendor record saved', 'success');
     },
@@ -67,18 +74,22 @@ export function LifecycleVendorRecordsPage() {
   });
 
   const deleteMutation = useMutation({
+    onMutate: () => mutationScope.capture(),
     mutationFn: (id: number) => deleteLifecycleVendorRecord(id),
-    onSuccess: () => {
-      invalidate();
+    onSuccess: async (_result, _variables, isCurrent) => {
+      if (!isCurrent?.()) return;
+      await invalidate();
       showToast('Vendor record disabled', 'success');
     },
     onError: (error: unknown) => showToast(getApiErrorMessage(error, 'Vendor record deletion failed.'), 'error'),
   });
 
   const importMutation = useMutation({
+    onMutate: () => mutationScope.capture(),
     mutationFn: (records: LifecycleVendorRecordPayload[]) => importLifecycleVendorRecords(records),
-    onSuccess: (result) => {
-      invalidate();
+    onSuccess: async (result, _variables, isCurrent) => {
+      if (!isCurrent?.()) return;
+      await invalidate();
       setImportText('');
       showToast(`Imported ${result.created} records`, result.errors.length ? 'info' : 'success');
     },
@@ -87,8 +98,10 @@ export function LifecycleVendorRecordsPage() {
 
   // @no-invalidation-needed export downloads current records without mutating server state.
   const exportMutation = useMutation({
+    onMutate: () => mutationScope.capture(),
     mutationFn: () => exportLifecycleVendorRecords(),
-    onSuccess: (result) => {
+    onSuccess: async (result, _variables, isCurrent) => {
+      if (!isCurrent?.()) return;
       const blob = new Blob([JSON.stringify(result.records, null, 2)], { type: 'application/json' });
       const url = URL.createObjectURL(blob);
       const anchor = document.createElement('a');
@@ -126,7 +139,7 @@ export function LifecycleVendorRecordsPage() {
             <Download className="h-4 w-4" />
             Export
           </Button>
-          <Button onClick={() => setCreating(true)}>
+          <Button permission={"lifecycle:vendor-record:write"} onClick={() => setCreating(true)}>
             <Plus className="h-4 w-4" />
             Add
           </Button>
@@ -166,11 +179,11 @@ export function LifecycleVendorRecordsPage() {
                   <td className="px-4 py-3 text-xs text-hcl-muted">{formatDate(record.updated_at)}</td>
                   <td className="px-4 py-3">
                     <div className="flex justify-end gap-2">
-                      <Button variant="ghost" size="sm" onClick={() => setEditing(record)}>
+                      <Button permission={"lifecycle:vendor-record:write"} variant="ghost" size="sm" onClick={() => setEditing(record)}>
                         <Pencil className="h-3.5 w-3.5" />
                         Edit
                       </Button>
-                      <Button variant="ghost" size="sm" onClick={() => deleteMutation.mutate(record.id)}>
+                      <Button permission={"lifecycle:vendor-record:delete"} variant="ghost" size="sm" onClick={() => deleteMutation.mutate(record.id)}>
                         <Trash2 className="h-3.5 w-3.5" />
                         Disable
                       </Button>
@@ -186,7 +199,7 @@ export function LifecycleVendorRecordsPage() {
       <div className="rounded-lg border border-border bg-surface p-4">
         <div className="flex items-center justify-between gap-3">
           <h2 className="text-sm font-semibold text-hcl-navy">Import</h2>
-          <Button
+          <Button permission={"lifecycle:vendor-record:write"}
             variant="secondary"
             size="sm"
             disabled={!Array.isArray(parsedImport)}
@@ -294,7 +307,7 @@ function VendorRecordDialog({
         </div>
         <div className="flex justify-end gap-2 border-t border-border px-5 py-4">
           <Button variant="secondary" onClick={onClose}>Cancel</Button>
-          <Button loading={saving} onClick={() => onSave(form)}>Save</Button>
+          <Button permission={"lifecycle:vendor-record:write"} loading={saving} onClick={() => onSave(form)}>Save</Button>
         </div>
       </div>
     </div>

@@ -5,8 +5,9 @@ from datetime import UTC, datetime, timedelta
 from uuid import uuid4
 
 import pytest
-from app.core.context import minimal_background_context, tenant_scope
 from app.models import AnalysisFinding, AnalysisRun, SBOMSource, Tenant
+
+from tests.tenant_fixture_scope import verified_fixture_tenant
 
 
 def _now(offset_seconds: int = 0) -> str:
@@ -19,7 +20,8 @@ def db(client):
 
     session = SessionLocal()
     try:
-        yield session
+        with verified_fixture_tenant(session, 1):
+            yield session
     finally:
         session.rollback()
         session.close()
@@ -99,7 +101,7 @@ def test_sbom_with_no_analysis_shows_no_latest_analysis(client, db):
     sbom = _seed_sbom(db, name=f"sbom-{created_by}", created_by=created_by)
     db.commit()
 
-    row = _listed_sbom(client, created_by=created_by, sbom_id=sbom.id)
+    row = _listed_sbom(client, created_by=created_by, sbom_id=str(sbom.public_id))
 
     assert row["latest_analysis"] is None
 
@@ -132,10 +134,10 @@ def test_sbom_list_returns_latest_analysis_state(client, db, status, normalized_
         _seed_finding(db, run=run, severity="HIGH", score=7.0)
     db.commit()
 
-    row = _listed_sbom(client, created_by=created_by, sbom_id=sbom.id)
+    row = _listed_sbom(client, created_by=created_by, sbom_id=str(sbom.public_id))
     latest = row["latest_analysis"]
 
-    assert latest["run_id"] == run.id
+    assert latest["run_id"] == str(run.public_id)
     assert latest["status"] == normalized_status
     assert latest["result"] == result
     if status == "FINDINGS":
@@ -157,10 +159,10 @@ def test_sbom_list_selects_latest_run_when_multiple_exist(client, db):
     latest_run = _seed_run(db, sbom=sbom, status="ERROR", raw_report={"query_errors": [{"message": "newer failed"}]})
     db.commit()
 
-    row = _listed_sbom(client, created_by=created_by, sbom_id=sbom.id)
+    row = _listed_sbom(client, created_by=created_by, sbom_id=str(sbom.public_id))
 
-    assert row["latest_analysis"]["run_id"] == latest_run.id
-    assert row["latest_analysis"]["run_id"] != old_run.id
+    assert row["latest_analysis"]["run_id"] == str(latest_run.public_id)
+    assert row["latest_analysis"]["run_id"] != str(old_run.public_id)
     assert row["latest_analysis"]["status"] == "failed"
     assert row["latest_analysis"]["result"] == "failed"
     assert row["latest_analysis"]["error_message"] == "newer failed"
@@ -182,7 +184,7 @@ def test_sbom_list_latest_analysis_preserves_tenant_isolation(client, db):
     )
     db.add(other_tenant)
     db.flush()
-    with tenant_scope(minimal_background_context(other_tenant.id, other_tenant.external_iam_tenant_id)):
+    with verified_fixture_tenant(db, other_tenant.id):
         other_sbom = _seed_sbom(db, name=f"other-{created_by}", tenant_id=other_tenant.id, created_by=created_by)
         _seed_run(db, sbom=other_sbom, status="ERROR", raw_report={"error_message": "cross tenant"})
     db.commit()
@@ -191,5 +193,5 @@ def test_sbom_list_latest_analysis_preserves_tenant_isolation(client, db):
     assert resp.status_code == 200, resp.text
     rows = resp.json()
 
-    assert [row["id"] for row in rows] == [default_sbom.id]
+    assert [row["id"] for row in rows] == [str(default_sbom.public_id)]
     assert rows[0]["latest_analysis"]["status"] == "completed"

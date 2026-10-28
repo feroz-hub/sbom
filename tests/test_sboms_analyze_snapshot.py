@@ -19,7 +19,10 @@ import json
 from pathlib import Path
 
 import pytest
-from app.models import AnalysisRun
+from app.models import AnalysisRun, SBOMSource
+
+from tests.public_id_fixture import public_row
+from tests.tenant_fixture_scope import verified_fixture_tenant
 
 from ._normalize import normalize
 
@@ -54,6 +57,21 @@ def test_post_sbom_analyze_returns_locked_shape(client, seeded_sbom, mock_extern
 
     actual = normalize(resp.json())
     expected = _load_or_write("post_sbom_analyze", actual)
+    # Keep the locked UUID/business payload and independently verify the
+    # additive display keys against this persisted synthetic run.
+    from app.db import SessionLocal
+
+    body = resp.json()
+    assert body["sbom_id"] == sbom_id
+    with SessionLocal() as db, verified_fixture_tenant(db, 1):
+        run = public_row(db, AnalysisRun, body["id"])
+        sbom = public_row(db, SBOMSource, sbom_id)
+        assert run.sbom_id == sbom.id
+        expected.update(display_id=run.id, sbom_display_id=sbom.id)
+        for name in ("project", "product"):
+            internal = getattr(run, f"{name}_id")
+            if internal is not None:
+                expected[f"{name}_display_id"] = internal
 
     assert actual == expected, (
         "POST /api/sboms/{id}/analyze response shape drifted.\n"
@@ -99,36 +117,39 @@ def test_post_sbom_analyze_returns_existing_active_run(client, seeded_sbom):
 
     db = SessionLocal()
     try:
-        active = AnalysisRun(
-            sbom_id=seeded_sbom["id"],
-            run_status="RUNNING",
-            sbom_name=seeded_sbom["sbom_name"],
-            source="NVD,OSV,GITHUB",
-            trigger_source="manual",
-            started_on="2026-07-01T00:00:00Z",
-            completed_on="2026-07-01T00:00:00Z",
-            duration_ms=0,
-        )
-        db.add(active)
-        db.commit()
-        db.refresh(active)
-        active_id = active.id
+        with verified_fixture_tenant(db, 1):
+            active = AnalysisRun(
+                sbom_id=public_row(db, SBOMSource, seeded_sbom["id"]).id,
+                run_status="RUNNING",
+                sbom_name=seeded_sbom["sbom_name"],
+                source="NVD,OSV,GITHUB",
+                trigger_source="manual",
+                started_on="2026-07-01T00:00:00Z",
+                completed_on="2026-07-01T00:00:00Z",
+                duration_ms=0,
+            )
+            db.add(active)
+            db.commit()
+            db.refresh(active)
+            active_id = active.id
+            active_public_id = str(active.public_id)
     finally:
         db.close()
 
     resp = client.post(f"/api/sboms/{seeded_sbom['id']}/analyze")
     assert resp.status_code == 200, resp.text
     body = resp.json()
-    assert body["id"] == active_id
+    assert body["id"] == active_public_id
     assert body["run_status"] == "RUNNING"
     assert body["trigger_source"] == "manual"
 
     db = SessionLocal()
     try:
-        runs = db.query(AnalysisRun).filter(AnalysisRun.sbom_id == seeded_sbom["id"]).all()
-        assert [run.id for run in runs].count(active_id) == 1
-        assert sum(1 for run in runs if run.run_status == "RUNNING") == 1
-        db.query(AnalysisRun).filter(AnalysisRun.id == active_id).delete()
-        db.commit()
+        with verified_fixture_tenant(db, 1):
+            runs = db.query(AnalysisRun).filter(AnalysisRun.sbom_id == public_row(db, SBOMSource, seeded_sbom["id"]).id).all()
+            assert [run.id for run in runs].count(active_id) == 1
+            assert sum(1 for run in runs if run.run_status == "RUNNING") == 1
+            db.query(AnalysisRun).filter(AnalysisRun.id == active_id).delete()
+            db.commit()
     finally:
         db.close()

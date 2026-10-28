@@ -1,0 +1,1024 @@
+{
+  "database": "sbom_public_resource_uuid_browser_test",
+  "foreign_keys": [
+    [
+      "account_action_tokens",
+      "fk_account_action_tokens_user_id_iam_users",
+      "FOREIGN KEY (user_id) REFERENCES iam_users(id) ON DELETE CASCADE"
+    ],
+    [
+      "advisor_policy",
+      "fk_advisor_policy_tenant_id_tenants",
+      "FOREIGN KEY (tenant_id) REFERENCES tenants(id) ON DELETE CASCADE"
+    ],
+    [
+      "advisor_policy_version",
+      "fk_advisor_policy_version_policy_id_advisor_policy",
+      "FOREIGN KEY (policy_id) REFERENCES advisor_policy(id)"
+    ],
+    [
+      "advisor_policy_version",
+      "fk_advisor_policy_version_tenant_id_tenants",
+      "FOREIGN KEY (tenant_id) REFERENCES tenants(id) ON DELETE CASCADE"
+    ],
+    [
+      "ai_credential_audit_log",
+      "fk_ai_credential_audit_log_tenant_id_tenants",
+      "FOREIGN KEY (tenant_id) REFERENCES tenants(id) ON DELETE SET NULL"
+    ],
+    [
+      "ai_fix_batch",
+      "fk_ai_fix_batch_run_id_analysis_run",
+      "FOREIGN KEY (run_id) REFERENCES analysis_run(id) ON DELETE CASCADE"
+    ],
+    [
+      "ai_fix_batch",
+      "fk_ai_fix_batch_tenant_id_tenants",
+      "FOREIGN KEY (tenant_id) REFERENCES tenants(id)"
+    ],
+    [
+      "ai_provider_credential",
+      "fk_ai_provider_credential_tenant_id_tenants",
+      "FOREIGN KEY (tenant_id) REFERENCES tenants(id) ON DELETE CASCADE"
+    ],
+    [
+      "ai_provider_model",
+      "fk_ai_provider_model_provider_credential_id_ai_provider_97cb",
+      "FOREIGN KEY (provider_credential_id) REFERENCES ai_provider_credential(id) ON DELETE CASCADE"
+    ],
+    [
+      "ai_settings",
+      "fk_ai_settings_tenant_id_tenants",
+      "FOREIGN KEY (tenant_id) REFERENCES tenants(id) ON DELETE CASCADE"
+    ],
+    [
+      "ai_usage_log",
+      "fk_ai_usage_log_tenant_id_tenants",
+      "FOREIGN KEY (tenant_id) REFERENCES tenants(id)"
+    ],
+    [
+      "analysis_finding",
+      "fk_analysis_finding_analysis_run_id_analysis_run",
+      "FOREIGN KEY (analysis_run_id) REFERENCES analysis_run(id)"
+    ],
+    [
+      "analysis_finding",
+      "fk_analysis_finding_component_id_sbom_component",
+      "FOREIGN KEY (component_id) REFERENCES sbom_component(id)"
+    ],
+    [
+      "analysis_finding",
+      "fk_analysis_finding_tenant_id_tenants",
+      "FOREIGN KEY (tenant_id) REFERENCES tenants(id)"
+    ],
+    [
+      "analysis_run",
+      "fk_analysis_run_product_id_products",
+      "FOREIGN KEY (product_id) REFERENCES products(id)"
+    ],
+    [
+      "analysis_run",
+      "fk_analysis_run_project_id_projects",
+      "FOREIGN KEY (project_id) REFERENCES projects(id)"
+    ],
+    [
+      "analysis_run",
+      "fk_analysis_run_sbom_id_sbom_source",
+      "FOREIGN KEY (sbom_id) REFERENCES sbom_source(id)"
+    ],
+    [
+      "analysis_run",
+      "fk_analysis_run_tenant_id_tenants",
+      "FOREIGN KEY (tenant_id) REFERENCES tenants(id)"
+    ],
+    [
+      "analysis_schedule",
+      "fk_analysis_schedule_last_run_id_analysis_run",
+      "FOREIGN KEY (last_run_id) REFERENCES analysis_run(id) ON DELETE SET NULL"
+    ],
+    [
+      "analysis_schedule",
+      "fk_analysis_schedule_product_id_products",
+      "FOREIGN KEY (product_id) REFERENCES products(id) ON DELETE CASCADE"
+    ],
+    [
+      "analysis_schedule",
+      "fk_analysis_schedule_project_id_projects",
+      "FOREIGN KEY (project_id) REFERENCES projects(id) ON DELETE CASCADE"
+    ],
+    [
+      "analysis_schedule",
+      "fk_analysis_schedule_sbom_id_sbom_source",
+      "FOREIGN KEY (sbom_id) REFERENCES sbom_source(id) ON DELETE CASCADE"
+    ],
+    [
+      "analysis_schedule",
+      "fk_analysis_schedule_tenant_id_tenants",
+      "FOREIGN KEY (tenant_id) REFERENCES tenants(id)"
+    ],
+    [
+      "audit_log",
+      "fk_audit_log_tenant_id_tenants",
+      "FOREIGN KEY (tenant_id) REFERENCES tenants(id)"
+    ],
+    [
+      "audit_log",
+      "fk_audit_log_user_ref_id_iam_users",
+      "FOREIGN KEY (user_ref_id) REFERENCES iam_users(id) ON DELETE SET NULL"
+    ],
+    [
+      "authorization_audit_log",
+      "fk_authorization_audit_log_actor_user_id_iam_users",
+      "FOREIGN KEY (actor_user_id) REFERENCES iam_users(id) ON DELETE SET NULL"
+    ],
+    [
+      "authorization_audit_log",
+      "fk_authorization_audit_log_target_membership_id_tenant_users",
+      "FOREIGN KEY (target_membership_id) REFERENCES tenant_users(id) ON DELETE SET NULL"
+    ],
+    [
+      "authorization_audit_log",
+      "fk_authorization_audit_log_target_user_id_iam_users",
+      "FOREIGN KEY (target_user_id) REFERENCES iam_users(id) ON DELETE SET NULL"
+    ],
+    [
+      "authorization_audit_log",
+      "fk_authorization_audit_log_tenant_id_tenants",
+      "FOREIGN KEY (tenant_id) REFERENCES tenants(id) ON DELETE SET NULL"
+    ],
+    [
+      "authorization_role_permissions",
+      "fk_authorization_role_permissions_created_by_user_id_iam_users",
+      "FOREIGN KEY (created_by_user_id) REFERENCES iam_users(id) ON DELETE SET NULL"
+    ],
+    [
+      "authorization_role_permissions",
+      "fk_authorization_role_permissions_permission_id_authori_8d82",
+      "FOREIGN KEY (permission_id) REFERENCES authorization_permissions(id) ON DELETE RESTRICT"
+    ],
+    [
+      "authorization_role_permissions",
+      "fk_authorization_role_permissions_role_id_authorization_roles",
+      "FOREIGN KEY (role_id) REFERENCES authorization_roles(id) ON DELETE RESTRICT"
+    ],
+    [
+      "authorization_roles",
+      "fk_authorization_roles_created_by_user_id_iam_users",
+      "FOREIGN KEY (created_by_user_id) REFERENCES iam_users(id) ON DELETE SET NULL"
+    ],
+    [
+      "authorization_roles",
+      "fk_authorization_roles_updated_by_user_id_iam_users",
+      "FOREIGN KEY (updated_by_user_id) REFERENCES iam_users(id) ON DELETE SET NULL"
+    ],
+    [
+      "compare_cache",
+      "fk_compare_cache_tenant_id_tenants",
+      "FOREIGN KEY (tenant_id) REFERENCES tenants(id)"
+    ],
+    [
+      "component_lifecycle_override_audit",
+      "fk_component_lifecycle_override_audit_component_id_sbom_794b",
+      "FOREIGN KEY (component_id) REFERENCES sbom_component(id) ON DELETE CASCADE"
+    ],
+    [
+      "component_lifecycle_override_audit",
+      "fk_component_lifecycle_override_audit_tenant_id_tenants",
+      "FOREIGN KEY (tenant_id) REFERENCES tenants(id)"
+    ],
+    [
+      "component_purpose_metadata",
+      "fk_component_purpose_metadata_tenant_id_tenants",
+      "FOREIGN KEY (tenant_id) REFERENCES tenants(id) ON DELETE CASCADE"
+    ],
+    [
+      "component_recommendation",
+      "fk_component_recommendation_product_id_products",
+      "FOREIGN KEY (product_id) REFERENCES products(id) ON DELETE SET NULL"
+    ],
+    [
+      "component_recommendation",
+      "fk_component_recommendation_project_id_projects",
+      "FOREIGN KEY (project_id) REFERENCES projects(id) ON DELETE SET NULL"
+    ],
+    [
+      "component_recommendation",
+      "fk_component_recommendation_sbom_id_sbom_source",
+      "FOREIGN KEY (sbom_id) REFERENCES sbom_source(id) ON DELETE SET NULL"
+    ],
+    [
+      "component_recommendation",
+      "fk_component_recommendation_source_component_id_sbom_component",
+      "FOREIGN KEY (source_component_id) REFERENCES sbom_component(id) ON DELETE SET NULL"
+    ],
+    [
+      "component_recommendation",
+      "fk_component_recommendation_tenant_id_tenants",
+      "FOREIGN KEY (tenant_id) REFERENCES tenants(id)"
+    ],
+    [
+      "component_recommendation_candidate",
+      "fk_component_recommendation_candidate_recommendation_id_4ea3",
+      "FOREIGN KEY (recommendation_id) REFERENCES component_recommendation(id) ON DELETE CASCADE"
+    ],
+    [
+      "component_recommendation_candidate",
+      "fk_component_recommendation_candidate_tenant_id_tenants",
+      "FOREIGN KEY (tenant_id) REFERENCES tenants(id)"
+    ],
+    [
+      "component_recommendation_compatibility_check",
+      "fk_component_recommendation_compatibility_check_candida_e9cc",
+      "FOREIGN KEY (candidate_id) REFERENCES component_recommendation_candidate(id) ON DELETE CASCADE"
+    ],
+    [
+      "component_recommendation_compatibility_check",
+      "fk_component_recommendation_compatibility_check_tenant__39ac",
+      "FOREIGN KEY (tenant_id) REFERENCES tenants(id)"
+    ],
+    [
+      "component_recommendation_event",
+      "fk_component_recommendation_event_recommendation_id_com_f423",
+      "FOREIGN KEY (recommendation_id) REFERENCES component_recommendation(id)"
+    ],
+    [
+      "component_recommendation_event",
+      "fk_component_recommendation_event_tenant_id_tenants",
+      "FOREIGN KEY (tenant_id) REFERENCES tenants(id)"
+    ],
+    [
+      "component_recommendation_factor",
+      "fk_component_recommendation_factor_candidate_id_compone_6850",
+      "FOREIGN KEY (candidate_id) REFERENCES component_recommendation_candidate(id) ON DELETE CASCADE"
+    ],
+    [
+      "component_recommendation_factor",
+      "fk_component_recommendation_factor_policy_version_id_ad_151c",
+      "FOREIGN KEY (policy_version_id) REFERENCES advisor_policy_version(id)"
+    ],
+    [
+      "component_recommendation_factor",
+      "fk_component_recommendation_factor_tenant_id_tenants",
+      "FOREIGN KEY (tenant_id) REFERENCES tenants(id)"
+    ],
+    [
+      "email_verification_tokens",
+      "fk_email_verification_tokens_user_id_iam_users",
+      "FOREIGN KEY (user_id) REFERENCES iam_users(id) ON DELETE CASCADE"
+    ],
+    [
+      "lifecycle_provider_configs",
+      "fk_lifecycle_provider_configs_tenant_id_tenants",
+      "FOREIGN KEY (tenant_id) REFERENCES tenants(id) ON DELETE CASCADE"
+    ],
+    [
+      "lifecycle_provider_configs",
+      "fk_lifecycle_provider_configs_updated_by_user_id_iam_users",
+      "FOREIGN KEY (updated_by_user_id) REFERENCES iam_users(id) ON DELETE SET NULL"
+    ],
+    [
+      "lifecycle_provider_secrets",
+      "fk_lifecycle_provider_secrets_tenant_id_tenants",
+      "FOREIGN KEY (tenant_id) REFERENCES tenants(id) ON DELETE CASCADE"
+    ],
+    [
+      "lifecycle_provider_secrets",
+      "fk_lifecycle_provider_secrets_updated_by_user_id_iam_users",
+      "FOREIGN KEY (updated_by_user_id) REFERENCES iam_users(id) ON DELETE SET NULL"
+    ],
+    [
+      "lifecycle_vendor_records",
+      "fk_lifecycle_vendor_records_updated_by_user_id_iam_users",
+      "FOREIGN KEY (updated_by_user_id) REFERENCES iam_users(id) ON DELETE SET NULL"
+    ],
+    [
+      "logical_sbom",
+      "fk_logical_sbom_product_id_products",
+      "FOREIGN KEY (product_id) REFERENCES products(id) ON DELETE CASCADE"
+    ],
+    [
+      "logical_sbom",
+      "fk_logical_sbom_product_tenant",
+      "FOREIGN KEY (product_id, tenant_id) REFERENCES products(id, tenant_id) ON DELETE CASCADE"
+    ],
+    [
+      "logical_sbom",
+      "fk_logical_sbom_tenant_id_tenants",
+      "FOREIGN KEY (tenant_id) REFERENCES tenants(id)"
+    ],
+    [
+      "native_platform_bootstrap",
+      "fk_native_platform_bootstrap_user_id_iam_users",
+      "FOREIGN KEY (user_id) REFERENCES iam_users(id) ON DELETE RESTRICT"
+    ],
+    [
+      "native_user_credentials",
+      "fk_native_user_credentials_user_id_iam_users",
+      "FOREIGN KEY (user_id) REFERENCES iam_users(id) ON DELETE CASCADE"
+    ],
+    [
+      "platform_user_roles",
+      "fk_platform_user_roles_created_by_user_id_iam_users",
+      "FOREIGN KEY (created_by_user_id) REFERENCES iam_users(id) ON DELETE SET NULL"
+    ],
+    [
+      "platform_user_roles",
+      "fk_platform_user_roles_user_id_iam_users",
+      "FOREIGN KEY (user_id) REFERENCES iam_users(id) ON DELETE CASCADE"
+    ],
+    [
+      "products",
+      "fk_products_current_sbom_id_sbom_source",
+      "FOREIGN KEY (current_sbom_id) REFERENCES sbom_source(id) ON DELETE SET NULL"
+    ],
+    [
+      "products",
+      "fk_products_project_id_projects",
+      "FOREIGN KEY (project_id) REFERENCES projects(id) ON DELETE CASCADE"
+    ],
+    [
+      "products",
+      "fk_products_tenant_id_tenants",
+      "FOREIGN KEY (tenant_id) REFERENCES tenants(id)"
+    ],
+    [
+      "projects",
+      "fk_projects_tenant_id_tenants",
+      "FOREIGN KEY (tenant_id) REFERENCES tenants(id)"
+    ],
+    [
+      "report_artifact",
+      "fk_report_artifact_delivery_id_report_delivery",
+      "FOREIGN KEY (delivery_id) REFERENCES report_delivery(id) ON DELETE CASCADE"
+    ],
+    [
+      "report_artifact",
+      "fk_report_artifact_tenant_id_tenants",
+      "FOREIGN KEY (tenant_id) REFERENCES tenants(id)"
+    ],
+    [
+      "report_delivery",
+      "fk_report_delivery_subscription_id_report_subscription",
+      "FOREIGN KEY (subscription_id) REFERENCES report_subscription(id) ON DELETE CASCADE"
+    ],
+    [
+      "report_delivery",
+      "fk_report_delivery_tenant_id_tenants",
+      "FOREIGN KEY (tenant_id) REFERENCES tenants(id)"
+    ],
+    [
+      "report_subscription",
+      "fk_report_subscription_iam_user_id_iam_users",
+      "FOREIGN KEY (iam_user_id) REFERENCES iam_users(id) ON DELETE CASCADE"
+    ],
+    [
+      "report_subscription",
+      "fk_report_subscription_product_id_products",
+      "FOREIGN KEY (product_id) REFERENCES products(id) ON DELETE CASCADE"
+    ],
+    [
+      "report_subscription",
+      "fk_report_subscription_project_id_projects",
+      "FOREIGN KEY (project_id) REFERENCES projects(id) ON DELETE CASCADE"
+    ],
+    [
+      "report_subscription",
+      "fk_report_subscription_sbom_id_sbom_source",
+      "FOREIGN KEY (sbom_id) REFERENCES sbom_source(id) ON DELETE CASCADE"
+    ],
+    [
+      "report_subscription",
+      "fk_report_subscription_tenant_id_tenants",
+      "FOREIGN KEY (tenant_id) REFERENCES tenants(id)"
+    ],
+    [
+      "run_cache",
+      "fk_run_cache_tenant_id_tenants",
+      "FOREIGN KEY (tenant_id) REFERENCES tenants(id)"
+    ],
+    [
+      "sbom_analysis_report",
+      "fk_sbom_analysis_report_sbom_ref_id_sbom_source",
+      "FOREIGN KEY (sbom_ref_id) REFERENCES sbom_source(id)"
+    ],
+    [
+      "sbom_analysis_report",
+      "fk_sbom_analysis_report_tenant_id_tenants",
+      "FOREIGN KEY (tenant_id) REFERENCES tenants(id)"
+    ],
+    [
+      "sbom_component",
+      "fk_sbom_component_duplicate_of_component_id_sbom_component",
+      "FOREIGN KEY (duplicate_of_component_id) REFERENCES sbom_component(id) ON DELETE CASCADE"
+    ],
+    [
+      "sbom_component",
+      "fk_sbom_component_sbom_id_sbom_source",
+      "FOREIGN KEY (sbom_id) REFERENCES sbom_source(id)"
+    ],
+    [
+      "sbom_component",
+      "fk_sbom_component_tenant_id_tenants",
+      "FOREIGN KEY (tenant_id) REFERENCES tenants(id)"
+    ],
+    [
+      "sbom_repair_jobs",
+      "fk_sbom_repair_jobs_imported_sbom_id_sbom_source",
+      "FOREIGN KEY (imported_sbom_id) REFERENCES sbom_source(id)"
+    ],
+    [
+      "sbom_repair_jobs",
+      "fk_sbom_repair_jobs_session_id_sbom_validation_sessions",
+      "FOREIGN KEY (session_id) REFERENCES sbom_validation_sessions(id) ON DELETE CASCADE"
+    ],
+    [
+      "sbom_repair_jobs",
+      "fk_sbom_repair_jobs_source_sbom_id_sbom_source",
+      "FOREIGN KEY (source_sbom_id) REFERENCES sbom_source(id)"
+    ],
+    [
+      "sbom_repair_jobs",
+      "fk_sbom_repair_jobs_tenant_id_tenants",
+      "FOREIGN KEY (tenant_id) REFERENCES tenants(id)"
+    ],
+    [
+      "sbom_source",
+      "fk_sbom_source_converted_sbom_id_sbom_source",
+      "FOREIGN KEY (converted_sbom_id) REFERENCES sbom_source(id)"
+    ],
+    [
+      "sbom_source",
+      "fk_sbom_source_logical_product",
+      "FOREIGN KEY (logical_sbom_id, tenant_id, product_id) REFERENCES logical_sbom(id, tenant_id, product_id)"
+    ],
+    [
+      "sbom_source",
+      "fk_sbom_source_logical_sbom_id_logical_sbom",
+      "FOREIGN KEY (logical_sbom_id) REFERENCES logical_sbom(id)"
+    ],
+    [
+      "sbom_source",
+      "fk_sbom_source_logical_tenant",
+      "FOREIGN KEY (logical_sbom_id, tenant_id) REFERENCES logical_sbom(id, tenant_id)"
+    ],
+    [
+      "sbom_source",
+      "fk_sbom_source_parent_id_sbom_source",
+      "FOREIGN KEY (parent_id) REFERENCES sbom_source(id)"
+    ],
+    [
+      "sbom_source",
+      "fk_sbom_source_product_id_products",
+      "FOREIGN KEY (product_id) REFERENCES products(id)"
+    ],
+    [
+      "sbom_source",
+      "fk_sbom_source_projectid_projects",
+      "FOREIGN KEY (projectid) REFERENCES projects(id)"
+    ],
+    [
+      "sbom_source",
+      "fk_sbom_source_sbom_type_sbom_type",
+      "FOREIGN KEY (sbom_type) REFERENCES sbom_type(id)"
+    ],
+    [
+      "sbom_source",
+      "fk_sbom_source_source_sbom_id_sbom_source",
+      "FOREIGN KEY (source_sbom_id) REFERENCES sbom_source(id)"
+    ],
+    [
+      "sbom_source",
+      "fk_sbom_source_tenant_id_tenants",
+      "FOREIGN KEY (tenant_id) REFERENCES tenants(id)"
+    ],
+    [
+      "sbom_validation_session_events",
+      "fk_sbom_validation_session_events_session_id_sbom_valid_ca0d",
+      "FOREIGN KEY (session_id) REFERENCES sbom_validation_sessions(id) ON DELETE CASCADE"
+    ],
+    [
+      "sbom_validation_session_events",
+      "fk_sbom_validation_session_events_tenant_id_tenants",
+      "FOREIGN KEY (tenant_id) REFERENCES tenants(id)"
+    ],
+    [
+      "sbom_validation_sessions",
+      "fk_sbom_validation_sessions_imported_sbom_id_sbom_source",
+      "FOREIGN KEY (imported_sbom_id) REFERENCES sbom_source(id)"
+    ],
+    [
+      "sbom_validation_sessions",
+      "fk_sbom_validation_sessions_project_id_projects",
+      "FOREIGN KEY (project_id) REFERENCES projects(id)"
+    ],
+    [
+      "sbom_validation_sessions",
+      "fk_sbom_validation_sessions_sbom_type_sbom_type",
+      "FOREIGN KEY (sbom_type) REFERENCES sbom_type(id)"
+    ],
+    [
+      "sbom_validation_sessions",
+      "fk_sbom_validation_sessions_tenant_id_tenants",
+      "FOREIGN KEY (tenant_id) REFERENCES tenants(id)"
+    ],
+    [
+      "security_mail_outbox",
+      "fk_security_mail_outbox_token_id_account_action_tokens",
+      "FOREIGN KEY (token_id) REFERENCES account_action_tokens(id) ON DELETE CASCADE"
+    ],
+    [
+      "security_mail_outbox",
+      "fk_security_mail_outbox_user_id_iam_users",
+      "FOREIGN KEY (user_id) REFERENCES iam_users(id) ON DELETE CASCADE"
+    ],
+    [
+      "tenant_user_role_assignment_history",
+      "fk_tenant_user_role_assignment_history_actor_user_id_iam_users",
+      "FOREIGN KEY (actor_user_id) REFERENCES iam_users(id) ON DELETE SET NULL"
+    ],
+    [
+      "tenant_user_role_assignment_history",
+      "fk_tenant_user_role_assignment_history_assignment_id_te_89a9",
+      "FOREIGN KEY (assignment_id) REFERENCES tenant_user_role_assignments(id) ON DELETE SET NULL"
+    ],
+    [
+      "tenant_user_role_assignment_history",
+      "fk_tenant_user_role_assignment_history_role_id_authoriz_9a90",
+      "FOREIGN KEY (role_id) REFERENCES authorization_roles(id) ON DELETE SET NULL"
+    ],
+    [
+      "tenant_user_role_assignment_history",
+      "fk_tenant_user_role_assignment_history_tenant_id_tenants",
+      "FOREIGN KEY (tenant_id) REFERENCES tenants(id) ON DELETE RESTRICT"
+    ],
+    [
+      "tenant_user_role_assignment_history",
+      "fk_tenant_user_role_assignment_history_tenant_user_id_t_b1b5",
+      "FOREIGN KEY (tenant_user_id) REFERENCES tenant_users(id) ON DELETE SET NULL"
+    ],
+    [
+      "tenant_user_role_assignments",
+      "fk_tenant_role_assignment_membership_tenant",
+      "FOREIGN KEY (tenant_user_id, tenant_id) REFERENCES tenant_users(id, tenant_id) ON DELETE CASCADE"
+    ],
+    [
+      "tenant_user_role_assignments",
+      "fk_tenant_user_role_assignments_assigned_by_user_id_iam_users",
+      "FOREIGN KEY (assigned_by_user_id) REFERENCES iam_users(id) ON DELETE SET NULL"
+    ],
+    [
+      "tenant_user_role_assignments",
+      "fk_tenant_user_role_assignments_revoked_by_user_id_iam_users",
+      "FOREIGN KEY (revoked_by_user_id) REFERENCES iam_users(id) ON DELETE SET NULL"
+    ],
+    [
+      "tenant_user_role_assignments",
+      "fk_tenant_user_role_assignments_role_id_authorization_roles",
+      "FOREIGN KEY (role_id) REFERENCES authorization_roles(id) ON DELETE RESTRICT"
+    ],
+    [
+      "tenant_user_role_assignments",
+      "fk_tenant_user_role_assignments_tenant_id_tenants",
+      "FOREIGN KEY (tenant_id) REFERENCES tenants(id) ON DELETE CASCADE"
+    ],
+    [
+      "tenant_users",
+      "fk_tenant_users_tenant_id_tenants",
+      "FOREIGN KEY (tenant_id) REFERENCES tenants(id) ON DELETE CASCADE"
+    ],
+    [
+      "tenant_users",
+      "fk_tenant_users_user_id_iam_users",
+      "FOREIGN KEY (user_id) REFERENCES iam_users(id) ON DELETE CASCADE"
+    ],
+    [
+      "user_identities",
+      "fk_user_identities_user_id_iam_users",
+      "FOREIGN KEY (user_id) REFERENCES iam_users(id) ON DELETE CASCADE"
+    ],
+    [
+      "vex_documents",
+      "fk_vex_documents_sbom_id_sbom_source",
+      "FOREIGN KEY (sbom_id) REFERENCES sbom_source(id) ON DELETE CASCADE"
+    ],
+    [
+      "vex_documents",
+      "fk_vex_documents_superseded_by_id_vex_documents",
+      "FOREIGN KEY (superseded_by_id) REFERENCES vex_documents(id) ON DELETE SET NULL"
+    ],
+    [
+      "vex_documents",
+      "fk_vex_documents_tenant_id_tenants",
+      "FOREIGN KEY (tenant_id) REFERENCES tenants(id)"
+    ],
+    [
+      "vex_investigation",
+      "fk_vex_investigation_component_id_sbom_component",
+      "FOREIGN KEY (component_id) REFERENCES sbom_component(id) ON DELETE SET NULL"
+    ],
+    [
+      "vex_investigation",
+      "fk_vex_investigation_effective_vex_statement_id_vex_statements",
+      "FOREIGN KEY (effective_vex_statement_id) REFERENCES vex_statements(id) ON DELETE SET NULL"
+    ],
+    [
+      "vex_investigation",
+      "fk_vex_investigation_last_analysis_run_id_analysis_run",
+      "FOREIGN KEY (last_analysis_run_id) REFERENCES analysis_run(id) ON DELETE SET NULL"
+    ],
+    [
+      "vex_investigation",
+      "fk_vex_investigation_sbom_id_sbom_source",
+      "FOREIGN KEY (sbom_id) REFERENCES sbom_source(id) ON DELETE CASCADE"
+    ],
+    [
+      "vex_investigation",
+      "fk_vex_investigation_tenant_id_tenants",
+      "FOREIGN KEY (tenant_id) REFERENCES tenants(id)"
+    ],
+    [
+      "vex_investigation_snapshot",
+      "fk_vex_investigation_snapshot_analysis_run_id_analysis_run",
+      "FOREIGN KEY (analysis_run_id) REFERENCES analysis_run(id) ON DELETE CASCADE"
+    ],
+    [
+      "vex_investigation_snapshot",
+      "fk_vex_investigation_snapshot_investigation_id_vex_inve_284e",
+      "FOREIGN KEY (investigation_id) REFERENCES vex_investigation(id) ON DELETE CASCADE"
+    ],
+    [
+      "vex_investigation_snapshot",
+      "fk_vex_investigation_snapshot_sbom_id_sbom_source",
+      "FOREIGN KEY (sbom_id) REFERENCES sbom_source(id) ON DELETE CASCADE"
+    ],
+    [
+      "vex_investigation_snapshot",
+      "fk_vex_investigation_snapshot_tenant_id_tenants",
+      "FOREIGN KEY (tenant_id) REFERENCES tenants(id)"
+    ],
+    [
+      "vex_override_audit",
+      "fk_vex_override_audit_component_id_sbom_component",
+      "FOREIGN KEY (component_id) REFERENCES sbom_component(id) ON DELETE CASCADE"
+    ],
+    [
+      "vex_override_audit",
+      "fk_vex_override_audit_investigation_id_vex_investigation",
+      "FOREIGN KEY (investigation_id) REFERENCES vex_investigation(id) ON DELETE SET NULL"
+    ],
+    [
+      "vex_override_audit",
+      "fk_vex_override_audit_sbom_id_sbom_source",
+      "FOREIGN KEY (sbom_id) REFERENCES sbom_source(id) ON DELETE CASCADE"
+    ],
+    [
+      "vex_override_audit",
+      "fk_vex_override_audit_tenant_id_tenants",
+      "FOREIGN KEY (tenant_id) REFERENCES tenants(id)"
+    ],
+    [
+      "vex_statements",
+      "fk_vex_statements_component_id_sbom_component",
+      "FOREIGN KEY (component_id) REFERENCES sbom_component(id) ON DELETE SET NULL"
+    ],
+    [
+      "vex_statements",
+      "fk_vex_statements_sbom_id_sbom_source",
+      "FOREIGN KEY (sbom_id) REFERENCES sbom_source(id) ON DELETE CASCADE"
+    ],
+    [
+      "vex_statements",
+      "fk_vex_statements_tenant_id_tenants",
+      "FOREIGN KEY (tenant_id) REFERENCES tenants(id)"
+    ],
+    [
+      "vex_statements",
+      "fk_vex_statements_vex_document_id_vex_documents",
+      "FOREIGN KEY (vex_document_id) REFERENCES vex_documents(id) ON DELETE CASCADE"
+    ],
+    [
+      "vulnerability_remediation",
+      "fk_vulnerability_remediation_project_id_projects",
+      "FOREIGN KEY (project_id) REFERENCES projects(id) ON DELETE CASCADE"
+    ],
+    [
+      "vulnerability_remediation",
+      "fk_vulnerability_remediation_tenant_id_tenants",
+      "FOREIGN KEY (tenant_id) REFERENCES tenants(id)"
+    ],
+    [
+      "vulnerability_remediation_audit",
+      "fk_vulnerability_remediation_audit_project_id_projects",
+      "FOREIGN KEY (project_id) REFERENCES projects(id) ON DELETE CASCADE"
+    ],
+    [
+      "vulnerability_remediation_audit",
+      "fk_vulnerability_remediation_audit_remediation_id_vulne_f9a9",
+      "FOREIGN KEY (remediation_id) REFERENCES vulnerability_remediation(id) ON DELETE CASCADE"
+    ],
+    [
+      "vulnerability_remediation_audit",
+      "fk_vulnerability_remediation_audit_tenant_id_tenants",
+      "FOREIGN KEY (tenant_id) REFERENCES tenants(id)"
+    ]
+  ],
+  "historical_guard_acl_note": "Frozen revision 100 retains default PUBLIC EXECUTE (null proacl), as its unchanged source specifies. Revisions 101 and 102 revoke PUBLIC EXECUTE. No historical guard ACL was changed.",
+  "identity_functions": [
+    {
+      "acl": "{resource_uuid_browser_owner=X/resource_uuid_browser_owner}",
+      "config": [
+        "search_path=pg_catalog"
+      ],
+      "definition_sha256": "9014947124cd39e2ba70d5df3a7d19ebd4b22c468516002b608912d868d1b730",
+      "function": "iam_user_public_identity_guard_v1",
+      "owner": "resource_uuid_browser_owner",
+      "public_execute": false,
+      "security_definer": false,
+      "volatility": "v"
+    },
+    {
+      "acl": "{resource_uuid_browser_owner=X/resource_uuid_browser_owner}",
+      "config": [
+        "search_path=pg_catalog"
+      ],
+      "definition_sha256": "a7342f6a2807538ee2eef6564c5d12880d99a4060b7256af9a79110f6b719491",
+      "function": "resource_public_identity_guard_v1",
+      "owner": "resource_uuid_browser_owner",
+      "public_execute": false,
+      "security_definer": false,
+      "volatility": "v"
+    },
+    {
+      "acl": null,
+      "config": [
+        "search_path=pg_catalog"
+      ],
+      "definition_sha256": "959193587b32e0702169f1e5aef07d55e27c94800205996eb9c45d115afd953e",
+      "function": "uuid_public_identity_guard_v1",
+      "owner": "resource_uuid_browser_owner",
+      "public_execute": true,
+      "security_definer": false,
+      "volatility": "v"
+    }
+  ],
+  "integer_fk_graph_equals_populated_baseline": true,
+  "metadata_difference_count": 0,
+  "metadata_differences": [],
+  "physical_connection_closed": true,
+  "read_only_rollback_acknowledged": true,
+  "resources": {
+    "analysis_run": {
+      "default": "gen_random_uuid()",
+      "enabled_triggers": [
+        [
+          "trg_analysis_run_public_id_allocate",
+          "O"
+        ],
+        [
+          "trg_analysis_run_public_id_immutable",
+          "O"
+        ]
+      ],
+      "invalid_or_duplicate_uuid_rows": 0,
+      "native_uuid": true,
+      "not_null": true,
+      "rows": 1,
+      "unique": true,
+      "validated_checks": [
+        [
+          "ck_analysis_run_public_id_v4",
+          true
+        ]
+      ]
+    },
+    "iam_users": {
+      "default": "gen_random_uuid()",
+      "enabled_triggers": [
+        [
+          "trg_iam_users_public_id_allocate",
+          "O"
+        ],
+        [
+          "trg_iam_users_public_id_immutable",
+          "O"
+        ]
+      ],
+      "invalid_or_duplicate_uuid_rows": 0,
+      "native_uuid": true,
+      "not_null": true,
+      "rows": 7,
+      "unique": true,
+      "validated_checks": [
+        [
+          "ck_iam_users_public_id_v4",
+          true
+        ]
+      ]
+    },
+    "logical_sbom": {
+      "default": "gen_random_uuid()",
+      "enabled_triggers": [
+        [
+          "trg_logical_sbom_public_id_immutable",
+          "O"
+        ],
+        [
+          "trg_logical_sbom_public_id_insert",
+          "O"
+        ]
+      ],
+      "invalid_or_duplicate_uuid_rows": 0,
+      "native_uuid": true,
+      "not_null": true,
+      "rows": 1,
+      "unique": true,
+      "validated_checks": [
+        [
+          "ck_logical_sbom_public_id_v4",
+          true
+        ]
+      ]
+    },
+    "platform_user_roles": {
+      "default": "gen_random_uuid()",
+      "enabled_triggers": [
+        [
+          "trg_platform_user_roles_public_id_allocate",
+          "O"
+        ],
+        [
+          "trg_platform_user_roles_public_id_immutable",
+          "O"
+        ]
+      ],
+      "invalid_or_duplicate_uuid_rows": 0,
+      "native_uuid": true,
+      "not_null": true,
+      "rows": 2,
+      "unique": true,
+      "validated_checks": [
+        [
+          "ck_platform_user_roles_public_id_v4",
+          true
+        ]
+      ]
+    },
+    "products": {
+      "default": "gen_random_uuid()",
+      "enabled_triggers": [
+        [
+          "trg_products_public_id_immutable",
+          "O"
+        ],
+        [
+          "trg_products_public_id_insert",
+          "O"
+        ]
+      ],
+      "invalid_or_duplicate_uuid_rows": 0,
+      "native_uuid": true,
+      "not_null": true,
+      "rows": 2,
+      "unique": true,
+      "validated_checks": [
+        [
+          "ck_products_public_id_v4",
+          true
+        ]
+      ]
+    },
+    "projects": {
+      "default": "gen_random_uuid()",
+      "enabled_triggers": [
+        [
+          "trg_projects_public_id_immutable",
+          "O"
+        ],
+        [
+          "trg_projects_public_id_insert",
+          "O"
+        ]
+      ],
+      "invalid_or_duplicate_uuid_rows": 0,
+      "native_uuid": true,
+      "not_null": true,
+      "rows": 2,
+      "unique": true,
+      "validated_checks": [
+        [
+          "ck_projects_public_id_v4",
+          true
+        ]
+      ]
+    },
+    "sbom_component": {
+      "default": "gen_random_uuid()",
+      "enabled_triggers": [
+        [
+          "trg_sbom_component_public_id_immutable",
+          "O"
+        ],
+        [
+          "trg_sbom_component_public_id_insert",
+          "O"
+        ]
+      ],
+      "invalid_or_duplicate_uuid_rows": 0,
+      "native_uuid": true,
+      "not_null": true,
+      "rows": 2,
+      "unique": true,
+      "validated_checks": [
+        [
+          "ck_sbom_component_public_id_v4",
+          true
+        ]
+      ]
+    },
+    "sbom_source": {
+      "default": "gen_random_uuid()",
+      "enabled_triggers": [
+        [
+          "trg_sbom_source_public_id_immutable",
+          "O"
+        ],
+        [
+          "trg_sbom_source_public_id_insert",
+          "O"
+        ]
+      ],
+      "invalid_or_duplicate_uuid_rows": 0,
+      "native_uuid": true,
+      "not_null": true,
+      "rows": 1,
+      "unique": true,
+      "validated_checks": [
+        [
+          "ck_sbom_source_public_id_v4",
+          true
+        ]
+      ]
+    },
+    "tenant_users": {
+      "default": "gen_random_uuid()",
+      "enabled_triggers": [
+        [
+          "trg_tenant_users_public_id_allocate",
+          "O"
+        ],
+        [
+          "trg_tenant_users_public_id_immutable",
+          "O"
+        ]
+      ],
+      "invalid_or_duplicate_uuid_rows": 0,
+      "native_uuid": true,
+      "not_null": true,
+      "rows": 5,
+      "unique": true,
+      "validated_checks": [
+        [
+          "ck_tenant_users_public_id_v4",
+          true
+        ]
+      ]
+    },
+    "tenants": {
+      "default": "gen_random_uuid()",
+      "enabled_triggers": [
+        [
+          "trg_tenants_public_id_immutable",
+          "O"
+        ],
+        [
+          "trg_tenants_public_id_insert",
+          "O"
+        ]
+      ],
+      "invalid_or_duplicate_uuid_rows": 0,
+      "native_uuid": true,
+      "not_null": true,
+      "rows": 2,
+      "unique": true,
+      "validated_checks": [
+        [
+          "ck_tenants_public_id_v4",
+          true
+        ]
+      ]
+    }
+  },
+  "revision": "102_public_membership_grant_analysis_uuid",
+  "runtime_role": "resource_uuid_browser_app",
+  "runtime_role_attributes": [
+    false,
+    false,
+    false,
+    false,
+    false
+  ],
+  "table_owners": [
+    "resource_uuid_browser_owner"
+  ],
+  "version": "16.15 (Debian 16.15-1.pgdg13+2)"
+}

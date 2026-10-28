@@ -1,0 +1,21 @@
+import importlib.util,json,uuid,hashlib
+from pathlib import Path
+spec=importlib.util.spec_from_file_location('m',Path(__file__).with_name('live-common.py'));m=importlib.util.module_from_spec(spec);spec.loader.exec_module(m);file='conversion.json'
+def rec(id,steps,expected,r,ok):m.rec(id,steps,expected,m.payload(r) if hasattr(r,'status_code') else r,ok,'admin',file)
+root=Path('/Users/ferozebasha/sbom');p=m.call('/api/projects','POST',{'project_name':'UAT R3 conversion '+str(uuid.uuid4()),'project_status':1});assert p.status_code==201;pid=p.json()['id']
+doc=json.loads((root/'tests/fixtures/sboms/valid/spdx_2_3_minimal.json').read_text());doc['documentNamespace']='https://round3.example.test/'+str(uuid.uuid4());raw=json.dumps(doc).encode()
+r=m.call('/api/sboms/upload','POST',data={'sbom_name':'UAT R3 SPDX conversion','project_id':pid},files={'file':('round3.spdx.json',raw,'application/json')});rec('R3-SPDX-UPLOAD','Upload supported synthetic SPDX 2.3','202',r,r.status_code==202);assert r.status_code==202;sid=r.json()['sbom_id']
+before=m.call('/api/sboms/'+sid+'/export?format=native');r=m.call('/api/sboms/'+sid+'/convert/cyclonedx','POST');rec('R3-SPDX-CONVERT','Convert native SPDX through supported application endpoint','200 source-linked CycloneDX UUID',r,r.status_code==200);assert r.status_code==200;converted=r.json()['converted_sbom_id']
+response=m.call('/api/sboms/'+converted+'/export?format=cyclonedx&export_mode=converted');data=response.json();refs={c.get('bom-ref') for c in data['components']};refs.add(data.get('metadata',{}).get('component',{}).get('bom-ref'));edges=data.get('dependencies',[]);valid=all(e.get('ref') in refs and all(v in refs for v in e.get('dependsOn',[])) for e in edges)
+rec('R3-CONVERSION-REFERENCES','Download converted artifact; inspect identity/dependency references','200 valid CycloneDX 1.6 and no dangling references',{'status':response.status_code,'format':data.get('bomFormat'),'specVersion':data.get('specVersion'),'componentCount':len(data['components']),'dependencyCount':len(edges),'referencesValid':valid},response.status_code==200 and data['bomFormat']=='CycloneDX' and data['specVersion']=='1.6' and valid)
+(m.OUT/'converted.cdx.json').write_bytes(response.content)
+after=m.call('/api/sboms/'+sid+'/export?format=native');rec('R3-CONVERSION-ORIGINAL-PRESERVED','Download original before/after conversion','Byte-identical original SPDX',{'beforeSha256':hashlib.sha256(before.content).hexdigest(),'afterSha256':hashlib.sha256(after.content).hexdigest(),'sourceSha256':hashlib.sha256(raw).hexdigest()},before.content==after.content==raw)
+r=m.call('/api/sboms/'+converted+'/convert/cyclonedx','POST');rec('R3-CONVERSION-WRONG-FORMAT','Attempt SPDX-only conversion on CycloneDX record','400',r,r.status_code==400)
+r=m.call('/api/sboms/'+sid+'/convert/cyclonedx','POST',role='viewer');rec('R3-CONVERSION-VIEWER','Viewer attempts conversion','403',r,r.status_code==403)
+r=m.call('/api/sboms/'+sid+'/convert/cyclonedx','POST',role='foreign');rec('R3-CONVERSION-FOREIGN','Foreign tenant attempts known UUID conversion','404',r,r.status_code==404)
+# Explicitly exercise the currently deferred verifier through a quarantine validation request.
+signed={'bomFormat':'CycloneDX','specVersion':'1.6','version':1,'signature':{'algorithm':'RS256','value':'AA'},'components':[{'type':'LIBRARY','bom-ref':'a','name':'synthetic-signature','version':'1'}]}
+r=m.call('/api/sboms/upload','POST',data={'sbom_name':'UAT R3 signature contract','project_id':pid},files={'file':('signed.cdx.json',json.dumps(signed),'application/json')});assert r.status_code==422;session=r.json()['detail']['session_id'];signed['components'][0]['type']='library';base='/api/sbom-validation-sessions/'+session
+r=m.call(base+'/repair-draft','PUT',{'content':json.dumps(signed)});assert r.status_code==200
+r=m.call(base+'/validate?verify_signature=true','POST');rec('R3-SIGNATURE-IMPLEMENTATION-CONTRACT','Validate synthetic signature with explicit verify_signature=true; no global flag change','Actual stable E110 unimplemented contract; no successful cryptographic verification claim',r,r.status_code==200 and 'verifier is not yet implemented' in r.text)
+(m.OUT/'conversion-fixture.json').write_text(json.dumps({'project_id':pid,'source_sbom_id':sid,'converted_sbom_id':converted,'signature_session_id':session},indent=2))

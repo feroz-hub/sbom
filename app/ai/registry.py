@@ -158,7 +158,7 @@ class ProviderRegistry:
                         default_model=cfg.default_model,
                         supports_structured_output=True,
                         is_local=(cfg.name in {"ollama", "vllm"}) or (cfg.name == "custom_openai" and cfg.is_local),
-                        notes=f"Disabled — {exc}",
+                        notes=f"Disabled — provider initialization failed ({type(exc).__name__}).",
                     )
                 )
         return out
@@ -279,9 +279,7 @@ def _fallback_eligible(exc: AiProviderError) -> bool:
     if isinstance(exc, CircuitBreakerOpenError):
         return True
     return bool(
-        exc.failure
-        and exc.failure.kind
-        in {"network_unreachable", "provider_down", "rate_limited", "quota_exceeded"}
+        exc.failure and exc.failure.kind in {"network_unreachable", "provider_down", "rate_limited", "quota_exceeded"}
     )
 
 
@@ -419,6 +417,8 @@ _registry: ProviderRegistry | None = None
 # against the loader's current version on every ``get_registry`` call so
 # credential / settings writes propagate without a process restart.
 _registry_version: int = -1
+_scoped_registries: dict[int | None, tuple[int, ProviderRegistry]] = {}
+_registry_config_lists: dict[int | None, list[ProviderConfig]] = {}
 
 
 def _resolve_default_provider_name(configs: list[ProviderConfig]) -> str:
@@ -448,24 +448,40 @@ def get_registry(db: Session | None = None) -> ProviderRegistry:
     the loader owns the session.
     """
     global _registry, _registry_version
+    from ..services.configuration_scope import current_configuration_tenant
+
+    tenant_id = current_configuration_tenant()
     with _registry_lock:
         try:
             from .config_loader import get_loader
 
             loader = get_loader()
             current_version = loader.current_version()
-            if _registry is None or current_version != _registry_version:
-                configs = loader.resolve_configs()
+            configs = loader.resolve_configs()
+            cached = _scoped_registries.get(tenant_id)
+            if cached is None or current_version != cached[0] or configs is not _registry_config_lists.get(tenant_id):
                 default = _resolve_default_provider_name(configs)
                 _registry = ProviderRegistry(configs, default_provider=default)
                 _registry_version = current_version
+                _scoped_registries[tenant_id] = (current_version, _registry)
+                _registry_config_lists[tenant_id] = configs
+            else:
+                # Still check tenant enablement on cache hits.
+                if tenant_id is not None:
+                    loader.resolve_settings()
+                _registry = cached[1]
         except Exception as exc:  # noqa: BLE001
+            if tenant_id is not None:
+                raise RuntimeError("Tenant AI configuration is unavailable") from None
             # Fall back to env-only when the loader can't construct
             # (e.g. in early-boot test scenarios with no DB). We hold
             # onto whatever registry we already had; if there's none,
             # build one from env so callers don't get None.
-            if _registry is None:
-                log.warning("ai.registry.loader_unavailable: %s — env fallback", exc)
+            platform_cached = _scoped_registries.get(None)
+            if platform_cached is not None:
+                _registry = platform_cached[1]
+            else:
+                log.warning("ai.registry.loader_unavailable: %s — env fallback", type(exc).__name__)
                 configs = build_configs_from_settings()
                 default = _resolve_default_provider_name(configs)
                 _registry = ProviderRegistry(configs, default_provider=default)
@@ -479,3 +495,5 @@ def reset_registry() -> None:
     with _registry_lock:
         _registry = None
         _registry_version = -1
+        _scoped_registries.clear()
+        _registry_config_lists.clear()

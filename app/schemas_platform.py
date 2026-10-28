@@ -8,7 +8,57 @@ from typing import Literal
 from pydantic import BaseModel, ConfigDict, Field, model_validator
 
 
+class TenantAdministratorRevokeRequest(BaseModel):
+    model_config = ConfigDict(extra="forbid")
+
+    expected_version: int = Field(ge=1)
+    replacement_primary_role_code: str | None = Field(default=None, min_length=1, max_length=64)
+    reason: str | None = Field(default=None, max_length=512)
+
+
+class TenantAdministratorDeactivateRequest(BaseModel):
+    model_config = ConfigDict(extra="forbid")
+
+    reason: str | None = Field(default=None, max_length=512)
+
+
+class TenantAdministratorGovernanceResponse(BaseModel):
+    tenant_id: int
+    membership_id: int
+    user_id: int
+    status: Literal["ACTIVE", "DISABLED", "PENDING"]
+    roles: list[str]
+    primary_role: str
+    role_assignment_version: int
+
+
+class TenantAdministratorMembership(TenantAdministratorGovernanceResponse):
+    display_name: str | None
+    email: str | None
+    account_status: str
+    is_effective: bool
+
+
+class TenantAdministratorReplacementRole(BaseModel):
+    code: str
+    name: str
+    scope: Literal["TENANT"] = "TENANT"
+
+
+class TenantAdministratorDirectory(BaseModel):
+    tenant_id: int
+    administrators: list[TenantAdministratorMembership]
+    replacement_roles: list[TenantAdministratorReplacementRole]
+
+
 class PlatformUserSummary(BaseModel):
+    first_name: str | None = None
+    last_name: str | None = None
+    phone: str | None = None
+    providers: list[str] = Field(default_factory=list)
+    last_login_at: datetime | None = None
+    updated_at: datetime | None = None
+    account_status: str | None = None
     id: int
     email: str | None
     display_name: str | None
@@ -31,6 +81,7 @@ class TenantMembershipBrief(BaseModel):
 
 
 class UserSearchResult(BaseModel):
+    providers: list[str] = Field(default_factory=list)
     id: int
     email: str | None
     display_name: str | None
@@ -49,7 +100,27 @@ class UserSearchResponse(BaseModel):
     items: list[UserSearchResult]
 
 
+class TenantUserCandidate(BaseModel):
+    """Minimal identity projection for attaching an existing account."""
+
+    id: int
+    display_name: str | None
+    email: str | None
+    status: str
+    email_verified: bool
+    verification_required: bool
+    providers: list[str] = Field(default_factory=list)
+
+
+class TenantUserCandidateResponse(BaseModel):
+    items: list[TenantUserCandidate]
+
+
 class PlatformTenantMembershipSummary(BaseModel):
+    membership_id: int
+    roles: list[str] = Field(default_factory=list)
+    primary_role: str | None = None
+    role_assignment_version: int = 1
     tenant_id: int
     tenant_name: str
     tenant_slug: str
@@ -75,6 +146,8 @@ class PlatformGrantSummary(BaseModel):
 
 
 class PlatformUserDetail(PlatformUserSummary):
+    security: dict | None = None
+    activity: dict = Field(default_factory=dict)
     platform_grant: PlatformGrantSummary | None
     tenant_memberships: list[PlatformTenantMembershipSummary]
 
@@ -127,7 +200,7 @@ class PlatformAdministratorRevokeResponse(BaseModel):
 class PlatformUserStatusUpdate(BaseModel):
     model_config = ConfigDict(extra="forbid")
 
-    status: Literal["ACTIVE", "DISABLED"]
+    status: Literal["ACTIVE", "DISABLED", "SUSPENDED"]
     reason: str | None = Field(default=None, max_length=500)
 
     @model_validator(mode="after")

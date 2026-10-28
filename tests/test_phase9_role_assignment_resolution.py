@@ -11,12 +11,14 @@ from app.services import tenant_role_assignment_service as service
 from app.settings import reset_settings
 from sqlalchemy import select
 
+from tests.tenant_fixture_scope import verified_fixture_tenant
+
 from .phase6_helpers import now, seed_user
 from .phase9_helpers import seed_role_membership
 
 
 def test_multiple_active_roles_union_database_permissions():
-    with SessionLocal() as db:
+    with SessionLocal() as db, verified_fixture_tenant(db, 1):
         user, membership, _ = seed_role_membership(db, role="VIEWER")
         service.grant_role(
             db,
@@ -38,7 +40,7 @@ def test_multiple_active_roles_union_database_permissions():
 
 
 def test_custom_assignable_tenant_role_is_effective():
-    with SessionLocal() as db:
+    with SessionLocal() as db, verified_fixture_tenant(db, 1):
         user, membership, _ = seed_role_membership(db)
         now = datetime.now(UTC)
         role = AuthorizationRole(
@@ -107,7 +109,7 @@ def test_database_mode_fails_closed_and_compare_enforces_legacy(monkeypatch):
 
 
 def test_primary_only_change_keeps_permission_union_and_updates_legacy_role():
-    with SessionLocal() as db:
+    with SessionLocal() as db, verified_fixture_tenant(db, 1):
         user, membership, _ = seed_role_membership(db, role="VIEWER")
         service.grant_role(
             db,

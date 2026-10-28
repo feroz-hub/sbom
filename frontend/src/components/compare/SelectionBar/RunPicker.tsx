@@ -1,5 +1,6 @@
 'use client';
 
+import { recordIdLabel } from '@/components/ui/RecordIdDisplay';
 import { useEffect, useId, useMemo, useRef, useState } from 'react';
 import { useQuery } from '@tanstack/react-query';
 import { Check, ChevronDown, Info, Loader2, Search } from 'lucide-react';
@@ -11,7 +12,7 @@ import { groupRunsForCompare } from './groupRunsForCompare';
 
 interface RunPickerProps {
   label: string;
-  selectedRunId: number | null;
+  selectedRunId: string | null;
   /**
    * Canonical summary for the currently-selected run. Comes from the parent
    * (compare query result, then the picker's own callback). Used for the
@@ -89,7 +90,7 @@ export function RunPicker({
     staleTime: 5 * 60 * 1000,
   });
   const isLoading = recentQuery.isLoading || searchQuery.isLoading;
-  const baseOptions = (debounced ? searchQuery.data : recentQuery.data) ?? [];
+  const baseOptions = useMemo(() => (debounced ? searchQuery.data : recentQuery.data) ?? [], [debounced, searchQuery.data, recentQuery.data]);
 
   const pairedProjectId = pairedRun?.project_id ?? null;
 
@@ -170,7 +171,7 @@ export function RunPicker({
   };
 
   const triggerLabel = selectedRun
-    ? `${selectedRun.sbom_name ?? '—'} · Run #${selectedRun.id} · ${formatDate(
+    ? `${selectedRun.sbom_name ?? '—'} · ${recordIdLabel('Run', selectedRun.display_id)} · ${formatDate(
         selectedRun.completed_on,
       )}`
     : 'Choose a run…';
@@ -214,10 +215,10 @@ export function RunPicker({
         <div className="min-w-0">
           <div className="flex items-center gap-2">
             <span className="truncate font-medium text-hcl-navy">
-              {run.sbom_name ?? `Run #${run.id}`}
+              {run.sbom_name ?? recordIdLabel('Run', run.display_id)}
             </span>
             <span className="font-mono text-[11px] text-hcl-muted">
-              #{run.id}
+              {recordIdLabel('', run.display_id)}
             </span>
           </div>
           <div className="mt-0.5 flex flex-wrap items-center gap-x-1.5 gap-y-0.5 text-[11px] text-hcl-muted">
@@ -227,6 +228,8 @@ export function RunPicker({
                 <span aria-hidden>·</span>
               </>
             )}
+            <span>v{run.sbom_version || 'unavailable'}</span>
+            <span aria-hidden>·</span>
             <span>{formatDate(run.completed_on)}</span>
             <span aria-hidden>·</span>
             <span className="uppercase">{run.run_status}</span>

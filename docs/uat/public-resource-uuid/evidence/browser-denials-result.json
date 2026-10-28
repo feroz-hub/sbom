@@ -1,0 +1,14 @@
+[
+  {
+    "name": "Public resource denials: foreign Membership, integer Grant, Viewer mutations and numeric UI route",
+    "result": "PASS",
+    "observations": {
+      "foreign_membership": 404,
+      "integer_grant": 422,
+      "viewer_membership_mutation": 403,
+      "viewer_platform_mutation": 403,
+      "numeric_ui_route": "Not found"
+    },
+    "time": "2026-10-21T17:20:46.948Z"
+  }
+]

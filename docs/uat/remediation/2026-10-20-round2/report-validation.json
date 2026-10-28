@@ -1,0 +1,28 @@
+{
+  "reportLinksMissing": [],
+  "credentialLikeValueMatches": [],
+  "reviewedFalsePositives": [
+    {
+      "file": "before/app/routers/component_advisor.py",
+      "classification": "source documentation or Python parameter annotation; reviewed, no credential"
+    },
+    {
+      "file": "before/app/routers/vex_investigations.py",
+      "classification": "source documentation or Python parameter annotation; reviewed, no credential"
+    },
+    {
+      "file": "before/app/core/security.py",
+      "classification": "source documentation or Python parameter annotation; reviewed, no credential"
+    }
+  ],
+  "finalCaseRegister": {
+    "acceptance": {
+      "PASS": 129
+    },
+    "baseline-defect-reproduction": {
+      "PASS": 3
+    }
+  },
+  "sourceFilesChanged": 31,
+  "result": "PASS"
+}
