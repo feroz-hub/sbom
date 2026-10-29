@@ -619,7 +619,11 @@ def test_startup_commands_use_solo_only_for_windows_worker(monkeypatch, tmp_path
     dev.start_application(SimpleNamespace(check=False))
     python = str(tmp_path / "python")
     celery = [python, "-m", "celery", "-A", "app.workers.celery_app"]
-    assert started["Celery worker"] == [*celery, "worker", "--loglevel=info", *(["--pool=solo"] if platform == "win32" else [])]
+    assert started["Celery worker"] == [
+        *celery, "worker", "--loglevel=info", "--queues=celery,reports", *(["--pool=solo"] if platform == "win32" else [])
+    ]
+    # Exactly one scheduler: the worker never embeds Beat, and Beat keeps its existing command.
+    assert "--beat" not in started["Celery worker"] and "-B" not in started["Celery worker"]
     assert started["Celery Beat"] == [*celery, "beat", "--loglevel=info"]
     assert started["API"] == [python, "-m", "uvicorn", "app.main:app", "--host", "127.0.0.1",
                               "--port", "18000", "--no-proxy-headers"]

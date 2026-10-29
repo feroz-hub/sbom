@@ -1174,7 +1174,9 @@ def start_application(args) -> None:
             )
         )
         celery = [str(venv_python()), "-m", "celery", "-A", "app.workers.celery_app"]
-        worker_command = [*celery, "worker", "--loglevel=info"]
+        # Same queue set as the production worker (docker-compose.server.yml):
+        # report notification tasks are routed to "reports". Beat stays separate.
+        worker_command = [*celery, "worker", "--loglevel=info", "--queues=celery,reports"]
         if sys.platform == "win32":
             worker_command.append("--pool=solo")
         processes.append(start_process("Celery worker", worker_command, env))
