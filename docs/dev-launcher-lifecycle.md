@@ -1,14 +1,20 @@
 # Local development lifecycle
 
-Run from the repository using Python 3.11+ (`python` on Windows if needed):
+This remains the process-ownership/recovery reference. For current setup,
+profile selection and OS limits use the [developer guide](development/README.md).
+The Validation section below records earlier results and is not current platform
+or release acceptance.
+
+Run from the repository using Python 3.11+ (python on Windows if needed).
+Select the intended profile explicitly; the examples use legacy:
 
 ```sh
-python3 scripts/dev.py start
-python3 scripts/dev.py stop
-python3 scripts/dev.py restart
-python3 scripts/dev.py status
-python3 scripts/dev.py --check
-python3 scripts/dev.py start --verbose
+python3 scripts/dev.py start --profile legacy
+python3 scripts/dev.py stop --profile legacy
+python3 scripts/dev.py restart --profile legacy
+python3 scripts/dev.py status --profile legacy
+python3 scripts/dev.py --check --profile legacy
+python3 scripts/dev.py start --verbose --profile legacy
 ```
 
 No command means `start`. Start/restart run in the foreground. Ctrl+C and SIGTERM
@@ -18,15 +24,28 @@ no detached mode; use another terminal for stop/status while the launcher runs.
 
 ## Ports and environment
 
-The current launcher fixes API to 18000 and HTTPS frontend to 13000. Docker
-PostgreSQL uses 55439, Redis 56379, Mailpit SMTP 1025 and web UI 8025. Local fallback
-PostgreSQL/Redis use 5432/6379. Status probes the dependency ports saved in
-`.env.dev.local`, with the existing protocol checks. It does not start containers.
+Both profiles use API 18000 and HTTPS frontend 13000. Legacy uses Docker
+PostgreSQL 55439/Redis 56379 or local 5432/6379, with Mailpit 1025/8025.
+Greenfield uses PostgreSQL 56044, Redis 56381 and Mailpit 1026/8026.
+See the [profile table](development/README.md#ports-environment-and-queues).
 
-Existing `.env.dev.local` resolution, Native IAM setup, migration/schema checks,
-HTTPS certificate generation and dependency-install caching remain in place.
-The same resolved environment is passed to API, Celery and frontend. Explicit
-`AI_FIXES_ENABLED` values are preserved; the launcher does not add an AI default.
+Auto selection chooses an existing home-directory Greenfield installation;
+otherwise it uses legacy. Greenfield's current trust verifier requires macOS.
+The registry is checkout-local; home-directory Greenfield state is shared across
+worktrees, so do not launch it concurrently from another checkout.
+
+Legacy configuration is stored in .env.dev.local and resolved with fixed Native
+flags. Greenfield uses its private state, recorded containers, restricted
+security-mail scheduler and both worker queues. Startup can propose guarded
+pending migrations after confirmation and backup/restore verification; it does
+not bootstrap or seed an installation as a normal start step.
+See [database operations](DATABASE_BOOTSTRAP_AND_UPGRADE.md#greenfield-startup).
+Legacy instead runs ordinary Alembic upgrade for its local target; populated
+pre-UUID targets must not cross revision 100 in either mode.
+
+--check does not start or migrate; it is prerequisite inspection, not full
+schema/application readiness. [Configuration](reference/configuration.md)
+describes precedence and the fields not fixed by each profile.
 
 ## Ownership and safety
 
@@ -74,8 +93,9 @@ unverified launcher or shared setup tool.
   occupied ports (and PID/executable when Linux permits inspection), but cannot
   safely adopt or kill them.
 
-Stop leaves PostgreSQL, Redis and Mailpit running, preserves volumes and keeps
-`.dev-logs/` (api.log, celery-worker.log, celery-beat.log, frontend.log).
+Stop leaves PostgreSQL, Redis and Mailpit running and preserves volumes.
+Legacy keeps .dev-logs (api.log, celery-worker.log, celery-beat.log, frontend.log);
+Greenfield keeps its private home-directory logs.
 
 ## Validation
 

@@ -199,8 +199,12 @@ REPAIR_E2E_NODE=/path/to/node PLAYWRIGHT_BROWSERS_PATH=/path/to/browsers \
 
 Run backend suites against a dedicated disposable test database, sequentially within each database: fixtures reset shared tables and parallel suites must use different databases. E2E uses disposable PostgreSQL, native login, BFF and real browsers. No production
 migration/deployment, commit or push is part of this implementation.
-The current Alembic head is `079_lifecycle_provider_verification`; the quality
-scoring implementation itself required no migration.
+The earlier Phase 2 record named 079_lifecycle_provider_verification as its
+head; the quality-scoring implementation itself required no migration.
+The source head checked on 28 October 2026 is 103_tenant_admin_governance.
+For any current installation/upgrade use the
+[database classification gate](DATABASE_BOOTSTRAP_AND_UPGRADE.md), not this
+implementation record as a migration procedure.
 
 ## Limitations and deferred work
 

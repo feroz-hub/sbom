@@ -1,5 +1,13 @@
 # SBOM Analyzer — one-command local developer start
 
+**Bundle installation instructions, not the active repository entry point.**
+The current checkout uses [scripts/dev.py](../scripts/dev.py), as documented in
+the [developer guide](../docs/development/README.md). The repository root has no
+dev.py, and the canonical launcher has no doctor/setup subcommand. The commands
+below refer to this enhanced bundle after explicit installation into a complete
+checkout; do not treat the bundle directory as a runnable full project.
+Profile/platform and database restrictions in the current guides still apply.
+
 ## Which file does what?
 
 | File | Purpose | Run directly? |

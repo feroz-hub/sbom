@@ -2,7 +2,11 @@
 
 Implemented on `feat/sbom-version-lineage-vex-import`; the feature migrations were
 `051_report_subscription` → `052_report_delivery_artifact` → `053_tenant_analysis_schedule` → `054_hierarchical_scheduler` → `055_ai_model_registry`.
-The current repository head is `079_lifecycle_provider_verification`.
+The source head verified on 28 October 2026 is
+103_tenant_admin_governance; the feature revision sequence above is historical.
+Read the [database compatibility gate](DATABASE_BOOTSTRAP_AND_UPGRADE.md) before
+deployment and the [profile/queue limitations](development/README.md#ports-environment-and-queues)
+before interpreting local delivery readiness.
 The feature is opt-in. Existing analysis, verification mail and env-only local workflows remain available with it disabled.
 
 ## Product decisions confirmed on 2026-09-07

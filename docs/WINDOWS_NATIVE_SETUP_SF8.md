@@ -1,9 +1,18 @@
 # SBOM Analyser + HCL.CS SF.8 IAM — Windows setup from scratch
 
 Verified end-to-end on Windows 11 on **2026-08-17**. This guide covers the **SF.8 variant** of HCL.CS
-(`SF.8.CRS_PL_AG_24`: SQL Server Express + WPF installer + demo server on port **5001**). It replaces
-[WINDOWS_NATIVE_SETUP.md](./WINDOWS_NATIVE_SETUP.md), which targets a different, PostgreSQL/Docker-based
-HCL.CS build on port 5180 — do not mix the two guides.
+(`SF.8.CRS_PL_AG_24`: SQL Server Express + WPF installer + demo server on port **5001**).
+It is specific to that provider build, alongside
+[WINDOWS_NATIVE_SETUP.md](WINDOWS_NATIVE_SETUP.md), which describes a different
+PostgreSQL-backed HCL build run directly on Windows without Docker. Do not mix
+their provider/database instructions. The recorded Windows verification date
+above is historical; current acceptance is unverified in this phase.
+
+“Native Windows” installation is distinct from Native IAM authentication.
+Use the [developer entry guide](development/README.md) for scripts/dev.py.
+Before the SBOM database/setup steps below, apply the
+[database compatibility gate](DATABASE_BOOTSTRAP_AND_UPGRADE.md); a populated
+pre-UUID target must not cross revision 100 through these commands.
 
 All commands run in **PowerShell**. Paths assume:
 

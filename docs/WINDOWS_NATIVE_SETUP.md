@@ -2,6 +2,19 @@
 
 This guide runs both products directly on Windows without Docker. It uses one local PostgreSQL 16 service and separate databases/roles for HCL.CS and SBOM Analyser.
 
+This is the PostgreSQL-backed HCL build integration guide. “Native Windows”
+means direct host installation, not the Native IAM identity provider.
+The [SF.8 guide](WINDOWS_NATIVE_SETUP_SF8.md) describes a different HCL build with
+SQL Server; neither guide globally replaces the other. Revalidate the actual
+provider build; current end-to-end compatibility was not tested in this phase.
+
+For ordinary developer startup use
+[scripts/dev.py and its profile/platform limits](development/README.md).
+Before invoking the database initializer or any upgrade below, apply the
+[database gate](DATABASE_BOOTSTRAP_AND_UPGRADE.md): fresh targets must be empty,
+compatible UUID targets need transition review, and populated pre-UUID targets
+must not cross revision 100. These commands are not a generic production path.
+
 ## Recommended directory layout
 
 ```text
