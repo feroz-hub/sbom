@@ -8,7 +8,7 @@ Scope: current configuration boundaries, checked against e62951c2 on
 | Execution path | Effective sources |
 | --- | --- |
 | Manual API / Alembic | Process environment is preferred; app/db.py, run.py and alembic/env.py use dotenv, and Settings reads .env. Settings defaults fill remaining fields. A working directory/environment change can change the target. |
-| legacy launcher | Reads saved .env.dev.local, applies fixed local service/Native flags, generates/reuses required local keys and passes the resolved environment to children. Inherited process values and Settings/dotenv fallback can still affect fields not fixed by the launcher. |
+| legacy launcher | Reads saved .env.dev.local, applies fixed local service/Native flags (including ENTRA_ENABLED=false and an empty NATIVE_JWT_VERIFICATION_KEYS_JSON, so no other issuer or trusted key is added), generates/reuses required local keys and passes the resolved environment to children. Inherited process values and Settings/dotenv fallback can still affect fields not fixed by the launcher. |
 | Greenfield launcher | Reads protected home-directory state, constructs an allowlisted environment and runs services from private working directories; disables ordinary dotenv loading and does not use legacy .env.dev.local. The private frontend copy excludes .env files. |
 | Server Compose | --env-file .env.server supplies Compose interpolation. Only explicitly forwarded environment values, mounted files and public image build values reach containers; an arbitrary key in .env.server is not automatically forwarded. |
 | Manual Next.js | Next.js environment loading and process variables apply. Public values can be compiled into browser code; BFF-only values stay on the server. |

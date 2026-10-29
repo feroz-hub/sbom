@@ -53,8 +53,9 @@ the reports queue. Production Compose consumes celery and reports and runs one
 separate Beat. The Greenfield worker consumes both queues but embeds only the
 restricted security-mail periodic schedule; it does not run the full scheduler.
 
-The legacy developer worker lacks an explicit reports queue subscription.
-Starting that profile does not establish report-delivery readiness; see the
+The legacy developer worker consumes celery and reports, alongside one
+separate Beat. Report delivery still needs its own configuration, so starting
+that profile does not establish delivery readiness; see the
 [developer guide](../development/README.md).
 
 API lifespan performs configuration/schema checks and data maintenance including

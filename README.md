@@ -49,8 +49,8 @@ services or migrate and is not full readiness/schema acceptance. Read the
 
 Use the same checkout and intended profile. Stop/Ctrl+C preserve data services and
 volumes. Application URLs are https://localhost:13000 and
-http://127.0.0.1:18000. Auto selection is available but depends on existing
-home-directory Greenfield state. There is no canonical doctor or setup command.
+http://127.0.0.1:18000. Auto selection picks Greenfield only on macOS with existing home-directory
+Greenfield state; elsewhere it uses legacy. There is no canonical doctor or setup command.
 
 ## Supported SBOM formats
 

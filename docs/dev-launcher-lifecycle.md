@@ -29,8 +29,9 @@ PostgreSQL 55439/Redis 56379 or local 5432/6379, with Mailpit 1025/8025.
 Greenfield uses PostgreSQL 56044, Redis 56381 and Mailpit 1026/8026.
 See the [profile table](development/README.md#ports-environment-and-queues).
 
-Auto selection chooses an existing home-directory Greenfield installation;
-otherwise it uses legacy. Greenfield's current trust verifier requires macOS.
+On macOS, auto selection chooses an existing home-directory Greenfield
+installation; otherwise, and always on Windows/Linux, it uses legacy. An
+explicit greenfield profile is refused off macOS except for stop.
 The registry is checkout-local; home-directory Greenfield state is shared across
 worktrees, so do not launch it concurrently from another checkout.
 

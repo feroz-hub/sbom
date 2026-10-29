@@ -362,8 +362,8 @@ not inferred passes. Do not publish test identities or captured payloads.
 
 Additional role/VEX/remediation, scheduling and mail cases remain in their
 [feature requirements](docs/requirements/vex-dashboard-investigation.md) and
-[report operations](docs/runbook-report-notifications.md). Legacy worker alone
-omits reports; Greenfield's periodic schedule is restricted. Do not start another
+[report operations](docs/runbook-report-notifications.md). The legacy launcher
+worker consumes celery and reports; Greenfield's periodic schedule is restricted. Do not start another
 Beat or enable real recipients merely to complete a checkbox.
 
 ## Troubleshooting

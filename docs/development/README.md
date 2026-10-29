@@ -1,7 +1,8 @@
 # Development setup and lifecycle
 
 Authoritative entry for developer startup. Source checked: e62951c2,
-28 October 2026. Use [scripts/dev.py](../../scripts/dev.py) from the repository
+28 October 2026; launcher preflight, queue and platform behavior updated
+29 October 2026. Use [scripts/dev.py](../../scripts/dev.py) from the repository
 root with a Python 3.11+ executable (python or python3 as installed).
 
 ## Profiles and platforms
@@ -13,9 +14,11 @@ In particular, legacy does not approve use of an old populated pre-UUID database
 | --- | --- | --- | --- |
 | legacy | Windows lifecycle/process branches and solo worker exist; current full-stack acceptance unverified. | POSIX lifecycle and Linux ownership branches exist; current full-stack acceptance unverified. | macOS ownership branches exist; current full-stack acceptance unverified. |
 | greenfield | Current trust verifier blocks startup; additional Unix socket/ownership assumptions exist. | Current trust verifier blocks startup outside macOS. | Implementation requires an existing trusted mkcert CA, private state and recorded Docker resources; current full-stack acceptance unverified. |
-| auto | Selects greenfield when the home-directory installation exists, including an incomplete one; otherwise legacy. It does not make an unsupported Greenfield path portable. | Same selection rule. | Same selection rule. |
+| auto | Uses legacy, with a note if Greenfield state exists. | Uses legacy, with a note if Greenfield state exists. | Selects greenfield when the home-directory installation exists, including an incomplete one; otherwise legacy. |
 
-The [Greenfield HTTPS implementation](../../scripts/greenfield_https.py)
+An explicit --profile greenfield is refused on Windows and Linux before any
+Greenfield code runs (stop remains available), as are the direct Greenfield
+setup entry points. The [Greenfield HTTPS implementation](../../scripts/greenfield_https.py)
 explicitly requires macOS Keychain verification.
 [Greenfield resource code](../../scripts/greenfield_uuid.py) also assumes Unix
 sockets, ownership/mode checks and POSIX paths. This is a source-based limitation,
@@ -30,8 +33,9 @@ identity-provider build. Neither changes the meaning of the dev.py profiles.
 
 1. Obtain a complete checkout. Install Python 3.11+ and Node/npm through your
    approved workstation tooling. The locked Next.js package declares Node
-   >=20.9.0; the full lockfile/toolchain must also be compatible. No runtime
-   version matrix was validated during this documentation change.
+   >=20.9.0. start refuses an older Python before creating .venv, refuses a
+   partial checkout before any setup, and refuses Node older than 20.9.0
+   before npm ci; --check reports the Node.js version and npm path it finds.
 2. Choose the profile explicitly. For legacy, provide reachable local
    PostgreSQL/Redis and compatible Mailpit, or Docker/Compose for project data
    services. PostgreSQL is the normal database; SQLite is not the full-stack
@@ -73,24 +77,27 @@ Run in the same checkout; use the intended profile consistently:
 For an installed macOS Greenfield environment, replace legacy with greenfield.
 Omitting the command defaults to start. --check overrides any lifecycle command and does
 not start services, install dependencies or migrate. Legacy check can validate
-saved keys and inspect dependencies; it is not a full database/schema/frontend
-readiness test. Greenfield check validates private-file prerequisites, trust and
+saved keys, data services and Node/npm; it stops at the first missing data
+service and is not a full database/schema/frontend readiness test. Greenfield check validates private-file prerequisites, trust and
 recorded containers without reading application password values or migrating.
+
+When a required setup step (venv, pip, npm ci, Compose or Alembic) fails, the
+launcher prints the redacted last 35 lines of that command. Application service
+logs are shown only with --verbose; otherwise the error names the .dev-logs file.
 
 Start/restart run in the foreground. Use another terminal for stop/status.
 Ctrl+C stops launcher-owned application processes while leaving PostgreSQL,
 Redis, Mailpit and data volumes running.
 
 The canonical parser has no doctor or setup subcommand, and the repository root
-has no dev.py. The [launcher bundle](../../sbom_launcher_bundle/DEVELOPER_START.md)
-is an installation artifact with a different launcher; its extra commands are
-not current repository commands.
+has no dev.py. The former sbom_launcher_bundle copy was retired; its useful
+preflight and error reporting now live in scripts/dev.py.
 
 ## What start changes
 
 | Profile | Current behavior |
 | --- | --- |
-| legacy | Creates/reuses .venv, installs requirements when needed, selects project Docker or local services, creates/reuses sbom_analyser_dev, generates/reuses private .env.dev.local keys, checks schema and runs Alembic upgrade, prepares frontend dependencies/certificate, then starts API, worker, full Beat and frontend. There is no Greenfield-style per-revision backup/confirmation contract here. |
+| legacy | Creates/reuses .venv, installs requirements when needed, selects project Docker or local services, creates/reuses sbom_analyser_dev, generates/reuses private .env.dev.local keys, checks schema and runs Alembic upgrade, prepares frontend dependencies/certificate, then starts API, worker, full Beat and frontend. Before Alembic it refuses an unknown schema and a pre-UUID revision whose identity tables contain rows, using read-only queries. There is no Greenfield-style per-revision backup/confirmation contract here. |
 | greenfield | Requires a complete existing private installation, checks resource identity and trusted HTTPS, resumes recorded containers, then checks pending schema transitions. Each pending unit requires explicit confirmation, verified encrypted backup/restore rehearsal and independent read-back before application services. Startup does not bootstrap or seed an installation. It can renew leaf certificates and refresh a private frontend working copy. |
 
 See [database operations](../DATABASE_BOOTSTRAP_AND_UPGRADE.md#greenfield-startup)
@@ -113,10 +120,12 @@ Both profiles currently select local Native authentication; neither is the HCL
 integration profile. [Configuration precedence](../reference/configuration.md)
 explains fixed flags and manual setup differences.
 
-The legacy worker consumes the default queue, while report tasks route to
-reports. Do not claim reports are ready from this launcher alone.
-[Report operations](../runbook-report-notifications.md) describes the specialist
-worker; real mail and delivery acceptance require explicit configuration.
+The legacy worker consumes both the default celery queue and reports, the
+same queue set as the server worker; Beat remains a single separate process.
+Report delivery still needs its REPORT_* settings, so do not claim reports are
+ready from this launcher alone. [Report operations](../runbook-report-notifications.md)
+describes the dedicated production worker; real mail and delivery acceptance
+require explicit configuration.
 Greenfield consumes both queues but its restricted scheduler does not tick the
 application-wide report/analysis schedules. Do not start a second full Beat to
 “fix” this without reviewing the intended profile policy.

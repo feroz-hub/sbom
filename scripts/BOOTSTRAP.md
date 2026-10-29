@@ -14,7 +14,7 @@ Source checked against e62951c2 on 28 October 2026.
 | macOS / Linux | scripts/bootstrap.sh (Bash) | Can install system tools and use Homebrew or a supported Linux package manager; may add package sources. |
 | Windows | scripts/bootstrap.ps1 (PowerShell) | Can use winget/Chocolatey and install tools; PATH refresh may require a new shell. |
 
-They target Python 3.11 and Node 20 prerequisites, create/reuse .venv, install
+They target Python 3.11 and Node 20.9+ prerequisites, create/reuse .venv, install
 requirements.txt, run npm ci, and copy missing backend/frontend example files.
 They also ensure a local AI encryption key in .env when applicable. Existing
 keys are preserved, but the operation can write an existing environment file.
@@ -30,9 +30,10 @@ On Windows:
     powershell -File scripts/bootstrap.ps1 -SkipSystem
 
 Skipping system installation still installs dependencies and may write local
-configuration. Full dependency compatibility remains to be checked: the locked
-Next.js package requires Node >=20.9.0, more specific than the installer's
-major-version check.
+configuration. Without the skip option, both installers treat Node older than
+20.9.0 (the locked Next.js minimum) as missing and install a newer one; with it,
+no Node check runs, and scripts/dev.py start enforces the minimum. Full
+dependency compatibility remains to be checked.
 
 ## What they do not provide
 
