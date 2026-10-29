@@ -24,6 +24,17 @@ class HttpsTrustError(RuntimeError):
     """Actionable, nonsecret trust diagnostic suitable for the launcher."""
 
 
+def require_supported_platform(platform=None):
+    """Fail early and clearly where Keychain trust and POSIX ownership checks cannot run."""
+    platform = platform or sys.platform
+    if platform != "darwin":
+        launcher = "python scripts/dev.py" if platform == "win32" else "python3 scripts/dev.py"
+        raise HttpsTrustError(
+            "Greenfield UUID setup currently supports macOS only (Keychain trust verification, POSIX "
+            f"ownership checks and a Unix Docker socket). Use {launcher} --profile legacy instead."
+        )
+
+
 def private_directory(path):
     info = path.lstat()
     if not stat.S_ISDIR(info.st_mode) or info.st_uid != os.getuid() or stat.S_IMODE(info.st_mode) != 0o700:
@@ -204,6 +215,7 @@ def main():
     parser = argparse.ArgumentParser(description=__doc__)
     parser.add_argument("action", choices=("check", "prepare", "verify-served"))
     args = parser.parse_args()
+    require_supported_platform()
     state = Path.home() / ".sbom-greenfield-uuid"
     _, _, _, metadata = ensure_certificate(state, prepare=args.action == "prepare")
     if args.action == "verify-served":
