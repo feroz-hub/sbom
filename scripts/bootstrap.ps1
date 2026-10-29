@@ -1,6 +1,6 @@
 <#
 .SYNOPSIS
-    SBOM Analyzer — local-machine bootstrap (Windows).
+    SBOM Analyzer - local-machine bootstrap (Windows).
 
 .DESCRIPTION
     Installs the two prerequisites the project needs to run locally:
@@ -9,7 +9,7 @@
     Then creates the backend venv, installs Python deps, installs frontend
     deps, and copies the .env / .env.local templates if they are missing.
 
-    Idempotent — safe to re-run. Every install step checks first; nothing
+    Idempotent - safe to re-run. Every install step checks first; nothing
     is reinstalled if it already meets the required minimum version.
 
     Package manager: winget (preferred, ships with Windows 10 21H2+ and
@@ -44,16 +44,18 @@ Set-StrictMode -Version Latest
 $RequiredPythonMajor = 3
 $RequiredPythonMinor = 11
 $RequiredNodeMajor   = 20
+# The locked Next.js release requires Node >=20.9.0 (frontend/package-lock.json).
+$RequiredNodeMinor   = 9
 
 $ScriptDir = Split-Path -Parent $MyInvocation.MyCommand.Path
 $RepoRoot  = Split-Path -Parent $ScriptDir
 
-# ── helpers ──────────────────────────────────────────────────────────────────
+# -- helpers ------------------------------------------------------------------
 
 function Write-Step  { Write-Host "==> $args" -ForegroundColor Blue }
-function Write-Ok    { Write-Host "✓ $args"   -ForegroundColor Green }
+function Write-Ok    { Write-Host "OK $args"   -ForegroundColor Green }
 function Write-Warn2 { Write-Host "! $args"   -ForegroundColor Yellow }
-function Write-Fail  { Write-Host "✗ $args"   -ForegroundColor Red; exit 1 }
+function Write-Fail  { Write-Host "X $args"   -ForegroundColor Red; exit 1 }
 
 function Test-Cmd([string]$Name) {
     [bool](Get-Command $Name -ErrorAction SilentlyContinue)
@@ -82,18 +84,19 @@ function Test-PythonOk {
 function Test-NodeOk {
     if (-not (Test-Cmd 'node')) { return $false }
     try {
-        $major = (& node -e 'process.stdout.write(String(process.versions.node.split(".")[0]))')
-        return ([int]$major -ge $RequiredNodeMajor)
+        $parts = (& node -e 'process.stdout.write(process.versions.node)').Split('.')
+        $major = [int]$parts[0]; $minor = [int]$parts[1]
+        return ($major -gt $RequiredNodeMajor -or ($major -eq $RequiredNodeMajor -and $minor -ge $RequiredNodeMinor))
     } catch { return $false }
 }
 
-# ── package manager bootstrap ────────────────────────────────────────────────
+# -- package manager bootstrap ------------------------------------------------
 
 function Get-PackageManager {
     if (Test-Cmd 'winget') { return 'winget' }
     if (Test-Cmd 'choco')  { return 'choco' }
 
-    Write-Step "Neither winget nor Chocolatey found — installing Chocolatey"
+    Write-Step "Neither winget nor Chocolatey found - installing Chocolatey"
     # Chocolatey's official bootstrap (https://chocolatey.org/install).
     Set-ExecutionPolicy Bypass -Scope Process -Force
     [System.Net.ServicePointManager]::SecurityProtocol = `
@@ -131,14 +134,14 @@ function Install-Node([string]$Pm) {
                 --silent --accept-source-agreements --accept-package-agreements
         }
         'choco' {
-            & choco install -y "nodejs-lts" --version="$RequiredNodeMajor.0.0" `
-                --allow-downgrade
+            # Unpinned like winget: a pinned 20.0.0 is older than Next.js accepts.
+            & choco install -y "nodejs-lts"
         }
     }
     Update-PathFromMachine
 }
 
-# ── steps ────────────────────────────────────────────────────────────────────
+# -- steps --------------------------------------------------------------------
 
 function Step-InstallSystemDeps {
     if ($SkipSystem) {
@@ -155,7 +158,7 @@ function Step-InstallSystemDeps {
     } else {
         Install-Python $pm
         if (-not (Test-PythonOk)) {
-            Write-Warn2 "Python not visible on PATH yet — open a new PowerShell and re-run with -SkipSystem if the venv step below fails."
+            Write-Warn2 "Python not visible on PATH yet - open a new PowerShell and re-run with -SkipSystem if the venv step below fails."
         }
     }
 
@@ -165,7 +168,7 @@ function Step-InstallSystemDeps {
     } else {
         Install-Node $pm
         if (-not (Test-NodeOk)) {
-            Write-Warn2 "Node not visible on PATH yet — open a new PowerShell and re-run with -SkipSystem if needed."
+            Write-Warn2 "Node not visible on PATH yet - open a new PowerShell and re-run with -SkipSystem if needed."
         }
     }
 }
@@ -207,7 +210,7 @@ function Step-SetupBackend {
 function Step-SetupFrontend {
     $frontend = Join-Path $RepoRoot 'frontend'
     if (-not (Test-Path $frontend)) {
-        Write-Warn2 "frontend/ not found — skipping npm install"
+        Write-Warn2 "frontend/ not found - skipping npm install"
         return
     }
     if (-not (Test-Cmd 'npm')) {
@@ -231,14 +234,14 @@ function Step-SetupFrontend {
     }
 }
 
-# ── main ─────────────────────────────────────────────────────────────────────
+# -- main ---------------------------------------------------------------------
 
 Step-InstallSystemDeps
 Step-SetupBackend
 Step-SetupFrontend
 
 Write-Host ""
-Write-Host "═══════════════════════════════════════════════════════════════════════" -ForegroundColor Green
+Write-Host "=======================================================================" -ForegroundColor Green
 Write-Host "  Bootstrap complete." -ForegroundColor Green
 Write-Host ""
 Write-Host "  Start the backend:"
@@ -247,4 +250,4 @@ Write-Host "    python run.py                       # -> http://localhost:8000"
 Write-Host ""
 Write-Host "  Start the frontend (in another terminal):"
 Write-Host "    cd frontend; npm run dev            # -> http://localhost:3000"
-Write-Host "═══════════════════════════════════════════════════════════════════════" -ForegroundColor Green
+Write-Host "=======================================================================" -ForegroundColor Green
