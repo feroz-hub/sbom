@@ -22,7 +22,10 @@ Schemas are loaded once at process startup (see [app/validation/stages/schema.py
 
 1. Open a PR that updates these files **and** this SOURCE.md row in the same commit.
 2. Bump the commit SHA / retrieved date on the affected row(s).
-3. Run `pytest tests/validation/ -m schema` to confirm the corpus still passes.
+3. On an authorized disposable test target, run
+   `python -m pytest tests/validation/ -m "not bench"` to include validation
+   integration tests. The current pytest configuration has no schema marker;
+   follow the [testing guide](../../../../docs/testing/README.md) for target safety.
 4. Add a CHANGELOG entry if the spec version itself moved (1.6 → 1.7).
 
 ## Round 3 missing signature-schema dependency

@@ -1,121 +1,56 @@
-# Local-machine bootstrap
+# Optional workstation bootstrap installers
 
-Two installer scripts that bring a fresh machine to a working dev state for the SBOM Analyzer.
-They install **Python 3.11** and **Node.js 20**, set up the backend venv with `requirements.txt`,
-run `npm ci` for the frontend, and copy `.env` / `.env.local` from the example files if missing.
+The developer entry point is
+[scripts/dev.py](../docs/development/README.md). These existing installers prepare
+tools/dependencies for manual or legacy development; they do not install a
+complete application stack or approve any production deployment.
 
-Both scripts are idempotent — re-running them only does the work that hasn't been done yet.
+Source checked against e62951c2 on 28 October 2026.
 
-## Which script to run
+## What they do
 
-| OS | Script | Run from |
-|---|---|---|
-| macOS | `scripts/bootstrap.sh` | Terminal (bash or zsh) |
-| Linux | `scripts/bootstrap.sh` | Any POSIX shell |
-| Windows | `scripts/bootstrap.ps1` | PowerShell (5.1+ or 7+) |
+| Platform | Existing installer | System installation behavior |
+| --- | --- | --- |
+| macOS / Linux | scripts/bootstrap.sh (Bash) | Can install system tools and use Homebrew or a supported Linux package manager; may add package sources. |
+| Windows | scripts/bootstrap.ps1 (PowerShell) | Can use winget/Chocolatey and install tools; PATH refresh may require a new shell. |
 
-## macOS / Linux
+They target Python 3.11 and Node 20.9+ prerequisites, create/reuse .venv, install
+requirements.txt, run npm ci, and copy missing backend/frontend example files.
+They also ensure a local AI encryption key in .env when applicable. Existing
+keys are preserved, but the operation can write an existing environment file.
+A rerun can reinstall dependencies; “idempotent” does not mean no writes.
 
-```bash
-cd <repo>
-chmod +x scripts/bootstrap.sh        # one-time
-./scripts/bootstrap.sh
-```
+Review workstation/package-manager policy before invoking system installation.
+For already provisioned Python/Node, existing skip-system interfaces are:
 
-The script auto-detects the OS and uses the right package manager:
+    bash scripts/bootstrap.sh --skip-system
 
-- **macOS** — Homebrew. Installs it first if missing.
-- **Debian / Ubuntu / Mint** — `apt-get`. Adds the deadsnakes PPA only if `python3.11` isn't already in the repos.
-- **Fedora / RHEL / Rocky / Alma / CentOS** — `dnf` (or `yum`).
-- **Arch / Manjaro** — `pacman`.
-- **openSUSE** — `zypper`.
-- **Alpine** — `apk`.
+On Windows:
 
-For Node 20 on apt/dnf-based distros it pulls the official NodeSource setup
-script (`setup_20.x`) so you don't end up with a stale distro Node.
+    powershell -File scripts/bootstrap.ps1 -SkipSystem
 
-If you already have Python 3.11 and Node 20 from another source (asdf, nvm,
-pyenv, Volta, your corporate image, etc.), skip the system step:
+Skipping system installation still installs dependencies and may write local
+configuration. Without the skip option, both installers treat Node older than
+20.9.0 (the locked Next.js minimum) as missing and install a newer one; with it,
+no Node check runs, and scripts/dev.py start enforces the minimum. Full
+dependency compatibility remains to be checked.
 
-```bash
-./scripts/bootstrap.sh --skip-system
-```
+## What they do not provide
 
-## Windows
+- PostgreSQL provisioning or database-target approval. PostgreSQL is the normal
+  application database; SQLite fallback must be explicit and is not the normal
+  full-stack default.
+- Redis or compatible Mailpit provisioning. Redis is required by the normal
+  developer launcher and production BFF/session configuration.
+- A complete authenticated configuration. The backend example disables
+  authentication while the frontend example is HCL-oriented and enables it;
+  copying both unchanged does not make a coherent login flow.
+- Production secret management, schema compatibility approval or release
+  acceptance.
 
-Open PowerShell (Windows Terminal is fine) and run:
-
-```powershell
-cd <repo>
-# Allow this single script to run, just for this session:
-Set-ExecutionPolicy -Scope Process -ExecutionPolicy Bypass
-.\scripts\bootstrap.ps1
-```
-
-The script prefers **winget** (built into Windows 10 21H2+ and Windows 11). If
-winget is missing it falls back to **Chocolatey**, installing Chocolatey itself
-if neither is present.
-
-If you have Python/Node already:
-
-```powershell
-.\scripts\bootstrap.ps1 -SkipSystem
-```
-
-> **Tip:** if the script installs Python or Node for the first time, you may
-> need to close and reopen PowerShell so the new tools land on `PATH`, then
-> re-run with `-SkipSystem` to finish the venv + npm steps.
-
-## What gets installed
-
-| Component | macOS | Debian/Ubuntu | Fedora/RHEL | Arch | Windows |
-|---|---|---|---|---|---|
-| Python 3.11 | `python@3.11` | `python3.11 python3.11-venv python3.11-dev` | `python3.11 python3.11-devel` | `python` | `Python.Python.3.11` |
-| Node 20 | `node@20` | NodeSource `nodejs` | NodeSource `nodejs` | `nodejs npm` | `OpenJS.NodeJS.LTS` |
-| Build toolchain | (via Xcode CLT) | `build-essential libxml2-dev libxslt1-dev libssl-dev libffi-dev libpq-dev` | `gcc gcc-c++ make libxml2-devel libxslt-devel openssl-devel libffi-devel libpq-devel` | `base-devel libxml2 libxslt openssl libffi postgresql-libs` | (Windows wheels) |
-
-The build toolchain on Linux is only there in case `lxml`, `cryptography`, or
-`psycopg` need to compile from source — current binary wheels cover most
-distros, so usually nothing is built.
-
-## What the scripts do NOT install
-
-- **Redis** — only needed for Celery-backed background scans. Default dev
-  runs scans synchronously inside the API process, so this is optional.
-- **PostgreSQL** — SQLite is the dev default. Install Postgres only if you're
-  validating the production path locally.
-- **API keys** — `NVD_API_KEY`, `GITHUB_TOKEN`, `VULNDB_API_KEY`, and any AI
-  provider keys are all optional. The script seeds `.env` from `.env.example`;
-  fill in keys later as needed. The one exception is
-  `AI_CONFIG_ENCRYPTION_KEY`, which the script generates for you — Settings →
-  AI cannot save a provider without it. Deployed environments inject it from
-  their own secret store instead (`docs/runbook-ai-credentials.md` §1.1).
-
-## After it finishes
-
-```bash
-# Backend
-source .venv/bin/activate      # macOS/Linux
-# or
-.\.venv\Scripts\Activate.ps1   # Windows
-
-python run.py                  # http://localhost:8000
-
-# Frontend (separate terminal)
-cd frontend
-npm run dev                    # http://localhost:3000
-```
-
-## Troubleshooting
-
-- **Script says Python/Node aren't on PATH after install.** Open a new shell so
-  it picks up the updated `PATH`, then re-run with `--skip-system` /
-  `-SkipSystem` to finish the venv + npm steps.
-- **Older Ubuntu (20.04) doesn't have `python3.11`.** The script adds the
-  deadsnakes PPA automatically. If your corporate apt mirror blocks PPAs,
-  install Python 3.11 by hand (e.g. via `pyenv`) and pass `--skip-system`.
-- **Behind a corporate proxy.** Set `HTTPS_PROXY` / `HTTP_PROXY` before running.
-  pip, npm, apt, dnf, and winget all honour those vars.
-- **`pip install` is slow or compiles wheels from source.** Make sure pip is
-  current: `python -m pip install --upgrade pip`. Old pips fall back to source
-  builds because they can't read modern wheel tags.
+Choose a [development profile](../docs/development/README.md) next. Use
+[configuration guidance](../docs/reference/configuration.md) to understand
+precedence, and the [database gate](../docs/DATABASE_BOOTSTRAP_AND_UPGRADE.md)
+before any start/bootstrap/upgrade. Do not run a populated pre-UUID target across
+revision 100. Existing manual run.py and npm commands start individual services,
+not the whole stack.

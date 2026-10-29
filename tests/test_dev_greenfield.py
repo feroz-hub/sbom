@@ -7,6 +7,7 @@ from unittest.mock import Mock
 import pytest
 from scripts import dev
 from scripts import dev_greenfield as launcher
+from scripts import greenfield_https as https
 
 
 @pytest.fixture
@@ -113,3 +114,11 @@ def test_greenfield_routing_does_not_initialize_legacy(monkeypatch):
 @pytest.mark.parametrize("profile", ["auto", "greenfield", "legacy"])
 def test_explicit_profiles(profile):
     assert dev.parse_args(["start", "--profile", profile]).profile == profile
+
+
+@pytest.mark.parametrize("platform", ["win32", "linux"])
+def test_direct_greenfield_entry_points_fail_clearly_off_macos(platform):
+    expected = "python scripts/dev.py" if platform == "win32" else "python3 scripts/dev.py"
+    with pytest.raises(https.HttpsTrustError, match=f"supports macOS only.*{expected} --profile legacy"):
+        https.require_supported_platform(platform)
+    https.require_supported_platform("darwin")

@@ -5,6 +5,30 @@ This runbook deploys SBOM Analyzer 2.0.0 as two application images on
 Celery worker, and single Celery Beat scheduler. PostgreSQL and Redis use their
 official images and are not published to the host.
 
+## Applicability and mandatory database gate
+
+Source configuration checked against e62951c2 on 28 October 2026. This procedure
+describes the repository's linux/amd64 server topology, not an approved production
+support matrix. Native Windows/macOS production, arm64 images, horizontal scale
+and provider-specific acceptance remain unverified here.
+
+Before any bootstrap, migration or Compose up command, classify the exact target
+using [database operations](DATABASE_BOOTSTRAP_AND_UPGRADE.md):
+
+- A fresh installation requires a separately identified, empty PostgreSQL target.
+- An existing compatible UUID installation requires approval of the exact
+  transition, physical schema/identity validation and backup/restore evidence.
+- A populated pre-UUID installation **must not cross revision 100** through this
+  procedure. Revision 100 refuses populated application tables. No approved
+  conversion is supplied here; stop for a separately reviewed design.
+- Unknown, drifted or ahead schemas require reconciliation, not marker stamping.
+
+The migrate service invokes upgrade head on an existing database; it does not
+implement that missing conversion or Greenfield's interactive backup contract.
+All write commands below are conditional on the operator's target/release review.
+[Configuration](reference/configuration.md) separates public build values from
+private runtime settings.
+
 ## 1. Install Docker Engine
 
 Install Docker Engine and the Compose and Buildx plugins from Docker's Ubuntu
@@ -103,12 +127,26 @@ port 3000. Preserve `Host`, `X-Forwarded-Host`, `X-Forwarded-Proto`, and client
 IP headers. The application uses `Secure`, `HttpOnly`, `SameSite=Lax`,
 `__Host-` cookies, so production authentication must be accessed over HTTPS.
 
-The current frontend session store is process memory. Run exactly one frontend
-replica unless the application is enhanced with a shared session store; a
-frontend restart requires users to sign in again. Always run exactly one Beat
-replica to avoid duplicate scheduled jobs.
+Server Compose configures shared Redis BFF sessions. Production session access
+refuses the in-memory fallback. Supply AUTH_SESSION_REDIS_URL and a stable,
+independent 32-byte base64 AUTH_SESSION_ENCRYPTION_KEY; the Compose configuration
+requires the encryption key. Preserve the protected transaction-key file as
+well. Redis support alone does not establish multi-replica or failover acceptance;
+validate the intended topology before changing replica counts. Always run
+exactly one Beat replica to avoid duplicate scheduled jobs.
+
+HCL is the provider described in this section. Native-only deployment requires
+matching backend/BFF and public image-build flags plus all Native production
+prerequisites; see [Native staging guidance](native-iam-greenfield-setup.md)
+and [security/IAM](security/README.md). Current server Compose does not forward
+ENTRA_* variables; Entra deployment through this manifest is unverified. This
+phase neither enables providers nor changes authentication configuration.
 
 ## 5. Validate and start
+
+Proceed only after the mandatory database gate above. A successful Compose
+render checks configuration shape; it does not prove schema compatibility,
+secrets validity or production readiness.
 
 ```bash
 docker compose --env-file .env.server -f docker-compose.server.yml config --quiet
@@ -120,7 +158,9 @@ The `migrate` service must show `Exited (0)`. On a provably empty PostgreSQL
 database its launcher uses the repository's guarded frozen schema baseline and
 then runs `alembic upgrade head`; on an existing database it runs
 `alembic upgrade head` directly. Backend, worker, and Beat are gated on migration
-success, so a failed migration prevents a stale-schema API from starting.
+success, so a failed migration prevents the new stale-schema API from starting.
+This ordering does not stop existing writers. In particular, it is not an
+approved way to discover whether a populated pre-UUID deployment can cross 100.
 
 ## 6. Verify the deployment
 
@@ -174,10 +214,21 @@ deleting all PostgreSQL, Redis, uploaded-workspace, and report data is intended.
 
 ## 8. Upgrade
 
-1. Back up PostgreSQL and persistent application files.
-2. Load the new image archive.
-3. Change `SBOM_ANALYSER_VERSION` in `.env.server`.
-4. Validate Compose, then recreate services:
+This section applies only to an operator-reviewed compatible UUID transition.
+Do not use it to cross revision 100 from a populated pre-UUID target. This
+documentation change approves no production source-to-target pair.
+
+1. Identify the cluster/database, source and target image/source revisions,
+   actual schema/identity guards and exact pending revisions. Resolve drift or
+   unknown state before writes.
+2. Back up PostgreSQL and persistent application files to an approved encrypted
+   destination, preserve required keys and rehearse restore in isolation.
+3. Plan and carry out writer drain/stop as required by the reviewed transition:
+   old API, workers and Beat must not race an incompatible migration. Compose
+   depends_on is startup ordering, not an old-writer drain.
+4. Load the approved images and set SBOM_ANALYSER_VERSION in protected server
+   configuration. Review provider/build/runtime compatibility.
+5. For that approved transition only, validate Compose and recreate services:
 
 ```bash
 docker compose --env-file .env.server -f docker-compose.server.yml config --quiet
@@ -186,7 +237,10 @@ docker compose --env-file .env.server -f docker-compose.server.yml ps -a
 docker compose --env-file .env.server -f docker-compose.server.yml logs migrate
 ```
 
-The migration container runs before the new API/worker/scheduler starts.
+The migration container runs before the new API/worker/scheduler starts. Verify
+migration exit, accepted schema, authenticated BFF/IAM readiness, intended queues
+and application storage before release. A failed or uncertain COMMIT requires
+operator reconciliation; do not retry, stamp or downgrade to force success.
 
 ## 9. Rollback
 
@@ -199,12 +253,17 @@ restore the pre-upgrade database backup if required, set
 docker compose --env-file .env.server -f docker-compose.server.yml up -d
 ```
 
-Never run an Alembic downgrade against production without a tested database
-restore plan.
+Revision 100 deliberately refuses public-identity downgrade. Do not treat
+Alembic downgrade as a generic rollback. Use only the reviewed per-transition
+recovery plan, accounting for writes since backup and a compatible image,
+schema, configuration and keys before any Compose restart.
 
 ## 10. Back up PostgreSQL and persistent files
 
-Create an encrypted backup destination with adequate free space:
+Use an approved encrypted backup destination with adequate free space.
+The directory permissions and pg_dump/tar commands below do not themselves
+encrypt data; encryption and recoverable key custody must already be provided
+by the approved destination/process:
 
 ```bash
 install -d -m 0700 backups
@@ -236,6 +295,7 @@ docker buildx build --platform linux/amd64 --load \
 docker buildx build --platform linux/amd64 --load \
   -t sbom-analyser-frontend:2.0.0 \
   --build-arg NEXT_PUBLIC_AUTH_ENABLED="$NEXT_PUBLIC_AUTH_ENABLED" \
+  --build-arg NEXT_PUBLIC_HCL_AUTH_ENABLED="${NEXT_PUBLIC_HCL_AUTH_ENABLED:-true}" \
   --build-arg NEXT_PUBLIC_API_URL="$NEXT_PUBLIC_API_URL" \
   --build-arg NEXT_PUBLIC_HCL_IAM_ISSUER="$NEXT_PUBLIC_HCL_IAM_ISSUER" \
   --build-arg NEXT_PUBLIC_HCL_IAM_CLIENT_ID="$NEXT_PUBLIC_HCL_IAM_CLIENT_ID" \
@@ -246,8 +306,11 @@ docker buildx build --platform linux/amd64 --load \
   -f frontend/Dockerfile frontend
 ```
 
-Do not pass database, IAM private keys, provider tokens, or other secrets as
-build arguments.
+NEXT_PUBLIC_HCL_AUTH_ENABLED defaults to true above, matching the Dockerfile.
+For a reviewed Native-only image, explicitly set it false and keep public and
+runtime auth flags consistent; a runtime edit does not reliably replace
+compiled browser values. Do not pass database, IAM private keys, provider tokens
+or other secrets as build arguments.
 
 Export the validated application images for transfer:
 

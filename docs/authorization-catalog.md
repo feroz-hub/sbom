@@ -1,8 +1,9 @@
 # Authorization catalogue operations
 
-Phase 8 makes PostgreSQL the authoritative source for the global SBOM role and
-permission catalogue. Tenant and platform user assignments remain in their
-existing tables; assignment redesign is intentionally deferred to Phase 9.
+Phase 8 introduced the PostgreSQL-backed global SBOM role and permission
+catalogue. Tenant-role assignment behavior evolved in Phase 9; see
+[TENANT_ROLE_ASSIGNMENTS.md](TENANT_ROLE_ASSIGNMENTS.md). The Phase 8 scope and
+frozen seed history below are retained.
 
 ## Resolver modes
 
@@ -27,21 +28,19 @@ transaction, validates existing role assignments, and widens
 `alembic_version.version_num` to 128 characters. The frozen seed is
 `app/authorization_catalog_seed_v1.py`; do not edit it after deployment.
 
-Historical revision 001 used live SQLAlchemy metadata and is not a stable
-fresh-install contract. Bootstrap a new, empty PostgreSQL database with:
+Use the [database operations guide](DATABASE_BOOTSTRAP_AND_UPGRADE.md) before
+installation or upgrade. Fresh PostgreSQL setup uses the frozen revision-047
+baseline; revision 001's live metadata is not a stable fresh-install contract.
+The source head verified on 28 October 2026 is 103_tenant_admin_governance;
+the revision-048 facts above remain historical.
 
-```bash
-python scripts/bootstrap_fresh_database.py \
-  --database-url postgresql+psycopg://USER:PASSWORD@HOST:5432/DATABASE \
-  --confirm-empty-database DATABASE
-```
+Revision 100 refuses populated pre-UUID application tables. Do not cross that
+boundary with a generic upgrade head. Existing compatible UUID installations
+still require exact transition/schema review and backup/restore evidence.
+No approved populated pre-UUID conversion or universal downgrade is supplied here.
 
-The command refuses non-PostgreSQL databases, mismatched confirmation, and any
-target containing public tables. It restores the frozen revision-047 schema,
-records that baseline, applies all subsequent revisions, and verifies the current
-head (`079_lifecycle_provider_verification`).
-Secrets belong in a secret manager or process environment; do not put real
-credentials in repository files or shell history.
+Secrets belong in protected runtime configuration or a secret manager, never
+repository files, shell history or shared diagnostic output.
 
 ## Protected mappings and scope
 

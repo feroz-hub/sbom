@@ -32,6 +32,8 @@ set -euo pipefail
 readonly REQUIRED_PYTHON_MAJOR=3
 readonly REQUIRED_PYTHON_MINOR=11
 readonly REQUIRED_NODE_MAJOR=20
+# The locked Next.js release requires Node >=20.9.0 (frontend/package-lock.json).
+readonly REQUIRED_NODE_MINOR=9
 
 # Resolve repo root assuming the script lives in <repo>/scripts/.
 SCRIPT_DIR="$(cd -- "$(dirname -- "${BASH_SOURCE[0]:-$0}")" &> /dev/null && pwd)"
@@ -73,12 +75,14 @@ python_ok() {
   "$cmd" -c "import sys; sys.exit(0 if sys.version_info >= (${REQUIRED_PYTHON_MAJOR}, ${REQUIRED_PYTHON_MINOR}) else 1)" 2> /dev/null
 }
 
-# Returns 0 if installed node meets >=20.
+# Returns 0 if installed node meets >=20.9.
 node_ok() {
   have node || return 1
-  local major
+  local major minor
   major="$(node -e 'process.stdout.write(String(process.versions.node.split(".")[0]))')"
-  [[ "$major" =~ ^[0-9]+$ ]] && (( major >= REQUIRED_NODE_MAJOR ))
+  minor="$(node -e 'process.stdout.write(String(process.versions.node.split(".")[1]))')"
+  [[ "$major" =~ ^[0-9]+$ && "$minor" =~ ^[0-9]+$ ]] || return 1
+  (( major > REQUIRED_NODE_MAJOR || (major == REQUIRED_NODE_MAJOR && minor >= REQUIRED_NODE_MINOR) ))
 }
 
 # Detect platform and package manager.

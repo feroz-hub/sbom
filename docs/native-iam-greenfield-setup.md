@@ -2,11 +2,23 @@
 
 No HCL/SF user migration, email-based linking, copied tenant data or source removal is part of this procedure. Do not drop an existing database. Local acceptance is not production readiness.
 
+This is fresh Native IAM staging guidance, distinct from the home-directory
+Greenfield developer profile. Read the
+[database classification gate](DATABASE_BOOTSTRAP_AND_UPGRADE.md) first.
+A populated pre-UUID target must not cross revision 100 through these commands.
+Existing compatible UUID targets require their own transition review.
+[Development profiles](development/README.md) and
+[configuration precedence](reference/configuration.md) describe local use.
+
 ## Prerequisites and target
 
 Use an approved PostgreSQL server, a separately named empty staging database, an operator identity with database-creation/migration privileges, Redis, the existing Celery worker/Beat deployment and an approved mail destination. Identify the server/database by safe identifiers before executing commands. Preserve any existing database until its disposal is separately authorized. Recoverable backups remain prudent even for test data.
 
-The inspected local environment has PostgreSQL 16 in `sbom-postgres-1` (host port 55439) and existing Mailpit SMTP at loopback port 1025, captured-mail UI at loopback port 8025. These are local observations, not production endpoints. No MailKit-based service was found; MailKit is not introduced. Do not assume local credentials apply elsewhere.
+The earlier staging procedure recorded PostgreSQL 16 in sbom-postgres-1
+(host port 55439), Mailpit SMTP 1025 and UI 8025. Those are historical local
+observations, not verified current services or production endpoints; the
+home-directory Greenfield developer profile uses different ports. No MailKit
+service is introduced. Do not assume credentials or resources apply elsewhere.
 
 Create the new database using the normal PostgreSQL operator tooling (`createdb` or the approved platform console). Obtain connection credentials through secret management; do not paste a connection string into a ticket, command history or repository. Export `DATABASE_URL` securely to the new database, and verify database name/server and that no public application tables exist. Use matching PostgreSQL-version backup/restore tools.
 
@@ -37,7 +49,14 @@ From the repository root with the project virtual environment and securely expor
 .venv/bin/python -m alembic current
 ```
 
-Expected head: `079_lifecycle_provider_verification`. On an empty PostgreSQL database, the Alembic environment installs the existing frozen revision-047 schema, stamps that supported baseline and applies 048 through current head. Historical migration 001 used live ORM metadata and is not replayed for fresh PostgreSQL. Migrations 001–061 remain unchanged. This is the repository's existing expected-bootstrap approach, now reachable through ordinary Alembic upgrade; it does not import old identity data.
+For the fresh, verified-empty target only: the source head checked on
+28 October 2026 is 103_tenant_admin_governance. The Alembic environment installs
+the frozen revision-047 schema and applies subsequent revisions; it does not
+import old identity data. Historical revision 001 uses live ORM metadata and is
+not the fresh PostgreSQL contract. A source head does not establish production
+acceptance. Reconfirm the checked-out head and follow the
+[database guide](DATABASE_BOOTSTRAP_AND_UPGRADE.md); never reuse this fresh
+procedure for a populated pre-UUID target.
 
 Migration 048 seeds and validates the immutable authorization catalogue transactionally. Start the normal authenticated API to initialize master/reference data (`app.main` startup); do not use development/auth-disabled seed mode. Verify the five role codes PLATFORM_ADMIN, TENANT_ADMIN, SECURITY_ANALYST, DEVELOPER, VIEWER and catalogue mappings. Verify zero old identities/memberships. No manual grants or password inserts.
 

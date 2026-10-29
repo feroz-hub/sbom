@@ -537,6 +537,9 @@ def main():
         "action", choices=["setup", "provision", "bootstrap", "env", "backend", "start", "restart", "build"]
     )
     args = parser.parse_args()
+    from scripts.greenfield_https import require_supported_platform
+
+    require_supported_platform()
     if args.action == "setup":
         from scripts.greenfield_https import ensure_certificate
 
@@ -586,4 +589,9 @@ def main():
 
 
 if __name__ == "__main__":
-    main()
+    from scripts.greenfield_https import HttpsTrustError
+
+    try:
+        main()
+    except HttpsTrustError as exc:
+        raise SystemExit(str(exc)) from None
