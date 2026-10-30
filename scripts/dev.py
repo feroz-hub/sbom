@@ -32,6 +32,7 @@ from urllib.request import urlopen
 
 MIN_PYTHON = (3, 11)
 MIN_NODE = (20, 9, 0)
+WINDOWS_SHUTDOWN_GRACE = 30.0
 REQUIRED_FILES = ("requirements.txt", "alembic.ini", "frontend/package.json", "frontend/package-lock.json")
 GREENFIELD_UUID_BASELINE = "100_greenfield_uuid_final"
 PUBLIC_IDENTITY_TABLES = ("tenants", "projects", "products", "logical_sbom", "sbom_source", "sbom_component")
@@ -42,6 +43,67 @@ UTC = timezone.utc  # noqa: UP017 - keep old-Python prerequisite diagnostics imp
 # Process identity and lifecycle are canonical here; never infer ownership from ports.
 class OwnershipError(RuntimeError):
     pass
+
+
+def _windows_kernel():
+    from ctypes import wintypes
+
+    kernel = ctypes.WinDLL("kernel32", use_last_error=True)
+    signatures = {
+        "OpenProcess": (wintypes.HANDLE, [wintypes.DWORD, wintypes.BOOL, wintypes.DWORD]),
+        "CloseHandle": (wintypes.BOOL, [wintypes.HANDLE]),
+        "WaitForSingleObject": (wintypes.DWORD, [wintypes.HANDLE, wintypes.DWORD]),
+        "GetProcessTimes": (wintypes.BOOL, [wintypes.HANDLE] + [ctypes.POINTER(wintypes.FILETIME)] * 4),
+        "QueryFullProcessImageNameW": (
+            wintypes.BOOL, [wintypes.HANDLE, wintypes.DWORD, wintypes.LPWSTR, ctypes.POINTER(wintypes.DWORD)]
+        ),
+        "TerminateProcess": (wintypes.BOOL, [wintypes.HANDLE, wintypes.UINT]),
+    }
+    for name, (result, arguments) in signatures.items():
+        function = getattr(kernel, name)
+        function.restype, function.argtypes = result, arguments
+    return kernel
+
+
+def _windows_error(pid, operation, code):
+    return OwnershipError(f"PID {pid}: {operation} failed (winerror={code}; status=UNKNOWN; ownership unverified).")
+
+
+def _windows_exited(kernel, handle, pid):
+    result = kernel.WaitForSingleObject(handle, 0)
+    if result == 0:
+        return True
+    if result == 258:  # WAIT_TIMEOUT: the process object is not signaled.
+        return False
+    raise _windows_error(pid, "WaitForSingleObject", ctypes.get_last_error())
+
+
+def _windows_query_failed(kernel, handle, pid, operation, code):
+    error = _windows_error(pid, operation, code)
+    try:
+        if _windows_exited(kernel, handle, pid):
+            return None
+    except OwnershipError as wait_error:
+        raise OwnershipError(f"{error} {wait_error}") from None
+    raise error
+
+
+def _windows_process_info(kernel, handle, pid):
+    """Read identity and liveness on one pinned process object, never a new PID."""
+    from ctypes import wintypes
+
+    if _windows_exited(kernel, handle, pid):
+        return None
+    times = [wintypes.FILETIME() for _ in range(4)]
+    if not kernel.GetProcessTimes(handle, *(ctypes.byref(value) for value in times)):
+        return _windows_query_failed(kernel, handle, pid, "GetProcessTimes", ctypes.get_last_error())
+    size = wintypes.DWORD(32768)
+    path = ctypes.create_unicode_buffer(size.value)
+    if not kernel.QueryFullProcessImageNameW(handle, 0, path, ctypes.byref(size)):
+        return _windows_query_failed(kernel, handle, pid, "QueryFullProcessImageNameW", ctypes.get_last_error())
+    if _windows_exited(kernel, handle, pid):
+        return None
+    return {"pid": pid, "birth": str((times[0].dwHighDateTime << 32) | times[0].dwLowDateTime), "exe": path.value}
 
 
 def process_info(pid: int) -> dict | None:
@@ -65,40 +127,17 @@ def process_info(pid: int) -> dict | None:
                 "uid": base.stat().st_uid,
             }
         if sys.platform == "win32":
-            from ctypes import wintypes
-
-            kernel = ctypes.WinDLL("kernel32", use_last_error=True)
-            kernel.OpenProcess.restype = wintypes.HANDLE
-            kernel.OpenProcess.argtypes = [wintypes.DWORD, wintypes.BOOL, wintypes.DWORD]
-            kernel.CloseHandle.argtypes = [wintypes.HANDLE]
-            kernel.GetProcessTimes.argtypes = [wintypes.HANDLE] + [ctypes.POINTER(wintypes.FILETIME)] * 4
-            kernel.QueryFullProcessImageNameW.argtypes = [
-                wintypes.HANDLE,
-                wintypes.DWORD,
-                wintypes.LPWSTR,
-                ctypes.POINTER(wintypes.DWORD),
-            ]
-            handle = kernel.OpenProcess(0x1000, False, pid)
+            if pid > 0xFFFFFFFF:
+                raise OwnershipError("Invalid Windows process identifier in runtime state.")
+            kernel = _windows_kernel()
+            handle = kernel.OpenProcess(0x101000, False, pid)  # QUERY_LIMITED_INFORMATION | SYNCHRONIZE
             if not handle:
-                if ctypes.get_last_error() == 87:
+                code = ctypes.get_last_error()
+                if code == 87:  # ERROR_INVALID_PARAMETER: this valid PID no longer exists.
                     return None
-                raise OwnershipError(f"Cannot inspect PID {pid}.")
+                raise _windows_error(pid, "OpenProcess", code)
             try:
-                times = [wintypes.FILETIME() for _ in range(4)]
-                size = wintypes.DWORD(32768)
-                path = ctypes.create_unicode_buffer(size.value)
-                if not kernel.GetProcessTimes(
-                    handle, *(ctypes.byref(t) for t in times)
-                ) or not kernel.QueryFullProcessImageNameW(handle, 0, path, ctypes.byref(size)):
-                    raise OwnershipError(f"Cannot inspect PID {pid}.")
-                # A terminated process handle may remain open in its parent.
-                if times[1].dwHighDateTime or times[1].dwLowDateTime:
-                    return None
-                return {
-                    "pid": pid,
-                    "birth": str((times[0].dwHighDateTime << 32) | times[0].dwLowDateTime),
-                    "exe": path.value,
-                }
+                return _windows_process_info(kernel, handle, pid)
             finally:
                 kernel.CloseHandle(handle)
         if sys.platform == "darwin":
@@ -207,7 +246,7 @@ def matches(record: dict, current: dict | None) -> bool:
 
 def group_members(pgid: int) -> list[dict]:
     if sys.platform == "win32":
-        return []  # taskkill /T walks the verified parent's tree on Windows.
+        return []  # Windows uses individually verified process handles.
     if sys.platform.startswith("linux"):
         pids = [int(p.name) for p in Path("/proc").iterdir() if p.name.isdigit()]
     else:
@@ -231,47 +270,85 @@ def group_members(pgid: int) -> list[dict]:
 
 
 def windows_children(pid: int) -> list[dict]:
-    """Snapshot descendant birth identities with the native Toolhelp API."""
+    """Pin identities and validate ancestry across two checked Toolhelp snapshots."""
     from ctypes import wintypes
 
     class Entry(ctypes.Structure):
         _fields_ = [
-            ("size", wintypes.DWORD),
-            ("usage", wintypes.DWORD),
-            ("pid", wintypes.DWORD),
-            ("heap", ctypes.c_size_t),
-            ("module", wintypes.DWORD),
-            ("threads", wintypes.DWORD),
-            ("parent", wintypes.DWORD),
-            ("priority", wintypes.LONG),
-            ("flags", wintypes.DWORD),
+            ("size", wintypes.DWORD), ("usage", wintypes.DWORD), ("pid", wintypes.DWORD),
+            ("heap", ctypes.c_size_t), ("module", wintypes.DWORD), ("threads", wintypes.DWORD),
+            ("parent", wintypes.DWORD), ("priority", wintypes.LONG), ("flags", wintypes.DWORD),
             ("exe", wintypes.WCHAR * 260),
         ]
 
-    kernel = ctypes.WinDLL("kernel32", use_last_error=True)
+    kernel = _windows_kernel()
     kernel.CreateToolhelp32Snapshot.restype = wintypes.HANDLE
     kernel.CreateToolhelp32Snapshot.argtypes = [wintypes.DWORD, wintypes.DWORD]
     kernel.Process32FirstW.argtypes = [wintypes.HANDLE, ctypes.POINTER(Entry)]
     kernel.Process32NextW.argtypes = [wintypes.HANDLE, ctypes.POINTER(Entry)]
-    kernel.CloseHandle.argtypes = [wintypes.HANDLE]
-    handle = kernel.CreateToolhelp32Snapshot(2, 0)
-    if handle == ctypes.c_void_p(-1).value:
-        raise OwnershipError("Cannot inspect Windows process tree.")
-    try:
-        entry = Entry()
-        entry.size = ctypes.sizeof(entry)
-        parents = {}
-        more = kernel.Process32FirstW(handle, ctypes.byref(entry))
-        while more:
-            parents[entry.pid] = entry.parent
-            more = kernel.Process32NextW(handle, ctypes.byref(entry))
-        owned = {pid}
-        while additions := {child for child, parent in parents.items() if parent in owned} - owned:
-            owned.update(additions)
-        return [info for child in owned if (info := process_info(child))]
-    finally:
-        kernel.CloseHandle(handle)
 
+    def snapshot():
+        handle = kernel.CreateToolhelp32Snapshot(2, 0)
+        if handle == ctypes.c_void_p(-1).value:
+            raise _windows_error(pid, "CreateToolhelp32Snapshot", ctypes.get_last_error())
+        try:
+            entry = Entry()
+            entry.size = ctypes.sizeof(entry)
+            parents = {}
+            operation = "Process32FirstW"
+            more = kernel.Process32FirstW(handle, ctypes.byref(entry))
+            while more:
+                parents[entry.pid] = entry.parent
+                operation = "Process32NextW"
+                more = kernel.Process32NextW(handle, ctypes.byref(entry))
+            code = ctypes.get_last_error()
+            if code != 18:  # ERROR_NO_MORE_FILES is the only successful end.
+                raise _windows_error(pid, operation, code)
+            return parents
+        finally:
+            kernel.CloseHandle(handle)
+
+    handles = []
+    def inspect(child):
+        handle = kernel.OpenProcess(0x101000, False, child)
+        if not handle:
+            code = ctypes.get_last_error()
+            if code == 87:
+                return None
+            raise _windows_error(child, "OpenProcess", code)
+        handles.append(handle)
+        return _windows_process_info(kernel, handle, child)
+
+    try:
+        root = inspect(pid)
+        if not root:
+            return []
+        parents = snapshot()
+        identities = {pid: root}
+        pending = [pid]
+        while pending:
+            parent = pending.pop()
+            for child, owner in parents.items():
+                if owner != parent or child in identities:
+                    continue
+                info = inspect(child)
+                if info and int(info["birth"]) >= int(identities[parent]["birth"]):
+                    identities[child] = info
+                    pending.append(child)
+        # PIDs may recycle between the first snapshot and OpenProcess. With
+        # all accepted handles pinned, recheck the parent links before adoption.
+        current = snapshot()
+        accepted = {pid: root}
+        while additions := {
+            child: info for child, info in identities.items()
+            if child not in accepted and current.get(child) == parents.get(child)
+            and current.get(child) in accepted
+        }:
+            accepted.update(additions)
+        return list(accepted.values())
+    finally:
+        for handle in reversed(handles):
+            kernel.CloseHandle(handle)
 
 def atomic_json(path: Path, value: dict) -> None:
     fd, name = tempfile.mkstemp(prefix=path.name + ".", suffix=".tmp", dir=path.parent)
@@ -281,7 +358,16 @@ def atomic_json(path: Path, value: dict) -> None:
             stream.write("\n")
             stream.flush()
             os.fsync(stream.fileno())
-        os.replace(name, path)
+        for attempt in range(11):
+            try:
+                os.replace(name, path)
+                break
+            except OSError as error:
+                # Windows readers/antivirus can briefly deny delete sharing.
+                # Keep the existing complete file and fail on sustained denial.
+                if sys.platform != "win32" or getattr(error, "winerror", None) not in {5, 32, 33} or attempt == 10:
+                    raise
+                time.sleep(min(0.01 * 2**attempt, 0.1))
     finally:
         Path(name).unlink(missing_ok=True)
 
@@ -295,6 +381,9 @@ class Runtime:
         self.lock = None
         self.state = None
         self.processes: dict[int, subprocess.Popen] = {}
+        self.inspection_errors: dict[int, str] = {}
+        self._shutdown_deadline: float | None = None
+        self._shutdown_prepared: set[tuple[int, str | None, str | None]] = set()
 
     def acquire(self) -> bool:
         # Keep this inode permanently. Unlinking a lock allows two independent
@@ -378,18 +467,36 @@ class Runtime:
                 raise KeyboardInterrupt
 
     def register(self, name: str, pid: int, port: int | None = None) -> None:
-        info = process_info(pid)
+        child = self.processes.get(pid)
+        if sys.platform == "win32" and getattr(child, "_handle", None):
+            info = _windows_process_info(_windows_kernel(), int(child._handle), pid)
+        else:
+            info = process_info(pid)
         if not info:
-            raise OwnershipError(f"{name} exited before ownership could be recorded.")
+            raise OwnershipError(f"{name}: PID {pid}, status=STOPPED; exited before ownership could be recorded. Log: {log_path(name)}")
         if not info.get("exe"):
             raise OwnershipError(f"Cannot establish executable identity for {name}.")
         if sys.platform != "win32" and (info.get("pgid") != pid or info.get("sid") != pid):
             raise OwnershipError(f"{name} did not start in an isolated process group.")
-        self.state["services"][name] = {**info, "port": port, "members": [info]}
+        record = {**info, "port": port, "members": [info]}
+        if sys.platform == "win32" and name in {"Celery worker", "Celery reports worker", "Celery Beat"}:
+            record["shutdown"] = {"instance": self.state["instance"], "component": name}
+        self.state["services"][name] = record
         atomic_json(self.path, self.state)
 
     def _snapshot_members(self, record: dict) -> list[dict]:
         members = windows_children(record["pid"]) if sys.platform == "win32" else group_members(record["pid"])
+        if sys.platform == "win32":
+            root = next((info for info in members if info["pid"] == record["pid"]), None)
+            if root and not matches(record, root):
+                raise OwnershipError(f"PID {record['pid']}: status=UNOWNED; process identity changed during enumeration.")
+            # A child may have outlived/reparented away from its wrapper. Keep
+            # its saved proof, including when a later snapshot cannot see it.
+            combined = {(info["pid"], info.get("birth")): info for info in record.get("members", [])}
+            combined.update({(info["pid"], info.get("birth")): info for info in members})
+            members = list(combined.values())
+            # A later complete snapshot cannot recover unknown historical
+            # descendants. Preserve an existing incomplete-tree record.
         saved = {info["pid"]: info for info in [record, *record.get("members", [])]}
         # Retain the previously verified executable if its path has vanished.
         # Otherwise losing the leader would discard a child's ownership proof.
@@ -400,32 +507,47 @@ class Runtime:
             for info in members
         ]
 
+    def diagnostic(self, name, record, error=None):
+        status = self.service_status(record)
+        detail = str(error) if error else self.inspection_errors.get(record["pid"], record.get("inspection_error", ""))
+        child = self.processes.get(record["pid"])
+        code = getattr(child, "returncode", None)
+        exit_detail = f", exit_code={code}" if code is not None else ""
+        path = profile_log_paths(ACTIVE_PROFILE).get(name, self.root / ".dev-logs")
+        return f"{name}: PID {record['pid']}, status={status}{exit_detail}; {detail or 'ownership/liveness checked'}. Log: {path}"
+
     def refresh(self) -> None:
         self.check_stop()
-        for record in self.state["services"].values():
-            # An exited macOS child is not inspectable until its parent reaps
-            # it. Do this here as well as during shutdown so the caller can
-            # report the service's real exit instead of a libproc error.
+        for name, record in self.state["services"].items():
             if child := self.processes.get(record["pid"]):
                 child.poll()
-            if matches(record, process_info(record["pid"])):
-                record["members"] = self._snapshot_members(record)
+            try:
+                if matches(record, process_info(record["pid"])):
+                    record["members"] = self._snapshot_members(record)
+            except OwnershipError as error:
+                self.inspection_errors[record["pid"]] = str(error)
+                raise OwnershipError(self.diagnostic(name, record, error)) from None
         atomic_json(self.path, self.state)
 
     def service_status(self, record: dict) -> str:
         try:
-            # Reap children spawned by this launcher before inspecting them.
-            # macOS libproc cannot inspect an exited, unreaped child, while
-            # kill(pid, 0) still succeeds and would otherwise imply UNKNOWN.
             if child := self.processes.get(record["pid"]):
                 child.poll()
             current = process_info(record["pid"])
+            if not record.get("birth") or not record.get("exe"):
+                return "UNKNOWN"  # Registration failed; absence cannot clear unrecorded descendants.
             if matches(record, current):
                 return "RUNNING"
             if current:
                 return "UNOWNED"
             if sys.platform == "win32":
-                if any(matches(saved, process_info(saved["pid"])) for saved in record.get("members", [])):
+                statuses = []
+                for saved in record.get("members", []):
+                    member = process_info(saved["pid"])
+                    statuses.append("RUNNING" if matches(saved, member) else "UNOWNED" if member else "STOPPED")
+                if "UNOWNED" in statuses:
+                    return "UNOWNED"
+                if "RUNNING" in statuses:
                     return "PARTIAL"
             else:
                 members = group_members(record["pid"])
@@ -433,11 +555,73 @@ class Runtime:
                     return "PARTIAL"
                 if members:
                     return "UNOWNED"
-            return "STOPPED"
-        except (OwnershipError, KeyError, TypeError):
+            return "UNKNOWN" if record.get("tree_unverified") else "STOPPED"
+        except (OwnershipError, KeyError, TypeError) as error:
+            self.inspection_errors[record["pid"]] = str(error)
             return "UNKNOWN"
 
-    def terminate(self, record: dict, timeout: float = 5) -> bool:
+    def _cooperative_shutdown(self, record):
+        metadata = record.get("shutdown")
+        state = self.state or self.load() or {}
+        if not isinstance(metadata, dict) or metadata.get("instance") != state.get("instance"):
+            return None
+        if metadata.get("component") not in {"Celery worker", "Celery reports worker", "Celery Beat"}:
+            return None
+        directory = GreenfieldStack.STATE if state.get("profile") == "greenfield" else self.root / ".dev-logs"
+        return {"SBOM_DEV_INSTANCE": metadata["instance"], "SBOM_DEV_STATE_DIR": str(directory)}
+
+    def _terminate_windows(self, record, timeout):
+        status = self.service_status(record)
+        if status == "STOPPED":
+            return True
+        pid = record["pid"]
+        identity = (pid, record.get("birth"), record.get("exe"))
+        if status == "RUNNING" and identity not in self._shutdown_prepared:
+            try:
+                record["members"] = self._snapshot_members(record)
+            except OwnershipError as error:
+                record["tree_unverified"] = True
+                record["inspection_error"] = str(error)
+                self.inspection_errors[pid] = str(error)
+        elif status not in {"RUNNING", "PARTIAL"} and identity not in self._shutdown_prepared:
+            record["tree_unverified"] = True
+            record["inspection_error"] = self.inspection_errors.get(pid, "Unresolved process identity/tree")
+        cooperative = self._cooperative_shutdown(record)
+        if cooperative:
+            try:
+                self._windows_terminate(record, force=False)
+            except OwnershipError as error:
+                # A known member may be exiting after an earlier request. Its
+                # current uncertainty protects it; it does not invalidate a
+                # complete tree snapshot taken before shutdown began.
+                self.inspection_errors[pid] = str(error)
+            deadline = (
+                self._shutdown_deadline if timeout is None and self._shutdown_deadline is not None
+                else time.monotonic() + (WINDOWS_SHUTDOWN_GRACE if timeout is None else timeout)
+            )
+            while time.monotonic() < deadline:
+                if self.service_status(record) == "STOPPED":
+                    return True
+                time.sleep(0.1)
+            if self.service_status(record) == "STOPPED":
+                return True
+            reason = "cooperative shutdown deadline expired"
+        else:
+            reason = "no cooperative shutdown hook is recorded for this component"
+        metadata = record.get("shutdown")
+        name = metadata.get("component", f"PID {pid}") if isinstance(metadata, dict) else f"PID {pid}"
+        say("WARN", "Windows shutdown", f"{name}: {reason}; forcing only verified handles. Active work may be interrupted; inspect component logs.")
+        self._windows_terminate(record, force=True)
+        for _ in range(30):
+            if self.service_status(record) == "STOPPED":
+                return True
+            time.sleep(0.1)
+        return False
+
+    def terminate(self, record: dict, timeout: float | None = None) -> bool:
+        if sys.platform == "win32":
+            return self._terminate_windows(record, timeout)
+        timeout = 5 if timeout is None else timeout
         status = self.service_status(record)
         if status == "STOPPED":
             return True
@@ -445,35 +629,25 @@ class Runtime:
             return False
         pid = record["pid"]
         if status == "RUNNING":
-            # Capture descendants before TERM: the leader may exit first while
-            # a child ignores TERM. Its birth identity must survive escalation.
             record["members"] = self._snapshot_members(record)
             if not matches(record, process_info(pid)):
                 return False
-        if sys.platform == "win32":
-            # Revalidate birth identity immediately before each tree operation.
-            self._windows_terminate(record, force=False)
-        else:
-            try:
-                os.killpg(pid, signal.SIGTERM)
-            except ProcessLookupError:
-                return True
+        try:
+            os.killpg(pid, signal.SIGTERM)
+        except ProcessLookupError:
+            return True
         deadline = time.monotonic() + timeout
         while time.monotonic() < deadline:
             if self.service_status(record) == "STOPPED":
                 return True
             time.sleep(0.1)
-        # A terminated group leader may leave children behind. Only a recorded
-        # surviving member can establish ownership in that case.
-        if self.service_status(record) not in {"RUNNING", "PARTIAL"}:
-            return self.service_status(record) == "STOPPED"
-        if sys.platform == "win32":
-            self._windows_terminate(record, force=True)
-        else:
-            try:
-                os.killpg(pid, signal.SIGKILL)
-            except ProcessLookupError:
-                return True
+        status = self.service_status(record)
+        if status not in {"RUNNING", "PARTIAL"}:
+            return status == "STOPPED"
+        try:
+            os.killpg(pid, signal.SIGKILL)
+        except ProcessLookupError:
+            return True
         for _ in range(30):
             if self.service_status(record) == "STOPPED":
                 return True
@@ -481,27 +655,102 @@ class Runtime:
         return False
 
     def _windows_terminate(self, record: dict, *, force: bool) -> None:
-        # Children are retained separately so a dead npm/cmd parent does not
-        # prevent cleanup of a recorded surviving node process.
-        for saved in [record, *record.get("members", [])]:
-            if matches(saved, process_info(saved["pid"])):
-                subprocess.run(
-                    ["taskkill", "/PID", str(saved["pid"]), "/T", *(["/F"] if force else [])],
-                    capture_output=True,
-                    check=False,
-                )
+        # TerminateProcess is asynchronous and targets the SAME handle whose
+        # birth/executable we just verified. Never use taskkill /T on bare PIDs.
+        cooperative = self._cooperative_shutdown(record) if not force else None
+        if not force and not cooperative:
+            return
+        kernel = _windows_kernel()
+        errors = []
+        seen = set()
+        members = [record, *record.get("members", [])]
+        # Notify wrappers before their real worker: the wrapper can disappear
+        # as soon as its child consumes the cooperative request.
+        for saved in reversed(members) if force else members:
+            identity = (saved["pid"], saved.get("birth"), saved.get("exe"))
+            if identity in seen:
+                continue
+            seen.add(identity)
+            if type(saved["pid"]) is not int or not 0 < saved["pid"] <= 0xFFFFFFFF:
+                errors.append("Invalid Windows PID; status=UNKNOWN; ownership unverified.")
+                continue
+            handle = kernel.OpenProcess(0x101001 if force else 0x101000, False, saved["pid"])
+            if not handle:
+                code = ctypes.get_last_error()
+                if code != 87:
+                    errors.append(str(_windows_error(saved["pid"], "OpenProcess", code)))
+                continue
+            try:
+                current = _windows_process_info(kernel, handle, saved["pid"])
+                if matches(saved, current):
+                    if not force:
+                        directory = Path(cooperative["SBOM_DEV_STATE_DIR"])
+                        directory.mkdir(parents=True, exist_ok=True)
+                        path = windows_shutdown_path(directory, cooperative["SBOM_DEV_INSTANCE"], saved["pid"])
+                        atomic_json(path, {**current, "instance": cooperative["SBOM_DEV_INSTANCE"]})
+                    elif not kernel.TerminateProcess(handle, 1):
+                        code = ctypes.get_last_error()
+                        _windows_query_failed(kernel, handle, saved["pid"], "TerminateProcess", code)
+            except OwnershipError as error:
+                errors.append(str(error))
+            except OSError as error:
+                errors.append(f"PID {saved['pid']}: cooperative request persistence failed ({type(error).__name__}, winerror={getattr(error, 'winerror', None)}; status=UNKNOWN)")
+            finally:
+                kernel.CloseHandle(handle)
+        if errors:
+            raise OwnershipError("; ".join(errors))
 
     def stop_services(self, say) -> bool:
+        try:
+            return self._stop_services(say)
+        finally:
+            self._shutdown_deadline = None
+            self._shutdown_prepared.clear()
+
+    def _stop_services(self, say) -> bool:
         state = self.state or self.load()
         if not state:
             return True
         remaining = {}
+        state["ready"] = False
+        if sys.platform == "win32":
+            # Discover ALL trees before any request can make a parent/child
+            # disappear. Never resnapshot those trees after requesting exit.
+            for name, record in state["services"].items():
+                if not self._cooperative_shutdown(record):
+                    continue
+                status = self.service_status(record)
+                try:
+                    if status == "RUNNING":
+                        record["members"] = self._snapshot_members(record)
+                    elif status not in {"PARTIAL", "STOPPED"}:
+                        raise OwnershipError(self.diagnostic(name, record))
+                except OwnershipError as error:
+                    record["tree_unverified"] = True
+                    record["inspection_error"] = str(error)
+                    self.inspection_errors[record["pid"]] = str(error)
+                self._shutdown_prepared.add((record["pid"], record.get("birth"), record.get("exe")))
+            # Workers drain concurrently under one bound, not serial 30s waits.
+            self._shutdown_deadline = time.monotonic() + WINDOWS_SHUTDOWN_GRACE
+            for name, record in state["services"].items():
+                if self._cooperative_shutdown(record):
+                    try:
+                        self._windows_terminate(record, force=False)
+                    except OwnershipError as error:
+                        self.inspection_errors[record["pid"]] = str(error)
+                        say("WARN", name, self.diagnostic(name, record, error))
         for name, record in reversed(list(state["services"].items())):
-            if self.terminate(record):
+            error = None
+            try:
+                stopped = self.terminate(record)
+            except OwnershipError as failure:
+                error, stopped = failure, False
+                self.inspection_errors[record["pid"]] = str(failure)
+            if stopped:
                 say("OK", name, "stopped")
             else:
                 remaining[name] = record
-                say("WARN", name, f"PID {record['pid']}: ownership unverified or process still running; not removed")
+                say("WARN", name, self.diagnostic(name, record, error) + "; runtime record retained; inspect and retry stop")
         state["services"] = remaining
         if remaining:
             atomic_json(self.path, state)
@@ -510,6 +759,7 @@ class Runtime:
         self.stop_path.unlink(missing_ok=True)
         self.state = None
         return True
+
 
 
 ROOT = Path(__file__).resolve().parents[1]
@@ -536,6 +786,39 @@ ACTIVE_LEGACY_CONFIG = "managed"
 
 class SetupError(RuntimeError):
     """A local prerequisite needs developer attention."""
+
+
+def windows_shutdown_path(directory, instance, pid):
+    """A local request names one runtime instance and process, never a console."""
+    if (
+        not isinstance(instance, str)
+        or not re.fullmatch(r"[A-Za-z0-9_-]{1,128}", instance)
+        or type(pid) is not int
+        or not 0 < pid <= 0xFFFFFFFF
+    ):
+        raise OwnershipError("Invalid Windows cooperative-shutdown identity.")
+    return Path(directory) / f"shutdown-{instance}-{pid}.json"
+
+
+def windows_shutdown_requested(env):
+    """Only the exact managed child may honor its identity-bound request."""
+    if sys.platform != "win32":
+        return False
+    try:
+        instance = env["SBOM_DEV_INSTANCE"]
+        path = windows_shutdown_path(env["SBOM_DEV_STATE_DIR"], instance, os.getpid())
+        if path.is_symlink():
+            return False
+        request = json.loads(path.read_text(encoding="utf8"))
+        return bool(
+            isinstance(request, dict)
+            and request.get("instance") == instance
+            and matches(request, process_info(os.getpid()))
+        )
+    except (OSError, ValueError, TypeError, KeyError, OwnershipError):
+        # Missing, stale, malformed or unverifiable requests never authorize a
+        # shutdown. The parent reports timeout and revalidates any escalation.
+        return False
 
 
 def runtime_environment(env: dict[str, str]) -> dict[str, str]:
@@ -578,7 +861,7 @@ def local_celery_app():
     import threading
 
     from app.workers.celery_app import celery_app
-    from celery.signals import worker_ready, worker_shutdown
+    from celery.signals import beat_init, worker_ready, worker_shutdown
 
     env = dict(os.environ)
     role = env.get("SBOM_DEV_WORKER_ROLE", "default")
@@ -589,7 +872,17 @@ def local_celery_app():
 
     def ready(sender=None, **kwargs):
         def emit():
+            requested = False
             while not stopped.is_set():
+                if not requested and windows_shutdown_requested(env):
+                    # The solo pool executes tasks on the main thread. Set the
+                    # same warm-exit flag used by Celery's TERM handler; never
+                    # interrupt that thread or close its consumer mid-task.
+                    from celery.worker import state
+
+                    state.should_stop = 0
+                    requested = True
+                    say("INFO", f"Celery {role} worker", "cooperative warm shutdown requested; finishing active work")
                 try:
                     queues = [q.name for q in sender.task_consumer.queues]
                     write_service_heartbeat(
@@ -607,8 +900,25 @@ def local_celery_app():
 
         threading.Thread(target=emit, name="sbom-local-health", daemon=True).start()
 
+    def beat_ready(sender=None, **kwargs):
+        if sys.platform != "win32":
+            return
+
+        def monitor():
+            # beat_init is emitted by celery.beat.Service. stop(wait=False)
+            # sets its exit event; its main loop finally closes/syncs the
+            # scheduler and releases our lease through LocalScheduler.close.
+            while not sender._is_stopped.wait(0.2):
+                if windows_shutdown_requested(env):
+                    say("INFO", "Celery Beat", "cooperative shutdown requested; syncing scheduler")
+                    sender.stop(wait=False)
+                    return
+
+        threading.Thread(target=monitor, name="sbom-local-beat-shutdown", daemon=True).start()
+
     worker_ready.connect(ready, weak=False)
     worker_shutdown.connect(lambda **kwargs: stopped.set(), weak=False)
+    beat_init.connect(beat_ready, weak=False)
     globals()["_LOCAL_CELERY_APP"] = celery_app
     return celery_app
 
@@ -754,7 +1064,10 @@ def background_commands(env):
         + str(
             folder / ("security-mail-schedule" if env["SBOM_DEV_PROFILE"] == "greenfield" else "celerybeat-schedule")
         ),
-        "--pidfile=" + str(folder / "celerybeat.pid"),
+        # Celery's stale-lock probe uses os.kill(pid, 0), which is not a
+        # read-only liveness check on Windows. Keep a real PID lock, scoped to
+        # this exclusively owned runtime instance; never probe an old PID.
+        "--pidfile=" + str(folder / (f"celerybeat-{instance}.pid" if sys.platform == "win32" else "celerybeat.pid")),
     ]
     return commands
 
@@ -764,6 +1077,21 @@ def service_failure(component, reason):
     return SetupError(
         f"{component}: {reason}. Log: {path}. Correct the component/configuration, then run python scripts/dev.py restart --profile {ACTIVE_PROFILE}."
     )
+
+
+def service_pid_matches(runtime, record, pid):
+    if type(pid) is not int:
+        return False
+    if sys.platform != "win32":
+        return pid == record["pid"]
+    saved = next((info for info in [record, *record.get("members", [])] if info["pid"] == pid), None)
+    if not saved:
+        return False
+    try:
+        return matches(saved, process_info(pid))
+    except OwnershipError as error:
+        runtime.inspection_errors[record["pid"]] = str(error)
+        return False
 
 
 def background_health(runtime, env, *, require_control=False):
@@ -776,8 +1104,10 @@ def background_health(runtime, env, *, require_control=False):
         ("Celery Beat", "beat", None),
     ):
         record = records.get(component)
-        if not record or runtime.service_status(record) != "RUNNING":
-            raise service_failure(component, "owned process is absent, stopped or unverifiable")
+        if not record:
+            raise service_failure(component, "status=STOPPED; no owned process was registered")
+        if runtime.service_status(record) != "RUNNING":
+            raise OwnershipError(runtime.diagnostic(component, record))
         path = heartbeat_path(env, role)
         try:
             if path.is_symlink():
@@ -785,7 +1115,7 @@ def background_health(runtime, env, *, require_control=False):
             value = json.loads(path.read_text())
             if (
                 value.get("instance") != state.get("instance")
-                or value.get("pid") != record["pid"]
+                or not service_pid_matches(runtime, record, value.get("pid"))
                 or not 0 <= time.time() - value.get("time", 0) <= 20
             ):
                 raise ValueError()
@@ -797,7 +1127,7 @@ def background_health(runtime, env, *, require_control=False):
             node = worker_node(role, state["instance"], env["SBOM_DEV_PROFILE"])
             if not value.get("connected") or value.get("node") != node or set(value.get("queues", [])) != queues:
                 raise service_failure(component, "worker is disconnected or is consuming the wrong queues")
-            expected[node] = (component, record["pid"], queues)
+            expected[node] = (component, value["pid"], queues)
     if require_control:
         with celery_control(env) as control:
             inspector = control.control.inspect(destination=list(expected), timeout=2)
@@ -817,7 +1147,7 @@ def wait_for_background(runtime, env, timeout=90):
         for component in background_commands(env):
             record = runtime.state["services"].get(component)
             if record and runtime.service_status(record) != "RUNNING":
-                raise service_failure(component, "process exited during background-service startup")
+                raise OwnershipError(runtime.diagnostic(component, record))
         try:
             background_health(runtime, env, require_control=True)
             return
@@ -848,7 +1178,7 @@ def wait_http_component(runtime, env, component, urls, *, context=None, timeout=
         runtime.refresh()
         record = runtime.state["services"][component]
         if runtime.service_status(record) != "RUNNING":
-            raise service_failure(component, "owned process exited before readiness")
+            raise OwnershipError(runtime.diagnostic(component, record))
         try:
             background_health(runtime, env)
             for url, expected in urls:
@@ -942,7 +1272,7 @@ def supervise_runtime(runtime, env, processes):
             except Exception as error:
                 runtime.state["ready"] = False
                 atomic_json(runtime.path, runtime.state)
-                if isinstance(error, SetupError):
+                if isinstance(error, (SetupError, OwnershipError)):
                     raise
                 raise service_failure(
                     "Celery worker", f"background health check failed ({type(error).__name__})"
@@ -3563,10 +3893,32 @@ def start_process(name: str, command: list[str], env: dict[str, str], cwd: Path 
                     "Frontend": int(env.get("DEV_FRONTEND_PORT", DEV_FRONTEND_PORT)),
                 }.get(name),
             )
-        except BaseException:
-            # This handle was just spawned here, even if persistence failed.
-            stop_processes([process])
-            raise
+        except BaseException as error:
+            # Always attempt exact-handle cleanup, even if state persistence
+            # itself failed. Never guess ownership of unrecorded descendants.
+            cleanup = []
+            try:
+                if name not in ACTIVE_RUNTIME.state["services"]:
+                    ACTIVE_RUNTIME.state["services"][name] = {
+                        "pid": process.pid, "birth": None, "exe": None, "members": [],
+                    }
+                    atomic_json(ACTIVE_RUNTIME.path, ACTIVE_RUNTIME.state)
+            except OSError as failure:
+                cleanup.append(f"runtime persistence failed ({type(failure).__name__})")
+            finally:
+                try:
+                    stop_processes([process])
+                except OSError as failure:
+                    cleanup.append(f"Popen handle cleanup failed ({type(failure).__name__}, winerror={getattr(failure, 'winerror', None)})")
+            if isinstance(error, (KeyboardInterrupt, SystemExit)):
+                if cleanup:
+                    say("WARN", name, "; ".join(cleanup))
+                raise
+            raise OwnershipError(
+                f"{name}: registration failed ({type(error).__name__}); "
+                f"{ACTIVE_RUNTIME.diagnostic(name, ACTIVE_RUNTIME.state['services'][name], error)}"
+                + ("; " + "; ".join(cleanup) if cleanup else "")
+            ) from None
     say("OK", name, f"running (pid {process.pid})")
     return process
 
@@ -3576,7 +3928,7 @@ def stop_processes(processes: list[subprocess.Popen]) -> None:
         if process.poll() is not None:
             continue
         if os.name == "nt":
-            subprocess.run(["taskkill", "/PID", str(process.pid), "/T", "/F"], capture_output=True, check=False)
+            process.terminate()  # Popen uses its original process HANDLE, never a reopened PID/tree.
         else:
             try:
                 os.killpg(process.pid, signal.SIGTERM)
@@ -3734,11 +4086,14 @@ def application_status(profile=None):
         record = state.get("services", {}).get(name)
         status = runtime.service_status(record) if record else "STOPPED"
         print(f"{name:<23} {status}")
+        if record and status in {"UNKNOWN", "UNOWNED", "PARTIAL"}:
+            print(runtime.diagnostic(name, record))
         running &= status == "RUNNING"
     if not running or not state.get("ready"):
         print("Application is not ready. Only verified owned processes can be managed; inspect logs or restart.")
         return False
     try:
+        checking = "Celery worker"
         env = profile_environment(profile)
         env["SBOM_DEV_INSTANCE"] = state["instance"]
         verify_data_connectivity(env)
@@ -3748,6 +4103,7 @@ def application_status(profile=None):
         context = (
             LocalHttps.client_context(GreenfieldStack.STATE) if profile == "greenfield" else legacy_https_context()
         )
+        checking = "API"
         with urlopen(f"http://127.0.0.1:{api_port}/health", timeout=3) as response:
             if json.load(response).get("database", {}).get("available") is not True:
                 raise service_failure("API", "database readiness failed")
@@ -3755,24 +4111,28 @@ def application_status(profile=None):
             with urlopen(f"http://127.0.0.1:{api_port}/ready/iam", timeout=3) as response:
                 if json.load(response).get("ready") is not True:
                     raise service_failure("API", "IAM readiness failed")
-        with urlopen(f"https://localhost:{frontend_port}/", context=context, timeout=3) as response:
+        checking = "Frontend"
+        frontend_path = "/native-sign-in" if env.get("NATIVE_AUTH_ENABLED", "false").lower() == "true" else "/"
+        with urlopen(f"https://localhost:{frontend_port}{frontend_path}", context=context, timeout=3) as response:
             if not 200 <= response.status < 400:
                 raise service_failure("Frontend", "HTTPS readiness failed")
     except Exception as error:
         detail = (
             redact(str(error), env if "env" in locals() else {})
-            if isinstance(error, SetupError)
-            else type(error).__name__
+            if isinstance(error, (SetupError, OwnershipError))
+            else str(service_failure(locals().get("checking", "API"), f"readiness request failed ({type(error).__name__})"))
         )
         print("UNHEALTHY: " + detail)
         return False
     print(
-        f"HEALTHY: PostgreSQL, Redis, both queue consumers and scheduler progress verified; https://localhost:{frontend_port}"
+        f"READY: HEALTHY: PostgreSQL, Redis, both queue consumers and scheduler progress verified; https://localhost:{frontend_port}"
     )
     return True
 
 
-def stop_application(timeout: float = 30) -> None:
+def stop_application(timeout: float | None = None) -> None:
+    if timeout is None:
+        timeout = WINDOWS_SHUTDOWN_GRACE + 20 if sys.platform == "win32" else 30
     print("SBOM Analyzer Development Shutdown\n", flush=True)
     runtime = Runtime(ROOT)
     requested = None
@@ -3950,6 +4310,7 @@ def main() -> None:
             )
         return 0
     previous = {}
+    startup_error = None
     try:
         # Recheck under the lock: another profile may have started between the
         # initial inspection and acquiring exclusive lifecycle ownership.
@@ -3974,14 +4335,33 @@ def main() -> None:
         start_application(args)
     except KeyboardInterrupt:
         print("\nStopping application processes...", flush=True)
+    except BaseException as error:
+        startup_error = error
+        raise
     finally:
         for sig in previous:
             signal.signal(sig, signal.SIG_IGN)
         try:
             if ACTIVE_RUNTIME:
-                if not runtime.stop_services(say):
-                    raise SetupError("Some owned processes could not be stopped; runtime state retained.")
-                clean_beat_lock(os.getpid())
+                try:
+                    cleaned = runtime.stop_services(say)
+                except (OwnershipError, OSError) as cleanup_error:
+                    message = (
+                        f"Cleanup failed ({type(cleanup_error).__name__}, winerror={getattr(cleanup_error, 'winerror', None)}); "
+                        f"runtime persistence/shutdown is incomplete. Inspect {runtime.path} and component logs; retry stop."
+                    )
+                    if startup_error is None:
+                        raise SetupError(message) from None
+                    say("WARN", "Cleanup", message)
+                else:
+                    if not cleaned:
+                        message = "Some processes could not be safely stopped; runtime state retained. Inspect component diagnostics and retry stop."
+                        if startup_error is not None:
+                            say("WARN", "Cleanup", message)
+                        else:
+                            raise SetupError(message)
+                    else:
+                        clean_beat_lock(os.getpid())
         finally:
             ACTIVE_RUNTIME = None
             runtime.release()

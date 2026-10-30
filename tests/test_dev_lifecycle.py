@@ -374,12 +374,17 @@ def test_windows_termination_validates_each_tree(monkeypatch, tmp_path):
     record = identity()
     child = identity(101)
     record["members"] = [child, identity(102)]
-    monkeypatch.setattr(lifecycle, "process_info", lambda pid: {100: record, 101: child, 102: identity(102, birth="reused")}.get(pid))
-    runner = MagicMock()
-    monkeypatch.setattr(lifecycle.subprocess, "run", runner)
+    kernel = SimpleNamespace(
+        OpenProcess=MagicMock(side_effect=lambda access, inherit, pid: pid),
+        CloseHandle=MagicMock(), TerminateProcess=MagicMock(return_value=True),
+        WaitForSingleObject=MagicMock(return_value=258),
+    )
+    current = {100: record, 101: child, 102: identity(102, birth="reused")}
+    monkeypatch.setattr(lifecycle, "_windows_kernel", lambda: kernel, raising=False)
+    monkeypatch.setattr(lifecycle, "_windows_process_info", lambda kernel, handle, pid: current.get(pid), raising=False)
     runtime._windows_terminate(record, force=True)
-    assert [call.args[0] for call in runner.call_args_list] == [
-        ["taskkill", "/PID", "100", "/T", "/F"], ["taskkill", "/PID", "101", "/T", "/F"]]
+    assert {call.args[0] for call in kernel.TerminateProcess.call_args_list} == {100, 101}
+    assert kernel.TerminateProcess.call_count == 2
 
 
 @posix_only
@@ -405,7 +410,8 @@ def test_macos_birth_identity_uses_microseconds(monkeypatch):
 
 def test_windows_birth_identity_uses_filetime(monkeypatch):
     kernel = SimpleNamespace(OpenProcess=MagicMock(return_value=7), CloseHandle=MagicMock(),
-                             GetProcessTimes=MagicMock(), QueryFullProcessImageNameW=MagicMock())
+                             GetProcessTimes=MagicMock(), QueryFullProcessImageNameW=MagicMock(),
+                             WaitForSingleObject=MagicMock(return_value=258), TerminateProcess=MagicMock())
     def times(handle, created, exited, kernel_time, user_time):
         created._obj.dwHighDateTime = 10
         created._obj.dwLowDateTime = 123
