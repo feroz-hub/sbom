@@ -268,6 +268,33 @@ def test_explicit_identity_target_approval_rechecks_readiness_before_single_chil
     assert SECRET not in capsys.readouterr().out
 
 
+@pytest.mark.parametrize(
+    "failure",
+    [KeyboardInterrupt(), RuntimeError(SECRET), MemoryError(SECRET), SystemExit(SECRET)],
+    ids=("interrupt", "unexpected-error", "memory-error", "exit"),
+)
+def test_lost_runner_outcome_after_authorization_never_claims_no_commit(candidate, monkeypatch, failure):
+    tty(monkeypatch)
+    handoffs = []
+
+    def runner(*values):
+        handoffs.append("operation may have committed")
+        raise failure
+
+    result = enrollment.run_enrollment(
+        candidate.args,
+        candidate.launcher,
+        action="create",
+        identity=identity(),
+        readiness_checker=lambda *values: report(),
+        child_runner=runner,
+        input_fn=lambda prompt: "CREATE NATIVE PLATFORM ADMIN",
+    )
+    assert handoffs
+    assert result.code == "OUTCOME_UNCONFIRMED" and result.committed is None
+    assert result.cleanup_confirmed is False
+
+
 def test_existing_users_require_additional_review_and_no_email_linking(candidate, monkeypatch):
     tty(monkeypatch)
     candidate.status.return_value = replace(candidate.status.return_value, existing_users_present=True)

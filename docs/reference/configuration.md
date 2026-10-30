@@ -578,6 +578,54 @@ it is not a diagnostic dry run.
 from this authenticated onboarding design. No HCL privileged provisioning or
 SQL-based activation/grant shortcut is added.
 
+## Controlled Native adapter: remaining readiness gate (SBO-98, Phase 5)
+
+The new internal enrollment adapter is staged for review. Its default readiness
+path returns `ENROLLMENT_READINESS_CONTRACT_REQUIRED`; it cannot currently create
+an account or resend activation through the public launcher. An injected checker
+is an internal test/integration boundary, never a command-line bypass. This phase
+does not claim complete onboarding or authorize live execution.
+
+The future setup entry points are `setup --native-admin-create` and
+`setup --native-admin-resend`, with explicit profile/family and exact
+`--confirm-database`. They currently return a specific BLOCKED diagnosis. They
+cannot be combined with `--plan`, diagnostic aliases, dependency repair,
+initialization/migration, provisioning, builds or provider changes. Identity and
+readiness-bypass flags are deliberately absent from the command line.
+
+The staged flow resolves the same selected Native environment, inspects aggregate
+status, requires every readiness fact, collects identity privately, requires an
+exact action and separate existing-user review, rechecks source/configuration and
+the observed user state, then uses one fresh child. Credentials travel in its
+allowlisted environment and identity in a private stdin protocol, never command
+arguments or files. The child disables both dotenv paths with
+`Settings(_env_file=None)` before application imports. A separately pinned
+`TenantSession` owns the connection/transaction used for exact target/schema
+proof and the existing approved create/resend service. No SQL inserts, password
+creation, manual grants or alternate bootstrap service are introduced. Bootstrap
+enablement is child-local; no saved configuration is rewritten.
+
+Cancellation, timeout, malformed/lost acknowledgment or unconfirmed cleanup means
+`OUTCOME_UNCONFIRMED`. Do not retry automatically. Inspect aggregate status and
+the durable reservation before recovery; retain uncertain owned-helper details.
+Cleanup uses only the original helper handle. Existing email activation, password
+creation and effective-grant services remain authoritative.
+
+The Engineering Lead must review the following readiness contract before the
+default gate can be enabled, and approve disposable resources before live tests:
+
+| Required fact | Current limitation and proposed direction |
+| --- | --- |
+| Running configuration binding | A matching profile/port and healthy process do not prove it uses the currently selected database/keys. Design an opaque per-instance configuration binding checked alongside verified PID identity; do not print secrets or silently adopt old records. |
+| Native IAM enabled | `ready: true` can describe disabled Native mode. Require explicit enabled evidence on the intended API, preserving existing contracts unless a change is reviewed. |
+| Activation origin | A localhost TLS handshake alone does not verify the configured activation origin. Bind the exact HTTPS origin, hostname and trusted certificate to the selected installation. |
+| Approved mail target | EHLO/TLS proves protocol availability, not authenticated delivery or recipient approval. Define approved Mailpit/SMTP evidence and explicit destination consent; diagnose must never send mail. |
+| Owned delivery workers | A global Redis readiness key is insufficient. Bind consumer/Beat heartbeats, queues and configuration to this verified instance. |
+
+HCL.CS privileged provisioning remains unimplemented pending Engineering Lead and
+identity-provider-owner approval. No database preparation, migration, enrollment,
+trust change, merge or deployment was performed by these staged adapters.
+
 ## Sources and precedence
 
 | Execution path | Effective sources |

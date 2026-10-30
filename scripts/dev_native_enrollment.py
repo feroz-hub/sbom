@@ -1,4 +1,4 @@
-"""Private, approval-gated Native enrollment adapter; no public CLI or setup.
+"""Internal Native adapter for the unified launcher; live readiness stays gated.
 
 The default readiness adapter deliberately blocks until the running components
 can attest their selected configuration and Native enablement. Injected checkers
@@ -42,6 +42,9 @@ _CHILD_ARGUMENT = "--internal-native-enrollment-child"
 _ACTIONS = {"create", "resend-activation"}
 _CONTROLS = {"PYTHONPATH", "PYTHON_DOTENV_DISABLED", "PYTHONDONTWRITEBYTECODE", "NATIVE_PLATFORM_BOOTSTRAP_ENABLED"}
 _SOURCES = (
+    "scripts/dev.py",
+    "scripts/dev_diagnostics.py",
+    "scripts/dev_private.py",
     "scripts/dev_native_enrollment.py",
     "scripts/dev_operator.py",
     "scripts/dev_config.py",
@@ -247,6 +250,7 @@ def inspect_enrollment(args, launcher, *, action, readiness_checker=None):
 
 def run_enrollment(args, launcher, *, action, identity=None, readiness_checker=None, child_runner=None, input_fn=None):
     """Authorize a current plan on a TTY, revalidate, then launch one owned child."""
+    handoff_started = False
     try:
         plan = inspect_enrollment(args, launcher, action=action, readiness_checker=readiness_checker)
         print(
@@ -282,15 +286,24 @@ def run_enrollment(args, launcher, *, action, identity=None, readiness_checker=N
             or current.existing_users_present is not plan.existing_users_present
         ):
             _refuse("ENROLLMENT_PLAN_CHANGED")
+        handoff_started = True
         return (child_runner or _launch_child)(current, identity, launcher)
     except (EOFError, KeyboardInterrupt):
+        if handoff_started:
+            return EnrollmentOutcome("OUTCOME_UNCONFIRMED", 1, None, False)
         return EnrollmentOutcome("ENROLLMENT_CANCELLED", 130)
     except EnrollmentError as error:
+        if handoff_started:
+            return EnrollmentOutcome("OUTCOME_UNCONFIRMED", 1, None, False)
         # Only a stable category is returned; driver/provider/identity values are never output.
         return EnrollmentOutcome(error.code, 1)
     except dev_operator.OperatorError:
+        if handoff_started:
+            return EnrollmentOutcome("OUTCOME_UNCONFIRMED", 1, None, False)
         return EnrollmentOutcome("ENROLLMENT_CONFIGURATION_BLOCKED", 1)
-    except Exception:
+    except BaseException:
+        if handoff_started:
+            return EnrollmentOutcome("OUTCOME_UNCONFIRMED", 1, None, False)
         return EnrollmentOutcome("ENROLLMENT_INSPECTION_FAILED", 1)
 
 
@@ -359,7 +372,7 @@ def _launch_child(plan, identity, launcher):
         if result["committed"] is not committed or child.returncode != exit_code:
             raise ValueError()
         return EnrollmentOutcome(result["code"], exit_code, committed)
-    except (KeyboardInterrupt, subprocess.TimeoutExpired, OSError, ValueError, TypeError):
+    except BaseException:
         if child is None:
             return EnrollmentOutcome("ENROLLMENT_HELPER_NOT_STARTED", 1)
         cleaned = _stop_owned(child)
