@@ -1,6 +1,7 @@
 # Configuration reference
 
-Scope: development configuration boundaries and SBO-98 Phases 1–4, based on
+Scope: development configuration boundaries, SBO-98 Phases 1–4 and the separately
+reviewable Native status increment of Phase 5, based on
 approved main `69e71088d7fef06874fe1e2eac7a53db0fd2f333`. Examples are templates,
 not one interchangeable environment.
 
@@ -10,9 +11,10 @@ The side-effect-free `scripts/dev_config.py` library is introduced against the
 approved main baseline `69e71088d7fef06874fe1e2eac7a53db0fd2f333`. Read-only
 diagnostics and prepared Legacy startup use it through the shared read-only
 snapshot adapter. Controlled setup inspects an independent action plan before
-delegating authorized preparation; standalone operator scripts retain their
-existing entry-point guards. Configuration files, protected private readers and
-process-ownership behavior remain authoritative. This is a library, not another
+delegating authorized preparation. Native operator status has an explicit opt-in
+adapter; existing privileged entry-point guards remain intact. Configuration
+files, protected private readers and process-ownership behavior remain
+authoritative. This is a library, not another
 environment-management CLI.
 
 Callers supply already-read snapshots and explicit profile, configuration family,
@@ -64,7 +66,8 @@ Further narrowing requires additional consumer review.
 Later separately reviewed work covers shared operator configuration and authorized
 Native enrollment. It must not reuse mutable preparation as a resolver, automatically
 migrate/create databases, replace saved keys or install certificate trust.
-Standalone bootstrap scripts are not yet connected to the shared resolver.
+The Native bootstrap CLI can opt into the shared resolver for aggregate status
+only; profile-based create/resend execution is not implemented.
 HCL.CS first-eligible-user provisioning still requires Engineering Lead and
 identity-provider-owner design approval.
 
@@ -444,6 +447,136 @@ acceptance remain unverified on that host; do not treat fixture existence as a p
 acceptance test. Complete SBOM startup, provider login and native acceptance on
 every platform remain separate work. No production or live database operation is
 implied.
+## Native enrollment inspection (SBO-98, Phase 5 status increment)
+
+Inspect the intended existing development installation without exporting its
+database URL into the shell. These commands do not prepare anything:
+
+```sh
+python scripts/dev.py setup --native-admin-status --profile legacy --legacy-config managed --confirm-database sbom_analyser_dev
+python scripts/dev.py setup --native-admin-status --profile greenfield --confirm-database sbom_greenfield_uuid
+```
+
+Existing Native Windows/env installations can select `--profile legacy` with
+`--legacy-config windows` or `--legacy-config env`, and must confirm their exact
+saved local database name. Selection does not enable Native authentication,
+convert an HCL.CS installation or authorize access to staging/production. The
+adapter requires authenticated Native configuration, disabled tenant bypass,
+original valid independent keys and the selected mail/Redis prerequisites.
+Greenfield must pass the existing certificate/trust and protected-file gates
+before application credentials are read; the setup-password is never read.
+Managed configuration uses the same saved provider selection and fixed startup
+defaults as prepared Managed startup, without invoking preparation or starting
+services. Status remains usable while the application is stopped.
+
+The existing operator entry point provides the same opt-in status path:
+
+```sh
+python scripts/bootstrap_native_platform_user.py --profile legacy --legacy-config managed --confirm-database sbom_analyser_dev status
+python scripts/bootstrap_native_platform_user.py --profile greenfield --confirm-database sbom_greenfield_uuid status
+```
+
+The flags precede the `status` subcommand. `--legacy-config` requires `--profile`.
+Profile selection is accepted only for `status`; combining it with `create` or
+`resend-activation` is refused before SQLAlchemy/application imports. The launcher
+route is setup-only and rejects lifecycle commands, `--plan`, diagnostics/check,
+provider selection, provisioning, initialization, migration and frontend build.
+It enters the read-only wrapper before mutable setup or runtime-lock dispatch.
+
+The observed `DATABASE_URL` discrepancy was an entry-point mismatch, not evidence
+of a PostgreSQL outage. The [original explicit-environment guard](../../scripts/bootstrap_native_platform_user.py#L39)
+checks raw `os.environ["DATABASE_URL"]` before importing `app.db`; it cannot see a
+configuration map which the Managed launcher supplies only to its child
+processes. That child environment comes from the
+[selected snapshots](../../scripts/dev_environment.py#L68) and
+[prepared Managed resolver](../../scripts/dev_prepared.py#L189).
+The opt-in [operator adapter](../../scripts/dev_operator.py) resolves that same
+validated development selection without a URL command argument or secret shell
+export, and retains exact database confirmation before driver import/connection.
+
+Status never imports application Settings/startup, enrolls a user, sends email,
+issues tokens, writes audits, commits a transaction, changes runtime records or
+starts/stops a service. It pins explicit PostgreSQL host/address, port, database,
+username and password from the immutable selected snapshot; validates the actual
+database and current migration marker before querying IAM aggregates; and uses
+server read-only/statement/lock/idle limits plus rollback and connection closure.
+Unsupported ambient/selected `PG*` overrides are blocked for review rather than
+discarding routing or stronger TLS settings. The reporting deadline has the
+read-only residual-probe limitation described under diagnostics above.
+
+Unselected `.env` files are neither read nor applied by this status path. This is
+safe because it uses explicit pinned psycopg keywords and never imports Settings.
+An explicitly selected Legacy env file still supplies its authoritative values.
+This exception does not change application startup precedence. The internal
+`native_child_environment()` is a disabled-bootstrap snapshot only, with
+`NATIVE_PLATFORM_BOOTSTRAP_ENABLED=false`; it refuses an unselected Settings
+dotenv source and rechecks full projection of a selected env file. No privileged
+child runner is wired. Future execution still needs separately reviewed
+`Settings(_env_file=None)`/cache isolation and source revalidation: Python-dotenv's
+disable flag alone does not disable Pydantic's independent `.env` reader.
+
+Successful output is aggregate JSON: allowlisted `code`/`state` plus booleans for
+usable administrator availability, enrollment need, existing users
+(`existing_users_present`, including administrators), bootstrap enablement and
+`live_readiness_verified=false`. It contains no
+user IDs, email addresses, tokens, activation URLs or connection strings.
+
+| Observation code | Meaning |
+| --- | --- |
+| ADMIN_READY | An effective active, verified Platform Admin grant was observed. |
+| ENROLLMENT_REQUIRED | No effective admin or singleton reservation was observed; this is not permission to create an account. Existing users require review. |
+| PENDING_ACTIVATION | The durable pending reservation requires the existing activation/recovery procedure. |
+| BOOTSTRAP_RESERVED | A completed or otherwise reserved bootstrap remains protected; do not delete or reopen it. |
+
+Exit 0 means the aggregate observation succeeded, including
+`ENROLLMENT_REQUIRED`; it does not mean application readiness or enrollment
+authorization. Exit 1 means blocked/failed configuration or database inspection;
+exit 2 means invalid command/flag combinations. This differs from the full
+`diagnose` result policy. At this increment, the isolated operator/CLI unit run
+reported **68 passing tests**. Real PostgreSQL, activation/email and native
+cross-platform acceptance have **not been run** for this increment.
+
+### Approved-service onboarding boundary and remaining gates
+
+The intended operator workflow is: inspect aggregate status, obtain explicit
+identity/target/action approval, validate live Native JWT/session/rate-limit,
+Redis, SMTP/encrypted outbox, owned-worker and verified HTTPS readiness, then use
+the existing approved create/resend services. Their PostgreSQL advisory lock,
+singleton reservation, identity-collision checks, audits and encrypted outbox
+must remain authoritative. Create produces a pending account, not a password or
+effective grant. Email activation lets the person choose the password and grants
+authority through the existing service transaction. Verify the effective grant,
+then disable temporary bootstrap enablement. Pending activation can complete
+after that temporary flag is disabled.
+
+This describes the existing service contract and the proposed controlled runner;
+the new runner is **not implemented**, and no live enrollment was performed.
+Exact target confirmation alone cannot authorize it. Use approved disposable
+resources, approved identity/mail destinations and explicit live-operation
+approval for later validation. Never insert a password, activation state, grant
+or reservation through SQL, extract an activation token, reset the database or
+replace original keys to bypass a refusal.
+
+The existing no-profile Native CLI remains compatible with its explicitly
+supplied environment. It imports application settings, calls `db.commit()` even
+for its old `status` branch, and outputs existing account ID/email/delivery
+fields. It is not the strict aggregate/read-only interface above; treat its
+output as restricted identity information. It must not be used as a setup
+diagnostic shortcut or as implicit approval for create/resend.
+
+HCL.CS first-eligible-user onboarding remains a proposal requiring Engineering
+Lead and identity-provider-owner approval of identity eligibility, trust and the
+verification/activation path. [HCL identity synchronization](../../app/services/identity_service.py#L503)
+can create an ACTIVE but unverified user, so ACTIVE alone is insufficient.
+The existing [emergency bootstrap](../../scripts/bootstrap_platform_admin.py)
+requires an exact existing eligible/verified user, authenticated mode, literal
+`BOOTSTRAP_PLATFORM_ADMIN` confirmation and approved change reference. Its service
+rejects ambiguous identities and refuses a new bootstrap grant when an effective
+administrator already exists; the wrapper commits DENIED audit records too, so
+it is not a diagnostic dry run.
+`grant_local_platform_admin.py` requires authentication disabled and is excluded
+from this authenticated onboarding design. No HCL privileged provisioning or
+SQL-based activation/grant shortcut is added.
 
 ## Sources and precedence
 
@@ -452,6 +585,7 @@ implied.
 | Manual API / Alembic | Process environment is preferred; app/db.py and alembic/env.py use dotenv, and Settings reads .env. Settings defaults fill remaining fields. A working directory/environment change can change the target. |
 | Managed Legacy launcher | Reads saved .env.dev.local through the shared snapshot resolver, validates its saved providers/keys/TLS, then applies the existing fixed local Native runtime settings. Ordinary start never generates keys, discovers credentials or writes this file. Explicit fresh setup is separately authorized. Inherited values and downstream Settings/dotenv fallback can still affect fields not fixed by the launcher. |
 | Existing Legacy Windows/env | Process values, then frontend .env.local, then the selected literal .windows/sbom.env.ps1 or explicitly selected root .env; defined later values win. Existing defaults and repository PYTHONPATH apply. Authenticated development, local-target and saved-mode checks refuse conflicts without conversion. |
+| Opt-in Native enrollment status | The selected development snapshot and Managed startup defaults feed an immutable operator context. Exact confirmation precedes the pinned read-only psycopg connection; no application Settings or unselected dotenv source is imported/applied. The old no-profile Native CLI keeps its separate explicit-environment behavior. |
 | Greenfield launcher | Reads protected home-directory state, constructs an allowlisted environment and runs services from private working directories; disables ordinary Python dotenv loading and does not use legacy .env.dev.local. Node runtime/build use the prepared environment-free frontend-isolated workspace and frontend projection. |
 | Launcher-managed Next.js | Receives projected BFF/public settings in the prepared environment-free workspace. Source private .env files are not handed back to Next's loader; the old source-relative transaction-key/CA meanings are preserved through explicit absolute paths. |
 | Server Compose | --env-file .env.server supplies Compose interpolation. Only explicitly forwarded environment values, mounted files and public image build values reach containers; an arbitrary key in .env.server is not automatically forwarded. |
