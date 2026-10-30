@@ -804,9 +804,8 @@ def get_progress(run_id: int, db: Session = Depends(get_db)) -> BatchProgress | 
 def cancel_run_fixes_legacy(run_id: int, db: Session = Depends(get_db)) -> dict:
     """Cancel every active batch on the run (legacy compat).
 
-    The legacy cancel flag is honoured by every batch's pipeline loop;
-    in practice this halts the in-flight semaphore work for all
-    concurrent batches.
+    Cancellation snapshots the currently tracked queued/running batch IDs.
+    This halts their in-flight work without cancelling future retry batches.
 
     Idempotent. When no live progress entry exists (e.g. a phantom
     subscriber on a run that has no batch), writes a synthetic terminal

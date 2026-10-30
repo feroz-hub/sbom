@@ -42,11 +42,11 @@ export function AiFixMetadata({ metadata, onRegenerate, regenerating }: AiFixMet
         </span>
       </div>
       {onRegenerate ? (
-        <PermissionButton size="sm" variant="ghost" permission={"tenant:settings:update"}
+        <PermissionButton size="sm" variant="secondary" permission="analysis:run"
           type="button"
           onClick={onRegenerate}
           disabled={regenerating}
-          className="rounded-md border border-border-subtle bg-surface px-2 py-1 text-[11px] font-medium text-hcl-navy hover:bg-surface-muted disabled:cursor-progress disabled:opacity-60"
+          disabledReason={regenerating ? 'Regeneration is in progress.' : undefined}
         >
           {regenerating ? 'Regenerating…' : 'Regenerate'}
         </PermissionButton>

@@ -26,8 +26,8 @@ Cancellation:
     acquisition. In-flight calls run to completion (we don't kill HTTP
     mid-flight); subsequent findings are skipped.
   * Per-batch: ``store.is_cancel_requested(run_id, batch_id)`` checks
-    the batch-scoped flag first, then the legacy run-level flag (which
-    cancels every batch on the run).
+    the batch-scoped flag. Run-level cancellation marks the currently
+    tracked active batch IDs, allowing later retry batches to proceed.
 """
 
 from __future__ import annotations
@@ -250,7 +250,8 @@ class AiFixBatchPipeline:
         else:
             progress.status = "complete"
         progress.finished_at = _now_iso()
-        progress.remaining = 0
+        # Cancelled / budget-paused work remains eligible for a later batch.
+        progress.remaining = max(progress.total - progress.from_cache - progress.generated - progress.failed, 0)
         self._store.write(progress)
         self._sync_batch_row(progress, batch_id)
 

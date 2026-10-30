@@ -291,13 +291,13 @@ describe('RunBatchProgress — idle CTA (no scope)', () => {
     );
   });
 
-  it('shows the budget-paused CTA pointing at Settings', async () => {
+  it('shows the budget-paused explanation pointing at Settings', async () => {
     getRunAiFixProgress.mockResolvedValue(
       makeBatchProgress({ status: 'paused_budget' }),
     );
     renderWithProviders(<RunBatchProgress runId={'00000000-0000-4000-8000-00000000002a'} />);
     await waitFor(() =>
-      expect(screen.getByText(/Daily AI budget reached/i)).toBeInTheDocument(),
+      expect(screen.getByText(/AI budget reached/i)).toBeInTheDocument(),
     );
   });
 
@@ -670,3 +670,28 @@ describe('RunBatchProgress — trigger payload', () => {
 });
 
 vi.mock('@/hooks/useAuth', async () => ({ useAuth: (await import('@/test/authorizedAuth')).authorizedAuth }));
+
+
+describe('RunBatchProgress — unavailable generation', () => {
+  it('honors the provider preflight block and explains it', async () => {
+    getRunAiFixProgress.mockResolvedValue(null);
+    estimateRunAiFixesScoped.mockResolvedValue({ ...DEFAULT_ESTIMATE,
+      total_findings_in_scope: 75, llm_call_count: 75,
+      blocked: true, blocked_reason: 'No AI provider configured.' });
+    renderWithProviders(<RunBatchProgress runId={DEFAULT_ESTIMATE.run_id} />);
+    expect(await screen.findByRole('status')).toHaveTextContent('No AI provider configured.');
+    expect(screen.getByRole('button', { name: 'Generate AI fixes' })).toBeDisabled();
+    expect(triggerRunAiFixes).not.toHaveBeenCalled();
+  });
+  it('shows a failed POST instead of silently ignoring it', async () => {
+    getRunAiFixProgress.mockResolvedValue(null);
+    estimateRunAiFixesScoped.mockResolvedValue({ ...DEFAULT_ESTIMATE,
+      total_findings_in_scope: 75, llm_call_count: 75 });
+    triggerRunAiFixes.mockRejectedValue(new Error('AI generation is disabled for this tenant.'));
+    renderWithProviders(<RunBatchProgress runId={DEFAULT_ESTIMATE.run_id} />);
+    const button = await screen.findByRole('button', { name: 'Generate AI fixes' });
+    await waitFor(() => expect(button).toBeEnabled());
+    await userEvent.click(button);
+    expect(await screen.findByRole('alert')).toHaveTextContent('AI generation is disabled for this tenant.');
+  });
+});

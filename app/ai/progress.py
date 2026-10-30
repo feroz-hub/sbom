@@ -167,6 +167,13 @@ class InMemoryProgressStore:
         with self._lock:
             if batch_id is None:
                 self._legacy_cancel.add(run_id)
+                # Snapshot current work: cancelling a run must not cancel retries.
+                for (rid, bid), raw in self._batch_progress.items():
+                    if rid != run_id:
+                        continue
+                    snapshot = _decode(raw)
+                    if snapshot and snapshot.status in {"queued", "pending", "in_progress"}:
+                        self._batch_cancel.add((rid, bid))
             else:
                 self._batch_cancel.add((run_id, batch_id))
 
@@ -177,9 +184,9 @@ class InMemoryProgressStore:
                 if run_id in self._legacy_cancel:
                     return True
                 return any(rid == run_id for rid, _ in self._batch_cancel)
-            # Batch-level callers: explicit batch flag OR legacy flag
-            # (the latter covers "cancel everything for this run").
-            return (run_id, batch_id) in self._batch_cancel or run_id in self._legacy_cancel
+            # Run-level cancellation snapshots existing batch IDs above. An old
+            # legacy flag must never poison a newly created batch.
+            return (run_id, batch_id) in self._batch_cancel
 
     def clear(self, run_id: int, batch_id: str | None = None) -> None:
         with self._lock:
@@ -337,6 +344,12 @@ class RedisProgressStore:
         key = self._legacy_cancel_key(run_id) if batch_id is None else self._batch_cancel_key(run_id, batch_id)
         try:
             self._client.set(key, "1", ex=self._PROGRESS_TTL_SECONDS)
+            if batch_id is None:
+                for snapshot in self.list_for_run(run_id):
+                    if snapshot.batch_id and snapshot.status in {"queued", "pending", "in_progress"}:
+                        self._client.set(
+                            self._batch_cancel_key(run_id, snapshot.batch_id), "1", ex=self._PROGRESS_TTL_SECONDS
+                        )
         except Exception as exc:  # noqa: BLE001
             log.warning(
                 "ai.progress.redis_cancel_failed: run=%s batch=%s err=%s",
@@ -346,14 +359,11 @@ class RedisProgressStore:
             )
 
     def is_cancel_requested(self, run_id: int, batch_id: str | None = None) -> bool:
-        # Legacy flag is a "cancel everything for this run" lever; honour
-        # it for both legacy and per-batch callers.
+        # Batch IDs capture the work cancelled at request time. Old run-level
+        # flags remain meaningful only for callers without a batch ID.
+        key = self._legacy_cancel_key(run_id) if batch_id is None else self._batch_cancel_key(run_id, batch_id)
         try:
-            if self._client.get(self._legacy_cancel_key(run_id)):
-                return True
-            if batch_id is not None and self._client.get(self._batch_cancel_key(run_id, batch_id)):
-                return True
-            return False
+            return bool(self._client.get(key))
         except Exception:  # noqa: BLE001
             return False
 

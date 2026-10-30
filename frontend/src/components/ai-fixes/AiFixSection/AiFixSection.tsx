@@ -48,6 +48,9 @@ export function aiFixErrorCopy(err: AiFixError, providerLabelFallback?: string):
         retrySec ? `Retry in ${retrySec}s.` : 'Retry in a moment.'
       }`;
     case 'auth_failed':
+      if (err.upstream_status_code === 403) {
+        return `The configured credential cannot access ${model} on ${provider}. Check model permissions in Settings.`;
+      }
       return `Invalid API key for ${provider}. Update in Settings.`;
     case 'model_not_found':
       return `Model ${model} not available. Update in Settings.`;

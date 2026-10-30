@@ -434,6 +434,8 @@ async def test_cancel_mid_flight_skips_remaining(client):
     assert summary.progress.cancel_requested is True
     # Some calls landed before cancel propagated; some were skipped.
     assert len(fake.calls) < 8
+    assert summary.progress.remaining == 8 - summary.progress.generated - summary.progress.failed
+    assert summary.progress.remaining > 0
 
 
 @pytest.mark.asyncio

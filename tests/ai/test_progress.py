@@ -97,3 +97,44 @@ def test_redis_round_trip_when_available():  # pragma: no cover — gated
     got = store.read(1234)
     assert got is not None and got.run_id == 1234
     store.clear(1234)
+
+
+@pytest.fixture(params=["memory", "redis"])
+def cancel_store(request):
+    if request.param == "memory":
+        return InMemoryProgressStore()
+    if not os.getenv("AI_TEST_REDIS_URL"):
+        pytest.skip("Set AI_TEST_REDIS_URL for the real Redis cancellation regression")
+    import redis
+    from app.ai.progress import RedisProgressStore
+
+    return RedisProgressStore(redis.Redis.from_url(os.environ["AI_TEST_REDIS_URL"]))
+
+
+def test_run_cancel_stops_existing_batches_but_allows_retry(cancel_store):
+    import uuid
+
+    run_id = uuid.uuid4().int % 1_000_000_000
+    try:
+        for batch_id in ("queued-before-cancel", "running-before-cancel"):
+            cancel_store.write(initial_progress(run_id, total=3, batch_id=batch_id))
+        cancel_store.request_cancel(run_id)
+        assert cancel_store.is_cancel_requested(run_id, "queued-before-cancel")
+        assert cancel_store.is_cancel_requested(run_id, "running-before-cancel")
+        cancel_store.write(initial_progress(run_id, total=3, batch_id="retry-after-cancel"))
+        assert not cancel_store.is_cancel_requested(run_id, "retry-after-cancel")
+    finally:
+        cancel_store.clear(run_id)
+
+
+def test_idle_legacy_cancel_does_not_poison_a_future_batch(cancel_store):
+    import uuid
+
+    run_id = uuid.uuid4().int % 1_000_000_000
+    try:
+        cancel_store.request_cancel(run_id)
+        assert cancel_store.is_cancel_requested(run_id)
+        cancel_store.write(initial_progress(run_id, total=75, batch_id="new-batch"))
+        assert not cancel_store.is_cancel_requested(run_id, "new-batch")
+    finally:
+        cancel_store.clear(run_id)
