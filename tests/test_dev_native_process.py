@@ -11,7 +11,6 @@ import os
 import socket
 import subprocess
 import sys
-import tempfile
 import time
 from pathlib import Path
 from unittest.mock import Mock
@@ -39,36 +38,38 @@ def owned_runtime(tmp_path):
                 child.wait(timeout=10)
 
 
-def sleeping_child(children):
+def sleeping_child(children, directory):
     # Framework Python can exec its final interpreter after Popen returns.
     # Record ownership only after this fixture has reached its stable workload.
-    with tempfile.TemporaryDirectory(prefix="sbom-owned-fixture-") as directory:
-        ready = Path(directory) / "ready"
-        process = subprocess.Popen(
-            [
-                sys.executable, "-c",
-                "import sys,time; from pathlib import Path; Path(sys.argv[1]).touch(); time.sleep(60)",
-                str(ready),
-            ],
-            stdout=subprocess.DEVNULL,
-            stderr=subprocess.DEVNULL,
-            **dev.platform_spawn_options(),
-        )
-        children.append(process)
-        deadline = time.monotonic() + 5
-        while not ready.exists():
-            if process.poll() is not None:
-                pytest.fail("Disposable Python fixture exited before readiness")
-            if time.monotonic() >= deadline:
-                pytest.fail("Disposable Python fixture did not become ready")
-            time.sleep(0.01)
-        return process
+    # pytest retains this directory until owned_runtime stops and reaps its
+    # children. File visibility can precede Path.touch() closing its Windows
+    # handle; deleting the directory immediately after readiness races that close.
+    ready = directory / f"ready-{len(children)}"
+    process = subprocess.Popen(
+        [
+            sys.executable, "-c",
+            "import sys,time; from pathlib import Path; Path(sys.argv[1]).touch(); time.sleep(60)",
+            str(ready),
+        ],
+        stdout=subprocess.DEVNULL,
+        stderr=subprocess.DEVNULL,
+        **dev.platform_spawn_options(),
+    )
+    children.append(process)
+    deadline = time.monotonic() + 5
+    while not ready.exists():
+        if process.poll() is not None:
+            pytest.fail("Disposable Python fixture exited before readiness")
+        if time.monotonic() >= deadline:
+            pytest.fail("Disposable Python fixture did not become ready")
+        time.sleep(0.01)
+    return process
 
 
-def test_native_stop_affects_only_recorded_child(owned_runtime):
+def test_native_stop_affects_only_recorded_child(owned_runtime, tmp_path):
     runtime, children = owned_runtime
-    owned = sleeping_child(children)
-    unrelated = sleeping_child(children)
+    owned = sleeping_child(children, tmp_path)
+    unrelated = sleeping_child(children, tmp_path)
     runtime.processes[owned.pid] = owned
     runtime.register("owned fixture", owned.pid)
     runtime.refresh()
@@ -79,9 +80,9 @@ def test_native_stop_affects_only_recorded_child(owned_runtime):
     assert not runtime.path.exists()
 
 
-def test_native_crashed_child_is_reaped_and_stale_state_cleans(owned_runtime):
+def test_native_crashed_child_is_reaped_and_stale_state_cleans(owned_runtime, tmp_path):
     runtime, children = owned_runtime
-    child = sleeping_child(children)
+    child = sleeping_child(children, tmp_path)
     runtime.processes[child.pid] = child
     runtime.register("crashed fixture", child.pid)
     child.terminate()
