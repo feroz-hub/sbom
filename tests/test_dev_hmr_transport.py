@@ -87,6 +87,11 @@ class OwnedSocket:
             self.chunks.insert(0, value[limit:])
         return value[:limit]
 
+    def recv_into(self, target):
+        value = self.recv(len(target))
+        target[: len(value)] = value
+        return len(value)
+
     def close(self):
         self.closed = True
         self.close_count += 1
@@ -167,7 +172,8 @@ def test_handshake_refuses_invalid_security_headers_without_echoing_values(owned
 
 
 @pytest.mark.parametrize("failure", ["limit", "timeout", "eof", "invalid-status", "tls"])
-def test_failed_open_has_a_bound_and_never_waits_for_a_peer_thread(owned_connection, failure):
+def test_failed_open_has_a_bound_and_never_waits_for_a_peer_thread(owned_connection, failure, monkeypatch):
+    monkeypatch.setattr(_FIXTURE.time, "monotonic", lambda: 0.0)
     responses = {"limit": b"H" * 8193, "timeout": b"", "eof": b"", "invalid-status": b"INVALID\r\n\r\n"}
     transport, context, _, _ = owned_connection(
         response=lambda request: responses.get(failure, b""),
@@ -377,3 +383,182 @@ def test_ping_stream_uses_one_receive_deadline_without_per_frame_reset(owned_con
             connection.recv(timeout=0.25)
         assert clock[0] <= 0.25 and transport.read_count <= 5
     assert transport.closed
+
+
+@pytest.mark.parametrize("chunked", [False, True])
+def test_http_reader_uses_verified_loopback_tls_and_stdlib_body_framing(owned_connection, chunked):
+    body = b"5\r\nhello\r\n0\r\n\r\n" if chunked else b"hello"
+    headers = b"Transfer-Encoding: chunked" if chunked else b"Content-Length: 5"
+    transport, context, connector, wrapper = owned_connection(
+        response=lambda request: b"HTTP/1.1 200 OK\r\n" + headers + b"\r\n\r\n" + body
+    )
+    assert _FIXTURE._get(context, _ORIGIN, "/", timeout=1) == "hello"
+    assert connector.call_args.args == (("127.0.0.1", 13000),)
+    assert wrapper.call_args.kwargs == {"server_hostname": "localhost"}
+    assert b"Accept-Encoding: identity\r\nConnection: close\r\n" in transport.sent[0]
+    assert transport.closed and transport.close_count == 1
+
+
+@pytest.mark.parametrize("phase", ["headers", "body"])
+def test_http_slow_progress_cannot_extend_total_response_deadline(owned_connection, monkeypatch, phase):
+    clock = [0.0]
+    monkeypatch.setattr(_FIXTURE.time, "monotonic", lambda: clock[0])
+    transport, context, _, _ = owned_connection(
+        response=lambda request: b"H" if phase == "headers" else b"HTTP/1.1 200 OK\r\nContent-Length: 100\r\n\r\n"
+    )
+    # One byte keeps arriving inside each inactivity interval; total time must
+    # still expire rather than letting HTTPResponse's header/body loop run on.
+    transport.chunks.extend([b"x"] * 100)
+
+    def progress(timeout):
+        clock[0] += min(timeout, 0.1)
+
+    transport.on_read = progress
+    with pytest.raises(TimeoutError, match="^FIXTURE_HTTP_TIMEOUT$"):
+        _FIXTURE._get(context, _ORIGIN, "/", timeout=0.25)
+    assert clock[0] <= 0.25 and transport.read_count <= 3
+    assert transport.closed and transport.close_count == 1
+
+
+@pytest.mark.parametrize("status", [302, 404])
+def test_http_refuses_redirects_and_preserves_safe_not_found_status(owned_connection, status):
+    transport, context, connector, _ = owned_connection(
+        response=lambda request: (
+            f"HTTP/1.1 {status} {_PRIVATE}\r\nLocation: https://example.invalid\r\nContent-Length: 0\r\n\r\n"
+        ).encode("ascii")
+    )
+    expected = AssertionError if status == 302 else _FIXTURE.HTTPError
+    with pytest.raises(expected) as caught:
+        _FIXTURE._get(context, _ORIGIN, "/", timeout=1)
+    assert _PRIVATE not in str(caught.value)
+    if status == 404:
+        assert caught.value.code == 404
+    connector.assert_called_once()
+    assert transport.closed
+
+
+def test_http_body_limit_closes_owned_transport_before_reporting_failure(owned_connection):
+    transport, context, _, _ = owned_connection(
+        response=lambda request: b"HTTP/1.1 200 OK\r\nContent-Length: 5\r\n\r\nhello"
+    )
+    with pytest.raises(pytest.fail.Exception, match="bounded read limit"):
+        _FIXTURE._get(context, _ORIGIN, "/", limit=2)
+    assert transport.closed
+
+
+@pytest.mark.parametrize("disable_verification", [False, True])
+def test_http_reader_refuses_unverified_tls_before_opening_socket(owned_connection, disable_verification):
+    _, context, connector, _ = owned_connection()
+    context.check_hostname = False
+    if disable_verification:
+        context.verify_mode = ssl.CERT_NONE
+    with pytest.raises(ValueError, match="^FIXTURE_HTTP_VERIFIED_TLS_REQUIRED$"):
+        _FIXTURE._get(context, _ORIGIN, "/")
+    connector.assert_not_called()
+
+
+@pytest.fixture
+def page_clock(monkeypatch):
+    clock = [0.0]
+    monkeypatch.setattr(_FIXTURE.time, "monotonic", lambda: clock[0])
+    monkeypatch.setattr(_FIXTURE.time, "sleep", lambda duration: clock.__setitem__(0, clock[0] + duration))
+    return clock
+
+
+def test_wait_page_retries_timeout_then_returns_compiled_page(monkeypatch, page_clock):
+    refresh = Mock()
+    get = Mock(side_effect=[TimeoutError("synthetic initial compilation timeout"), "<main>wanted</main>"])
+    monkeypatch.setattr(_FIXTURE, "_refresh", refresh)
+    monkeypatch.setattr(_FIXTURE, "_get", get)
+    assert _FIXTURE._wait_page(object(), _ORIGIN, object(), {}, "wanted") == "<main>wanted</main>"
+    assert get.call_count == refresh.call_count == 2 and page_clock[0] == 0.2
+    assert all(0 < call.kwargs["timeout"] <= 5 for call in get.call_args_list)
+
+
+def test_wait_page_rejects_stale_marker_until_only_new_page_is_present(monkeypatch, page_clock):
+    refresh = Mock()
+    get = Mock(side_effect=["old", "old new", "new"])
+    monkeypatch.setattr(_FIXTURE, "_refresh", refresh)
+    monkeypatch.setattr(_FIXTURE, "_get", get)
+    assert _FIXTURE._wait_page(object(), _ORIGIN, object(), {}, "new", absent="old") == "new"
+    assert get.call_count == refresh.call_count == 3 and page_clock[0] == 0.4
+
+
+def test_wait_page_ownership_refusal_aborts_before_http_retry(monkeypatch, page_clock):
+    get = Mock(side_effect=AssertionError("unverified process ownership reached HTTP"))
+    monkeypatch.setattr(_FIXTURE, "_refresh", Mock(side_effect=ValueError("synthetic ownership refusal")))
+    monkeypatch.setattr(_FIXTURE, "_get", get)
+    with pytest.raises(ValueError, match="synthetic ownership refusal"):
+        _FIXTURE._wait_page(object(), _ORIGIN, object(), {}, "new")
+    get.assert_not_called()
+    assert page_clock[0] == 0
+
+
+def test_wait_page_does_not_request_after_ownership_check_consumes_budget(monkeypatch, page_clock):
+    monkeypatch.setattr(_FIXTURE, "_refresh", lambda *args: page_clock.__setitem__(0, 61.0))
+    get = Mock(side_effect=AssertionError("expired compilation budget reached HTTP"))
+    monkeypatch.setattr(_FIXTURE, "_get", get)
+    with pytest.raises(pytest.fail.Exception, match="bounded compilation deadline"):
+        _FIXTURE._wait_page(object(), _ORIGIN, object(), {}, "new")
+    get.assert_not_called()
+
+
+def test_wait_page_caps_request_to_remaining_budget_and_stops_retrying(monkeypatch, page_clock):
+    monkeypatch.setattr(_FIXTURE, "_refresh", Mock())
+
+    def get(*args, timeout):
+        page_clock[0] += timeout
+        raise TimeoutError("synthetic compilation timeout")
+
+    reader = Mock(side_effect=get)
+    monkeypatch.setattr(_FIXTURE, "_get", reader)
+    with pytest.raises(pytest.fail.Exception, match="bounded compilation deadline"):
+        _FIXTURE._wait_page(object(), _ORIGIN, object(), {}, "new")
+    assert page_clock[0] == 60 and reader.call_args.kwargs["timeout"] < 5
+
+
+def _native_fixture_module():
+    specification = importlib.util.spec_from_file_location(
+        "sbom_native_compiler_fixture_policy", Path(__file__).with_name("test_dev_native_compiler.py")
+    )
+    module = importlib.util.module_from_spec(specification)
+    specification.loader.exec_module(module)
+    return module
+
+
+@pytest.fixture(params=("next", "native"))
+def frontend_fixture_policy(request):
+    return _FIXTURE if request.param == "next" else _native_fixture_module()
+
+
+def test_dedicated_frontend_fixture_requires_prerequisites_instead_of_skipping(monkeypatch, frontend_fixture_policy):
+    monkeypatch.setenv("SBOM_DEV_REQUIRE_FRONTEND_FIXTURE", "1")
+    with pytest.raises(pytest.fail.Exception, match="^FRONTEND_FIXTURE_PREREQUISITE_REQUIRED: synthetic prerequisite$"):
+        frontend_fixture_policy._prerequisite_unavailable("synthetic prerequisite")
+
+
+@pytest.mark.parametrize("flag", (None, "", "0", "true", " 1", "1 "))
+def test_optional_frontend_fixture_skips_unless_strict_flag_is_exactly_one(monkeypatch, frontend_fixture_policy, flag):
+    if flag is None:
+        monkeypatch.delenv("SBOM_DEV_REQUIRE_FRONTEND_FIXTURE", raising=False)
+    else:
+        monkeypatch.setenv("SBOM_DEV_REQUIRE_FRONTEND_FIXTURE", flag)
+    with pytest.raises(pytest.skip.Exception, match="^synthetic prerequisite$"):
+        frontend_fixture_policy._prerequisite_unavailable("synthetic prerequisite")
+
+
+def test_actual_missing_prerequisite_path_uses_strict_policy_before_any_probe(
+    monkeypatch, frontend_fixture_policy, tmp_path
+):
+    monkeypatch.setenv("SBOM_DEV_REQUIRE_FRONTEND_FIXTURE", "1")
+    forbidden = Mock(side_effect=AssertionError("A missing prerequisite reached a live probe"))
+    monkeypatch.setattr(frontend_fixture_policy.subprocess, "run", forbidden)
+    if frontend_fixture_policy is _FIXTURE:
+        monkeypatch.setattr(frontend_fixture_policy.importlib.util, "find_spec", lambda name: None)
+        check, arguments = frontend_fixture_policy._prerequisites, (tmp_path,)
+    else:
+        monkeypatch.setattr(frontend_fixture_policy.shutil, "which", lambda name: None)
+        check, arguments = frontend_fixture_policy._installed_packages, ()
+    with pytest.raises(pytest.fail.Exception, match="^FRONTEND_FIXTURE_PREREQUISITE_REQUIRED:"):
+        check(*arguments)
+    forbidden.assert_not_called()

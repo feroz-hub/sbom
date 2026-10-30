@@ -39,10 +39,16 @@ def _metadata(path):
     )
 
 
+def _prerequisite_unavailable(reason):
+    if os.environ.get("SBOM_DEV_REQUIRE_FRONTEND_FIXTURE") == "1":
+        pytest.fail("FRONTEND_FIXTURE_PREREQUISITE_REQUIRED: " + reason, pytrace=False)
+    pytest.skip(reason)
+
+
 def _installed_packages():
     node = shutil.which("node")
     if node is None:
-        pytest.skip(
+        _prerequisite_unavailable(
             "Native compiler fixture requires an existing approved Node executable; no installation was attempted"
         )
     candidates = [_ROOT / "frontend/node_modules"]
@@ -96,11 +102,11 @@ def _installed_packages():
             for path in (modules / "next/package.json", modules / "next/dist/lib/download-swc.js"):
                 observed[path] = _metadata(path)
         except (OSError, ValueError, TypeError):
-            pytest.skip(
+            _prerequisite_unavailable(
                 "Native compiler fixture public package layout is unsupported or unverifiable; nothing was changed"
             )
         return Path(node), packages, tables, observed
-    pytest.skip(
+    _prerequisite_unavailable(
         "Native compiler fixture requires existing Next triples/native packages; no fallback download is allowed"
     )
 
@@ -130,6 +136,7 @@ def _remove_links(links, root):
 
 
 def test_actual_production_native_compiler_probe_and_guard_preserve_installed_dependencies(tmp_path, monkeypatch):
+    tmp_path = tmp_path.resolve()
     node, packages, tables, observed = _installed_packages()
     guard_source = _ROOT / "scripts/dev_next_guard.cjs"
     guard_bytes, _ = dev_frontend._regular(guard_source, limit=65536)

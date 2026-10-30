@@ -13,7 +13,9 @@ from __future__ import annotations
 
 import base64
 import hashlib
+import http.client
 import importlib.util
+import io
 import json
 import os
 import re
@@ -29,7 +31,6 @@ from pathlib import Path
 from ssl import CERT_REQUIRED, SSLContext
 from urllib.error import HTTPError, URLError
 from urllib.parse import urlsplit
-from urllib.request import HTTPRedirectHandler, HTTPSHandler, ProxyHandler, build_opener
 
 import pytest
 from scripts import dev, dev_components, dev_config, dev_frontend
@@ -53,11 +54,6 @@ _DOWNLOAD_GUARD = (
     "exports.downloadNativeNextSwc = blocked;\n"
     "exports.downloadWasmSwc = blocked;\n"
 ).encode("utf-8")
-
-
-class _NoRedirect(HTTPRedirectHandler):
-    def redirect_request(self, request, fp, code, message, headers, newurl):
-        raise AssertionError("The fixture refused an unexpected redirect")
 
 
 class _Scripts(HTMLParser):
@@ -285,9 +281,15 @@ def _tool_environment(node, home):
     return environment
 
 
+def _prerequisite_unavailable(reason):
+    if os.environ.get("SBOM_DEV_REQUIRE_FRONTEND_FIXTURE") == "1":
+        pytest.fail("FRONTEND_FIXTURE_PREREQUISITE_REQUIRED: " + reason, pytrace=False)
+    pytest.skip(reason)
+
+
 def _prerequisites(home):
     if importlib.util.find_spec("cryptography") is None:
-        pytest.skip("Real Next fixture requires already-installed cryptography; nothing was installed")
+        _prerequisite_unavailable("Real Next fixture requires already-installed cryptography; nothing was installed")
     node = shutil.which("node")
     candidates = [_ROOT / "frontend/node_modules"]
     if os.name == "nt":
@@ -304,7 +306,7 @@ def _prerequisites(home):
     )
     modules = next((path for path in candidates if all((path / name).is_file() for name in required)), None)
     if not node or modules is None:
-        pytest.skip(
+        _prerequisite_unavailable(
             "Real Next fixture requires existing approved Node/Next/React/TypeScript packages; no install is allowed"
         )
     node = Path(node)
@@ -323,9 +325,11 @@ def _prerequisites(home):
         details = json.loads(completed.stdout)
         match = re.fullmatch(r"(\d+)\.(\d+)\.(\d+)", details["version"])
         if completed.returncode or not match or tuple(map(int, match.groups())) < dev.MIN_NODE:
-            pytest.skip("The existing Node version does not meet the candidate minimum")
+            _prerequisite_unavailable("The existing Node version does not meet the candidate minimum")
         if details["platform"] not in {"win32", "darwin", "linux"} or details["arch"] not in {"x64", "arm64", "ia32"}:
-            pytest.skip("The installed Node platform is outside this fixture's native dependency preflight")
+            _prerequisite_unavailable(
+                "The installed Node platform is outside this fixture's native dependency preflight"
+            )
         # Read only the bundled pure triples table, never Next's SWC loader.
         # Match its Windows MSVC/Linux x64 ABI filtering and require the actual
         # selected npm package, rather than bypassing its entry point via .node.
@@ -360,12 +364,14 @@ def _prerequisites(home):
             env=_tool_environment(node, home),
         )
         if checked.returncode != 0 or checked.stdout != '{"ready":true}':
-            pytest.skip("No selected installed native SWC package passed preflight; fallback downloads are forbidden")
+            _prerequisite_unavailable(
+                "No selected installed native SWC package passed preflight; fallback downloads are forbidden"
+            )
     except (OSError, subprocess.TimeoutExpired, ValueError, KeyError, TypeError):
-        pytest.skip("The existing Node runtime cannot be inspected within the fixture deadline")
+        _prerequisite_unavailable("The existing Node runtime cannot be inspected within the fixture deadline")
     safe = dev_config.component_environment({"CI": "1", "NEXT_TELEMETRY_DISABLED": "1"}, "frontend")
     if any(safe.get(name) != "1" for name in ("CI", "NEXT_TELEMETRY_DISABLED", "NEXT_DISABLE_SWC_WASM")):
-        pytest.skip(
+        _prerequisite_unavailable(
             "Real Next fixture requires preserved CI/no-auto-install and telemetry-disable controls before launch"
         )
     return node, modules
@@ -479,14 +485,70 @@ def _remove_fixture_links(links, root):
             link.unlink()
 
 
-def _get(opener, origin, path, *, limit=1048576, timeout=3):
+class _DeadlineHTTPReader(io.RawIOBase):
+    """Give HTTPResponse a buffered reader with one absolute socket deadline."""
+
+    def __init__(self, transport, deadline):
+        super().__init__()
+        self.transport, self.deadline = transport, deadline
+
+    def readable(self):
+        return True
+
+    def readinto(self, target):
+        self.transport.settimeout(_HMRSocket._remaining(self.deadline))
+        return self.transport.recv_into(target)
+
+    def makefile(self, mode):
+        assert mode == "rb"
+        return io.BufferedReader(self)  # Closing this reader never closes its caller-owned TLS socket.
+
+
+def _get(context, origin, path, *, limit=1048576, timeout=3):
     parsed = urlsplit(path)
-    if parsed.scheme or parsed.netloc or not path.startswith("/"):
+    endpoint = urlsplit(origin)
+    port = endpoint.port or 443
+    if (
+        parsed.scheme
+        or parsed.netloc
+        or parsed.fragment
+        or not path.startswith("/")
+        or any(not 33 <= ord(char) <= 126 for char in path)
+        or origin != f"https://localhost:{port}"
+        or not 1 <= port <= 65535
+    ):
         pytest.fail("The fixture refused a nonlocal resource URL")
-    with opener.open(origin + path, timeout=timeout) as response:
-        if response.status != 200:
-            raise OSError("Fixture HTTP status was not ready")
-        body = response.read(limit + 1)
+    if not isinstance(context, SSLContext) or context.verify_mode != CERT_REQUIRED or not context.check_hostname:
+        raise ValueError("FIXTURE_HTTP_VERIFIED_TLS_REQUIRED")
+    if not isinstance(limit, int) or not 1 <= limit <= 16777216:
+        raise ValueError("FIXTURE_HTTP_LIMIT_REQUIRED")
+    deadline, transport = _HMRSocket._deadline(timeout), None
+    try:
+        transport = socket.create_connection(("127.0.0.1", port), timeout=_HMRSocket._remaining(deadline))
+        transport.settimeout(_HMRSocket._remaining(deadline))
+        transport = context.wrap_socket(transport, server_hostname="localhost")
+        transport.settimeout(_HMRSocket._remaining(deadline))
+        transport.sendall(
+            (
+                f"GET {path} HTTP/1.1\r\nHost: localhost:{port}\r\n"
+                "Accept-Encoding: identity\r\nConnection: close\r\n\r\n"
+            ).encode("ascii")
+        )
+        with http.client.HTTPResponse(_DeadlineHTTPReader(transport, deadline)) as response:
+            response.begin()
+            if 300 <= response.status < 400:
+                raise AssertionError("The fixture refused an unexpected redirect")
+            if response.status != 200:
+                raise HTTPError(origin + path, response.status, "Fixture HTTP status was not ready", None, None)
+            body = response.read(limit + 1)
+        _HMRSocket._remaining(deadline)
+    except TimeoutError:
+        raise TimeoutError("FIXTURE_HTTP_TIMEOUT") from None
+    except http.client.HTTPException:
+        raise OSError("FIXTURE_HTTP_PROTOCOL_INVALID") from None
+    finally:
+        if transport is not None:
+            transport.close()  # No keepalive, TLS unwrap or wait for peer shutdown.
     if len(body) > limit:
         pytest.fail("Fixture response exceeded its bounded read limit")
     return body.decode("utf-8")
@@ -544,8 +606,11 @@ def _wait_page(opener, origin, runtime, identities, marker, *, absent=None):
     deadline = time.monotonic() + 60
     while time.monotonic() < deadline:
         _refresh(runtime, identities)
+        remaining = deadline - time.monotonic()
+        if remaining <= 0:
+            break
         try:
-            html = _get(opener, origin, "/", timeout=min(5, max(0.1, deadline - time.monotonic())))
+            html = _get(opener, origin, "/", timeout=min(5, remaining))
             if marker in html and (absent is None or absent not in html):
                 return html
         except (HTTPError, URLError, OSError):
@@ -599,7 +664,7 @@ def _page(marker):
 @pytest.mark.timeout(600)  # Every phase has its own bound; leave time for verified cleanup.
 def test_real_next_verified_https_websocket_hmr_assets_and_verified_owned_cleanup(tmp_path_factory, monkeypatch):
     # Keep native Windows fixture paths below the host's configured path limit.
-    tmp_path = tmp_path_factory.mktemp("next")
+    tmp_path = tmp_path_factory.mktemp("next").resolve()
     home = tmp_path / "fixture-home"
     home.mkdir()
     node, installed = _prerequisites(home)
@@ -669,7 +734,7 @@ def test_real_next_verified_https_websocket_hmr_assets_and_verified_owned_cleanu
         dev.create_local_certificate(certificate, key)  # Approved disposable TLS fixture only; no trust installation.
         context = ssl.create_default_context(cafile=str(certificate))
         assert context.check_hostname and context.verify_mode == ssl.CERT_REQUIRED
-        opener = build_opener(ProxyHandler({}), HTTPSHandler(context=context), _NoRedirect())
+        opener = context  # The bounded reader owns local TLS directly; no proxy or redirect discovery.
         with socket.socket() as reservation:
             reservation.bind(("127.0.0.1", 0))
             port = reservation.getsockname()[1]

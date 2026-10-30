@@ -126,15 +126,18 @@ jobs:
   frontend-fixture:
     # Explicit installations are confined to fresh CI runners. The fixture
     # blocks Next compiler downloads and never starts the application stack.
-    runs-on: ubuntu-latest
+    runs-on: ${{ matrix.os }}
+    timeout-minutes: 20
     strategy:
       fail-fast: false
       matrix:
+        os: [ubuntu-latest, windows-latest, macos-latest]
         node: ["22", "26.1.0"]
     env:
       PYTHONDONTWRITEBYTECODE: "1"
       PYTHON_DOTENV_DISABLED: "1"
       PYTEST_DISABLE_PLUGIN_AUTOLOAD: "1"
+      SBOM_DEV_REQUIRE_FRONTEND_FIXTURE: "1"
       DATABASE_URL: "sqlite:///:memory:"
       TEST_DATABASE_URL: "sqlite:///:memory:"
     steps:
