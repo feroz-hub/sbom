@@ -76,6 +76,7 @@ jobs:
         run: >-
           python -m pytest -p no:cacheprovider --noconftest -q
           tests/test_dev_launcher.py tests/test_dev_lifecycle.py
+          tests/test_dev_windows_lifecycle.py
           tests/test_dev_background.py tests/test_dev_main_merge.py
           tests/test_greenfield_windows_compat.py
       - name: POSIX TLS, setup and migration guard unit regressions
@@ -87,8 +88,7 @@ jobs:
           tests/test_greenfield_service_ports.py tests/test_dev_private_setup.py
           tests/test_greenfield_startup_migrations.py tests/test_greenfield_auto_migrations.py
           tests/test_greenfield_resource_startup.py tests/test_greenfield_governance_startup.py
-      - name: POSIX native process smoke fixtures (not full stack)
-        if: runner.os != 'Windows'
+      - name: Native process smoke fixtures (not full stack)
         run: >-
           python -m pytest -p no:cacheprovider --noconftest -q
           tests/test_dev_native_process.py
