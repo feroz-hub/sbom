@@ -1,6 +1,6 @@
 """Optional real Next/HTTPS/HMR fixture, never the SBOM application stack.
 
-Requires existing approved Node/Next/React/TypeScript dependencies and websockets.
+Requires existing approved Node/Next/React/TypeScript dependencies.
 No packages are installed, no existing private configuration is loaded, and no
 database/API/worker is started. All source, TLS and runtime records are fixtures.
 Next itself is copied into the fixture with compiler downloads explicitly blocked;
@@ -11,6 +11,8 @@ unverifiable records/artifacts are retained and fail the test, never force-clear
 
 from __future__ import annotations
 
+import base64
+import hashlib
 import importlib.util
 import json
 import os
@@ -24,6 +26,7 @@ import time
 from concurrent.futures import ThreadPoolExecutor
 from html.parser import HTMLParser
 from pathlib import Path
+from ssl import CERT_REQUIRED, SSLContext
 from urllib.error import HTTPError, URLError
 from urllib.parse import urlsplit
 from urllib.request import HTTPRedirectHandler, HTTPSHandler, ProxyHandler, build_opener
@@ -69,6 +72,199 @@ class _Scripts(HTMLParser):
                 self.paths.append(value)
 
 
+class _HMRSocket:
+    """Fixture-only verified TLS/WebSocket transport; no threads or peer joins."""
+
+    _LIMIT = 1048576
+
+    def __init__(
+        self, url, *, ssl, origin, open_timeout=5, close_timeout=3, proxy=None, compression=None, ping_interval=None
+    ):
+        self._socket, self._buffer, self._fragments, self._opened = None, bytearray(), None, False
+        self._close_timeout = close_timeout
+        parsed = urlsplit(url)
+        port = parsed.port or 443
+        target = parsed.path + ("?" + parsed.query if parsed.query else "")
+        if (
+            parsed.scheme != "wss"
+            or parsed.hostname != "localhost"
+            or parsed.username is not None
+            or parsed.password is not None
+            or parsed.fragment
+            or not target.startswith("/")
+            or any(not 33 <= ord(char) <= 126 for char in target)
+            or origin != f"https://localhost:{port}"
+            or not 1 <= port <= 65535
+            or not isinstance(ssl, SSLContext)
+            or ssl.verify_mode != CERT_REQUIRED
+            or not ssl.check_hostname
+            or any(value is not None for value in (proxy, compression, ping_interval))
+        ):
+            raise ValueError("HMR_WEBSOCKET_POLICY_REQUIRED")
+        deadline = self._deadline(open_timeout)
+        self._deadline(close_timeout)
+        try:
+            self._socket = socket.create_connection(("127.0.0.1", port), timeout=self._remaining(deadline))
+            self._socket.settimeout(self._remaining(deadline))
+            self._socket = ssl.wrap_socket(self._socket, server_hostname="localhost")
+            key = base64.b64encode(os.urandom(16)).decode("ascii")
+            request = (
+                f"GET {target} HTTP/1.1\r\nHost: localhost:{port}\r\nUpgrade: websocket\r\n"
+                f"Connection: Upgrade\r\nSec-WebSocket-Key: {key}\r\nSec-WebSocket-Version: 13\r\n"
+                f"Origin: {origin}\r\n\r\n"
+            ).encode("ascii")
+            self._socket.settimeout(self._remaining(deadline))
+            self._socket.sendall(request)
+            while b"\r\n\r\n" not in self._buffer:
+                if len(self._buffer) >= 8192:
+                    raise ValueError("HMR_WEBSOCKET_HEADER_LIMIT")
+                self._read(min(4096, 8192 - len(self._buffer)), deadline)
+            end = self._buffer.index(b"\r\n\r\n") + 4
+            header = bytes(self._buffer[:end])
+            del self._buffer[:end]
+            status = re.fullmatch(rb"HTTP/1\.1 ([0-9]{3})(?: [^\r\n]*)?", header.split(b"\r\n", 1)[0])
+            if status is None:
+                raise ValueError("HMR_WEBSOCKET_HANDSHAKE_INVALID")
+            if status[1] != b"101":
+                raise ValueError("HMR_WEBSOCKET_HANDSHAKE_HTTP_" + status[1].decode("ascii"))
+            try:
+                headers = {}
+                for line in header.decode("ascii").split("\r\n")[1:-2]:
+                    name, value = line.split(":", 1)
+                    name = name.lower()
+                    if name in headers:
+                        raise ValueError()
+                    headers[name] = value.strip()
+                expected = base64.b64encode(
+                    hashlib.sha1(
+                        (key + "258EAFA5-E914-47DA-95CA-C5AB0DC85B11").encode("ascii"), usedforsecurity=False
+                    ).digest()
+                ).decode("ascii")
+                if (
+                    headers.get("upgrade", "").lower() != "websocket"
+                    or "upgrade" not in {part.strip().lower() for part in headers.get("connection", "").split(",")}
+                    or headers.get("sec-websocket-accept") != expected
+                    or {"sec-websocket-extensions", "sec-websocket-protocol"} & headers.keys()
+                ):
+                    raise ValueError()
+            except (ValueError, UnicodeError):
+                raise ValueError("HMR_WEBSOCKET_HANDSHAKE_INVALID") from None
+            self._opened = True
+        except BaseException:
+            self.close()
+            raise
+
+    @staticmethod
+    def _deadline(timeout):
+        if not isinstance(timeout, (int, float)) or not 0 < timeout <= 30:
+            raise ValueError("HMR_WEBSOCKET_TIMEOUT_REQUIRED")
+        return time.monotonic() + timeout
+
+    @staticmethod
+    def _remaining(deadline):
+        remaining = deadline - time.monotonic()
+        if remaining <= 0:
+            raise TimeoutError("HMR_WEBSOCKET_TIMEOUT")
+        return remaining
+
+    def _read(self, count, deadline):
+        self._socket.settimeout(self._remaining(deadline))
+        data = self._socket.recv(count)
+        if not data:
+            raise ConnectionError("HMR_WEBSOCKET_EOF")
+        self._buffer.extend(data)
+
+    def _need(self, count, deadline):
+        while len(self._buffer) < count:
+            self._read(min(count - len(self._buffer), 65536), deadline)
+
+    def _control(self, opcode, payload, deadline):
+        mask = os.urandom(4)
+        frame = bytes((0x80 | opcode, 0x80 | len(payload))) + mask
+        frame += bytes(value ^ mask[index % 4] for index, value in enumerate(payload))
+        self._socket.settimeout(self._remaining(deadline))
+        self._socket.sendall(frame)
+
+    def _reply(self, opcode, payload, deadline):
+        try:
+            self._control(opcode, payload, deadline)
+        except OSError:
+            self._opened = False  # A partial send cannot be safely retried.
+            self.close()
+            raise ConnectionError("HMR_WEBSOCKET_CONTROL_FAILED") from None
+
+    def recv(self, timeout=3):
+        deadline = self._deadline(timeout)
+        while self._opened:
+            self._remaining(deadline)
+            self._need(2, deadline)
+            first, second = self._buffer[:2]
+            opcode, size, offset = first & 15, second & 127, 2
+            if first & 112 or second & 128 or opcode not in {0, 1, 8, 9, 10}:
+                raise ValueError("HMR_WEBSOCKET_FRAME_INVALID")
+            if size in {126, 127}:
+                offset += 2 if size == 126 else 8
+                self._need(offset, deadline)
+                size = int.from_bytes(self._buffer[2:offset], "big")
+                if size < (126 if offset == 4 else 65536):
+                    raise ValueError("HMR_WEBSOCKET_FRAME_INVALID")
+            if size > self._LIMIT or (opcode >= 8 and (not first & 128 or size > 125)):
+                raise ValueError("HMR_WEBSOCKET_FRAME_LIMIT")
+            if opcode in {0, 1}:
+                if (opcode == 0) != (self._fragments is not None):
+                    raise ValueError("HMR_WEBSOCKET_CONTINUATION_INVALID")
+                if len(self._fragments or b"") + size > self._LIMIT:
+                    raise ValueError("HMR_WEBSOCKET_MESSAGE_LIMIT")
+            self._need(offset + size, deadline)
+            payload = bytes(self._buffer[offset : offset + size])
+            del self._buffer[: offset + size]
+            if opcode == 8:
+                code = int.from_bytes(payload[:2], "big") if size >= 2 else None
+                if size == 1 or (code is not None and (not 1000 <= code < 5000 or code in {1004, 1005, 1006, 1015})):
+                    raise ValueError("HMR_WEBSOCKET_CLOSE_INVALID")
+                try:
+                    payload[2:].decode("utf-8")
+                except UnicodeError:
+                    raise ValueError("HMR_WEBSOCKET_CLOSE_INVALID") from None
+                self._reply(8, payload, deadline)
+                self._opened = False
+                self.close()
+                raise ConnectionError("HMR_WEBSOCKET_CLOSED")
+            if opcode in {9, 10}:
+                if opcode == 9:
+                    self._reply(10, payload, deadline)
+                continue
+            if self._fragments is None:
+                self._fragments = bytearray()
+            self._fragments.extend(payload)
+            if first & 128:
+                message, self._fragments = self._fragments, None
+                try:
+                    return message.decode("utf-8")
+                except UnicodeError:
+                    raise ValueError("HMR_WEBSOCKET_TEXT_INVALID") from None
+        raise ConnectionError("HMR_WEBSOCKET_CLOSED")
+
+    def close(self):
+        if self._socket is not None:
+            try:
+                if self._opened:
+                    self._control(8, b"", self._deadline(self._close_timeout))
+            except OSError:
+                pass
+            finally:
+                self._opened = False
+                transport = self._socket
+                self._socket = None
+                transport.close()
+
+    def __enter__(self):
+        return self
+
+    def __exit__(self, *error):
+        self.close()
+
+
 def _tool_environment(node, home):
     environment = {
         "PATH": str(node.parent),
@@ -90,8 +286,8 @@ def _tool_environment(node, home):
 
 
 def _prerequisites(home):
-    if importlib.util.find_spec("websockets") is None or importlib.util.find_spec("cryptography") is None:
-        pytest.skip("Real Next fixture requires already-installed cryptography and websockets; nothing was installed")
+    if importlib.util.find_spec("cryptography") is None:
+        pytest.skip("Real Next fixture requires already-installed cryptography; nothing was installed")
     node = shutil.which("node")
     candidates = [_ROOT / "frontend/node_modules"]
     if os.name == "nt":
@@ -393,7 +589,6 @@ def test_real_next_verified_https_websocket_hmr_assets_and_verified_owned_cleanu
     home = tmp_path / "fixture-home"
     home.mkdir()
     node, installed = _prerequisites(home)
-    from websockets.sync.client import connect
 
     root, links = tmp_path / "checkout", []
     source = root / "frontend"
@@ -518,7 +713,7 @@ def test_real_next_verified_https_websocket_hmr_assets_and_verified_owned_cleanu
         html = _get(opener, origin, "/")
         if BEFORE not in html:
             pytest.fail("The synthetic client page was not compiled/rendered")
-        with connect(
+        with _HMRSocket(
             f"wss://localhost:{port}/_next/webpack-hmr",
             ssl=context,
             origin=origin,
