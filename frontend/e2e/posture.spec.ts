@@ -110,7 +110,7 @@ test('selected SBOM scope, investigation details and dark theme retain supported
   await page.getByRole('button', { name: 'Switch to dark theme' }).click();
   await expect(page.locator('html')).toHaveClass(/dark/);
   await page.screenshot({ path: resolve(evidenceDir, 'vex-dark.png') });
-  await page.getByRole('button', { name: 'Investigate', exact: true }).click();
+  await page.getByRole('button', { name: 'Update VEX', exact: true }).click();
   await expect(page.getByRole('region', { name: 'Selected investigation context' })).toContainText('openssl 1.1.1');
   await expect(page.getByText('Read-only fixture evidence', { exact: false })).toBeVisible();
   expect(requests.some(request => request.path === `/api/vex/investigations/${row.id}`)).toBe(true);

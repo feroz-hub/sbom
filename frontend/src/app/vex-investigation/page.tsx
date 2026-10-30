@@ -15,7 +15,7 @@
 
 import { Suspense, useEffect, useMemo, useRef, useState } from 'react';
 import { useInfiniteQuery, useQuery } from '@tanstack/react-query';
-import { AlertTriangle, ShieldQuestion } from 'lucide-react';
+import { AlertTriangle, Pencil, ShieldQuestion } from 'lucide-react';
 import { useRouter, useSearchParams } from 'next/navigation';
 import { DashboardFilters } from '@/components/dashboard/DashboardFilters';
 import { TopBar } from '@/components/layout/TopBar';
@@ -691,8 +691,9 @@ function InvestigationTableRow({
       </Td>
       <Td>{row.assigned_to ? <><span>{row.assigned_to_label ?? 'Legacy assignment'}</span>{row.assigned_to_is_self ? <Badge variant="info">You</Badge> : null}{row.assigned_to_active === false ? <span className="block text-[10px] text-hcl-muted">Inactive or legacy owner</span> : null}</> : <Badge variant="gray">Unassigned</Badge>}</Td>
       <Td>
-        <Button variant="ghost" size="sm" onClick={() => onOpen(row, 'investigation')}>
-          Investigate
+        <Button variant="ghost" size="sm" className="whitespace-nowrap" onClick={() => onOpen(row, 'investigation')}>
+          <Pencil className="h-3.5 w-3.5 shrink-0" aria-hidden="true" />
+          Update VEX
         </Button>
       </Td>
     </tr>

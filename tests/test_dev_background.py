@@ -25,6 +25,8 @@ def runtime(monkeypatch, tmp_path):
     manager = Mock(state=state, path=tmp_path / "runtime.json")
     manager.service_status.return_value = "RUNNING"
     manager.load.return_value = state
+    current = {}
+    monkeypatch.setattr(dev, "process_info", current.get)
     for index, (name, role, queues) in enumerate(
         (
             ("Celery worker", "default", ["celery"]),
@@ -33,7 +35,9 @@ def runtime(monkeypatch, tmp_path):
         ),
         100,
     ):
-        state["services"][name] = {"pid": index}
+        record = {"pid": index, "birth": f"synthetic-birth-{index}", "exe": "synthetic-python"}
+        state["services"][name] = record
+        current[index] = record.copy()
         data = {"instance": state["instance"], "pid": index, "time": time.time(), "connected": True}
         if queues:
             data.update(node=dev.worker_node(role, state["instance"], "greenfield"), queues=queues)
