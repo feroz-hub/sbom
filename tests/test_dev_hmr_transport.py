@@ -18,7 +18,7 @@ _SPEC = importlib.util.spec_from_file_location(
 _FIXTURE = importlib.util.module_from_spec(_SPEC)
 _SPEC.loader.exec_module(_FIXTURE)
 _HMRSocket = _FIXTURE._HMRSocket
-_URL = "wss://localhost:13000/_next/webpack-hmr"
+_URL = "wss://localhost:13000/_next/hmr"
 _ORIGIN = "https://localhost:13000"
 _PRIVATE = "synthetic-private-header-and-frame-value"
 

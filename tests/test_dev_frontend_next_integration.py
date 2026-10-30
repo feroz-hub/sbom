@@ -726,7 +726,7 @@ def test_real_next_verified_https_websocket_hmr_assets_and_verified_owned_cleanu
         _wait_probe(opener, origin, runtime, identities)
         html = _wait_page(opener, origin, runtime, identities, BEFORE)
         with _HMRSocket(
-            f"wss://localhost:{port}/_next/webpack-hmr",
+            f"wss://localhost:{port}/_next/hmr",
             ssl=context,
             origin=origin,
             proxy=None,
