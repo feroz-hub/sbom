@@ -145,6 +145,9 @@ def kernel(monkeypatch):
     monkeypatch.setattr(dev.sys, "platform", "win32")
     monkeypatch.setattr(dev.ctypes, "WinDLL", lambda *args, **kwargs: value, raising=False)
     monkeypatch.setattr(dev.ctypes, "get_last_error", lambda: value.last_error, raising=False)
+    # These fake workers have no cooperative loop; the dedicated shutdown
+    # tests separately exercise warm waiting and the real native Celery loop.
+    monkeypatch.setattr(dev, "WINDOWS_SHUTDOWN_GRACE", 0, raising=False)
     return value
 
 

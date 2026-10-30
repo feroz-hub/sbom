@@ -76,7 +76,7 @@ jobs:
         run: >-
           python -m pytest -p no:cacheprovider --noconftest -q
           tests/test_dev_launcher.py tests/test_dev_lifecycle.py
-          tests/test_dev_windows_lifecycle.py
+          tests/test_dev_windows_lifecycle.py tests/test_dev_windows_shutdown.py
           tests/test_dev_background.py tests/test_dev_main_merge.py
           tests/test_greenfield_windows_compat.py
       - name: POSIX TLS, setup and migration guard unit regressions
