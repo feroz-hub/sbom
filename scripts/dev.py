@@ -1948,41 +1948,13 @@ class LocalHttps:
         Administrators and SYSTEM are permitted. Never infer security from POSIX
         chmod bits on Windows, and never change the user's ACL or trust settings.
         """
-        import json
-
-        env = LocalHttps.clean_environment()
-        env["SBOM_TLS_ACL_PATH"] = str(Path(path).absolute())
-        powershell = shutil.which("powershell.exe", path=env["PATH"])
-        if not powershell:
-            raise LocalHttps.HttpsTrustError(
-                "PowerShell is required to verify Windows private-file ACLs; install/restore Windows PowerShell."
-            )
-        script = "$ErrorActionPreference='Stop';$acl=Get-Acl -LiteralPath $env:SBOM_TLS_ACL_PATH;$rules=@($acl.GetAccessRules($true,$true,[System.Security.Principal.SecurityIdentifier]) | ForEach-Object { @{sid=$_.IdentityReference.Value;type=[int]$_.AccessControlType;rights=[int]$_.FileSystemRights} });@{owner=$acl.GetOwner([System.Security.Principal.SecurityIdentifier]).Value;current=[System.Security.Principal.WindowsIdentity]::GetCurrent().User.Value;protected=$acl.AreAccessRulesProtected;rules=$rules} | ConvertTo-Json -Compress -Depth 4"
+        native_acl = _development_library("dev_windows_acl")
         try:
-            result = subprocess.run(
-                [powershell, "-NoProfile", "-NonInteractive", "-Command", script],
-                env=env,
-                capture_output=True,
-                text=True,
-                timeout=15,
-            )
-            if result.returncode:
-                raise ValueError()
-            acl = json.loads(result.stdout)
-            if not acl.get("current") or acl.get("owner") != acl["current"]:
-                raise ValueError()
-            allowed = {acl["current"], "S-1-5-18", "S-1-5-32-544"}
-            mutable_rights = 2 | 4 | 16 | 64 | 256 | 65536 | 262144 | 524288
-            rules = acl.get("rules")
-            if not isinstance(rules, list) or not rules:
-                raise ValueError()
-            for rule in rules:
-                if rule["type"] == 0 and rule["sid"] not in allowed:
-                    if private or int(rule["rights"]) & mutable_rights:
-                        raise ValueError()
-        except (OSError, ValueError, TypeError, KeyError, subprocess.TimeoutExpired):
+            native_acl.verify_access(Path(path).absolute(), private=private)
+        except native_acl.AclVerificationError as error:
             raise LocalHttps.HttpsTrustError(
-                "Windows file ownership/private ACL verification failed. Restrict this path to your user, SYSTEM and Administrators using Windows Security/Advanced permissions, then rerun diagnose; no ACL was changed."
+                f"Windows file ownership/private ACL verification failed ({error}); status=UNVERIFIED. "
+                "Review access and Windows Security/Advanced permissions, then rerun diagnose; no ACL was changed."
             ) from None
 
     @staticmethod

@@ -261,7 +261,13 @@ persistent-ACL filesystem support. Existing ACLs are not repaired, and failed
 creation can retain incomplete new artifacts for operator review. Redirected
 certificate/configuration parent paths are refused. System-service
 installation and OS/browser root trust are never performed by setup. Native
-Windows/macOS/Linux, real provider login and fresh-install acceptance remain
+Windows ownership/DACL inspection uses read-only native metadata APIs on one
+handle, with current-user ownership and conservative trusted-grant checks. It
+does not launch PowerShell, change ACLs or treat unknown metadata as safe. This
+also avoids the confirmed 15-second helper timeout on fresh Windows CI hosts.
+Keep checkout/state and test TEMP paths within the machine's supported Windows
+path limits; no long-path or other machine policy is enabled automatically.
+Native Windows/macOS/Linux, real provider login and fresh-install acceptance remain
 separate validation work; documentation and fixture tests do not establish them.
 
 ## Sources and precedence
