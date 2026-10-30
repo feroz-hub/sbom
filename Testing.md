@@ -44,33 +44,56 @@ Keep evidence and downloads private and redacted. Do not commit raw HAR files,
 cookies, authorization headers, activation links, screenshots of real accounts,
 customer SBOMs or report contents to the public repository.
 
-## 1. Start the stack and sign in
+## 1. Start the stack
 
-Read [development setup and platform limits](docs/development/README.md), then
-the [database compatibility gate](docs/DATABASE_BOOTSTRAP_AND_UPGRADE.md).
-Start can write configuration/data and apply or propose migrations.
+From the repository root, run the single local development manager:
 
-From the repository root with the configured Python 3.11+ executable:
+```sh
+python3 scripts/dev.py
+```
 
-    python scripts/dev.py --check --profile legacy
-    python scripts/dev.py start --profile legacy
+No command means `start`. Keep this foreground process running while testing.
+The launcher prepares project dependencies as needed, verifies or resumes the
+selected profile's PostgreSQL/Redis dependencies, and manages FastAPI, Next.js,
+the default Celery worker, the reports worker, and exactly one Celery Beat.
+Wait for the launcher's application-ready message; a process merely running is
+not sufficient. Missing system software, approved HTTPS trust, external identity
+services and explicit database setup may still require operator action. See the
+[setup guide](scripts/BOOTSTRAP.md) and [lifecycle guide](docs/dev-launcher-lifecycle.md).
 
-Use greenfield only for the intended installed macOS environment. Keep the
-foreground terminal; use a second terminal for status/stop. Do not start the
-shared home-directory Greenfield stack from another worktree.
+Manage the same checkout from another terminal; do not start individual services:
 
-Open https://localhost:13000 after reviewing local trust. API origin:
-http://127.0.0.1:18000. Check database availability in /health, /ready/iam and real
-BFF sign-in. --check or an HTTP 200 alone does not establish acceptance.
+```sh
+python3 scripts/dev.py start
+python3 scripts/dev.py stop
+python3 scripts/dev.py restart
+python3 scripts/dev.py status
+python3 scripts/dev.py doctor
+python3 scripts/dev.py logs
+python3 scripts/dev.py logs --service reports --lines 80
+```
+
+`status`, `doctor` and `logs` inspect the environment. Use `restart` only when
+needed. `stop` or Ctrl+C stops verified launcher-owned application processes;
+database containers, persisted data, credentials and certificates are preserved.
+Ordinary startup does not initialize or implicitly upgrade a database.
+
+The **verified macOS Greenfield environment** uses:
+
+- Frontend: **https://localhost:13000**
+- API: **http://127.0.0.1:18000**
+
+These are environment-specific URLs, not universal defaults. Use the selected
+profile's reported URLs and preserved configuration on other installations.
+The UI links below target this verified Greenfield frontend. Native Windows and
+full Linux application acceptance remain unverified; consult the
+[platform matrix](docs/engineering/dev-launcher-platform-matrix.md).
 
 Use the approved test enrollment/login flow. Confirm tenant selection and
-permissions for project/application creation, SBOM upload, analysis and export.
-Record disabled/hidden unauthorized actions as expected restrictions; do not
-grant broader roles merely to obtain a pass.
-
-Historical setup expectations retired: machine-specific paths, the port-8001
-workaround and the claim that cross-env is missing. cross-env is already declared;
-repair an incomplete lockfile installation using the testing/development guides.
+permissions for project/application creation, upload, analysis and export.
+Do not grant broader roles or disable authentication to obtain a pass.
+The source-aligned MT procedures below supersede older label/ID/count assumptions;
+all observed browser/provider/timing outcomes still require a real test run.
 
 ## 2. Dashboard (MT-01)
 
@@ -362,8 +385,8 @@ not inferred passes. Do not publish test identities or captured payloads.
 
 Additional role/VEX/remediation, scheduling and mail cases remain in their
 [feature requirements](docs/requirements/vex-dashboard-investigation.md) and
-[report operations](docs/runbook-report-notifications.md). The legacy launcher
-worker consumes celery and reports; Greenfield's periodic schedule is restricted. Do not start another
+[report operations](docs/runbook-report-notifications.md). Both profiles use separate default/reports consumers and one full application Beat,
+with existing feature/security guards and Greenfield's mail cadence retained. Do not start another
 Beat or enable real recipients merely to complete a checkbox.
 
 ## Troubleshooting

@@ -29992,7 +29992,7 @@ Commands run from the repository unless a frontend working directory is stated. 
 | Frontend focused | in frontend: bundled Node `node_modules/vitest/vitest.mjs run src/lib/dashboardScopeUrl.test.ts src/components/dashboard/DashboardFilters.test.tsx src/app/vex-investigation/page.test.tsx src/components/vex/vexDecisionValidation.test.ts src/lib/dashboard-vex-invalidation.test.ts --maxWorkers=1` | **111 passed**, exit 0 |
 | Frontend integration | same Vitest command with `src/app/__tests__/dashboard-drilldown.integration.test.tsx src/components/vex/data-sync.integration.test.tsx src/components/vex/AssigneeCombobox.test.tsx --maxWorkers=1` | **25 passed**, exit 0 |
 | TypeScript | in frontend: bundled Node `node_modules/typescript/bin/tsc --noEmit` | pass, exit 0 |
-| Build | `PYTHONPATH=. .venv/bin/python -m scripts.greenfield_uuid build` | optimized webpack build, TypeScript and 47 static pages passed, exit 0 |
+| Build | `PYTHONPATH=. .venv/bin/python scripts/dev.py setup --profile greenfield --frontend-build` | optimized webpack build, TypeScript and 47 static pages passed, exit 0 |
 | Backend lint | `.venv/bin/python -m ruff check app/routers/vex_investigations.py tests/test_vex_confidence_serialization.py tests/test_vex_investigations_api.py` | pass, exit 0 |
 | Frontend lint | in frontend: bundled Node ESLint on the changed parser and two dashboard test files | pass, exit 0 |
 

@@ -1,6 +1,6 @@
 # Greenfield restart port preflight — 24 October 2026
 
-The reported traceback failed at `scripts/greenfield_uuid.py`'s plain
+The reported traceback failed at `scripts/dev.py`'s plain
 `socket.bind()` check for application ports 18000 and 13000, after schema
 verification succeeded. This was separate from the database/schema check.
 
@@ -15,7 +15,7 @@ running managed environment while the former preflight still rejects restart.
 
 ## Correction
 
-- `scripts/greenfield_uuid.py`: use a named application-port check matching the
+- `scripts/dev.py`: use a named application-port check matching the
   POSIX reuse policy of the application listener. Never enable `SO_REUSEADDR`
   on Windows and never enable `SO_REUSEPORT`. A live listener is still refused.
   Port checks precede settings/credential reads, workspace copying and process

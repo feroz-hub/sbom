@@ -42,7 +42,7 @@ The existing 193-case suite concerns the original six resources. No unexecuted c
 | Global Ruff app/tests/scripts | **4 pre-existing findings**, unchanged baseline files | ruff-full-final.log |
 | Git whitespace | **PASS** | whitespace-final.log |
 
-The four global Ruff findings are import order in backfill_component_descriptions.py, bootstrap_fresh_database.py and compare_authorization_catalog.py, plus datetime.UTC in dev_runtime.py. Their exact baseline source bytes are preserved; no unrelated lint rewrite is part of this change. Next's generated next-env.d.ts build-path rewrite was restored to its original bytes.
+The four global Ruff findings are import order in backfill_component_descriptions.py, bootstrap_fresh_database.py and compare_authorization_catalog.py, plus datetime.UTC in dev.py. Their exact baseline source bytes are preserved; no unrelated lint rewrite is part of this change. Next's generated next-env.d.ts build-path rewrite was restored to its original bytes.
 
 The prior `backend-full-final.xml` name is historical: that run was interrupted at **192 PASS**, zero failures after 308.71 s to correct a demonstrated numeric-shaped JSON integer validation hole. It is not a complete acceptance run. The final focused suite adds explicit rejection of that input and hyphenless User selectors. The later complete-inventory attempts are recorded below; while one is in progress, no final backend acceptance is claimed.
 

@@ -21,7 +21,11 @@ STATE = Path.home() / ".sbom-public-resource-uuid"
 def environment(database=DATABASE):
     from sqlalchemy.engine import make_url
 
-    from scripts.greenfield_uuid import settings, url
+    from scripts.dev import GreenfieldStack
+
+    settings = GreenfieldStack.settings
+
+    url = GreenfieldStack.url
 
     if database not in {DATABASE, FOCUSED_DATABASE}:
         raise RuntimeError("Not an public-resource task-owned test database")
@@ -46,7 +50,11 @@ def environment(database=DATABASE):
 def prepare(database=DATABASE):
     from sqlalchemy import create_engine, inspect, text
 
-    from scripts.greenfield_uuid import url, verify_resources
+    from scripts.dev import GreenfieldStack
+
+    url = GreenfieldStack.url
+
+    verify_resources = GreenfieldStack.verify_resources
 
     verify_resources()
     env = environment(database)

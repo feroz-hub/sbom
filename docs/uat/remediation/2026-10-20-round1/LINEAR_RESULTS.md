@@ -21,6 +21,6 @@ Exact passing suites:
 - Backend: `PYTHONPATH=. .venv/bin/python docs/uat/remediation/2026-10-20-round1/run-regressions.py tests/test_vex_confidence_serialization.py tests/test_vex_scoped_authorization.py tests/test_dashboard_scope.py`.
 - Frontend (from frontend, using bundled Node): `node_modules/vitest/vitest.mjs run src/lib/dashboardScopeUrl.test.ts src/components/dashboard/DashboardFilters.test.tsx src/app/vex-investigation/page.test.tsx src/components/vex/vexDecisionValidation.test.ts src/lib/dashboard-vex-invalidation.test.ts --maxWorkers=1`.
 - Integration (same runtime/directory): `node_modules/vitest/vitest.mjs run src/app/__tests__/dashboard-drilldown.integration.test.tsx src/components/vex/data-sync.integration.test.tsx src/components/vex/AssigneeCombobox.test.tsx --maxWorkers=1`.
-- TypeScript: bundled Node `node_modules/typescript/bin/tsc --noEmit`. Build: `PYTHONPATH=. .venv/bin/python -m scripts.greenfield_uuid build`.
+- TypeScript: bundled Node `node_modules/typescript/bin/tsc --noEmit`. Build: `PYTHONPATH=. .venv/bin/python scripts/dev.py setup --profile greenfield --frontend-build`.
 
 485-case baseline and unrelated dirty work preserved. Remaining five findings/other coverage are unchanged. Full UAT sign-off WITHHELD. No commit/push/merge/deployment; no Linear issue marked Done.

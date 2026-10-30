@@ -1,3 +1,5 @@
+> Local development uses `python scripts/dev.py`. Explicit Celery commands in this document are production/operator procedures.
+
 # Phase 1 UUID migration: baseline audit
 
 Audit date: 2026-10-16 (Asia/Kolkata). Scope: repository discovery and read-only baseline verification. No UUID migration has been implemented or applied.
@@ -55,10 +57,10 @@ Paths below are relative to the repository root.
 | FastAPI routers | `app/routers/`: projects/products, SBOM CRUD/upload/versions/logical SBOMs, validation/repair, analysis/runs/findings, reports, dashboards, CVE/KEV, VEX, lifecycle, advisor, AI, tenants/platform, native/Entra authentication, verification and authorization catalog. `app/nvd_mirror/api.py`: `/admin/nvd-mirror` router. |
 | Pydantic contracts | `app/schemas.py` and `app/schemas_{authorization,compare,cve,dashboard,identity,lifecycle_admin,native_enrollment,platform,reports,tenants,user_management,vex}.py`; additional contracts in `app/ai/schemas.py`, `app/nvd_mirror/schemas.py` and domain modules under `app/services/`. JSON/XSD files in `app/validation/schemas/` are SBOM format validation schemas, a separate concern. |
 | Frontend | `frontend/package.json`: Next.js, React and TypeScript application. Pages/routes in `frontend/src/app/`; UI in `frontend/src/components/`; API client in `frontend/src/lib/api.ts`; backend proxy in `frontend/src/app/api/backend/[...path]/route.ts`; shared contracts in `frontend/src/types/`; state/query behavior in `frontend/src/hooks/`. Frontend-specific guidance exists in `frontend/AGENTS.md`; no frontend files were edited. |
-| Celery configuration | `app/workers/celery_app.py`: broker/result backend resolution, task includes, Beat schedule and worker lifecycle. Launchers: `scripts/celery_worker.sh`, `scripts/celery_beat.sh`, `scripts/report_worker.sh`. |
+| Celery configuration | `app/workers/celery_app.py`: broker/result backend resolution, task includes, Beat schedule and worker lifecycle. Launchers: `scripts/dev.py`, `scripts/dev.py`, `scripts/dev.py`. |
 | Celery jobs | Registered modules: `app/workers/security_mail.py`, `app/nvd_mirror/tasks.py`, `app/workers/scheduled_analysis.py`, `cve_refresh.py`, `ai_fix_tasks.py`, `source_cache.py`, `kev_sync.py`, `report_notifications.py`, `ai_model_discovery.py`, `component_advisor_tasks.py`. These are future ID serialization and task-argument audit surfaces. |
 | Database configuration | `app/db.py`, `app/settings.py`, `alembic/env.py`; root `.env`, launcher `.env.dev.local`, `docker-compose.yml`, `docker-compose.server.yml` and example env files. Values and credentials are intentionally omitted. |
-| Bootstrap/diagnostics | `scripts/dev.py`, `scripts/dev_runtime.py`, `scripts/check_database.py`, `scripts/bootstrap_fresh_database.py`, `scripts/schema/postgresql_047_baseline.sql`. These were inspected as source where needed; no launcher, bootstrap or migration operation was executed. |
+| Bootstrap/diagnostics | `scripts/dev.py`, `scripts/dev.py`, `scripts/check_database.py`, `scripts/bootstrap_fresh_database.py`, `scripts/schema/postgresql_047_baseline.sql`. These were inspected as source where needed; no launcher, bootstrap or migration operation was executed. |
 
 ## Repository migration head
 

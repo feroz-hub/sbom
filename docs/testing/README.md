@@ -37,14 +37,17 @@ example includes integration-marked validation tests but excludes benchmarks.
 There is no registered schema marker. These are different coverage claims,
 not interchangeable “full green” commands.
 
-The developer launcher suites mock every process, container and database call
-and need no test database. Run them without the database conftest:
+The developer launcher unit/adapter suites need no test database; the separate
+native smoke suite creates only disposable fixture-owned processes and listeners. Run them without the database conftest:
 
     python -m pytest -p no:cacheprovider --noconftest -q tests/test_dev_launcher.py tests/test_dev_lifecycle.py tests/test_dev_greenfield.py
 
 The [dev-launcher workflow](../../.github/workflows/dev-launcher.yml) runs the
-same command on Windows, Linux and macOS. POSIX process-group cases are skipped
-on Windows. These are unit results, not native full-stack acceptance.
+cross-platform unit/adapter subset on Windows, Linux and macOS, with additional
+POSIX TLS/setup/migration and native-process fixture checks. See its explicit file
+lists. POSIX-only cases are skipped on Windows; full Windows/Linux application
+acceptance is unverified. Include tests/test_dev_main_merge.py for the security
+and diagnostics transferred from main. No CI job runs application provisioning.
 
 Focused suites should match the changed behavior, such as launcher ownership,
 public UUID contracts, IAM/tenant isolation, VEX/metrics or report storage.

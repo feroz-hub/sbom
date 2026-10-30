@@ -35,7 +35,7 @@ The runtime uses `greenfield_app` (no SUPERUSER/CREATEDB/CREATEROLE/REPLICATION/
 
 Frontend routes, clients, resource selection, tenant context and cache keys preserve UUID strings. Keyset pagination exposes UUID anchors in both cursor input and X-Next-Cursor output, preserving internal integer ordering. Nested posture/version/source references and permanent-delete responses retain their public identities. Analysis defaults now follow server configuration instead of hardcoded providers. Report snapshots and links use public UUID resource references. Dialog focus timing/restoration and project default ordering were corrected during real regression testing. `ResourceId` fixture-compatible TypeScript unions remain transitional; numeric values do not gain HTTP authorization.
 
-Core new sources: `app/{public_identity,public_api,greenfield_schema}.py`, `alembic/versions/100_greenfield_uuid_final.py`, `infra/greenfield-uuid/compose.yml`, `scripts/greenfield_{uuid,references,seed,schema_check,integrity,acceptance,regression}.py`, `scripts/test_greenfield_setup.py`, `frontend/src/lib/publicId.ts`, `frontend/e2e/greenfield.{config,spec}.ts`, and the Makefile. Existing model, auth-context, tenant-serialization, report-composer, frontend resource/type/client and regression-test files were updated. Use `git diff --name-only` to inspect the full working tree; it also contains preserved pre-existing user changes.
+Core new sources: `app/{public_identity,public_api,greenfield_schema}.py`, `alembic/versions/100_greenfield_uuid_final.py`, `infra/greenfield-uuid/compose.yml`, `scripts/greenfield_{uuid,references,seed,schema_check,integrity,acceptance,regression}.py`, `scripts/dev.py`, `frontend/src/lib/publicId.ts`, `frontend/e2e/greenfield.{config,spec}.ts`, and the Makefile. Existing model, auth-context, tenant-serialization, report-composer, frontend resource/type/client and regression-test files were updated. Use `git diff --name-only` to inspect the full working tree; it also contains preserved pre-existing user changes.
 
 ## Real verification
 
@@ -72,10 +72,10 @@ python3 -m venv .venv
 docker pull postgres@sha256:1a6ab3f5345eb6dbe04a1349529caabdb0ab09293a09590fad07b2246bfa4b54
 docker pull redis@sha256:e7723ff73d963f5cc6d9c4643ea3d989527a402a319239054e9472a7fb9219a2
 docker pull axllent/mailpit@sha256:98b916bd3c8d61f7633a52d3ea2f58d00620cb01ca57ab59edde68c347a95365
-make greenfield-setup
+python scripts/dev.py setup --profile greenfield --provision-greenfield --initialize-database --confirm-database sbom_greenfield_uuid
 ```
 
-Setup checks port/name collisions, uses only the new project, generates dedicated random credentials, bootstraps/seeds and starts the app/worker. It waits for a successful backend health response and an HTTPS native-login page, validating the generated local certificate; startup failures retain logs without automatic teardown. It refuses unrecognized existing resource identities. It never runs the old migration executor. The application uses an isolated frontend workspace and clean generated settings rather than the repository's ambient `.env`. The original acceptance run did not start Celery Beat. The standard launcher now embeds a restricted security-mail scheduler in the worker; external mirror/sync/analysis schedules are not started automatically.
+Current setup is controlled through scripts/dev.py: provisioning, confirmed empty-database initialization and migrations are explicit operations. See [bootstrap controls](../../scripts/BOOTSTRAP.md). Runtime startup uses the full application schedule with separate default/reports workers and one separate Beat. Historical results below describe the earlier implementation and do not establish current platform acceptance; see the [current matrix](../engineering/dev-launcher-platform-matrix.md).
 
 For subsequent starts, the standard launcher now selects this installed UUID environment automatically:
 
@@ -95,13 +95,13 @@ Open `https://localhost:13000` (now a locally trusted mkcert leaf; see the HTTPS
 make greenfield-schema
 make greenfield-integrity
 make greenfield-api
-.venv/bin/python -B -m unittest scripts.test_greenfield_setup -v
+.venv/bin/python -m pytest --noconftest -q tests/test_dev_private_setup.py
 .venv/bin/python -B -m scripts.greenfield_regression  # default native suites; test-file arguments accepted
 (cd frontend && npm test -- --maxWorkers=1)
 (cd frontend && npx tsc --noEmit)
-.venv/bin/python -B -m scripts.greenfield_uuid build  # separate isolated build workspace
+.venv/bin/python scripts/dev.py setup --profile greenfield --frontend-build  # separate isolated build workspace
 (cd frontend/e2e && npx playwright test --config greenfield.config.ts)
-make greenfield-restart  # only recorded task-owned backend/frontend/worker processes
+python scripts/dev.py restart --profile greenfield  # only recorded task-owned backend/frontend/worker processes
 ```
 
 The fresh-process report load probes passed at 50 SBOMs/4,901 findings (**4.23 s, 172.3 MiB peak**) and 250 SBOMs/24,901 findings (**24.28 s, 288.0 MiB peak**), retaining the original elapsed-time and <512 MiB peak-memory assertions. Linux keeps its original /proc VmHWM and address-space-cap implementation. macOS uses independently tested fresh-exec ru_maxrss in bytes; a 64 MiB parent-allocation regression demonstrates that parent residency is excluded. A hard child address-space cap is unavailable on this macOS host and is explicitly reported, rather than presented as enforced.
@@ -136,4 +136,4 @@ A real browser with a legacy integer tenant preference could authenticate succes
 
 ## Trusted development HTTPS follow-up
 
-The original self-signed leaf and Playwright TLS-bypass configuration did not establish normal Chrome trust. This has now been corrected with a leaf issued by the existing trusted local mkcert CA; no Keychain change was necessary on this Mac. Setup/start requires system trust before readiness, and both greenfield browser configurations now use installed Chrome with `ignoreHTTPSErrors: false`. Existing certificates are reused rather than regenerated on each restart. `make greenfield-https` performs system-trust endpoint verification. See [HTTPS certificate fix](GREENFIELD_HTTPS_CERTIFICATE_FIX.md) for before/after fingerprints, strict-browser login results, fresh-machine prerequisites and remaining platform limitations. Historical test results above retain their original scope.
+The original self-signed leaf and Playwright TLS-bypass configuration did not establish normal Chrome trust. This has now been corrected with a leaf issued by the existing trusted local mkcert CA; no Keychain change was necessary on this Mac. Setup/start requires system trust before readiness, and both greenfield browser configurations now use installed Chrome with `ignoreHTTPSErrors: false`. Existing certificates are reused rather than regenerated on each restart. `python scripts/dev.py doctor --profile greenfield` performs system-trust endpoint verification. See [HTTPS certificate fix](GREENFIELD_HTTPS_CERTIFICATE_FIX.md) for before/after fingerprints, strict-browser login results, fresh-machine prerequisites and remaining platform limitations. Historical test results above retain their original scope.

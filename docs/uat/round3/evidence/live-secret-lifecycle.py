@@ -3,7 +3,8 @@ import importlib.util,json,secrets,threading
 from pathlib import Path
 from http.server import ThreadingHTTPServer,BaseHTTPRequestHandler
 from sqlalchemy import create_engine,text
-from scripts.greenfield_uuid import settings
+from scripts.dev import GreenfieldStack
+settings = GreenfieldStack.settings
 spec=importlib.util.spec_from_file_location('m',Path(__file__).with_name('live-common.py'));m=importlib.util.module_from_spec(spec);spec.loader.exec_module(m)
 f=m.create_tenant();tid=f['tenant_id'];token=f['token'];file='secret-lifecycle.json';mockid=None;server=None
 expected_key=secrets.token_urlsafe(32);auth_observations=[]

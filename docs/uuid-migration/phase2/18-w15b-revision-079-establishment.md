@@ -32,7 +32,7 @@ The private accepted archive is380123bytes, SHA256 `8d82d9a24373d62af0be9231ffe4
 
 ## Exact failed gate
 
-Native macOS libproc metadata inspection used only AST-extracted `process_info` and `matches` definitions from [dev_runtime.py](/Users/ferozebasha/sbom/scripts/dev_runtime.py:25), with no launcher/application import or execution. `None` means absent under that function; inspection errors raise separately. At03:11:47.306461UTC the current private `.dev-runtime.json` process records were checked individually:
+Native macOS libproc metadata inspection used only AST-extracted `process_info` and `matches` definitions from [scripts/dev.py](../../../scripts/dev.py), with no launcher/application import or execution. `None` means absent under that function; inspection errors raise separately. At03:11:47.306461UTC the current private `.dev-runtime.json` process records were checked individually:
 
 | Recorded role | Recorded PID | Recorded birth identity | Live observation | Identity match |
 | --- | --- | --- | --- | --- |

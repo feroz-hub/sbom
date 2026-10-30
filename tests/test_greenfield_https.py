@@ -1,6 +1,7 @@
 """Synthetic certificate tests; no real trust-store changes, network or CA keys."""
 
 import ipaddress
+import json
 import os
 import subprocess
 from datetime import UTC, datetime, timedelta
@@ -12,7 +13,27 @@ from cryptography import x509
 from cryptography.hazmat.primitives import hashes, serialization
 from cryptography.hazmat.primitives.asymmetric import rsa
 from cryptography.x509.oid import NameOID
-from scripts import greenfield_https as tls
+from scripts import dev
+
+
+class _CanonicalTlsSurface:
+    """Patch the real canonical class methods and their module dependencies.
+
+    The adapter is a class whose subprocess/os dependencies live in scripts.dev.
+    Writes patch the real implementation rather than a copied TLS module.
+    """
+
+    def __getattr__(self, name):
+        if hasattr(dev.LocalHttps, name):
+            return getattr(dev.LocalHttps, name)
+        return getattr(dev, name)
+
+    def __setattr__(self, name, value):
+        target = dev.LocalHttps if hasattr(dev.LocalHttps, name) else dev
+        setattr(target, name, value)
+
+
+tls = _CanonicalTlsSurface()
 
 
 def certificate(key, issuer_key, subject, issuer, hosts=(), expiry=30):
@@ -62,7 +83,8 @@ def test_valid_pair_reused_without_generation_or_replacement(pair, monkeypatch):
     command = Mock(side_effect=AssertionError("unnecessary generation"))
     monkeypatch.setattr(tls.subprocess, "run", command)
     _, _, _, metadata = tls.ensure_certificate(state, prepare=True)
-    assert metadata["macos_trusted"] is True
+    assert metadata["system_trusted"] is True
+    assert metadata["macos_trusted"] is (tls.sys.platform == "darwin")
     assert set(metadata["sans"]) == set(tls.HOSTS)
     assert before == (cert.read_bytes(), key.stat().st_ino)
     command.assert_not_called()
@@ -191,6 +213,7 @@ def test_generation_only_leaf_retains_old_pair(pair, monkeypatch):
 
 
 def test_environment_removes_ca_overrides_and_tls_bypasses(monkeypatch):
+    monkeypatch.setattr(tls.sys, "platform", "darwin")
     monkeypatch.setenv("CAROOT", "/untrusted")
     monkeypatch.setenv("CURL_CA_BUNDLE", "/untrusted")
     monkeypatch.setenv("NODE_TLS_REJECT_UNAUTHORIZED", "0")
@@ -199,6 +222,7 @@ def test_environment_removes_ca_overrides_and_tls_bypasses(monkeypatch):
 
 
 def test_endpoint_probe_uses_system_trust_and_fixed_url(monkeypatch):
+    monkeypatch.setattr(tls.sys, "platform", "darwin")
     command = Mock(return_value=subprocess.CompletedProcess([], 0))
     monkeypatch.setattr(tls.subprocess, "run", command)
     tls.verify_endpoint()
@@ -249,16 +273,169 @@ def test_existing_untrusted_ca_requires_operator_confirmation(monkeypatch, tmp_p
 def test_launcher_tls_failure_prevents_container_start(monkeypatch, tmp_path):
     from types import SimpleNamespace
 
-    from scripts import dev_greenfield
 
     for name in ("environment.json", "runtime-password", "setup-password"):
         (tmp_path / name).write_text("synthetic")
-    monkeypatch.setattr(dev_greenfield.stack, "STATE", tmp_path)
+    monkeypatch.setattr(dev.GreenfieldStack, "STATE", tmp_path)
     monkeypatch.setattr(
-        dev_greenfield.https, "ensure_certificate", Mock(side_effect=tls.HttpsTrustError("not trusted"))
+        dev.LocalHttps, "ensure_certificate", Mock(side_effect=tls.HttpsTrustError("not trusted"))
     )
     inspect = Mock()
-    monkeypatch.setattr(dev_greenfield, "inventory", inspect)
+    monkeypatch.setattr(dev.GreenfieldProfile, "inventory", inspect)
     with pytest.raises(tls.HttpsTrustError):
-        dev_greenfield.start(SimpleNamespace(check=False), Mock())
+        dev.GreenfieldProfile.start(SimpleNamespace(check=False), Mock())
     inspect.assert_not_called()
+
+
+@pytest.mark.parametrize("platform", ["linux", "win32"])
+def test_platform_environment_keeps_required_paths_but_removes_tls_bypasses(monkeypatch, platform):
+    monkeypatch.setattr(tls.sys, "platform", platform)
+    for key in ("CAROOT", "CURL_CA_BUNDLE", "SSL_CERT_FILE", "SSL_CERT_DIR", "HTTPS_PROXY", "NODE_TLS_REJECT_UNAUTHORIZED", "OPENSSL_CONF"):
+        monkeypatch.setenv(key, "untrusted")
+    monkeypatch.setenv("SYSTEMROOT", r"C:\Windows")
+    monkeypatch.setenv("LOCALAPPDATA", r"C:\Users\Developer\AppData\Local")
+    env = tls.clean_environment()
+    assert not set(env).intersection({"CAROOT", "CURL_CA_BUNDLE", "SSL_CERT_FILE", "SSL_CERT_DIR", "HTTPS_PROXY", "NODE_TLS_REJECT_UNAUTHORIZED", "OPENSSL_CONF"})
+    if platform == "win32":
+        assert env["SYSTEMROOT"] == r"C:\Windows"
+        assert "LOCALAPPDATA" in env
+
+
+def test_linux_verifies_against_native_default_trust_without_ca_override(monkeypatch, tmp_path):
+    monkeypatch.setattr(tls.sys, "platform", "linux")
+    monkeypatch.setattr(tls.shutil, "which", lambda *a, **k: "/usr/bin/openssl")
+    command = Mock(return_value=subprocess.CompletedProcess([], 0))
+    monkeypatch.setattr(tls.subprocess, "run", command)
+    assert tls.system_trusted(tmp_path / "cert.pem", hostname="localhost") is True
+    args = command.call_args.args[0]
+    assert args[:2] == ["/usr/bin/openssl", "verify"]
+    assert args[2:6] == ["-purpose", "sslserver", "-verify_hostname", "localhost"]
+    assert not {"-CAfile", "-CApath", "-CAstore"}.intersection(args)
+    assert "SSL_CERT_FILE" not in command.call_args.kwargs["env"]
+
+
+def test_linux_untrusted_certificate_is_rejected(monkeypatch, tmp_path):
+    monkeypatch.setattr(tls.sys, "platform", "linux")
+    monkeypatch.setattr(tls.shutil, "which", lambda *a, **k: "/usr/bin/openssl")
+    monkeypatch.setattr(tls.subprocess, "run", Mock(return_value=subprocess.CompletedProcess([], 2)))
+    assert tls.system_trusted(tmp_path / "cert.pem") is False
+
+
+def test_linux_missing_trust_tool_is_actionable_and_does_not_install(monkeypatch, tmp_path):
+    monkeypatch.setattr(tls.sys, "platform", "linux")
+    monkeypatch.setattr(tls.shutil, "which", lambda *a, **k: None)
+    command = Mock()
+    monkeypatch.setattr(tls.subprocess, "run", command)
+    with pytest.raises(tls.HttpsTrustError, match="openssl package"):
+        tls.system_trusted(tmp_path / "cert.pem")
+    command.assert_not_called()
+
+
+def _mock_windows_roots(monkeypatch, root, *, trusted=True):
+    monkeypatch.setattr(tls.sys, "platform", "win32")
+    monkeypatch.setattr(tls, "_windows_access", lambda *a, **k: None)
+    der = x509.load_pem_x509_certificate(root.read_bytes()).public_bytes(serialization.Encoding.DER)
+    monkeypatch.setattr(tls.ssl, "enum_certificates", lambda store: [(der, "x509_asn", trusted)], raising=False)
+
+
+def test_windows_requires_exact_root_in_native_store(pair, monkeypatch):
+    _, cert, _, root, *_ = pair
+    _mock_windows_roots(monkeypatch, root)
+    assert tls._windows_system_trusted(root) is True
+    assert tls._windows_system_trusted(cert, hostname="localhost") is True
+    assert tls._windows_system_trusted(cert) is False
+    assert tls._windows_system_trusted(cert, hostname="other.local") is False
+
+
+def test_windows_rejects_root_without_server_auth_trust(pair, monkeypatch):
+    _, cert, _, root, *_ = pair
+    _mock_windows_roots(monkeypatch, root, trusted={"1.3.6.1.5.5.7.3.3"})
+    assert tls._windows_system_trusted(root) is False
+    assert tls._windows_system_trusted(cert, hostname="localhost") is False
+
+
+def test_windows_rejects_different_signer_even_with_same_issuer_name(pair, monkeypatch):
+    _, cert, _, root, leaf_key, _, subject, issuer = pair
+    other = rsa.generate_private_key(public_exponent=65537, key_size=2048)
+    cert.write_bytes(certificate(leaf_key, other, subject, issuer, tls.HOSTS))
+    _mock_windows_roots(monkeypatch, root)
+    assert tls._windows_system_trusted(cert, hostname="localhost") is False
+
+
+def test_windows_native_store_failure_is_actionable(pair, monkeypatch):
+    _, cert, _, root, *_ = pair
+    _mock_windows_roots(monkeypatch, root)
+    monkeypatch.setattr(tls.ssl, "enum_certificates", Mock(side_effect=OSError("unavailable")), raising=False)
+    with pytest.raises(tls.HttpsTrustError, match="native ROOT store"):
+        tls._windows_system_trusted(cert, hostname="localhost")
+
+
+def _mock_windows_acl(monkeypatch, *, owner="S-1-5-21-1", rules=None, returncode=0):
+    monkeypatch.setattr(tls.sys, "platform", "win32")
+    monkeypatch.setattr(tls.shutil, "which", lambda *a, **k: "powershell.exe")
+    if rules is None:
+        rules = [{"sid": "S-1-5-21-1", "type": 0, "rights": 0x1F01FF}]
+    result = {"owner": owner, "current": "S-1-5-21-1", "rules": rules}
+    command = Mock(return_value=subprocess.CompletedProcess([], returncode, json.dumps(result)))
+    monkeypatch.setattr(tls.subprocess, "run", command)
+    return command
+
+
+def test_windows_accepts_current_user_private_acl_without_changing_it(monkeypatch, tmp_path):
+    command = _mock_windows_acl(monkeypatch)
+    tls._windows_access(tmp_path, private=True)
+    script = command.call_args.args[0][-1]
+    assert "Get-Acl" in script
+    assert "Set-Acl" not in script
+    assert str(tmp_path) not in script
+    assert command.call_args.kwargs["env"]["SBOM_TLS_ACL_PATH"] == str(tmp_path)
+
+
+@pytest.mark.parametrize("owner,rules", [
+    ("S-1-5-21-2", None),
+    ("S-1-5-21-1", []),
+    ("S-1-5-21-1", [{"sid": "S-1-1-0", "type": 0, "rights": 1}]),
+])
+def test_windows_rejects_unowned_null_or_public_private_acl(monkeypatch, tmp_path, owner, rules):
+    _mock_windows_acl(monkeypatch, owner=owner, rules=rules)
+    with pytest.raises(tls.HttpsTrustError, match="no ACL was changed"):
+        tls._windows_access(tmp_path, private=True)
+
+
+def test_windows_public_cert_can_be_readable_but_not_writable_by_everyone(monkeypatch, tmp_path):
+    _mock_windows_acl(monkeypatch, rules=[{"sid": "S-1-1-0", "type": 0, "rights": 0x20089}])
+    tls._windows_access(tmp_path, private=False)
+    _mock_windows_acl(monkeypatch, rules=[{"sid": "S-1-1-0", "type": 0, "rights": 2}])
+    with pytest.raises(tls.HttpsTrustError, match="private ACL"):
+        tls._windows_access(tmp_path, private=False)
+
+
+def test_windows_acl_probe_failure_is_fail_closed(monkeypatch, tmp_path):
+    _mock_windows_acl(monkeypatch, returncode=1)
+    with pytest.raises(tls.HttpsTrustError, match="private ACL"):
+        tls._windows_access(tmp_path, private=True)
+
+
+def test_windows_reparse_directory_is_rejected_before_acl_probe(monkeypatch):
+    monkeypatch.setattr(tls.sys, "platform", "win32")
+    path = Mock()
+    path.lstat.return_value = SimpleNamespace(st_mode=0o40700, st_file_attributes=0x400)
+    check = Mock()
+    monkeypatch.setattr(tls, "_windows_access", check)
+    with pytest.raises(tls.HttpsTrustError, match="reparse|nonsymlink"):
+        tls.private_directory(path)
+    check.assert_not_called()
+
+
+@pytest.mark.parametrize("platform,binary", [("linux", "/usr/bin/curl"), ("win32", "curl.exe")])
+def test_endpoint_probe_is_portable_and_still_uses_system_trust(monkeypatch, platform, binary):
+    monkeypatch.setattr(tls.sys, "platform", platform)
+    monkeypatch.setattr(tls.shutil, "which", lambda *a, **k: binary)
+    command = Mock(return_value=subprocess.CompletedProcess([], 0))
+    monkeypatch.setattr(tls.subprocess, "run", command)
+    tls.verify_endpoint()
+    args = command.call_args.args[0]
+    assert args[0] == binary
+    assert args[1] == "--disable"
+    assert args[args.index("--output") + 1] == os.devnull
+    assert not {"-k", "--insecure", "--cacert"}.intersection(args)

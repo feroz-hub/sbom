@@ -41,7 +41,6 @@ COPY --from=builder /opt/venv /opt/venv
 COPY --chown=appuser:appuser app ./app
 COPY --chown=appuser:appuser alembic.ini ./
 COPY --chown=appuser:appuser alembic ./alembic
-COPY --chown=appuser:appuser run.py ./
 COPY --chown=appuser:appuser scripts/bootstrap_fresh_database.py scripts/docker_migrate.py ./scripts/
 COPY --chown=appuser:appuser scripts/schema/postgresql_047_baseline.sql ./scripts/schema/
 

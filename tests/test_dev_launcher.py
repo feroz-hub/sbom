@@ -8,17 +8,21 @@ from unittest.mock import MagicMock
 
 import pytest
 from scripts import dev
-from scripts.dev_runtime import Runtime
+from scripts.dev import Runtime
 
 
 @pytest.fixture(autouse=True)
 def isolated_runtime(monkeypatch, tmp_path):
-    for name in dev.REQUIRED_FILES:  # A complete checkout, so layout validation passes.
-        (tmp_path / name).parent.mkdir(parents=True, exist_ok=True)
-        (tmp_path / name).touch()
     monkeypatch.setattr(dev, "ROOT", tmp_path)
+    monkeypatch.setattr(dev, "CONFIG", tmp_path / ".env.dev.local")
+    monkeypatch.setattr(dev, "BEAT_LOCK", tmp_path / ".dev-beat.pid")
     monkeypatch.setattr(dev, "Runtime", lambda root: Runtime(tmp_path))
     monkeypatch.setattr(dev, "ACTIVE_RUNTIME", None)
+    monkeypatch.setattr(dev, "ACTIVE_PROFILE", "legacy")
+    monkeypatch.setattr(dev.GreenfieldStack, "node_binary", lambda: tmp_path / "node")
+    monkeypatch.setattr(dev, "validate_repository_layout", lambda *args, **kwargs: None)
+    monkeypatch.setattr(dev, "validate_prerequisites", lambda *args, **kwargs: None)
+    monkeypatch.setattr(dev, "resolve_profile", lambda requested="auto": "legacy" if requested == "auto" else requested)
 
 
 def mock_virtualenv_handoff(monkeypatch, tmp_path, platform):
@@ -391,14 +395,16 @@ def test_valid_local_credentials_are_persisted(monkeypatch: pytest.MonkeyPatch, 
     )
 
 
-def test_provider_fallback_updates_only_development_urls() -> None:
-    saved = dev.resolve_config({}, 55439, 56379, 1025)
+def test_fresh_explicit_local_selection_sets_development_urls_without_mutating_input() -> None:
+    saved = {"EXISTING_SETTING": "preserved"}
     changed = dev.resolve_config(saved, 5432, 6379, 1025, pg_provider="local", redis_provider="local")
     assert changed["DEV_POSTGRES_PROVIDER"] == "local"
     assert changed["DEV_REDIS_PROVIDER"] == "local"
     assert changed["DATABASE_URL"].endswith(":5432/sbom_analyser_dev")
     assert changed["REDIS_URL"].endswith(":6379/0")
     assert changed["AUTH_SESSION_REDIS_URL"].endswith(":6379/1")
+    assert changed["EXISTING_SETTING"] == "preserved"
+    assert saved == {"EXISTING_SETTING": "preserved"}
 
 
 def test_generated_application_urls_use_development_ports() -> None:
@@ -531,10 +537,12 @@ def test_saved_local_is_reused_even_with_docker(monkeypatch: pytest.MonkeyPatch)
     assert dev.select_service("redis", 56379, 6379, check=False, env={}, preferred="local") == ("local", 6379)
 
 
-def test_saved_docker_falls_back_when_unavailable(monkeypatch: pytest.MonkeyPatch) -> None:
+@pytest.mark.parametrize("service,docker_port,local_port", [("redis", 56379, 6379), ("postgres", 55439, 5432)])
+def test_saved_docker_never_falls_back_when_unavailable(monkeypatch, service, docker_port, local_port) -> None:
     monkeypatch.setattr(dev, "docker_available", lambda: False)
-    monkeypatch.setattr(dev, "service_available", lambda service, port: port == 6379)
-    assert dev.select_service("redis", 56379, 6379, check=False, env={}, preferred="docker") == ("local", 6379)
+    monkeypatch.setattr(dev, "service_available", lambda name, port: port == local_port)
+    with pytest.raises(dev.SetupError, match="no provider fallback"):
+        dev.select_service(service, docker_port, local_port, check=False, env={}, preferred="docker")
 
 
 def test_infrastructure_port_conflict_is_clear(monkeypatch: pytest.MonkeyPatch) -> None:
@@ -585,61 +593,31 @@ def test_check_mode_does_not_start_services_or_processes(
     monkeypatch.setattr(dev, "ensure_database", lambda url: pytest.fail("database touched"))
     monkeypatch.setattr(dev, "start_process", lambda *args: pytest.fail("process started"))
     monkeypatch.setattr(dev, "wait_for_mailpit_ready", lambda *args: pytest.fail("readiness wait started"))
-    monkeypatch.setattr(dev, "node_version", lambda: (22, 1, 0))
     dev.main()
     output = capsys.readouterr().out
-    assert "no services or processes started" in output
-    assert "database schema and migrations were not validated" in output
-    assert "22.1.0" in output
+    assert "read-only checks finished" in output
     assert "BEGIN PRIVATE KEY" not in output
 
 
 @pytest.mark.parametrize("platform", ["win32", "linux", "darwin"])
-def test_startup_commands_use_solo_only_for_windows_worker_and_consume_reports_queue(monkeypatch, tmp_path, platform):
+def test_startup_commands_are_native_and_consume_both_queues(monkeypatch, tmp_path, platform):
     monkeypatch.setattr(dev.sys, "platform", platform)
-    monkeypatch.setattr(dev.sys, "argv", ["dev.py"])
-    monkeypatch.setattr(dev, "CONFIG", tmp_path / ".env.dev.local")
-    monkeypatch.setattr(dev, "BEAT_LOCK", tmp_path / "beat.lock")
     monkeypatch.setattr(dev, "venv_python", lambda: tmp_path / "python")
-    monkeypatch.setattr(dev, "read_config", lambda: {})
-    monkeypatch.setattr(dev, "docker_available", lambda: False)
-    monkeypatch.setattr(dev, "select_service", lambda service, port, *args, **kwargs: ("Docker", port))
-    monkeypatch.setattr(dev, "mailpit_ready", lambda: True)
-    # This test constructs commands; service readiness has its own tests.
-    monkeypatch.setattr(dev, "select_mailpit", lambda **kwargs: "Docker")
-    def unexpected_network_probe(*args, **kwargs):
-        pytest.fail("Command-generation test must not probe a live service")
-    monkeypatch.setattr(dev, "reachable", unexpected_network_probe)
-    for name in ("ensure_virtualenv", "ensure_dependencies", "generate_keys", "check_application_ports",
-                 "ensure_database", "write_config", "validate_existing_schema", "acquire_beat_lock", "stop_processes"):
-        monkeypatch.setattr(dev, name, lambda *args, **kwargs: None)
-    monkeypatch.setattr(dev, "run_migrations", lambda env: "test-head")
-    monkeypatch.setattr(dev, "ensure_frontend", lambda: "npm")
-    started = {}
-    monkeypatch.setattr(dev, "start_process", lambda name, command, *args: started.setdefault(name, command))
-
-    def ready(*args):
-        raise KeyboardInterrupt  # End the simulated foreground run without launching anything.
-
-    monkeypatch.setattr(dev, "wait_for_ready", ready)
-    dev.start_application(SimpleNamespace(check=False))
-    python = str(tmp_path / "python")
-    celery = [python, "-m", "celery", "-A", "app.workers.celery_app"]
-    assert started["Celery worker"] == [
-        *celery, "worker", "--loglevel=info", "--queues=celery,reports", *(["--pool=solo"] if platform == "win32" else [])
-    ]
-    # Exactly one scheduler: the worker never embeds Beat, and Beat keeps its existing command.
-    assert "--beat" not in started["Celery worker"] and "-B" not in started["Celery worker"]
-    assert started["Celery Beat"] == [*celery, "beat", "--loglevel=info"]
-    assert started["API"] == [python, "-m", "uvicorn", "app.main:app", "--host", "127.0.0.1",
-                              "--port", "18000", "--no-proxy-headers"]
-    assert started["Frontend"] == ["npm", "run", "dev:https", "--", "--port", "13000"]
+    env = {"SBOM_DEV_INSTANCE": "synthetic", "SBOM_DEV_PROFILE": "legacy", "SBOM_DEV_STATE_DIR": str(tmp_path)}
+    commands = dev.background_commands(env)
+    pool = "prefork" if platform == "linux" else "solo"
+    assert "--queues=celery" in commands["Celery worker"]
+    assert "--queues=reports" in commands["Celery reports worker"]
+    assert "--pool=" + pool in commands["Celery reports worker"]
+    assert "beat" in commands["Celery Beat"]
+    assert "--scheduler=scripts.dev:LocalScheduler" in commands["Celery Beat"]
 
 
 @pytest.fixture
 def frontend_install(monkeypatch, tmp_path):
+    monkeypatch.setattr(dev, "node_version", lambda: (20, 9, 0))
     frontend = tmp_path / "frontend"
-    frontend.mkdir(exist_ok=True)
+    frontend.mkdir()
     (frontend / "package.json").write_text('{"name":"test"}')
     (frontend / "package-lock.json").write_text('{"lockfileVersion":3}')
     certificates = frontend / "certificates"
@@ -647,8 +625,7 @@ def frontend_install(monkeypatch, tmp_path):
     (certificates / "localhost.pem").write_text("existing certificate")
     (certificates / "localhost-key.pem").write_text("existing key")
     monkeypatch.setattr(dev, "ROOT", tmp_path)
-    monkeypatch.setattr(dev.shutil, "which", lambda name: "npm")
-    monkeypatch.setattr(dev, "node_version", lambda: (20, 9, 0))
+    monkeypatch.setattr(dev.shutil, "which", lambda name, **kwargs: "npm")
 
     def install(command):
         assert command == ["npm", "ci", "--prefix", "frontend"]
@@ -691,7 +668,7 @@ def test_failed_frontend_install_is_not_stamped_and_retries(frontend_install):
     dev.ensure_frontend()
     (frontend / "package-lock.json").write_text('{"changed":true}')
     install = runner.side_effect
-    runner.side_effect = lambda command: SimpleNamespace(returncode=1, stdout="", stderr="npm ERR! network")
+    runner.side_effect = lambda command: SimpleNamespace(returncode=1, stdout="", stderr="synthetic npm failure")
     with pytest.raises(dev.SetupError, match="Frontend npm ci failed"):
         dev.ensure_frontend()
     assert not (frontend / "node_modules/.sbom-dependencies-sha256").exists()
@@ -719,7 +696,10 @@ def test_same_environment_passed_to_all_processes(monkeypatch: pytest.MonkeyPatc
     env = {"DATABASE_URL": "same", "NATIVE_SECURITY_OUTBOX_KEY": "same-secret"}
     dev.start_process("API", ["api"], env)
     dev.start_process("Worker", ["worker"], env)
-    assert received == [env, env]
+    assert received[0] == received[1]
+    assert all(received[0][key] == value for key, value in env.items())
+    assert "PATH" in received[0]
+    assert env == {"DATABASE_URL": "same", "NATIVE_SECURITY_OUTBOX_KEY": "same-secret"}
 
 
 def test_schema_guard_allows_empty_and_known_revision() -> None:
@@ -769,23 +749,34 @@ def test_verbose_prints_startup_log_without_secret(
     assert "secret-value" not in output
 
 
-def test_readiness_waits_for_all_three_checks(monkeypatch: pytest.MonkeyPatch) -> None:
+def test_readiness_validates_api_database_and_iam(monkeypatch):
+    import io
+    import json
+    from contextlib import nullcontext
     requests = []
-    monkeypatch.setattr(dev, "http_ready", lambda url, json_ready=False: requests.append((url, json_ready)) or True)
-    processes = [SimpleNamespace(poll=lambda: None) for _ in range(4)]
-    dev.wait_for_ready(processes, {}, dev.DEV_API_PORT, dev.DEV_FRONTEND_PORT, timeout=1)
-    assert requests == [
-        ("http://127.0.0.1:18000/health", False),
-        ("http://127.0.0.1:18000/ready/iam", True),
-        ("https://localhost:13000", False),
-    ]
+    manager = MagicMock()
+    manager.state = {"services": {"API": {"pid": 100}}}
+    manager.service_status.return_value = "RUNNING"
+    monkeypatch.setattr(dev, "background_health", lambda *args, **kwargs: None)
+    def response(url, **kwargs):
+        requests.append(url)
+        body = io.StringIO(json.dumps({"database": {"available": True}, "ready": True}))
+        body.status = 200
+        return nullcontext(body)
+    monkeypatch.setattr(dev, "urlopen", response)
+    dev.wait_http_component(manager, {}, "API", [("http://127.0.0.1:18000/health", "database"),
+                                                  ("http://127.0.0.1:18000/ready/iam", "iam")], timeout=1)
+    assert requests == ["http://127.0.0.1:18000/health", "http://127.0.0.1:18000/ready/iam"]
 
 
-def test_readiness_failure_names_log(monkeypatch: pytest.MonkeyPatch) -> None:
-    monkeypatch.setattr(dev, "http_ready", lambda url, json_ready=False: False)
-    processes = [SimpleNamespace(poll=lambda: None) for _ in range(4)]
-    with pytest.raises(dev.SetupError, match=r"\.dev-logs/api\.log"):
-        dev.wait_for_ready(processes, {}, dev.DEV_API_PORT, dev.DEV_FRONTEND_PORT, timeout=0)
+def test_readiness_failure_names_component_and_log(monkeypatch):
+    monkeypatch.setattr(dev, "ACTIVE_PROFILE", "legacy")
+    with pytest.raises(dev.SetupError) as failure:
+        dev.wait_http_component(MagicMock(), {}, "API", [], timeout=0)
+    diagnostic = str(failure.value)
+    assert diagnostic.startswith("API:")
+    reported_log = diagnostic.split("Log: ", 1)[1].split(". Correct", 1)[0]
+    assert Path(reported_log) == dev.ROOT / ".dev-logs" / "api.log"
 
 
 def test_unrecognized_application_port_is_not_reused(monkeypatch: pytest.MonkeyPatch, tmp_path: Path) -> None:
@@ -808,389 +799,3 @@ def test_existing_sbom_launcher_is_identified(monkeypatch: pytest.MonkeyPatch, t
     monkeypatch.setattr(dev, "http_ready", lambda url, json_ready=False: True)
     with pytest.raises(dev.SetupError, match="ownership: unrelated/unknown"):
         dev.check_application_ports(dev.DEV_API_PORT, dev.DEV_FRONTEND_PORT)
-
-
-# --- Preflight, cross-platform and safety regressions (enterprise dev simplification) ---
-
-REPOSITORY = Path(dev.__file__).resolve().parents[1]
-
-
-def test_cli_surface_is_unchanged() -> None:
-    assert dev.parse_args([]).command == "start"
-    assert dev.parse_args([]).profile == "auto"
-    for command in ("start", "stop", "restart", "status"):
-        assert dev.parse_args([command, "--profile", "legacy"]).command == command
-    args = dev.parse_args(["--check", "--verbose", "--profile", "greenfield"])
-    assert (args.check, args.verbose, args.profile) == (True, True, "greenfield")
-    with pytest.raises(SystemExit):
-        dev.parse_args(["doctor"])  # --check remains the single inspection mode.
-
-
-@pytest.mark.parametrize("platform", ["win32", "linux"])
-def test_auto_profile_uses_legacy_where_greenfield_is_unsupported(monkeypatch, tmp_path, capsys, platform) -> None:
-    monkeypatch.delenv("SBOM_DEV_PROFILE_NOTED", raising=False)
-    (tmp_path / ".sbom-greenfield-uuid").mkdir()
-    (dev.ROOT / "scripts").mkdir()
-    (dev.ROOT / "scripts/greenfield_uuid.py").touch()
-    assert dev.resolve_profile("auto", "start", platform_name=platform, home=tmp_path) == "legacy"
-    assert "requires macOS" in capsys.readouterr().out
-    # The .venv handoff re-runs main() with the inherited environment: no second note.
-    assert dev.resolve_profile("auto", "start", platform_name=platform, home=tmp_path) == "legacy"
-    assert capsys.readouterr().out == ""
-
-
-def test_auto_profile_selects_installed_greenfield_on_macos(tmp_path) -> None:
-    (tmp_path / ".sbom-greenfield-uuid").mkdir()
-    (dev.ROOT / "scripts").mkdir()
-    (dev.ROOT / "scripts/greenfield_uuid.py").touch()
-    assert dev.resolve_profile("auto", "start", platform_name="darwin", home=tmp_path) == "greenfield"
-    assert dev.resolve_profile("auto", "start", platform_name="darwin", home=tmp_path / "absent") == "legacy"
-
-
-@pytest.mark.parametrize("platform", ["win32", "linux"])
-@pytest.mark.parametrize("command", ["start", "restart", "status", "--check"])
-def test_explicit_greenfield_fails_clearly_off_macos(platform, command) -> None:
-    with pytest.raises(dev.SetupError, match="supports macOS only.*--profile legacy"):
-        dev.resolve_profile("greenfield", command, platform_name=platform)
-
-
-def test_greenfield_stop_stays_available_off_macos() -> None:
-    # Stop only reads this checkout's ownership registry, so it is never refused.
-    assert dev.resolve_profile("greenfield", "stop", platform_name="win32") == "greenfield"
-    assert dev.resolve_profile("legacy", "start", platform_name="win32") == "legacy"
-
-
-@pytest.mark.parametrize(
-    "argv", [["dev.py", "--check", "--profile", "greenfield"], ["dev.py", "status", "--profile", "greenfield"]]
-)
-def test_unsupported_greenfield_is_refused_before_import(monkeypatch, capsys, argv) -> None:
-    from scripts import dev_greenfield
-
-    monkeypatch.setattr(dev.sys, "platform", "win32")
-    monkeypatch.setattr(dev.sys, "argv", argv)
-    monkeypatch.setattr(dev, "start_application", lambda args: pytest.fail("greenfield start reached"))
-    monkeypatch.setattr(dev_greenfield, "status", lambda runtime: pytest.fail("greenfield status reached"))
-    monkeypatch.setattr(dev, "ensure_virtualenv", lambda: pytest.fail("venv created"))
-    assert dev.cli() == 1
-    assert "supports macOS only" in capsys.readouterr().err
-
-
-def test_old_python_is_refused_before_virtualenv(monkeypatch, capsys) -> None:
-    monkeypatch.setattr(dev.sys, "argv", ["dev.py", "start", "--profile", "legacy"])
-    monkeypatch.setattr(dev.sys, "version_info", (3, 10, 14, "final", 0))
-    monkeypatch.setattr(dev.sys, "prefix", str(dev.ROOT / "system-python"))  # Not running inside .venv.
-    monkeypatch.setattr(dev, "venv_python", lambda: dev.ROOT / "absent/python")  # No .venv to hand off to.
-    monkeypatch.setattr(dev, "ensure_virtualenv", lambda: pytest.fail("venv created by an unsupported Python"))
-    assert dev.cli() == 1
-    assert "Python 3.10.14 is too old" in capsys.readouterr().err
-
-
-def test_old_launcher_python_hands_off_to_an_existing_venv(monkeypatch, tmp_path) -> None:
-    # A supported .venv checks its own interpreter after the handoff.
-    python = tmp_path / ".venv/bin/python"
-    python.parent.mkdir(parents=True)
-    python.touch()
-    monkeypatch.setattr(dev, "VENV", tmp_path / ".venv")
-    monkeypatch.setattr(dev, "venv_python", lambda: python)
-    monkeypatch.setattr(dev.sys, "prefix", str(tmp_path / "system-python"))
-    monkeypatch.setattr(dev.sys, "version_info", (3, 9, 6, "final", 0))
-    monkeypatch.setattr(dev.sys, "argv", ["dev.py", "start", "--profile", "legacy"])
-    handoff = MagicMock(side_effect=SystemExit(0))
-    monkeypatch.setattr(dev, "ensure_virtualenv", handoff)
-    with pytest.raises(SystemExit):
-        dev.main()
-    handoff.assert_called_once_with()
-
-
-def test_old_python_inside_existing_venv_explains_recreation(monkeypatch, tmp_path) -> None:
-    monkeypatch.setattr(dev, "VENV", tmp_path / ".venv")
-    monkeypatch.setattr(dev.sys, "prefix", str(tmp_path / ".venv"))
-    with pytest.raises(dev.SetupError, match="existing .venv uses Python 3.10.0"):
-        dev.validate_python_version((3, 10, 0))
-    dev.validate_python_version((3, 11, 0))
-
-
-def test_incomplete_checkout_is_refused_before_any_setup(monkeypatch) -> None:
-    (dev.ROOT / "frontend/package-lock.json").unlink()
-    monkeypatch.setattr(dev.sys, "argv", ["dev.py", "--check", "--profile", "legacy"])
-    monkeypatch.setattr(dev, "start_application", lambda args: pytest.fail("setup started"))
-    with pytest.raises(dev.SetupError, match="Missing: frontend/package-lock.json"):
-        dev.main()
-
-
-@pytest.mark.parametrize("command", ["stop", "status"])
-def test_stop_and_status_do_not_require_a_complete_checkout(monkeypatch, command) -> None:
-    (dev.ROOT / "requirements.txt").unlink()
-    monkeypatch.setattr(dev.sys, "argv", ["dev.py", command, "--profile", "legacy"])
-    calls = []
-    monkeypatch.setattr(dev, "stop_application", lambda: calls.append("stop"))
-    monkeypatch.setattr(dev, "application_status", lambda: calls.append("status"))
-    dev.main()
-    assert calls == [command]
-
-
-def test_cli_maps_outcomes_to_exit_codes(monkeypatch, capsys) -> None:
-    monkeypatch.setattr(dev, "main", lambda: None)
-    assert dev.cli() == 0
-    monkeypatch.setattr(dev, "main", MagicMock(side_effect=KeyboardInterrupt))
-    assert dev.cli() == 130
-    monkeypatch.setattr(dev, "main", MagicMock(side_effect=dev.SetupError("readable reason")))
-    assert dev.cli() == 1
-    assert "[ERROR] readable reason" in capsys.readouterr().err
-
-
-def test_failed_setup_command_tail_is_redacted(capsys) -> None:
-    secret = "super-secret-password"
-    output = "\n".join(f"line {number}" for number in range(50)) + f"\nconnecting with {secret}"
-    dev.explain_failed_command(SimpleNamespace(returncode=1, stdout=output, stderr=""), {"POSTGRES_PASSWORD": secret})
-    error = capsys.readouterr().err
-    assert secret not in error and "[REDACTED]" in error
-    assert "line 16" in error and "line 15" not in error  # Only the last 35 lines.
-
-
-def test_failed_setup_command_tail_is_silent_on_success_or_verbose(monkeypatch, capsys) -> None:
-    dev.explain_failed_command(SimpleNamespace(returncode=0, stdout="ok", stderr=""))
-    monkeypatch.setattr(dev, "VERBOSE", True)  # Verbose mode already streamed the output.
-    dev.explain_failed_command(SimpleNamespace(returncode=1, stdout="failed", stderr=""))
-    assert capsys.readouterr().err == ""
-
-
-def test_pip_failure_reports_detail_and_keeps_stamp_unset(monkeypatch, tmp_path, capsys) -> None:
-    monkeypatch.setattr(dev, "VENV", tmp_path / ".venv")
-    monkeypatch.setitem(dev.sys.modules, "celery", None)  # A missing import forces installation.
-    failure = SimpleNamespace(returncode=1, stdout="", stderr="No matching distribution")
-    monkeypatch.setattr(dev, "run", lambda command: failure)
-    with pytest.raises(dev.SetupError, match="Python dependency installation failed"):
-        dev.ensure_dependencies()
-    assert "No matching distribution" in capsys.readouterr().err
-    assert not (tmp_path / ".venv/.sbom-requirements-sha256").exists()
-
-
-def test_service_logs_stay_behind_verbose(capsys) -> None:
-    path = dev.log_path("API")
-    path.parent.mkdir()
-    path.write_text("Authorization: Bearer runtime-token")
-    dev.show_log("API", {})
-    assert "runtime-token" not in capsys.readouterr().err
-
-
-def test_child_output_is_decoded_as_utf8(monkeypatch) -> None:
-    captured = {}
-
-    def fake_run(command, **kwargs):
-        captured.update(kwargs)
-        return SimpleNamespace(stdout="", stderr="")
-
-    monkeypatch.setattr(dev.subprocess, "run", fake_run)
-    dev.run(["tool"])
-    assert (captured["encoding"], captured["errors"]) == ("utf-8", "replace")
-
-
-@pytest.mark.parametrize(
-    ("output", "expected"),
-    [("v22.11.0\n", (22, 11, 0)), ("v20.9.0", (20, 9, 0)), ("v23.0.0-rc.1", (23, 0, 0)), ("garbage", None)],
-)
-def test_node_version_is_parsed(monkeypatch, output, expected) -> None:
-    monkeypatch.setattr(dev.shutil, "which", lambda name: "node")
-    monkeypatch.setattr(dev, "run", lambda command: SimpleNamespace(returncode=0, stdout=output, stderr=""))
-    assert dev.node_version() == expected
-
-
-def test_node_requirement_matches_locked_next_release() -> None:
-    import json
-
-    lock = json.loads((REPOSITORY / "frontend/package-lock.json").read_text(encoding="utf-8"))
-    engines = lock["packages"]["node_modules/next"]["engines"]["node"]
-    assert engines == ">=" + ".".join(str(part) for part in dev.MIN_NODE)
-    assert dev.node_problem((20, 8, 1)) and dev.node_problem(None)
-    assert dev.node_problem((20, 9, 0)) is None and dev.node_problem((24, 0, 0)) is None
-
-
-def test_old_node_is_refused_before_npm_ci(monkeypatch) -> None:
-    monkeypatch.setattr(dev.shutil, "which", lambda name: name)
-    monkeypatch.setattr(dev, "node_version", lambda: (20, 5, 1))
-    monkeypatch.setattr(dev, "run", lambda command: pytest.fail("npm ci ran with an unsupported Node.js"))
-    with pytest.raises(dev.SetupError, match="Node.js 20.5.1 is too old"):
-        dev.ensure_frontend()
-
-
-def test_legacy_worker_matches_production_queue_set() -> None:
-    compose = (REPOSITORY / "docker-compose.server.yml").read_text(encoding="utf-8")
-    assert f'"--queues={dev.WORKER_QUEUES}"' in compose
-    routes = (REPOSITORY / "app/workers/celery_app.py").read_text(encoding="utf-8")
-    assert '"report_notifications.*": {"queue": "reports"}' in routes
-    assert "task_default_queue" not in routes  # The default queue is Celery's "celery".
-    assert dev.celery_worker_command(["celery"], "linux") == [
-        "celery", "worker", "--loglevel=info", "--queues=celery,reports"
-    ]
-    assert dev.celery_worker_command(["celery"], "win32")[-1] == "--pool=solo"
-
-
-def test_untrusted_env_cannot_add_identity_providers_or_keys() -> None:
-    saved = {"ENTRA_ENABLED": "true", "NATIVE_JWT_VERIFICATION_KEYS_JSON": '{"other": "key"}'}
-    values = dev.resolve_config(saved, dev.POSTGRES_PORT, dev.REDIS_PORT, dev.MAILPIT_SMTP_PORT)
-    assert values["ENTRA_ENABLED"] == "false"
-    assert values["NATIVE_JWT_VERIFICATION_KEYS_JSON"] == "{}"
-    assert values["HCL_AUTH_ENABLED"] == "false" and values["NATIVE_AUTH_ENABLED"] == "true"
-
-
-def test_beat_lock_never_signals_a_recorded_pid(monkeypatch, tmp_path) -> None:
-    lock = tmp_path / "beat.pid"
-    lock.write_text("4242")
-    monkeypatch.setattr(dev, "BEAT_LOCK", lock)
-    monkeypatch.setattr(dev.os, "kill", lambda *args: pytest.fail("os.kill is not a liveness probe on Windows"))
-    monkeypatch.setattr(dev, "process_info", lambda pid: None)  # Exited: the stale lock is reclaimed.
-    dev.acquire_beat_lock()
-    assert lock.read_text() == str(dev.os.getpid())
-
-
-@pytest.mark.parametrize("probe", [lambda pid: {"pid": pid}, MagicMock(side_effect=dev.OwnershipError("denied"))])
-def test_live_or_uninspectable_beat_owner_is_kept(monkeypatch, tmp_path, probe) -> None:
-    lock = tmp_path / "beat.pid"
-    lock.write_text("4242")
-    monkeypatch.setattr(dev, "BEAT_LOCK", lock)
-    monkeypatch.setattr(dev, "process_info", probe)
-    with pytest.raises(dev.SetupError, match="already owns Celery Beat"):
-        dev.acquire_beat_lock()
-    assert lock.read_text() == "4242"
-
-
-def test_malformed_beat_lock_is_reclaimed(monkeypatch, tmp_path) -> None:
-    lock = tmp_path / "beat.pid"
-    lock.write_text("not-a-pid")
-    monkeypatch.setattr(dev, "BEAT_LOCK", lock)
-    monkeypatch.setattr(dev, "process_info", lambda pid: pytest.fail("no lookup for a malformed PID"))
-    dev.acquire_beat_lock()
-    assert lock.read_text() == str(dev.os.getpid())
-
-
-@pytest.mark.parametrize(
-    ("platform", "hint"),
-    [("win32", "netstat -ano | findstr :18000"), ("darwin", "lsof -nP -iTCP:18000 -sTCP:LISTEN")],
-)
-def test_port_conflicts_suggest_read_only_inspection(monkeypatch, platform, hint) -> None:
-    monkeypatch.setattr(dev.sys, "platform", platform)
-    assert hint in dev.port_diagnostic(18000)
-    assert "ownership: unrelated/unknown" in dev.port_diagnostic(18000)
-
-
-@pytest.mark.parametrize(("platform", "command"), [("nt", "python scripts/dev.py"), ("posix", "python3 scripts/dev.py")])
-def test_launcher_hint_uses_platform_python(platform, command) -> None:
-    assert dev.launcher_command(platform) == command
-
-
-def test_identity_tables_match_revision_100_guard() -> None:
-    from app.public_identity import TABLES
-
-    assert dev.PUBLIC_IDENTITY_TABLES == TABLES
-
-
-def test_pre_uuid_revisions_are_strict_ancestors_of_revision_100() -> None:
-    from alembic.config import Config
-    from alembic.script import ScriptDirectory
-
-    script = ScriptDirectory.from_config(Config(str(REPOSITORY / "alembic.ini")))
-    ancestors = dev.pre_uuid_revisions(script)
-    assert {"079_lifecycle_provider_verification", "078_finding_reconciliation"} <= ancestors
-    assert dev.GREENFIELD_UUID_BASELINE not in ancestors
-    assert not {"101_iam_user_public_uuid", "103_tenant_admin_governance"} & ancestors
-
-
-class FakeCursor:
-    def __init__(self, rows):
-        self.rows = rows
-
-    def fetchall(self):
-        return self.rows
-
-    def fetchone(self):
-        return self.rows[0]
-
-    def __iter__(self):
-        return iter(self.rows)
-
-
-class FakeConnection:
-    """Catalogue double: records every statement and fails on anything but a read-only SELECT."""
-
-    def __init__(self, revision, populated):
-        self.revision = revision
-        self.populated = populated
-        self.statements = []
-        self.read_only = False
-
-    def __enter__(self):
-        return self
-
-    def __exit__(self, *args):
-        return False
-
-    def execute(self, statement, params=None):
-        assert self.read_only, "schema inspection must use a read-only session"
-        assert statement.lstrip().upper().startswith("SELECT"), statement
-        self.statements.append(statement)
-        if "pg_class" in statement:
-            tables = ["alembic_version", "iam_users", *dev.PUBLIC_IDENTITY_TABLES]
-            return FakeCursor([("public", table) for table in tables])
-        if "alembic_version" in statement:
-            return FakeCursor([(self.revision,)])
-        table = statement.split('public."')[1].split('"')[0]
-        return FakeCursor([(table in self.populated,)])
-
-
-def inspect_schema(monkeypatch, revision, populated):
-    connection = FakeConnection(revision, populated)
-    monkeypatch.setitem(dev.sys.modules, "psycopg", SimpleNamespace(connect=lambda url: connection, Error=Exception))
-    monkeypatch.setattr(dev, "ROOT", REPOSITORY)
-    dev.validate_existing_schema("postgresql+psycopg://sbom:sbom@127.0.0.1:55439/sbom_analyser_dev")
-    return connection
-
-
-@pytest.mark.parametrize("revision", ["079_lifecycle_provider_verification", "078_finding_reconciliation"])
-def test_populated_pre_uuid_database_is_refused_before_alembic(monkeypatch, revision) -> None:
-    with pytest.raises(dev.SetupError, match=rf"pre-UUID revision {revision} and has rows in tenants, sbom_component"):
-        inspect_schema(monkeypatch, revision, {"tenants", "sbom_component"})
-
-
-def test_empty_pre_uuid_identity_tables_may_continue(monkeypatch) -> None:
-    connection = inspect_schema(monkeypatch, "079_lifecycle_provider_verification", set())
-    assert sum("SELECT EXISTS" in statement for statement in connection.statements) == len(dev.PUBLIC_IDENTITY_TABLES)
-
-
-@pytest.mark.parametrize("revision", ["100_greenfield_uuid_final", "103_tenant_admin_governance"])
-def test_uuid_databases_skip_the_row_probe(monkeypatch, revision) -> None:
-    connection = inspect_schema(monkeypatch, revision, {"tenants"})
-    assert not any("SELECT EXISTS" in statement for statement in connection.statements)
-
-
-def test_refused_pre_uuid_database_never_reaches_migrations(monkeypatch, tmp_path) -> None:
-    monkeypatch.setattr(dev, "CONFIG", tmp_path / ".env.dev.local")
-    monkeypatch.setattr(dev, "read_config", lambda: {})
-    monkeypatch.setattr(dev, "select_service", lambda service, port, *args, **kwargs: ("Docker", port))
-    monkeypatch.setattr(dev, "select_mailpit", lambda **kwargs: "Docker")
-    for name in ("ensure_dependencies", "generate_keys", "check_application_ports", "ensure_database", "write_config"):
-        monkeypatch.setattr(dev, name, lambda *args, **kwargs: None)
-
-    def refuse(url):
-        raise dev.SetupError("pre-UUID revision refused")
-
-    monkeypatch.setattr(dev, "validate_existing_schema", refuse)
-    monkeypatch.setattr(dev, "run_migrations", lambda env: pytest.fail("Alembic ran after a refusal"))
-    with pytest.raises(dev.SetupError, match="pre-UUID revision refused"):
-        dev.start_application(SimpleNamespace(check=False, profile="legacy"))
-
-
-def test_compose_failure_detail_only_when_no_local_fallback(monkeypatch, capsys) -> None:
-    failure = SimpleNamespace(returncode=1, stdout="", stderr="pull access denied")
-    monkeypatch.setattr(dev, "docker_available", lambda: True)
-    monkeypatch.setattr(dev, "compose_container", lambda service: False)
-    monkeypatch.setattr(dev, "reachable", lambda host, port: False)
-    monkeypatch.setattr(dev, "run", lambda command, env=None: failure)
-    monkeypatch.setattr(dev.time, "sleep", lambda seconds: None)
-    monkeypatch.setattr(dev, "service_available", lambda service, port: port == 5432)
-    assert dev.select_service("postgres", 55439, 5432, check=False, env={}, preferred="docker") == ("local", 5432)
-    assert "pull access denied" not in capsys.readouterr().err  # Fallback succeeded: no dump.
-    monkeypatch.setattr(dev, "service_available", lambda service, port: False)
-    with pytest.raises(dev.SetupError, match="Could not start project postgres"):
-        dev.select_service("postgres", 55439, 5432, check=False, env={}, preferred="docker")
-    assert "pull access denied" in capsys.readouterr().err

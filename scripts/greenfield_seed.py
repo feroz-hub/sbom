@@ -7,7 +7,13 @@ import os
 import secrets
 from datetime import UTC, datetime
 
-from scripts.greenfield_uuid import STATE, private_file, settings
+from scripts.dev import GreenfieldStack
+
+STATE = GreenfieldStack.STATE
+
+private_file = GreenfieldStack.private_file
+
+settings = GreenfieldStack.settings
 
 
 def seed():

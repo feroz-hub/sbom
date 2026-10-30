@@ -21,12 +21,12 @@ application acceptance. There is no canonical doctor command.
 | Wrong ports or Mailpit UI | Check the [profile port table](../development/README.md#ports-environment-and-queues); legacy uses 8025/1025, Greenfield 8026/1026. |
 | Missing Node/npm, dependencies or frontend types | --check reports Node/npm; start requires Node 20.9.0+ and prints the redacted tail of a failed pip/npm ci. --check does not prove a frontend install/build. cross-env is already declared. |
 | Unowned/unknown PID or occupied API/frontend port | Inspect ownership; use [lifecycle recovery](../dev-launcher-lifecycle.md). Do not kill by port/name or delete a lock to bypass refusal. |
-| Missing/untrusted Greenfield CA | The current verifier requires macOS Keychain and an independently trusted mkcert CA. Ordinary start does not install CA trust. On Windows/Linux the greenfield profile is refused up front; use legacy. |
+| Missing/untrusted Greenfield CA | The selected native adapter requires an independently approved mkcert CA. Ordinary start does not install root trust. Do not switch profiles to bypass a trust error; consult the platform matrix. |
 | Missing/incomplete Greenfield state | Stop. Do not fall back to a different profile/database to bypass refusal. Review the specialist installation record and target with the operator. |
-| Migration confirmation or source/schema refusal | Follow [database operations](../DATABASE_BOOTSTRAP_AND_UPGRADE.md). Legacy start refuses a populated pre-UUID sbom_analyser_dev before Alembic. Never stamp, replay history, weaken guards or drop data to make startup succeed. |
+| Migration confirmation or source/schema refusal | Follow [database operations](../DATABASE_BOOTSTRAP_AND_UPGRADE.md). Ordinary start requires a current schema; explicit setup --migrate refuses a populated pre-UUID target before Alembic. Never stamp, replay history, weaken guards or drop data to make startup succeed. |
 | Prior pending upgrade / unknown COMMIT | Preserve private pending marker, backup and journal; reconcile with an operator before retry/start. |
 | Login failures | Compare backend/BFF/public build flags, canonical origin, issuer/audience and shared Redis. Use the [IAM guides](../security/README.md); do not disable authentication as a repair. |
-| Report task queued but not delivered | Confirm a reports consumer, intended scheduler, private storage and controlled SMTP. The legacy launcher worker consumes celery and reports; Greenfield has a restricted periodic schedule. See [report operations](../runbook-report-notifications.md). |
+| Report task queued but not delivered | Confirm a reports consumer, intended scheduler, private storage and controlled SMTP. Both profiles manage default/reports consumers and a full separate Beat with existing feature guards. See [report operations](../runbook-report-notifications.md). |
 | API responds but app is not ready | Check database content in /health, /ready/iam, BFF access, workers and intended provider paths. An HTTP 200 alone is not release acceptance. |
 
 ## Logs and redaction

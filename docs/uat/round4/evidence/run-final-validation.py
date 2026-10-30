@@ -15,9 +15,9 @@ def sanitize(s):
  return s
 checks=[('vitest-full-final',[str(node),'node_modules/vitest/vitest.mjs','run','--maxWorkers=1'],R/'frontend'),
  ('typescript-final',[str(node),'node_modules/typescript/bin/tsc','--noEmit'],R/'frontend'),
- ('ruff-final',[str(python),'-m','ruff','check','app','tests','scripts/reconcile_analysis_run_finding_counts.py','scripts/greenfield_uuid.py'],R),
+ ('ruff-final',[str(python),'-m','ruff','check','app','tests','scripts/reconcile_analysis_run_finding_counts.py','scripts/dev.py'],R),
  ('eslint-full-final',[str(node),'node_modules/eslint/bin/eslint.js','.','--format','json'],R/'frontend'),
- ('build-final',[str(python),'-m','scripts.greenfield_uuid','build'],R),
+ ('build-final',[str(python),'scripts/dev.py','setup','--profile','greenfield','--frontend-build'],R),
  ('diff-whitespace-final',['git','-c','core.fsmonitor=false','diff','--check'],R)]
 def verify_source():
  return sorted(name for name,digest in m['sourceHashesAfter'].items() if not (R/name).is_file() or hashlib.sha256((R/name).read_bytes()).hexdigest()!=digest)

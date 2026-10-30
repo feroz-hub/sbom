@@ -45,7 +45,7 @@ The existing implementations are:
 - [scripts/docker_migrate.py](../scripts/docker_migrate.py): selects the guarded
   bootstrap for an empty server target, otherwise calls Alembic upgrade head.
   It does not supply a populated pre-UUID conversion.
-- [scripts/greenfield_uuid.py](../scripts/greenfield_uuid.py): explicit isolated
+- [scripts/dev.py setup](../scripts/dev.py): explicit isolated
   local setup, with final metadata validation, identity guards and its own
   reference/fixture process. Use a maintainer-reviewed, target-specific
   installation procedure. Historical acceptance records do not certify current
@@ -81,13 +81,15 @@ deployment; Compose startup ordering does not drain old writers automatically.
 
 ## Greenfield startup
 
-Normal Greenfield start calls
+Ordinary Greenfield start performs a read-only current-schema gate through
 [guarded migration selection](../scripts/greenfield_auto_migrations.py).
 It can discover pending descendants of the accepted UUID baseline; it does not
 replay pre-UUID history, bootstrap an existing installation or seed synthetic
 users as an ordinary startup step.
 
-For each pending unit, the
+Pending transitions require explicit scripts/dev.py setup --profile greenfield --migrate;
+ordinary start supplies no confirmation and therefore cannot upgrade.
+For each explicitly approved pending unit, the
 [shared migration coordinator](../scripts/greenfield_migrations.py) requires:
 
 1. Source pins/snapshots, resource identity, predecessor and physical schema

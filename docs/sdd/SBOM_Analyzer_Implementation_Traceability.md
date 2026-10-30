@@ -1,3 +1,5 @@
+> Local development uses `python scripts/dev.py`. Explicit Celery commands in this document are production/operator procedures.
+
 # SBOM Analyzer — Implementation Traceability
 
 | | |
@@ -13,7 +15,7 @@ Mapping of SDD sections to repository files, classes, functions, routes, models 
 | --- | --- | --- | --- | --- | --- |
 | 3 | System overview / feature set | `app/main.py` (app assembly); `README.md`; `frontend/src/app/**` | full suite | Implemented | Feature list verified item-by-item; change feed excluded (see 5.10.6) |
 | 5.1 | High-level architecture | `app/main.py:711-914`; `frontend/src/lib/api.ts`; `app/workers/celery_app.py`; `app/db.py` | `tests/test_auth_integration.py`, smoke suites | Implemented | Modular monolith + SPA + Celery |
-| 5.2 | Integration/deployment topology | `Dockerfile`; `docker-compose.yml` (postgres-only); `railway.toml`; `scripts/celery_worker.sh`, `scripts/celery_beat.sh`; `docs/nvd-mirror/02-operations.md §8.1` | — | Partially Implemented | Worker/beat/Redis/frontend have no compose/K8s manifests; frontend has no Dockerfile |
+| 5.2 | Integration/deployment topology | `Dockerfile`; `docker-compose.yml` (postgres-only); `railway.toml`; `scripts/dev.py`, `scripts/dev.py`; `docs/nvd-mirror/02-operations.md §8.1` | — | Partially Implemented | Worker/beat/Redis/frontend have no compose/K8s manifests; frontend has no Dockerfile |
 | 5.3 | Domain terms | `app/models.py`; `app/sources/base.py:34-66` | — | Implemented | Match/Advisory are not tables (SDD 17.1) |
 | 5.4 | Module inventory | `app/` subpackages; `pyproject.toml` | per-module suites | Implemented | |
 | 5.5 | Layering & segregation | `pyproject.toml [tool.importlinter]` (3 contracts); `app/validation/`, `app/parsing/` | `lint-imports` (not wired into pytest) | Implemented | Hexagonal only inside `app/nvd_mirror/`; `app/ports/` empty placeholder |
@@ -32,7 +34,7 @@ Mapping of SDD sections to repository files, classes, functions, routes, models 
 | 5.11 | Resource constraints | `app/middleware/max_body.py`; `app/rate_limit.py`; `app/settings.py:40-160,677-693`; `app/db.py:82-121`; `app/http_client.py` | `test_max_upload_size.py`, `test_nvd_perf_guards.py`, `test_connection_pool_fix.py` | Implemented | Async blocking documented as Known Limitation |
 | 5.12 | Dependencies/assumptions/constraints | `requirements.txt` (freeze), `pyproject.toml`, `frontend/package.json`; `alembic/versions/033` (forward-only) | `test_migration_drift.py` | Implemented | Node unpinned (OQ-007); httpx2 dev dep (OQ-010) |
 | 6 | OS features | `Dockerfile`; `app/services/sbom/workspace_storage.py:44-91`; `railway.toml` | `test_validation_repair_workspace.py` | Implemented | `data/` has no declared volume |
-| 7.2–7.3 | Platforms & SOUP | `scripts/bootstrap.sh/.ps1`; `requirements.txt`; `frontend/package.json` | — | Implemented | hypothesis IS declared (planning note stale) |
+| 7.2–7.3 | Platforms & SOUP | `scripts/dev.py/.ps1`; `requirements.txt`; `frontend/package.json` | — | Implemented | hypothesis IS declared (planning note stale) |
 | 8.1 | REST contract & error envelope | `app/error_handlers.py:28-49`; `app/main.py:714-740`; `frontend/src/lib/api.ts:150-259`; `app/etag.py`; `app/idempotency.py` | `test_500_no_leak.py` | Implemented | Mixed prefixes (OQ-011) |
 | 8.1 | SSE server side | `app/routers/sboms_crud.py:1574-1901`; `app/routers/ai_fixes.py:702-874`; `app/ai/progress.py:424-522` | `test_sboms_analyze_stream.py`; `tests/ai/` progress tests | Implemented | Compare streaming reserved, not implemented |
 | 8.1 | SSE client authentication | `frontend/src/hooks/useAnalysisStream.ts:125-144` (no auth headers); `AiBatchProgressProvider.tsx:156-216`, `useAiFix.ts:131-197` (EventSource, `withCredentials:false`, no token param) | `RunBatchProgress` test (SSE→poll degradation) | Not Implemented (P0 gap) | Fix design in SDD 8.1 (OQ-030) |
@@ -46,7 +48,7 @@ Mapping of SDD sections to repository files, classes, functions, routes, models 
 | 8.3 | UI features & drill-down | `frontend/src/app/**`; `useAnalysisUrlState.ts`; `useFindingsFilterFromUrl.ts`; `SeverityChart.tsx:94-108`; `topVulnerableRuns.ts`; `queryInvalidation.ts` | 75 Vitest files incl. `dashboard-drilldown.integration.test.tsx`, `mutation-invalidation.test.ts` | Implemented | Drill-down confirmed end-to-end; no drag-drop upload |
 | 9 / 14 | Security controls & threat map | `app/core/security.py`; `app/core/permissions.py`; `app/db.py:177-241` (tenancy); `app/security/secrets.py`; `app/validation/stages/security.py`; `app/services/lifecycle/vex_discovery.py:229-257` | `test_rbac_permissions.py`, `test_tenant_isolation.py`, `test_hcl_iam_auth.py`, `validation/test_security.py`, `test_500_no_leak.py` | Implemented (with residual gaps) | No CSP/security headers; CORS `*` default; Redis unauth; SSRF DNS/redirect residual |
 | 10.1.1 | Audit trail | `app/models.py:1335-1373` (AuditLog); `app/main.py:793-829`; `app/services/audit_service.py:32-79`; `app/services/audit_log.py:39-91` | No dedicated suite (asserted incidentally) | Implemented | Test gap (OQ-037); fail-open writes |
-| 10.1.2 | Logging | `app/logger.py:90-178`; `run.py:22,45` | `test_500_no_leak.py` | Implemented | |
+| 10.1.2 | Logging | `app/logger.py:90-178`; `scripts/dev.py:22,45` | `test_500_no_leak.py` | Implemented | |
 | 10.1.3 | Notification | No evidence — searched `webhook/smtp/notification` | — | Not Implemented | In-app toasts/SSE only (OQ-015) |
 | 10.1.4 | Error handling | `app/error_handlers.py`; `app/validation/errors.py:135-352`; `docs/validation-error-codes.md` | `test_errors.py`, `test_500_no_leak.py` | Implemented | |
 | 10.2+ | API surface (204 endpoints) | `app/routers/*.py` (29 files) + `app/nvd_mirror/api.py`; registration `app/main.py:859-914` | API/snapshot suites per router | Implemented | Count verified = raw decorator count; 5 deprecated routes carry RFC 9745 headers |

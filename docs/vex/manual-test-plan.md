@@ -13,12 +13,12 @@ this is the human pass over the same ground.
 ## 0. Setup
 
 ```
-start-all.bat
+scripts/dev.py
 ```
 
 - API: <http://localhost:8000> · docs at `/docs`
 - UI: <http://localhost:3000>
-- `stop-all.bat` shuts both down and leaves PostgreSQL alone.
+- `scripts/dev.py` shuts both down and leaves PostgreSQL alone.
 
 Prerequisites: `.venv`, `.env`, `frontend/node_modules`, PostgreSQL on 5432,
 and the database at Alembic head (`058_vex_source_format`). The API refuses to

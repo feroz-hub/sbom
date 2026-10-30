@@ -15,7 +15,19 @@ import time
 import uuid
 from contextlib import contextmanager
 
-from scripts.greenfield_uuid import DB, ROOT, STATE, settings, url, verify_resources
+from scripts.dev import GreenfieldStack
+
+DB = GreenfieldStack.DB
+
+ROOT = GreenfieldStack.ROOT
+
+STATE = GreenfieldStack.STATE
+
+settings = GreenfieldStack.settings
+
+url = GreenfieldStack.url
+
+verify_resources = GreenfieldStack.verify_resources
 
 sys.path.insert(0, str(ROOT / "infra/uuid-migration/staged-runner"))
 import uuid_integrity_control as ctl

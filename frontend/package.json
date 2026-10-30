@@ -5,8 +5,6 @@
   "scripts": {
     "dev": "cross-env NODE_NO_WARNINGS=1 next dev",
     "dev:https": "cross-env NODE_NO_WARNINGS=1 next dev --webpack --experimental-https --experimental-https-key certificates/localhost-key.pem --experimental-https-cert certificates/localhost.pem",
-    "setup:https": "bash scripts/setup-dev-https.sh",
-    "setup:https:windows": "powershell -ExecutionPolicy Bypass -File scripts/setup-dev-https.ps1",
     "build": "next build",
     "start": "next start",
     "lint": "eslint .",

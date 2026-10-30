@@ -3,7 +3,8 @@ import json,os
 from pathlib import Path
 from uuid import UUID
 from sqlalchemy import select,func,text
-from scripts.greenfield_uuid import settings
+from scripts.dev import GreenfieldStack
+settings = GreenfieldStack.settings
 os.environ.update(settings())
 from app.db import SessionLocal
 from app.models import Tenant,VexStatement,VexOverrideAudit,SBOMSource,VexDocument

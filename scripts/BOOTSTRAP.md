@@ -1,56 +1,84 @@
-# Optional workstation bootstrap installers
+# Local setup and prerequisites
 
-The developer entry point is
-[scripts/dev.py](../docs/development/README.md). These existing installers prepare
-tools/dependencies for manual or legacy development; they do not install a
-complete application stack or approve any production deployment.
+Use only `python scripts/dev.py` for local management. See the
+[lifecycle guide](../docs/dev-launcher-lifecycle.md) for profiles and recovery.
 
-Source checked against e62951c2 on 28 October 2026.
+Install Python 3.11+ (python.org), Node.js 20.9+ with npm (nodejs.org), and Docker
+Desktop (Windows/macOS) or Docker Engine plus Compose (Linux) when using containers.
+Reopen the terminal and start Docker. Suitable local PostgreSQL/Redis can be used
+with explicitly selected Legacy configuration.
 
-## What they do
+```sh
+python scripts/dev.py doctor
+python scripts/dev.py setup
+python scripts/dev.py
+```
 
-| Platform | Existing installer | System installation behavior |
-| --- | --- | --- |
-| macOS / Linux | scripts/bootstrap.sh (Bash) | Can install system tools and use Homebrew or a supported Linux package manager; may add package sources. |
-| Windows | scripts/bootstrap.ps1 (PowerShell) | Can use winget/Chocolatey and install tools; PATH refresh may require a new shell. |
+Project pip/npm dependencies and safe missing leaf certificates are prepared;
+existing configuration/keys are preserved. System software and root certificate
+trust are explicit prerequisites. The launcher never approves root trust or
+bypasses TLS verification.
 
-They target Python 3.11 and Node 20.9+ prerequisites, create/reuse .venv, install
-requirements.txt, run npm ci, and copy missing backend/frontend example files.
-They also ensure a local AI encryption key in .env when applicable. Existing
-keys are preserved, but the operation can write an existing environment file.
-A rerun can reinstall dependencies; “idempotent” does not mean no writes.
+## Greenfield
 
-Review workstation/package-manager policy before invoking system installation.
-For already provisioned Python/Node, existing skip-system interfaces are:
+Existing private state is reused. Restore original missing private files; never
+copy another developer's credentials or overwrite partial state. Install mkcert
+separately and explicitly approve its development CA under your organization's
+policy before asking the launcher to issue a leaf.
 
-    bash scripts/bootstrap.sh --skip-system
+For a genuinely new isolated installation, review ports, pinned images and the
+exact database target first:
 
-On Windows:
+```sh
+python scripts/dev.py setup --profile greenfield --provision-greenfield --confirm-database sbom_greenfield_uuid
+python scripts/dev.py setup --profile greenfield --initialize-database --confirm-database sbom_greenfield_uuid
+python scripts/dev.py --profile greenfield
+```
 
-    powershell -File scripts/bootstrap.ps1 -SkipSystem
+Provisioning creates only the fixed new containers/private state; collisions fail.
+The preserved image policy uses cached pinned images without silent upgrades.
+If absent, obtain the exact images in infra/greenfield-uuid/compose.yml.
+Initialization requires the confirmed empty database and retains metadata/grant
+checks; populated databases are refused. Account bootstrap is an explicit
+[Native IAM procedure](../docs/native-iam-greenfield-setup.md).
 
-Skipping system installation still installs dependencies and may write local
-configuration. Without the skip option, both installers treat Node older than
-20.9.0 (the locked Next.js minimum) as missing and install a newer one; with it,
-no Node check runs, and scripts/dev.py start enforces the minimum. Full
-dependency compatibility remains to be checked.
+Pending schema changes block ordinary startup. Review migrations/backups:
 
-## What they do not provide
+```sh
+python scripts/dev.py setup --profile greenfield --migrate
+python scripts/dev.py setup --profile legacy --migrate --confirm-database sbom_analyser_dev
+```
 
-- PostgreSQL provisioning or database-target approval. PostgreSQL is the normal
-  application database; SQLite fallback must be explicit and is not the normal
-  full-stack default.
-- Redis or compatible Mailpit provisioning. Redis is required by the normal
-  developer launcher and production BFF/session configuration.
-- A complete authenticated configuration. The backend example disables
-  authentication while the frontend example is HCL-oriented and enables it;
-  copying both unchanged does not make a coherent login flow.
-- Production secret management, schema compatibility approval or release
-  acceptance.
+Greenfield requires additional exact interactive confirmation and verified backups.
+Windows pending upgrades remain blocked until native backup/restore validation.
+Legacy initialization uses setup --initialize-database with its exact saved database
+name; do not run against existing data. Stop the managed application before changes.
 
-Choose a [development profile](../docs/development/README.md) next. Use
-[configuration guidance](../docs/reference/configuration.md) to understand
-precedence, and the [database gate](../docs/DATABASE_BOOTSTRAP_AND_UPGRADE.md)
-before any start/bootstrap/upgrade. Do not run a populated pre-UUID target across
-revision 100. Existing manual run.py and npm commands start individual services,
-not the whole stack.
+## Existing Legacy
+
+Managed Legacy preserves .env.dev.local and the fixed development database.
+Saved Windows/HCL.CS configuration can be selected with:
+
+```sh
+python scripts/dev.py --profile legacy --legacy-config windows
+```
+
+Only literal assignments in .windows/sbom.env.ps1 are accepted; PowerShell code is
+never executed. Select existing root .env explicitly with --legacy-config env.
+The launcher does not switch database families or authentication modes.
+A saved database Celery transport is refused until Redis is explicitly configured;
+it is never silently changed.
+
+External HCL.CS, registered redirects, approved provider CA bundles, provider
+credentials and administrator accounts remain operator prerequisites. See
+[HCL configuration](../docs/HCL_IAM_CONFIGURATION.md) and the
+[verification matrix](../docs/engineering/dev-launcher-platform-matrix.md).
+
+Use doctor, status and logs --service <name> for diagnosis. Restore incomplete
+certificates/private state rather than rotating credentials. Resolve occupied
+ports deliberately; unrelated listeners are never killed.
+
+Before explicit initialization/upgrade, read the [database compatibility gate](../docs/DATABASE_BOOTSTRAP_AND_UPGRADE.md).
+A populated pre-UUID database cannot cross revision 100. Inspection/stop/status
+remain available without complete startup prerequisites. Required setup failures
+print a redacted tail (up to 35 lines); this is distinct from application logs.

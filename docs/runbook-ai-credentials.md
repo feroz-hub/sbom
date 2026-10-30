@@ -32,7 +32,7 @@ python scripts/generate_encryption_key.py
 Restart the API + Celery workers so the env var is in process memory.
 
 **Local development needs no manual step.** `scripts/bootstrap.{sh,ps1}`
-and `python run.py` both call
+and `python scripts/dev.py` both call
 `generate_encryption_key.py --ensure-env`, which fills the key into a
 local `.env` only when it has no value yet — an existing key is never
 replaced, so it cannot orphan credentials you already saved.

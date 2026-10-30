@@ -13,7 +13,7 @@ from tests.test_greenfield_startup_migrations import flow as flow
 
 @pytest.fixture
 def resource_flow(flow, monkeypatch):
-    monkeypatch.setattr(common.stack, "REVISION", unit.CURRENT)
+    monkeypatch.setattr(common.stack, "current_revision", lambda: unit.CURRENT)
     flow.marker.return_value = (IDENTITY, unit.PREVIOUS)
     flow.before["data"].update({table: [2, "synthetic unchanged"] for table in unit.TABLES})
     monkeypatch.setattr(unit, "verify_sources", common.verify_sources)

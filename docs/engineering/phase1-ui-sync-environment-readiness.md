@@ -1,3 +1,5 @@
+> Local development uses `python scripts/dev.py`. Explicit Celery commands in this document are production/operator procedures.
+
 # Phase 1 Gate B environment readiness
 
 Inspected 2026-10-09 on macOS ARM64. Branch `feat/native-user-management`; HEAD `6e7b22e1110ef1849150671b8d253efe0479e074`. This is discovery and planning, not execution authorization. Gate A's recorded **1,630 passing tests** remains the acceptance baseline; tests/build were not rerun in this environment-only task. Gate B remains **BLOCKED**; no A–I live scenario ran.
@@ -42,7 +44,7 @@ Status meanings: **AVAILABLE** = observed runtime/package/listener; **NOT RUNNIN
 
 ## Supported topology and configuration
 
-Sources: `README.md`, `docs/dev-launcher-lifecycle.md`, `docs/native-iam-greenfield-setup.md`, `docs/native-tenant-provisioning.md`, `.env.example`, `.env.native-iam.example`, `.env.server.example`, `frontend/.env.local.example`, `docker-compose.yml`, `docker-compose.server.yml`, `scripts/dev.py`, `run.py`, `app/settings.py`, `app/workers/celery_app.py`, and both Phase 1 reports. Original audit implementation sections distinguish configuration readiness, inline catalog sync and materialized enrichment.
+Sources: `README.md`, `docs/dev-launcher-lifecycle.md`, `docs/native-iam-greenfield-setup.md`, `docs/native-tenant-provisioning.md`, `.env.example`, `.env.native-iam.example`, `.env.server.example`, `frontend/.env.local.example`, `docker-compose.yml`, `docker-compose.server.yml`, `scripts/dev.py`, `scripts/dev.py`, `app/settings.py`, `app/workers/celery_app.py`, and both Phase 1 reports. Original audit implementation sections distinguish configuration readiness, inline catalog sync and materialized enrichment.
 
 Recommended local topology:
 
@@ -57,7 +59,7 @@ Recommended local topology:
 | Storage | Isolated upload/workspace/report storage and logs; inspect configured paths before executing, especially server Compose shared application volume |
 | Identity | Native-only supported mode; no external OIDC server needed. Auth enabled, `DEV_DEFAULT_TENANT=false`, HCL disabled, catalogue/role assignment fail closed |
 
-Beat is required for automatic security outbox dispatch and scheduled-analysis ticks (every 15 minutes). Run Now enqueue alone does not prove scheduler/worker completion. Beat also registers mirror/KEV/model-refresh/cache/report tasks: starting it authorizes background activity, not merely a UI server. Review existing enablement/configuration and outbound access before starting. Report **target selectors** need the app/database; report delivery is outside these acceptance scenarios and does not require enabling notifications or running a reports worker. If delivery is later explicitly included, use the existing `scripts/report_worker.sh` / `reports` queue and shared private artifacts, not the default worker alone.
+Beat is required for automatic security outbox dispatch and scheduled-analysis ticks (every 15 minutes). Run Now enqueue alone does not prove scheduler/worker completion. Beat also registers mirror/KEV/model-refresh/cache/report tasks: starting it authorizes background activity, not merely a UI server. Review existing enablement/configuration and outbound access before starting. Report **target selectors** need the app/database; report delivery is outside these acceptance scenarios and does not require enabling notifications or running a reports worker. If delivery is later explicitly included, use the existing `scripts/dev.py` / `reports` queue and shared private artifacts, not the default worker alone.
 
 Local fallback PostgreSQL 5432 / Redis 6379 is supported but is a second choice until the operator confirms isolated database credentials and Redis state. A dedicated staging server can use existing `docker-compose.server.yml`; it needs prebuilt backend/frontend images, secret/certificate mounts, migration approval and TLS ingress. That Compose includes an automatic `migrate` dependency and defaults for production validation; do not start it with local Mailpit assumptions. A fresh local Compose data stack plus host app launcher is the shortest supported route here.
 
@@ -104,7 +106,7 @@ For a separately named greenfield target, reuse the documented manual procedure 
 npm run dev:https -- --port 13000
 ```
 
-Do not run `python run.py` as a readiness check: it may generate a key into root `.env` and starts the API. Native greenfield setup requires independent RSA JWT signing/public keys, outbox AES-GCM key, session encryption key, Redis session/rate-limit configuration and canonical HTTPS activation/reset URLs. Provider credential storage also needs a stable supported encryption key (`AI_CONFIG_ENCRYPTION_KEY` for AI; lifecycle supports the configured secrets chain). Templates contain examples, not acceptable shared credentials. The launcher already supports Native key generation; never print generated secrets into this report.
+Do not run `python scripts/dev.py` as a readiness check: it may generate a key into root `.env` and starts the API. Native greenfield setup requires independent RSA JWT signing/public keys, outbox AES-GCM key, session encryption key, Redis session/rate-limit configuration and canonical HTTPS activation/reset URLs. Provider credential storage also needs a stable supported encryption key (`AI_CONFIG_ENCRYPTION_KEY` for AI; lifecycle supports the configured secrets chain). Templates contain examples, not acceptable shared credentials. The launcher already supports Native key generation; never print generated secrets into this report.
 
 ## Identity and disposable fixture plan
 

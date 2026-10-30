@@ -23,34 +23,69 @@ before starting. Python 3.11+, Node.js/npm, PostgreSQL and Redis are required fo
 the normal development stack. The locked Next.js package requires Node >=20.9.0;
 the full dependency/toolchain compatibility remains subject to validation.
 
-From the repository root, using your Python 3.11+ executable:
+From the repository root:
 
-    python scripts/dev.py --check --profile legacy
-    python scripts/dev.py start --profile legacy
+```sh
+python3 scripts/dev.py
+```
 
-Use python3 where that is your configured executable. For an **already installed
-macOS Greenfield environment**, select --profile greenfield instead. Greenfield's
-current trust verifier blocks Windows and Linux; the legacy lifecycle contains
-OS-specific Windows/Linux/macOS implementations, with current end-to-end
-acceptance unverified in this documentation phase.
-
-Start is a writing operation: legacy can install dependencies, create its local
-database, generate local keys and apply migrations. Greenfield can request a
-confirmed upgrade after backup/restore verification. --check does not start
-services or migrate and is not full readiness/schema acceptance. Read the
-[profile and platform details](docs/development/README.md#profiles-and-platforms).
+Use python where that is your configured Python command. scripts/dev.py is the
+only public local development manager. It prepares safe project dependencies,
+verifies the selected data services, then starts two Celery consumers (default
+and reports), exactly one separate Beat, FastAPI and HTTPS Next.js. Readiness
+requires real consumer/queue responses and scheduler progress, API database/IAM
+readiness where applicable, and verified HTTPS.
 
 ## Development commands
 
-    python scripts/dev.py status --profile legacy
-    python scripts/dev.py stop --profile legacy
-    python scripts/dev.py restart --profile legacy
-    python scripts/dev.py start --profile legacy --verbose
+```sh
+python3 scripts/dev.py setup
+python3 scripts/dev.py start
+python3 scripts/dev.py stop
+python3 scripts/dev.py restart
+python3 scripts/dev.py status
+python3 scripts/dev.py doctor
+python3 scripts/dev.py logs --service reports --lines 80
+```
 
-Use the same checkout and intended profile. Stop/Ctrl+C preserve data services and
-volumes. Application URLs are https://localhost:13000 and
-http://127.0.0.1:18000. Auto selection picks Greenfield only on macOS with existing home-directory
-Greenfield state; elsewhere it uses legacy. There is no canonical doctor or setup command.
+No command means start; --check is a read-only doctor alias. Start/restart stay
+in the foreground. Stop/Ctrl+C manage only verified owned application processes
+and preserve data services, credentials, certificates and volumes. Port/name/PID
+alone never authorizes termination. Required setup failures show a redacted tail;
+application logs are available through logs.
+
+### Profiles and persisted data
+
+Auto selects an installed Greenfield private directory, otherwise Legacy. An
+incomplete installation fails without selecting another profile/database. Pin
+--profile greenfield or --profile legacy when needed; an existing runtime also
+pins its Legacy configuration family.
+
+| Profile | Saved configuration | PostgreSQL | Redis | Mailpit UI/SMTP |
+| --- | --- | --- | --- | --- |
+| Greenfield | Private ~/.sbom-greenfield-uuid | sbom_greenfield_uuid, 56044 | 56381 | 8026/1026 |
+| Managed Legacy | Ignored .env.dev.local | sbom_analyser_dev, Docker 55439 or saved local port | Docker 56379 or saved local port | 8025/1025 |
+| Existing Legacy Windows/env | Literal .windows/sbom.env.ps1 or explicitly selected .env | Saved local database, isolated from Greenfield | Saved Redis | Saved settings |
+
+The verified macOS Greenfield URLs are https://localhost:13000 and
+http://127.0.0.1:18000. Other installations use their reported/saved URLs;
+Windows/env configurations retain saved ports (defaults 8000/3000 when absent).
+Use --legacy-config managed|windows|env to select the intended family. Saved
+PowerShell is parsed as literal assignments, never executed.
+
+Ordinary start validates the current schema and does not initialize or implicitly
+upgrade it. Provisioning, empty-database initialization and migration require
+explicit setup controls in [bootstrap guidance](scripts/BOOTSTRAP.md), with
+confirmed targets and the [database gate](docs/DATABASE_BOOTSTRAP_AND_UPGRADE.md).
+Do not reset data or rotate credentials to bypass a refusal.
+
+The launcher contains Windows/macOS/Linux adapters. Native Windows and full Linux
+application acceptance remain unverified; pending Greenfield upgrades are blocked
+on Windows until native backup/restore validation. See the
+[verification matrix](docs/engineering/dev-launcher-platform-matrix.md) and
+[lifecycle guide](docs/dev-launcher-lifecycle.md). Trust is never installed silently
+and TLS verification remains enabled. External identity providers and initial
+administrators remain explicit operator prerequisites.
 
 ## Supported SBOM formats
 

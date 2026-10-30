@@ -72,7 +72,9 @@ def seed_catalog(db):
 
 
 def seed():
-    from scripts.greenfield_uuid import STATE, settings
+    from scripts.dev import GreenfieldStack
+    STATE = GreenfieldStack.STATE
+    settings = GreenfieldStack.settings
 
     env = settings()
     os.environ.clear()

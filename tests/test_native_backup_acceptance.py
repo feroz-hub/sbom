@@ -14,7 +14,9 @@ from app.services import native_auth_service as auth
 from app.services import native_enrollment_service as enrollment
 from app.services import native_password_service as passwords
 from app.settings import get_settings
-from scripts.greenfield_uuid import REVISION
+from scripts.dev import GreenfieldStack
+
+REVISION = GreenfieldStack.current_revision()
 from sqlalchemy import create_engine, inspect, select, text
 from sqlalchemy.engine import make_url
 

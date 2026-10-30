@@ -47,7 +47,7 @@ Bundled Node: `/Users/ferozebasha/.cache/codex-runtimes/codex-primary-runtime/de
 | Final Native/IAM/KEV/RBAC | `PYTHONPATH=. .venv/bin/python docs/uat/remediation/2026-10-20-round2/run-auth-regressions.py` plus same nine files from initial selection | **287 passed / 0 failed / 0 skipped**, exit 0. [Final log](pytest-native-final.log) |
 | Full frontend | in frontend: bundled Node `node_modules/vitest/vitest.mjs run --maxWorkers=1` | **1,800 passed / 0 failed / 0 skipped; 199 files passed**. [Final](vitest-all-final.log). Earlier 19 accessible-role selector failures corrected, [retained initial log](vitest-all.log). |
 | TypeScript | bundled Node `node_modules/typescript/bin/tsc --noEmit` | **PASS**, exit 0. [Log](typescript-final.log) |
-| Production frontend build | `PYTHONPATH=. .venv/bin/python -m scripts.greenfield_uuid build` | **PASS**, exit 0; webpack, TypeScript and **47 static pages**. [Log](build.log) |
+| Production frontend build | `PYTHONPATH=. .venv/bin/python scripts/dev.py setup --profile greenfield --frontend-build` | **PASS**, exit 0; webpack, TypeScript and **47 static pages**. [Log](build.log) |
 | Ruff | `.venv/bin/python -m ruff check` on all Round 2 Python source/test changes (files in `changed-files.json`) | **PASS**. [Log](ruff-final.log) |
 | ESLint | bundled Node `node_modules/eslint/bin/eslint.js` on the 13 Round 2 frontend source/test files | **PASS**, exit 0. [Log](eslint.log) |
 | Whitespace | `git -c core.fsmonitor=false diff --check` | PASS at verification; final integrity record captures rerun. |

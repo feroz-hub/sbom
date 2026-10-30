@@ -31,7 +31,9 @@ def write_private(path, content):
 def environment():
     from sqlalchemy.engine import URL
 
-    from scripts.greenfield_uuid import settings
+    from scripts.dev import GreenfieldStack
+
+    settings = GreenfieldStack.settings
 
     env = settings()
     # Tokens and BFF sessions from this task must never authenticate to the main app.
@@ -95,7 +97,11 @@ def prepare():
     from sqlalchemy import create_engine, text
     from sqlalchemy.engine import make_url
 
-    from scripts.greenfield_uuid import url, verify_resources
+    from scripts.dev import GreenfieldStack
+
+    url = GreenfieldStack.url
+
+    verify_resources = GreenfieldStack.verify_resources
 
     verify_resources()
     STATE.mkdir(mode=0o700, exist_ok=True)
