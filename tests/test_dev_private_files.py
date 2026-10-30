@@ -4,8 +4,10 @@ from __future__ import annotations
 
 import ctypes
 import errno
+import json
 import os
 import stat
+import subprocess
 import sys
 from pathlib import Path
 from types import SimpleNamespace
@@ -414,10 +416,45 @@ def test_windows_devices_and_alternate_streams_are_refused_before_creation(windo
 
 
 @pytest.mark.skipif(sys.platform != "win32", reason="Actual native Windows DACL acceptance")
-def test_native_windows_new_file_has_protected_private_dacl(tmp_path):
+def test_native_windows_new_file_has_protected_private_dacl(tmp_path, monkeypatch):
     from scripts import dev
 
     path = tmp_path / "synthetic-private-file"
     dev_private.create_private_file(path, SECRET)
     assert path.read_bytes() == SECRET
-    dev.LocalHttps._windows_access(path, private=True)  # Get-Acl only, no ACL mutation.
+    observation = {}
+    original_run = subprocess.run
+
+    def observed_run(*args, **kwargs):
+        try:
+            result = original_run(*args, **kwargs)
+        except subprocess.TimeoutExpired:
+            observation["helper_status"] = "timeout"
+            raise
+        except OSError as error:
+            observation.update(helper_status="os-error", winerror=getattr(error, "winerror", None))
+            raise
+        observation.update(helper_status="exited", returncode=result.returncode)
+        try:
+            acl = json.loads(result.stdout)
+            rules = acl.get("rules")
+            observation.update(
+                json_valid=True,
+                owner_matches=bool(acl.get("current")) and acl.get("owner") == acl["current"],
+                protected=acl.get("protected"),
+                rule_count=len(rules) if isinstance(rules, list) else None,
+            )
+            if isinstance(rules, list):
+                allowed = {acl.get("current"), "S-1-5-18", "S-1-5-32-544"}
+                observation["unexpected_allows"] = sum(
+                    rule.get("type") == 0 and rule.get("sid") not in allowed for rule in rules
+                )
+        except (ValueError, TypeError, AttributeError):
+            observation["json_valid"] = False
+        return result
+
+    monkeypatch.setattr(dev.subprocess, "run", observed_run)
+    try:
+        dev.LocalHttps._windows_access(path, private=True)  # Get-Acl only, no ACL mutation.
+    except dev.LocalHttps.HttpsTrustError:
+        pytest.fail("Native protected-DACL roundtrip failed: " + json.dumps(observation, sort_keys=True), pytrace=False)
