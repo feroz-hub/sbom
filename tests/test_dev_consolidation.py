@@ -38,6 +38,25 @@ def checkout(monkeypatch, tmp_path):
     return root, home
 
 
+@pytest.fixture
+def greenfield_installation(checkout, monkeypatch):
+    """Only the metadata guard's required files; all external checks are mocked."""
+    root, home = checkout
+    state = home / ".sbom-greenfield-uuid"
+    state.mkdir(mode=0o700)
+    for name, content in {
+        "environment.json": "{}",
+        "runtime-password": "synthetic-runtime-password",
+        "setup-password": "synthetic-setup-password",
+    }.items():
+        path = state / name
+        path.write_text(content, encoding="utf-8")
+        path.chmod(0o600)
+    monkeypatch.setattr(dev.GreenfieldStack, "ROOT", root)
+    monkeypatch.setattr(dev.GreenfieldStack, "STATE", state)
+    return state
+
+
 @pytest.mark.parametrize("command", ["start", "stop", "restart", "status", "doctor", "logs"])
 def test_one_public_parser_accepts_all_lifecycle_commands(command):
     assert dev.parse_args([command]).command == command
@@ -424,13 +443,19 @@ def test_greenfield_application_port_failure_precedes_dependency_install(monkeyp
     forbidden.assert_not_called()
 
 
-def test_canonical_greenfield_tls_failure_precedes_container_resume(monkeypatch):
-    monkeypatch.setattr(dev.LocalHttps, "ensure_certificate", Mock(side_effect=dev.LocalHttps.HttpsTrustError("untrusted local CA")))
+def test_canonical_greenfield_tls_failure_precedes_container_resume(greenfield_installation, monkeypatch):
+    certificate = Mock(side_effect=dev.LocalHttps.HttpsTrustError("untrusted local CA"))
+    monkeypatch.setattr(dev.LocalHttps, "ensure_certificate", certificate)
     forbidden = Mock(side_effect=AssertionError("container operation before trust validation"))
+    for name in ("settings", "read_private", "verify_resources", "docker_command"):
+        monkeypatch.setattr(dev.GreenfieldStack, name, forbidden)
     monkeypatch.setattr(dev.GreenfieldProfile, "inventory", forbidden)
+    monkeypatch.setattr(dev.GreenfieldProfile, "start_services", forbidden)
     monkeypatch.setattr(dev.subprocess, "run", forbidden)
+    monkeypatch.setattr(dev.subprocess, "Popen", forbidden)
     with pytest.raises(dev.LocalHttps.HttpsTrustError, match="untrusted"):
         dev.GreenfieldProfile.start(SimpleNamespace(check=False), Mock())
+    certificate.assert_called_once_with(greenfield_installation, prepare=True)
     forbidden.assert_not_called()
 
 
@@ -443,20 +468,45 @@ def test_canonical_greenfield_inventory_checks_recorded_identity_before_inspecti
     forbidden.assert_not_called()
 
 
-def test_canonical_greenfield_check_is_read_only_and_does_not_read_passwords(monkeypatch):
+def test_canonical_greenfield_check_is_read_only_and_does_not_read_passwords(greenfield_installation, monkeypatch):
     from scripts import greenfield_migrations
 
+    before = {path.name: (path.read_bytes(), path.stat().st_mtime_ns) for path in greenfield_installation.iterdir()}
     certificate = Mock()
     monkeypatch.setattr(dev.LocalHttps, "ensure_certificate", certificate)
-    monkeypatch.setattr(dev.GreenfieldProfile, "inventory", lambda: [])
+    inventory = Mock(return_value=[])
+    monkeypatch.setattr(dev.GreenfieldProfile, "inventory", inventory)
     forbidden = Mock(side_effect=AssertionError("mutation or password read during check"))
-    for name in ("settings", "read_private"):
+    for name in (
+        "settings", "read_private", "private_file", "initialize_private_state", "provision",
+        "bootstrap", "frontend_workspace", "docker_command", "verify_resources",
+    ):
         monkeypatch.setattr(dev.GreenfieldStack, name, forbidden)
     monkeypatch.setattr(dev.GreenfieldProfile, "start_services", forbidden)
+    monkeypatch.setattr(dev, "start_process", forbidden)
+    monkeypatch.setattr(dev, "run", forbidden)
     monkeypatch.setattr(dev.subprocess, "run", forbidden)
+    monkeypatch.setattr(dev.subprocess, "Popen", forbidden)
+    monkeypatch.setattr(dev.subprocess, "check_output", forbidden)
     monkeypatch.setattr(greenfield_migrations, "ensure_current", forbidden)
     dev.GreenfieldProfile.start(SimpleNamespace(check=True), None)
-    certificate.assert_called_once_with(dev.GreenfieldStack.STATE, prepare=False)
+    certificate.assert_called_once_with(greenfield_installation, prepare=False)
+    inventory.assert_called_once_with()
+    forbidden.assert_not_called()
+    after = {path.name: (path.read_bytes(), path.stat().st_mtime_ns) for path in greenfield_installation.iterdir()}
+    assert after == before
+
+
+@pytest.mark.parametrize("missing", ["environment.json", "runtime-password", "setup-password"])
+def test_canonical_greenfield_incomplete_state_fails_before_tls_or_container_checks(greenfield_installation, monkeypatch, missing):
+    (greenfield_installation / missing).unlink()
+    forbidden = Mock(side_effect=AssertionError("incomplete installation bypassed"))
+    monkeypatch.setattr(dev.LocalHttps, "ensure_certificate", forbidden)
+    monkeypatch.setattr(dev.GreenfieldProfile, "inventory", forbidden)
+    monkeypatch.setattr(dev.GreenfieldStack, "settings", forbidden)
+    monkeypatch.setattr(dev.GreenfieldStack, "read_private", forbidden)
+    with pytest.raises(dev.SetupError, match="Greenfield installation is incomplete"):
+        dev.GreenfieldProfile.start(SimpleNamespace(check=True), None)
     forbidden.assert_not_called()
 
 

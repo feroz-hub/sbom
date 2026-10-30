@@ -11,6 +11,8 @@ import os
 import socket
 import subprocess
 import sys
+import tempfile
+import time
 from pathlib import Path
 from unittest.mock import Mock
 
@@ -38,14 +40,29 @@ def owned_runtime(tmp_path):
 
 
 def sleeping_child(children):
-    process = subprocess.Popen(
-        [sys.executable, "-c", "import time; time.sleep(60)"],
-        stdout=subprocess.DEVNULL,
-        stderr=subprocess.DEVNULL,
-        **dev.platform_spawn_options(),
-    )
-    children.append(process)
-    return process
+    # Framework Python can exec its final interpreter after Popen returns.
+    # Record ownership only after this fixture has reached its stable workload.
+    with tempfile.TemporaryDirectory(prefix="sbom-owned-fixture-") as directory:
+        ready = Path(directory) / "ready"
+        process = subprocess.Popen(
+            [
+                sys.executable, "-c",
+                "import sys,time; from pathlib import Path; Path(sys.argv[1]).touch(); time.sleep(60)",
+                str(ready),
+            ],
+            stdout=subprocess.DEVNULL,
+            stderr=subprocess.DEVNULL,
+            **dev.platform_spawn_options(),
+        )
+        children.append(process)
+        deadline = time.monotonic() + 5
+        while not ready.exists():
+            if process.poll() is not None:
+                pytest.fail("Disposable Python fixture exited before readiness")
+            if time.monotonic() >= deadline:
+                pytest.fail("Disposable Python fixture did not become ready")
+            time.sleep(0.01)
+        return process
 
 
 def test_native_stop_affects_only_recorded_child(owned_runtime):

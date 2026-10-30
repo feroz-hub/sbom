@@ -771,8 +771,12 @@ def test_readiness_validates_api_database_and_iam(monkeypatch):
 
 def test_readiness_failure_names_component_and_log(monkeypatch):
     monkeypatch.setattr(dev, "ACTIVE_PROFILE", "legacy")
-    with pytest.raises(dev.SetupError, match=r"API:.*\.dev-logs/api\.log"):
+    with pytest.raises(dev.SetupError) as failure:
         dev.wait_http_component(MagicMock(), {}, "API", [], timeout=0)
+    diagnostic = str(failure.value)
+    assert diagnostic.startswith("API:")
+    reported_log = diagnostic.split("Log: ", 1)[1].split(". Correct", 1)[0]
+    assert Path(reported_log) == dev.ROOT / ".dev-logs" / "api.log"
 
 
 def test_unrecognized_application_port_is_not_reused(monkeypatch: pytest.MonkeyPatch, tmp_path: Path) -> None:
