@@ -6,7 +6,7 @@ import sys
 
 # The public read-only entry points must not create import caches on a fresh
 # checkout, including before argument parsing or optional dependency imports.
-if __name__ == "__main__" and any(value in {"diagnose", "doctor", "--check"} for value in sys.argv[1:]):
+if __name__ == "__main__" and any(value in {"setup", "diagnose", "doctor", "--check"} for value in sys.argv[1:]):
     sys.dont_write_bytecode = True
 
 import argparse
@@ -1530,34 +1530,117 @@ def verify_existing_schema(env):
 
 
 def setup_application(args):
+    """Inspect and obtain scoped authorization before any preparation."""
+    previous = sys.dont_write_bytecode
+    sys.dont_write_bytecode = True
+    try:
+        try:
+            from scripts import dev_setup
+        except ModuleNotFoundError as error:
+            if error.name != "scripts":
+                raise
+            import dev_setup
+        return dev_setup.run_setup(args, sys.modules[__name__], _apply_setup_application)
+    finally:
+        sys.dont_write_bytecode = previous
+
+
+def _development_library(name):
+    """Import a private launcher library from a checkout or a direct script."""
+    import importlib
+
+    try:
+        return importlib.import_module("scripts." + name)
+    except ModuleNotFoundError as error:
+        if error.name != "scripts":
+            raise
+        return importlib.import_module(name)
+
+
+def _setup_requires(args, category):
+    if category not in getattr(args, "_setup_authorized_categories", ()):
+        raise SetupError(f"SETUP_APPROVAL_REQUIRED: the {category} action was not authorized by this plan.")
+
+
+def _apply_setup_application(args):
     global ACTIVE_PROFILE, ACTIVE_LEGACY_CONFIG
+    if not getattr(args, "_setup_authorized_categories", None):
+        raise SetupError("SETUP_APPROVAL_REQUIRED: review the explicit setup plan before preparation.")
     profile = args.profile
     if profile == "auto":
         profile = "greenfield" if GreenfieldStack.STATE.exists() else "legacy"
     ACTIVE_PROFILE = profile
     ACTIVE_LEGACY_CONFIG = select_legacy_configuration(args.legacy_config)
+    selected_values = {}
+    if profile == "legacy":
+        selected_values, frontend_values = _development_library("dev_environment").load_legacy_snapshots(
+            ACTIVE_LEGACY_CONFIG, sys.modules[__name__]
+        ) if CONFIG.exists() or ACTIVE_LEGACY_CONFIG != "managed" else ({}, {})
+        selected_values = {**frontend_values, **selected_values}
+        _development_library("dev_prepared")._development_only(selected_values, sys.modules[__name__])
+        if ACTIVE_LEGACY_CONFIG == "managed":
+            _development_library("dev_prepared").validate_managed_mode({**os.environ, **selected_values}, sys.modules[__name__])
+    database_action = args.initialize_database or args.migrate or args.provision_greenfield
+    if database_action:
+        if profile == "greenfield":
+            target_name = GreenfieldStack.DB
+        elif ACTIVE_LEGACY_CONFIG == "managed":
+            if selected_values.get("DATABASE_URL"):
+                validate_database_url(selected_values["DATABASE_URL"])
+            target_name = DB_NAME
+        else:
+            target = _development_library("dev_config").resolve_configuration(
+                profile="legacy", family=ACTIVE_LEGACY_CONFIG, inherited=dict(os.environ),
+                saved=selected_values, root=str(ROOT), platform="linux" if sys.platform.startswith("linux") else sys.platform,
+            ).database
+            target_name = target.name
+        if args.confirm_database != target_name:
+            raise SetupError("DATABASE_CONFIRMATION_REQUIRED: repeat the exact selected database name before any preparation.")
+        _setup_requires(args, "database-migrate" if args.migrate else "database-initialize")
     state = Runtime(ROOT).load() or {}
-    if state.get("services") and any((args.provision_greenfield, args.initialize_database, args.migrate)):
+    if state:
         raise SetupError(
-            "Stop the managed runtime before explicit provisioning or schema setup. No database changes were made."
-        )
+            "Use status and verified-ownership stop before preparation; existing runtime records were retained.")
+    _development_library("dev_prepared")._development_only(os.environ, sys.modules[__name__])
     validate_repository_layout()
     validate_prerequisites()
-    ensure_virtualenv()
-    ensure_dependencies()
+    if "project-dependencies" in args._setup_authorized_categories:
+        ensure_virtualenv()
+    else:
+        require_virtualenv()
+    # Take the same lifecycle lock only after any interpreter handoff. A setup
+    # parent must never hold this lock while its child tries to acquire it.
+    runtime = Runtime(ROOT)
+    if not runtime.acquire():
+        raise SetupError("SETUP_RUNTIME_BUSY: another launcher operation owns this checkout; nothing was prepared.")
+    try:
+        if runtime.load():
+            raise SetupError("SETUP_RUNTIME_PRESENT: runtime records appeared; retain them and use verified-ownership stop before preparation.")
+        if "project-dependencies" in args._setup_authorized_categories:
+            ensure_dependencies()
+        else:
+            _development_library("dev_prepared").require_project(sys.modules[__name__])
+        return _prepare_authorized_setup(args, profile)
+    finally:
+        runtime.release()
+
+
+def _prepare_authorized_setup(args, profile):
+    """Apply reviewed actions while the checkout lifecycle lock is held."""
     if profile == "greenfield":
-        if args.provision_greenfield or args.initialize_database:
-            if args.confirm_database != GreenfieldStack.DB:
-                raise SetupError(
-                    "Explicit Greenfield setup requires --confirm-database sbom_greenfield_uuid. Existing databases are never reset."
-                )
         if args.provision_greenfield:
+            for category in ("configuration", "secrets", "certificates", "data-providers"):
+                _setup_requires(args, category)
+            if GreenfieldStack.STATE.exists():
+                raise SetupError("Existing Greenfield state must be restored/reviewed; setup will not provision over it.")
             LocalHttps.ensure_certificate(GreenfieldStack.STATE, prepare=True)
             GreenfieldStack.provision()
         else:
             resolve_profile("greenfield")
-            LocalHttps.ensure_certificate(GreenfieldStack.STATE, prepare=True)
-        ensure_frontend(certificate=False)
+            LocalHttps.ensure_certificate(GreenfieldStack.STATE, prepare=False)
+        if "project-dependencies" in args._setup_authorized_categories:
+            ensure_frontend(certificate=False)
+        validate_secrets(GreenfieldStack.settings())
         if args.initialize_database:
             previous, directory = dict(os.environ), Path.cwd()
             try:
@@ -1571,56 +1654,56 @@ def setup_application(args):
 
             greenfield_migrations.ensure_current()
         if args.frontend_build:
+            _setup_requires(args, "frontend-build")
             env = GreenfieldStack.settings()
             env["NODE_ENV"] = "production"
             result = run(
-                [
-                    str(GreenfieldStack.node_binary()),
-                    str(ROOT / "frontend/node_modules/next/dist/bin/next"),
-                    "build",
-                    "--webpack",
-                ],
-                env=env,
-                cwd=GreenfieldStack.frontend_workspace("frontend-build"),
+                [str(GreenfieldStack.node_binary()), str(ROOT / "frontend/node_modules/next/dist/bin/next"),
+                 "build", "--webpack"], env=env, cwd=GreenfieldStack.frontend_workspace("frontend-build"),
             )
             if result.returncode:
-                raise SetupError(
-                    "Local frontend build failed. Rerun setup --frontend-build --verbose for the redacted diagnostic."
-                )
+                raise SetupError("Local frontend build failed. Review the redacted setup diagnostic.")
     else:
-        if args.frontend_build:
-            raise SetupError("--frontend-build selects the isolated Greenfield workspace; use --profile greenfield.")
-        ensure_frontend()
-        legacy_https_context()
-        if args.provision_greenfield:
-            raise SetupError("--provision-greenfield cannot be used with Legacy.")
-        if args.initialize_database or args.migrate:
-            env = (
-                prepare_managed_legacy()
-                if ACTIVE_LEGACY_CONFIG == "managed"
-                else existing_legacy_environment(ACTIVE_LEGACY_CONFIG)
+        if args.frontend_build or args.provision_greenfield:
+            raise SetupError("Greenfield provisioning/build flags cannot prepare Legacy.")
+        if "project-dependencies" in args._setup_authorized_categories:
+            ensure_frontend(certificate=False)
+        if ACTIVE_LEGACY_CONFIG == "managed":
+            env = prepare_managed_legacy(setup_args=args)
+        else:
+            plan = _development_library("dev_environment").resolve_existing(
+                argparse.Namespace(profile="legacy", legacy_config=ACTIVE_LEGACY_CONFIG),
+                sys.modules[__name__], None,
             )
-            name = urlsplit(env["DATABASE_URL"]).path.lstrip("/")
-            if args.confirm_database != name:
-                raise SetupError("Database setup requires --confirm-database matching the saved local database name.")
-            if args.initialize_database:
-                from scripts.bootstrap_fresh_database import bootstrap
+            env = dict(plan.environment)
+            _development_library("dev_prepared")._development_only(env, sys.modules[__name__])
+            if plan.authentication_enabled is not True or env.get("DEV_DEFAULT_TENANT", "").lower() not in {"false", "0", "no", "off"}:
+                raise SetupError("AUTHENTICATED_SETUP_REQUIRED: preserve authenticated mode and disable the development bypass explicitly.")
+            if "native" in plan.auth_modes:
+                validate_secrets(env)
+        if "certificates" in args._setup_authorized_categories:
+            certificate, key = ROOT / "frontend/certificates/localhost.pem", ROOT / "frontend/certificates/localhost-key.pem"
+            if certificate.exists() or key.exists():
+                raise SetupError("Existing localhost material appeared; review a new plan instead of replacing either file.")
+            create_local_certificate(certificate, key)
+        legacy_https_context()
+        if args.initialize_database:
+            from scripts.bootstrap_fresh_database import bootstrap
 
-                previous = dict(os.environ)
-                try:
-                    os.environ.update(env)
-                    bootstrap(env["DATABASE_URL"], name)
-                finally:
-                    os.environ.clear()
-                    os.environ.update(previous)
-            else:
-                validate_existing_schema(env["DATABASE_URL"], validate_target=ACTIVE_LEGACY_CONFIG == "managed")
-                run_migrations(env)
-    say(
-        "OK",
-        "Setup",
-        "project dependencies and local HTTPS prepared; existing configuration retained; no application processes started",
-    )
+            name = urlsplit(env["DATABASE_URL"]).path[1:]
+            previous = dict(os.environ)
+            try:
+                os.environ.update(env)
+                bootstrap(env["DATABASE_URL"], name)
+            finally:
+                os.environ.clear()
+                os.environ.update(previous)
+        elif args.migrate:
+            validate_existing_schema(env["DATABASE_URL"], validate_target=ACTIVE_LEGACY_CONFIG == "managed")
+            run_migrations(env)
+    say("OK", "Setup", "authorized preparation finished; retained private material and data safeguards; no application processes started")
+
+
 
 
 def check_profile_ownership(runtime, profile: str) -> None:
@@ -2720,7 +2803,7 @@ class GreenfieldProfile:
     @staticmethod
     def start_services(runtime):
         GreenfieldStack.check_service_ports()
-        cert, key, _, _ = LocalHttps.ensure_certificate(GreenfieldStack.STATE, prepare=True)
+        cert, key, _, _ = LocalHttps.ensure_certificate(GreenfieldStack.STATE, prepare=False)
         GreenfieldStack.verify_resources()
         env = runtime_environment(GreenfieldStack.settings())
         node = GreenfieldStack.node_binary()
@@ -2742,7 +2825,9 @@ class GreenfieldProfile:
         from scripts import greenfield_migrations as migrations
 
         validate_greenfield_installation()
-        LocalHttps.ensure_certificate(GreenfieldStack.STATE, prepare=not args.check)
+        LocalHttps.ensure_certificate(GreenfieldStack.STATE, prepare=False)
+        if not args.check:
+            _development_library("dev_prepared")._development_only(GreenfieldStack.settings(), sys.modules[__name__])
         observed = GreenfieldProfile.inventory()
         if args.check:
             say(
@@ -3069,7 +3154,18 @@ def venv_python() -> Path:
 
 
 def ensure_virtualenv() -> None:
+    _virtualenv(prepare=True)
+
+
+def require_virtualenv() -> None:
+    """Use an existing project interpreter without creating or repairing it."""
+    _virtualenv(prepare=False)
+
+
+def _virtualenv(*, prepare: bool) -> None:
     if not venv_python().exists():
+        if not prepare:
+            raise SetupError("PROJECT_SETUP_REQUIRED: review python scripts/dev.py setup; startup creates no virtualenv.")
         result = run([sys.executable, "-m", "venv", str(VENV)])
         if result.returncode:
             explain_failed_command(result)
@@ -3100,7 +3196,9 @@ def ensure_dependencies() -> None:
         import alembic  # noqa: F401
         import celery  # noqa: F401
         import cryptography  # noqa: F401
+        import dotenv  # noqa: F401
         import psycopg  # noqa: F401
+        import redis  # noqa: F401
         import uvicorn  # noqa: F401
 
         installed = stamp.exists() and stamp.read_text().strip() == digest
@@ -3142,8 +3240,33 @@ def read_config(path: Path = CONFIG) -> dict[str, str]:
     return values
 
 
-def write_config(values: dict[str, str], path: Path = CONFIG) -> None:
+def write_config(values: dict[str, str], path: Path = CONFIG, *, create_only=False) -> None:
     # Replace atomically so interrupted setup cannot leave half a keypair.
+    if create_only:
+        private_files = _development_library("dev_private")
+        try:
+            private_files.validate_parent(path, ROOT)
+        except OSError:
+            raise SetupError("PRIVATE_CONFIG_PARENT_UNVERIFIED: new configuration must remain in nonredirected checkout directories.") from None
+        temporary = path.with_name(path.name + ".tmp-" + uuid.uuid4().hex)
+        payload = "# Local Native IAM development only. Never commit this file.\n" + "".join(
+            f"{key}={json.dumps(value)}\n" for key, value in sorted(values.items())
+        )
+        created = False
+        try:
+            private_files.create_private_file(temporary, payload.encode("utf-8"))
+            created = True
+            private_files.validate_parent(path, ROOT)
+            os.link(temporary, path)  # Publish without ever replacing an existing configuration.
+        except Exception as error:
+            raise SetupError(
+                f"PRIVATE_CONFIG_CREATION_FAILED ({type(error).__name__}): an existing file was not replaced; "
+                "review the new-file permissions and current setup plan."
+            ) from None
+        finally:
+            if created:
+                temporary.unlink(missing_ok=True)
+        return
     temporary = path.with_name(path.name + ".tmp")
     fd = os.open(temporary, os.O_WRONLY | os.O_CREAT | os.O_TRUNC, 0o600)
     try:
@@ -3177,7 +3300,8 @@ def generate_keys(values: dict[str, str]) -> None:
             .decode()
         )
     for key in ("NATIVE_SECURITY_OUTBOX_KEY", "AUTH_SESSION_ENCRYPTION_KEY"):
-        values.setdefault(key, base64.b64encode(secrets.token_bytes(32)).decode())
+        if key not in values:
+            values[key] = base64.b64encode(secrets.token_bytes(32)).decode()
     validate_secrets(values)
 
 
@@ -3379,28 +3503,26 @@ def resolve_local_database_url(
     interactive: bool,
     input_fn=input,
     password_fn=None,
+    allow_missing_database=False,
 ) -> str:
     candidates = []
     if saved_url:
         validate_database_url(saved_url)
         candidates.append(saved_url)
-    else:
-        repository_url = repository_database_candidate(repository_env, port)
-        if repository_url:
-            candidates.append(repository_url)
-        candidates.extend(pgpass_database_candidates(pgpass_path, port))
-        candidates.append(default_database_url("local", port))
 
     for candidate in dict.fromkeys(candidates):
         try:
-            ensure_database(candidate)
+            validate_database_credentials(candidate, allow_missing=allow_missing_database)
             return candidate
         except SetupError:
-            pass
+            raise SetupError(
+                "SAVED_DATABASE_CREDENTIALS_REVIEW_REQUIRED: the saved local target could not be verified. "
+                "Restore its approved credentials; setup will not substitute another login."
+            ) from None
 
     if not interactive:
         raise SetupError(
-            f"PostgreSQL credentials are required for {DB_NAME}. Run python scripts/dev.py in an interactive terminal."
+            f"PostgreSQL credentials are required for {DB_NAME}. Review python scripts/dev.py setup in an interactive terminal."
         )
 
     print(f"[INFO] Local PostgreSQL detected at 127.0.0.1:{port}")
@@ -3409,12 +3531,12 @@ def resolve_local_database_url(
         user, password = read_postgres_credentials(input_fn=input_fn, password_fn=password_fn)
         candidate = local_database_url(user, password, port)
         try:
-            ensure_database(candidate)
+            validate_database_credentials(candidate, allow_missing=allow_missing_database)
             return candidate
         except SetupError:
             if attempt < 2:
                 print(
-                    "[ERROR] PostgreSQL credentials were not accepted or cannot create the development database. Try again."
+                    "[ERROR] PostgreSQL credentials or the selected existing target could not be validated. Try again."
                 )
     raise SetupError("PostgreSQL credentials were not accepted after 3 attempts. Check the local login and rerun.")
 
@@ -3430,6 +3552,8 @@ def configure_local_database(
     interactive: bool,
     input_fn=input,
     password_fn=None,
+    allow_missing_database=False,
+    persist=True,
 ) -> None:
     saved_url = saved.get("DATABASE_URL") if saved.get("DATABASE_URL") == values.get("DATABASE_URL") else None
     values["DATABASE_URL"] = resolve_local_database_url(
@@ -3440,8 +3564,9 @@ def configure_local_database(
         interactive=interactive,
         input_fn=input_fn,
         password_fn=password_fn,
+        allow_missing_database=allow_missing_database,
     )
-    if values != saved:
+    if persist and values != saved:
         write_config(values, config_path)
 
 
@@ -3521,6 +3646,85 @@ def resolve_config(
     values.update(fixed)
     values.setdefault("NATIVE_PLATFORM_BOOTSTRAP_ENABLED", "false")
     return values
+
+
+def _readonly_local_database(url: str, *, database: str | None = None):
+    """Open a pinned local target for inspection, never credential-driven creation."""
+    import psycopg
+
+    validate_database_url(url)
+    target = urlsplit(url)
+    name = database or DB_NAME
+    if name not in {DB_NAME, "postgres"}:
+        raise SetupError("Database inspection is outside the managed development target.")
+    connection = psycopg.connect(
+        host=target.hostname, hostaddr="127.0.0.1", port=target.port,
+        dbname=name, user=unquote(target.username or ""), password=unquote(target.password or ""),
+        connect_timeout=3, autocommit=False,
+        options="-c default_transaction_read_only=on -c statement_timeout=3000 -c lock_timeout=250 -c search_path=pg_catalog,public",
+    )
+    try:
+        if connection.execute("SHOW transaction_read_only").fetchone()[0] != "on":
+            raise SetupError("DATABASE_NOT_READONLY: credential inspection could not establish read-only mode.")
+        if connection.execute("SELECT pg_catalog.current_database()").fetchone()[0] != name:
+            raise SetupError("DATABASE_TARGET_MISMATCH: credential inspection returned a different local target.")
+    except BaseException:
+        try:
+            connection.rollback()
+        finally:
+            connection.close()
+        raise
+    return connection
+
+
+def _close_database_inspection(connection):
+    try:
+        connection.rollback()
+    finally:
+        connection.close()
+
+
+def validate_database_credentials(url: str, *, allow_missing: bool = False) -> bool:
+    """Validate selected credentials with SELECT/SHOW only; return target existence."""
+    import psycopg
+
+    connection = None
+    try:
+        try:
+            connection = _readonly_local_database(url)
+            return True
+        except psycopg.Error as error:
+            if getattr(error, "sqlstate", None) != "3D000" or not allow_missing:
+                raise
+        connection = _readonly_local_database(url, database="postgres")
+        connection.execute("SELECT 1 FROM pg_catalog.pg_database WHERE datname=%s", (DB_NAME,)).fetchone()
+        return False
+    except psycopg.Error:
+        raise SetupError(
+            "DATABASE_CREDENTIALS_UNVERIFIED: verify the selected local credentials/target. "
+            "A missing database requires explicitly confirmed setup; no database was created."
+        ) from None
+    finally:
+        if connection is not None:
+            _close_database_inspection(connection)
+
+
+def _require_empty_database_for_initial_keys(url):
+    connection = _readonly_local_database(url)
+    try:
+        present = connection.execute(
+            "SELECT EXISTS (SELECT 1 FROM pg_catalog.pg_class AS item "
+            "JOIN pg_catalog.pg_namespace AS scope ON scope.oid=item.relnamespace "
+            "WHERE scope.nspname NOT LIKE 'pg_%' AND scope.nspname <> 'information_schema' "
+            "AND item.relkind IN ('r','p','v','m','S','f'))"
+        ).fetchone()
+        if not present or present[0] is not False:
+            raise SetupError(
+                "ORIGINAL_KEYS_REQUIRED: this existing schema cannot receive guessed replacement keys. "
+                "Restore its original private configuration; no keys were generated."
+            )
+    finally:
+        _close_database_inspection(connection)
 
 
 def ensure_database(url: str) -> None:
@@ -3650,7 +3854,7 @@ def ensure_frontend(*, certificate: bool = True) -> str:
             "Cannot read frontend package.json/package-lock.json. Restore the manifests and rerun."
         ) from None
     try:
-        installed = modules.is_dir() and stamp.read_text().strip() == digest
+        installed = modules.is_dir() and (modules / "next/dist/bin/next").is_file() and stamp.read_text().strip() == digest
     except OSError:
         installed = False
     if not installed:
@@ -3683,6 +3887,12 @@ def ensure_frontend(*, certificate: bool = True) -> str:
 
 def create_local_certificate(cert: Path, key: Path) -> None:
     """Create the same localhost certificate files consumed by dev:https."""
+    private_files = _development_library("dev_private")
+    try:
+        private_files.validate_parent(cert, ROOT, allow_missing=True)
+        private_files.validate_parent(key, ROOT, allow_missing=True)
+    except OSError:
+        raise SetupError("CERTIFICATE_PARENT_UNVERIFIED: restore nonredirected certificate directories inside this checkout before authorizing generation.") from None
     import datetime
     import ipaddress
 
@@ -3714,14 +3924,22 @@ def create_local_certificate(cert: Path, key: Path) -> None:
         .sign(private, hashes.SHA256())
     )
     cert.parent.mkdir(parents=True, exist_ok=True)
-    fd = os.open(key, os.O_WRONLY | os.O_CREAT | os.O_EXCL, 0o600)
-    with os.fdopen(fd, "wb") as stream:
-        stream.write(
-            private.private_bytes(
+    try:
+        private_files.validate_parent(cert, ROOT)
+        private_files.validate_parent(key, ROOT)
+        private_files.create_private_file(
+            key, private.private_bytes(
                 serialization.Encoding.PEM, serialization.PrivateFormat.PKCS8, serialization.NoEncryption()
-            )
+            ),
         )
-    cert.write_bytes(certificate.public_bytes(serialization.Encoding.PEM))
+        fd = os.open(cert, os.O_WRONLY | os.O_CREAT | os.O_EXCL, 0o644)
+        with os.fdopen(fd, "wb") as stream:
+            stream.write(certificate.public_bytes(serialization.Encoding.PEM))
+    except Exception as error:
+        raise SetupError(
+            f"CERTIFICATE_PREPARATION_INCOMPLETE ({type(error).__name__}): existing files were not replaced. "
+            "Review the localhost pair and retained preparation artifacts before retrying."
+        ) from None
 
 
 def acquire_beat_lock() -> None:
@@ -3936,109 +4154,115 @@ def stop_processes(processes: list[subprocess.Popen]) -> None:
                     pass
 
 
-def prepare_managed_legacy(*, check=False):
-    print("SBOM Analyzer Development Setup\n", flush=True)
-    say("OK", "Python", platform.python_version())
-    saved = read_config()
-    if check and any(
-        key in saved
-        for key in (
-            "NATIVE_JWT_PRIVATE_KEY",
-            "NATIVE_JWT_PUBLIC_KEY",
-            "NATIVE_SECURITY_OUTBOX_KEY",
-            "AUTH_SESSION_ENCRYPTION_KEY",
-        )
-    ):
-        try:
-            validate_secrets(saved)
-        except ImportError:
-            raise SetupError(
-                "Cannot validate saved Native IAM keys without Python dependencies. Run python scripts/dev.py first."
-            ) from None
-    if not check and CONFIG.exists() and os.name != "nt":
-        CONFIG.chmod(0o600)
-    docker_env = os.environ.copy()
-    docker_env.update(
-        {
-            "POSTGRES_PORT": str(POSTGRES_PORT),
-            "REDIS_PORT": str(REDIS_PORT),
-            "MAILPIT_SMTP_PORT": str(MAILPIT_SMTP_PORT),
-            "MAILPIT_UI_PORT": str(MAILPIT_UI_PORT),
-        }
-    )
-    postgres, pg_port = select_service(
-        "postgres",
-        POSTGRES_PORT,
-        5432,
-        check=check,
-        env=docker_env,
-        preferred=saved.get("DEV_POSTGRES_PROVIDER"),
-    )
-    redis, redis_port = select_service(
-        "redis",
-        REDIS_PORT,
-        6379,
-        check=check,
-        env=docker_env,
-        preferred=saved.get("DEV_REDIS_PROVIDER"),
-    )
-    # An older SBOM-specific Mailpit container is accepted, never an arbitrary SMTP server.
-    mailpit = select_mailpit(check=check, env=docker_env)
-    values = resolve_config(
-        saved,
-        pg_port,
-        redis_port,
-        MAILPIT_SMTP_PORT,
-        pg_provider=provider_name(postgres),
-        redis_provider=provider_name(redis),
-    )
-    if not check:
-        generate_keys(values)
-    env = os.environ.copy()
-    env.update(values)
-    env["PYTHONPATH"] = str(ROOT)
-    api_port = int(values["DEV_API_PORT"])
-    frontend_port = int(values["DEV_FRONTEND_PORT"])
-    db_url = urlsplit(values["DATABASE_URL"])
-    say("OK", "PostgreSQL", f"{postgres}, {db_url.hostname}:{db_url.port}")
-    say("OK", "Redis", f"{redis}, 127.0.0.1:{redis_port}")
-    say("OK", "Database", DB_NAME)
-    say("OK", "Mailpit", f"{mailpit}, http://127.0.0.1:{MAILPIT_UI_PORT}")
+def prepare_managed_legacy(*, check=False, setup_args=None):
+    """Prepare only explicitly authorized setup; ordinary start uses saved state."""
     if check:
+        env = _development_library("dev_prepared").prepared_legacy_environment(sys.modules[__name__], "managed")
         say("OK", "Check", "no services or processes started")
-        return
-    check_application_ports(api_port, frontend_port)
-    if postgres == "local":
-        configure_local_database(values, saved, pg_port, interactive=sys.stdin.isatty())
-        env["DATABASE_URL"] = values["DATABASE_URL"]
+        return env
+    if setup_args is None:
+        raise SetupError("SETUP_APPROVAL_REQUIRED: managed preparation is accepted only through the setup plan.")
+    existed = CONFIG.exists() or CONFIG.is_symlink()
+    saved = _development_library("dev_environment").load_legacy_snapshots("managed", sys.modules[__name__])[0] if existed else {}
+    _development_library("dev_prepared").validate_managed_mode({**os.environ, **saved}, sys.modules[__name__])
+    required_keys = {"NATIVE_JWT_PRIVATE_KEY", "NATIVE_JWT_PUBLIC_KEY", "NATIVE_SECURITY_OUTBOX_KEY", "AUTH_SESSION_ENCRYPTION_KEY"}
+    if existed:
+        if not required_keys <= saved.keys():
+            raise SetupError("ORIGINAL_KEYS_REQUIRED: restore the original complete Native keys; setup will not replace them.")
+        validate_secrets(saved)
     else:
+        for category in ("configuration", "secrets", "database-initialize"):
+            _setup_requires(setup_args, category)
+        if not setup_args.initialize_database or setup_args.confirm_database != DB_NAME:
+            raise SetupError("DATABASE_CONFIRMATION_REQUIRED: fresh managed configuration requires confirmed empty initialization.")
+    pg_requested = getattr(setup_args, "postgres_provider", None)
+    redis_requested = getattr(setup_args, "redis_provider", None)
+    mail_requested = getattr(setup_args, "mailpit_provider", None)
+    pg_saved = saved.get("DEV_POSTGRES_PROVIDER")
+    if saved.get("DATABASE_URL"):
+        validate_database_url(saved["DATABASE_URL"])
+        pg_saved = pg_saved or ("docker" if urlsplit(saved["DATABASE_URL"]).port == POSTGRES_PORT else "local")
+    redis_saved = saved.get("DEV_REDIS_PROVIDER")
+    if saved.get("REDIS_URL"):
+        redis_saved = redis_saved or ("docker" if urlsplit(saved["REDIS_URL"]).port == REDIS_PORT else "local")
+    if any(requested and previous and requested != previous for requested, previous in
+           ((pg_requested, pg_saved), (redis_requested, redis_saved),
+            (mail_requested, saved.get("DEV_MAILPIT_PROVIDER")))):
+        raise SetupError("PROVIDER_CHANGE_REVIEW_REQUIRED: preserve saved provider identity; no fallback or conversion was performed.")
+    pg_provider = pg_requested or pg_saved or "local"
+    redis_provider = redis_requested or redis_saved or "local"
+    mail_provider = mail_requested or saved.get("DEV_MAILPIT_PROVIDER") or "local"
+    if not existed and pg_provider == "docker":
+        raise SetupError(
+            "APPROVED_DATABASE_CONFIGURATION_REQUIRED: fresh Legacy setup cannot adopt default Docker credentials. "
+            "Prepare an approved configuration or select explicit Greenfield provisioning."
+        )
+    docker_env = {**os.environ, "POSTGRES_PORT": str(POSTGRES_PORT), "REDIS_PORT": str(REDIS_PORT),
+                  "MAILPIT_SMTP_PORT": str(MAILPIT_SMTP_PORT), "MAILPIT_UI_PORT": str(MAILPIT_UI_PORT)}
+    # Legacy has no durable dependency inventory. Reuse only already running
+    # dependencies; new private container installations use explicit Greenfield
+    # provisioning. Never compose-up an unknown Legacy PostgreSQL volume here.
+    local_pg_port = urlsplit(saved["DATABASE_URL"]).port if pg_provider == "local" and saved.get("DATABASE_URL") else 5432
+    postgres, pg_port = select_service("postgres", POSTGRES_PORT, local_pg_port, check=True,
+                                      env=docker_env, preferred=pg_provider)
+    redis, redis_port = select_service("redis", REDIS_PORT, 6379, check=True,
+                                      env=docker_env, preferred=redis_provider)
+    if any("available to start" in label.lower() for label in (postgres, redis)):
+        raise SetupError(
+            "DEPENDENCY_PREPARATION_REQUIRED: Legacy dependencies must already be running. "
+            "Use the explicit Greenfield setup plan for a new private container installation; no container was started."
+        )
+    if mail_provider == "local":
+        if not mailpit_ready():
+            raise SetupError("MAILPIT_PREPARATION_REQUIRED: start the selected local Mailpit service; no provider was created.")
+    else:
+        mailpit, _ = select_service("mailpit", MAILPIT_SMTP_PORT, MAILPIT_SMTP_PORT, check=True,
+                                    env=docker_env, preferred="docker")
+        if "available to start" in mailpit.lower():
+            raise SetupError("MAILPIT_PREPARATION_REQUIRED: the selected Legacy Mailpit container is not running.")
+        ensure_mailpit_ready()
+    values = resolve_config(saved, pg_port, redis_port, MAILPIT_SMTP_PORT,
+                            pg_provider=provider_name(postgres), redis_provider=provider_name(redis))
+    if postgres == "local":
+        configure_local_database(values, saved, pg_port, interactive=sys.stdin.isatty(),
+                                 allow_missing_database=bool(setup_args.initialize_database), persist=False)
+    else:
+        validate_database_credentials(values["DATABASE_URL"], allow_missing=bool(setup_args.initialize_database))
+    if setup_args.initialize_database:
+        _setup_requires(setup_args, "database-initialize")
+        if setup_args.confirm_database != DB_NAME:
+            raise SetupError("DATABASE_CONFIRMATION_REQUIRED: the managed development database was not confirmed.")
         ensure_database(values["DATABASE_URL"])
-        if values != saved:
-            write_config(values)
+    if not existed:
+        _require_empty_database_for_initial_keys(values["DATABASE_URL"])
+        generate_keys(values)
+        values["DEV_MAILPIT_PROVIDER"] = mail_provider
+        # The preparation plan fingerprint was revalidated. Do not replace a
+        # configuration another actor created while credentials were entered.
+        if CONFIG.exists():
+            raise SetupError("SETUP_PLAN_CHANGED: a managed configuration appeared; no existing file was overwritten.")
+        write_config(values, create_only=True)
+    env = {**os.environ, **values, "PYTHONPATH": str(ROOT)}
     return env
 
 
 def start_application(args) -> None:
+    prepared = _development_library("dev_prepared")
+    npm = prepared.require_project(sys.modules[__name__])
     if getattr(args, "profile", "legacy") == "greenfield":
         if not args.check:
             check_application_ports(DEV_API_PORT, DEV_FRONTEND_PORT)
-            ensure_dependencies()
-            ensure_frontend(certificate=False)
         GreenfieldProfile.start(args, ACTIVE_RUNTIME)
         return
-    if not args.check:
-        ensure_dependencies()
-    if ACTIVE_LEGACY_CONFIG == "managed":
-        env = prepare_managed_legacy(check=args.check)
-    else:
-        env = existing_legacy_environment(ACTIVE_LEGACY_CONFIG)
+    env = prepared.prepared_legacy_environment(sys.modules[__name__], ACTIVE_LEGACY_CONFIG)
     if args.check:
         return
     verify_data_connectivity(env)
+    if ACTIVE_LEGACY_CONFIG == "managed":
+        ensure_mailpit_ready()
     head = verify_existing_schema(env)
     say("OK", "Schema", head)
     api_port, frontend_port = int(env["DEV_API_PORT"]), int(env["DEV_FRONTEND_PORT"])
-    npm = ensure_frontend()
     legacy_https_context()
     check_application_ports(api_port, frontend_port)
     processes, env = launch_services(
@@ -4212,6 +4436,10 @@ def parse_args(argv=None):
         help="diagnose is read-only; doctor is a deprecated compatibility alias",
     )
     parser.add_argument("--check", action="store_true", help="compatibility alias for read-only diagnose")
+    parser.add_argument("--plan", action="store_true", help="setup only: show a read-only preparation plan without applying it")
+    for service in ("postgres", "redis", "mailpit"):
+        parser.add_argument(f"--{service}-provider", choices=("local", "docker"),
+                            help=f"setup only: explicitly select the {service} provider; saved providers stay pinned")
     parser.add_argument("--verbose", action="store_true", help="redacted setup diagnostics")
     parser.add_argument(
         "--profile",
@@ -4254,25 +4482,26 @@ def main() -> None:
     VERBOSE = args.verbose
     if args.check or args.command in {"diagnose", "doctor"}:
         if any((args.provision_greenfield, args.initialize_database, args.migrate,
-                args.frontend_build, args.confirm_database)):
+                args.frontend_build, args.confirm_database, args.plan,
+                args.postgres_provider, args.redis_provider, args.mailpit_provider)):
             print("[FAIL] CLI: DIAGNOSTIC_OPTIONS; diagnose cannot be combined with preparation or database flags.",
                   file=sys.stderr)
             return 2
         return doctor(args) if args.command == "doctor" else diagnose(args)
-    if args.command in {"setup", "start", "restart"}:
+    if args.command == "setup":
+        return setup_application(args)
+    if args.command in {"start", "restart"}:
         if not venv_python().exists() or Path(sys.prefix).resolve() == VENV.resolve():
             validate_python_version()
         validate_repository_layout()
         if sys.version_info < MIN_PYTHON:
-            ensure_virtualenv()  # Existing supported environment performs its own checks.
+            require_virtualenv()  # Existing supported environment performs its own checks.
     if args.command != "setup" and any(
-        (args.provision_greenfield, args.initialize_database, args.migrate, args.frontend_build, args.confirm_database)
+        (args.provision_greenfield, args.initialize_database, args.migrate, args.frontend_build, args.confirm_database,
+         args.plan, args.postgres_provider, args.redis_provider, args.mailpit_provider)
     ):
         raise SetupError("Provisioning and database changes are accepted only by the explicit setup command.")
     ACTIVE_LEGACY_CONFIG = pin_legacy_configuration(args.legacy_config, Runtime(ROOT).load())
-    if args.command == "setup":
-        setup_application(args)
-        return
     args.profile = (
         control_profile(args.profile) if args.command in {"stop", "status"} else resolve_profile(args.profile)
     )
@@ -4290,7 +4519,7 @@ def main() -> None:
             return
     validate_repository_layout()
     validate_prerequisites()
-    ensure_virtualenv()
+    require_virtualenv()
     runtime = Runtime(ROOT)
     if not runtime.acquire():
         state = runtime.load()

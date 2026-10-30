@@ -30,8 +30,9 @@ python3 scripts/dev.py
 ```
 
 Use python where that is your configured Python command. scripts/dev.py is the
-only public local development manager. It prepares safe project dependencies,
-verifies the selected data services, then starts two Celery consumers (default
+only public local development manager. Review `setup --plan` and explicitly
+authorize required preparation with `setup`. Ordinary start uses the prepared
+dependencies/configuration, verifies selected data services, then starts two Celery consumers (default
 and reports), exactly one separate Beat, FastAPI and HTTPS Next.js. Readiness
 requires real consumer/queue responses and scheduler progress, API database/IAM
 readiness where applicable, and verified HTTPS.
@@ -39,6 +40,7 @@ readiness where applicable, and verified HTTPS.
 ## Development commands
 
 ```sh
+python3 scripts/dev.py setup --plan
 python3 scripts/dev.py setup
 python3 scripts/dev.py start
 python3 scripts/dev.py stop
@@ -50,6 +52,8 @@ python3 scripts/dev.py logs --service reports --lines 80
 
 No command means start; `diagnose` is read-only and `--check` is its compatibility
 form. `doctor` remains a temporary alias with one deprecation notice on stderr.
+`setup --plan` is read-only; interactive setup requires category-specific consent
+and rechecks its inputs before changes. See [controlled setup and recovery](docs/reference/configuration.md#controlled-setup-and-prepared-startup-sbo-98-phase-3).
 See the [diagnostic contract](docs/reference/configuration.md#read-only-diagnostics-sbo-98-phase-2)
 for checks, statuses, exit codes and limitations. Start/restart stay
 in the foreground. Stop/Ctrl+C manage only verified owned application processes
@@ -76,8 +80,10 @@ Windows/env configurations retain saved ports (defaults 8000/3000 when absent).
 Use --legacy-config managed|windows|env to select the intended family. Saved
 PowerShell is parsed as literal assignments, never executed.
 
-Ordinary start validates the current schema and does not initialize or implicitly
-upgrade it. Provisioning, empty-database initialization and migration require
+Ordinary start requires prepared dependency stamps, saved keys/configuration and
+existing HTTPS material. It does not install, create credentials/certificates,
+discover database credentials, create a database or initialize/upgrade schema.
+Provisioning, empty-database initialization and migration require
 explicit setup controls in [bootstrap guidance](scripts/BOOTSTRAP.md), with
 confirmed targets and the [database gate](docs/DATABASE_BOOTSTRAP_AND_UPGRADE.md).
 Do not reset data or rotate credentials to bypass a refusal.

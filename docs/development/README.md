@@ -31,14 +31,17 @@ provider integrations. “Native Windows” does not mean the Native IAM provide
 ## First development setup
 
 Install Python 3.11+, Node.js >=20.9.0 with npm, and Docker/Compose or the explicitly
-configured local data services through approved workstation tooling. The launcher
-checks prerequisites before setup, reuses its virtualenv and content-stamped
-pip/npm installs, and reports required command failures with redacted detail.
+configured local data services through approved workstation tooling. Begin with
+`python scripts/dev.py setup --plan`; then review the actions/blockers and obtain
+the required approvals before interactive setup. Each required action category
+needs explicit consent, and changed inputs require a new plan. Only authorized
+setup prepares its virtualenv and content-stamped pip/npm installs.
 System software and trusted root certificates are not installed silently.
 
 Review the [database gate](../DATABASE_BOOTSTRAP_AND_UPGRADE.md) before explicit
 initialization/upgrade. Ordinary start refuses an outdated schema; it does not
-initialize, reset or automatically upgrade it. Setup offers separately controlled
+install dependencies, create keys/certificates, create a database, initialize,
+reset or automatically upgrade it. Setup offers separately controlled
 provisioning, confirmed empty-database initialization, migration and isolated
 frontend build flags; see the bootstrap guide for exact commands. Never use a
 populated pre-UUID database across revision 100.
@@ -52,6 +55,7 @@ operator prerequisites. Do not change authentication to bypass a failed scenario
 
 ```sh
 python scripts/dev.py
+python scripts/dev.py setup --plan
 python scripts/dev.py setup
 python scripts/dev.py start
 python scripts/dev.py stop
@@ -76,8 +80,10 @@ pending migration, uncreated/pending administrator or untrusted certificate need
 an explicitly authorized corrective action. HCL.CS first-eligible-user privileged
 provisioning still requires Engineering Lead and identity-provider-owner approval.
 Do not change providers, enable a bypass or create an administrator to make a check
-pass. Controlled setup and component-specific runtime injection are later SBO-98
-phases; current preparation behavior remains unchanged by diagnostic inspection.
+pass. Read the [controlled setup and recovery contract](../reference/configuration.md#controlled-setup-and-prepared-startup-sbo-98-phase-3), including
+the existing-interpreter repair limit and retained partial artifacts. Component
+environment isolation and shared operator-script configuration remain later work;
+neither setup nor diagnostics authorizes privileged enrollment.
 
 ## Ports, environment and queues
 

@@ -5,6 +5,7 @@ checkout with Python 3.11+ (use python3 where needed):
 
 ```sh
 python scripts/dev.py
+python scripts/dev.py setup --plan
 python scripts/dev.py setup
 python scripts/dev.py status
 python scripts/dev.py diagnose
@@ -50,25 +51,32 @@ flags, ports and database identities remain authoritative and are not overwritte
 
 Python 3.11+, Node.js 20.9+ with npm and selected data services are prerequisites.
 Greenfield requires Docker/Compose and its approved mkcert CA. Missing system
-software produces install instructions. Project virtualenv/pip/npm dependencies
-are prepared only when needed, using content-based freshness checks.
+software produces install instructions. `setup --plan` observes required actions;
+interactive `setup` requests category-specific consent and revalidates inputs.
+Project virtualenv/pip/npm dependencies are prepared only by authorized setup,
+using content-based freshness checks. Bare startup requires prepared dependencies
+and never installs packages, discovers database credentials or generates keys.
 System software, OS services and trusted roots are not installed silently.
 
 Ordinary startup authenticates to PostgreSQL/Redis and validates the existing
-schema. It does not initialize, reset or implicitly upgrade a database.
+schema. It does not create, initialize, reset or implicitly upgrade a database.
 See [bootstrap instructions](../scripts/BOOTSTRAP.md) for guarded setup flags.
 Stop application processes before schema changes. First-user creation remains
 the [Native IAM operator procedure](native-iam-greenfield-setup.md).
 
 Greenfield reuses verified containers, networks, volumes, private credentials and
-its independently trusted mkcert CA. A missing leaf may be prepared after trust
-verification. Legacy reuses its certificate pair or creates a self-signed leaf;
+its independently trusted mkcert CA. New leaf creation belongs to explicit,
+authorized setup; ordinary startup validates existing material only. Legacy
+reuses its pair, or authorized setup creates a missing self-signed leaf;
 browser/OS trust requires explicit operator approval. Incomplete pairs fail
 without replacing surviving material. TLS and hostname verification remain enabled.
+See [controlled preparation and recovery limits](reference/configuration.md#controlled-setup-and-prepared-startup-sbo-98-phase-3)
+for new-file Windows DACL safeguards, existing-interpreter dependency blockers
+and retained partial artifacts. Existing private files and trust are not repaired.
 
 ## Complete runtime
 
-Dependency order is verified/resumed data services (including managed Mailpit),
+Dependency order is verified data services (including managed Mailpit),
 authenticated PostgreSQL/Redis checks, default celery queue worker, reports queue
 worker, one separate Beat, FastAPI, then HTTPS Next.js. All receive the resolved
 profile environment. Saved RELOAD=true enables the backend reloader using the same owned API command.

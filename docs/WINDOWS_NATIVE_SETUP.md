@@ -17,6 +17,7 @@ PowerShell terminal at the repository root:
 
 ```powershell
 python scripts/dev.py diagnose --profile legacy --legacy-config windows
+python scripts/dev.py setup --plan --profile legacy --legacy-config windows
 python scripts/dev.py setup --profile legacy --legacy-config windows
 python scripts/dev.py --profile legacy --legacy-config windows
 python scripts/dev.py status --profile legacy
@@ -30,6 +31,13 @@ $env:NAME = 'value' assignments. Nonliteral code is rejected. Saved local databa
 credentials, Redis broker, ports, authentication and provider CA/redirect settings
 remain authoritative. Missing API/frontend ports default to 8000/3000.
 Managed Legacy and Greenfield remain separate.
+`setup --plan` is read-only. Interactive setup needs category-specific consent and
+revalidates its inputs; ordinary start requires prepared dependencies/configuration
+and never installs packages, discovers credentials or creates keys/certificates.
+Selected Legacy services must already be running. Missing original material is
+restored through review rather than replaced. New managed/private-key files use
+protected Windows DACLs on supported filesystems; existing ACLs and OS trust are
+not repaired. See [setup recovery limits](reference/configuration.md#controlled-setup-and-prepared-startup-sbo-98-phase-3).
 
 `diagnose` is the primary read-only inspection command. `--check` and
 `setup --check` use that path before mutable setup; mutation flags are refused.

@@ -16,7 +16,6 @@ import shutil
 import smtplib
 import socket
 import ssl
-import stat
 import subprocess
 import threading
 import time
@@ -27,10 +26,11 @@ from urllib.parse import unquote, urlsplit
 from urllib.request import HTTPRedirectHandler, HTTPSHandler, ProxyHandler, build_opener
 
 if __package__:
-    from . import dev_config
+    from . import dev_config, dev_environment
     from .greenfield_migration_graph import discover
 else:
     import dev_config
+    import dev_environment
     from greenfield_migration_graph import discover
 
 
@@ -94,27 +94,10 @@ def _bounded(call, timeout=6):
 
 
 def _read_text(path, limit=131072):
-    path = Path(path)
-    before = path.lstat()
-    if (
-        not stat.S_ISREG(before.st_mode)
-        or before.st_nlink != 1
-        or getattr(before, "st_file_attributes", 0) & getattr(stat, "FILE_ATTRIBUTE_REPARSE_POINT", 1024)
-    ):
-        raise DiagnosticError("REDIRECTED_FILE")
-    fd = os.open(path, os.O_RDONLY | getattr(os, "O_NOFOLLOW", 0) | getattr(os, "O_NONBLOCK", 0))
-    with os.fdopen(fd, "rb") as stream:
-        current = os.fstat(stream.fileno())
-        if (
-            not stat.S_ISREG(current.st_mode)
-            or current.st_nlink != 1
-            or (current.st_dev, current.st_ino) != (before.st_dev, before.st_ino)
-        ):
-            raise DiagnosticError("REDIRECTED_FILE")
-        data = stream.read(limit + 1)
-    if len(data) > limit:
-        raise DiagnosticError("OVERSIZED_FILE")
-    return data.decode("utf-8-sig")
+    try:
+        return dev_environment.bounded_read_text(path, limit)
+    except dev_environment.EnvironmentReadError as error:
+        raise DiagnosticError(error.code) from None
 
 
 def _command_environment():
@@ -205,15 +188,10 @@ def _dependency_checks(launcher):
 
 
 def _select_profile(args, launcher, state):
-    requested = args.profile
-    recorded = (state or {}).get("profile")
-    if requested == "auto" and recorded in {"legacy", "greenfield"}:
-        requested = recorded
-    profile = launcher.resolve_profile(requested)
-    if recorded in {"legacy", "greenfield"} and recorded != profile:
-        raise DiagnosticError("PROFILE_CONFLICT")
-    family = launcher.pin_legacy_configuration(args.legacy_config, state) if profile == "legacy" else "managed"
-    return profile, family
+    try:
+        return dev_environment.select_profile(args, launcher, state)
+    except dev_environment.EnvironmentReadError as error:
+        raise DiagnosticError(error.code) from None
 
 
 def _runtime_state(launcher):
@@ -239,39 +217,10 @@ def _runtime_state(launcher):
 
 
 def _configuration(args, launcher, state):
-    profile, family = _select_profile(args, launcher, state)
-    common = {
-        "profile": profile,
-        "family": family,
-        "inherited": dict(os.environ),
-        "root": str(launcher.ROOT),
-        "platform": "linux" if launcher.sys.platform.startswith("linux") else launcher.sys.platform,
-    }
-    if profile == "greenfield":
-        saved = json.loads(launcher.GreenfieldStack.read_private("environment.json"))
-        if not isinstance(saved, dict):
-            raise DiagnosticError("CONFIGURATION_INVALID")
-        inputs = dev_config.GreenfieldInputs(
-            str(launcher.GreenfieldStack.STATE),
-            launcher.GreenfieldStack.read_private("runtime-password"),
-            launcher.GreenfieldStack.read_private("security-mail-key")
-            if "NATIVE_SECURITY_OUTBOX_KEY" not in saved
-            else None,
-            launcher.GreenfieldStack.read_private("provider-storage-key")
-            if "AI_CONFIG_ENCRYPTION_KEY" not in saved
-            else None,
-        )
-        return dev_config.resolve_configuration(**common, saved=saved, greenfield=inputs)
-    if family == "managed":
-        saved = dev_config.parse_managed(_read_text(launcher.CONFIG))
-        return dev_config.resolve_configuration(**common, saved=saved)
-    path = launcher.ROOT / (".windows/sbom.env.ps1" if family == "windows" else ".env")
-    saved = (
-        dev_config.parse_windows(_read_text(path)) if family == "windows" else dev_config.parse_dotenv(_read_text(path))
-    )
-    frontend = launcher.ROOT / "frontend/.env.local"
-    values = dev_config.parse_dotenv(_read_text(frontend)) if frontend.is_file() else {}
-    return dev_config.resolve_configuration(**common, saved=saved, frontend=values)
+    try:
+        return dev_environment.resolve_existing(args, launcher, state)
+    except dev_environment.EnvironmentReadError as error:
+        raise DiagnosticError(error.code) from None
 
 
 def _certificate_check(profile, launcher):
