@@ -77,3 +77,8 @@ credentials and administrator accounts remain operator prerequisites. See
 Use doctor, status and logs --service <name> for diagnosis. Restore incomplete
 certificates/private state rather than rotating credentials. Resolve occupied
 ports deliberately; unrelated listeners are never killed.
+
+Before explicit initialization/upgrade, read the [database compatibility gate](../docs/DATABASE_BOOTSTRAP_AND_UPGRADE.md).
+A populated pre-UUID database cannot cross revision 100. Inspection/stop/status
+remain available without complete startup prerequisites. Required setup failures
+print a redacted tail (up to 35 lines); this is distinct from application logs.

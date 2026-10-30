@@ -1,5 +1,16 @@
 # Windows / HCL.CS local development
 
+
+“Native Windows” means host installation, not the Native IAM identity provider.
+The PostgreSQL-backed HCL.CS build (historically port 5180) and SF.8 SQL Server
+build (historically port 5001) are different provider integrations; neither guide
+replaces the other. Do not mix their provider/database procedures. Historical
+Windows verification does not establish acceptance of the current launcher.
+Apply the [database gate](DATABASE_BOOTSTRAP_AND_UPGRADE.md) before any SBOM setup
+or upgrade: fresh targets must be empty; populated pre-UUID targets must not cross
+revision 100. External HCL.CS provisioning stays in its own repository/operator
+procedure, with separate roles/databases and explicitly approved certificate trust.
+
 The sole manager is scripts/dev.py. Install Python 3.11+, Node.js 20.9+ with npm,
 Docker Desktop where required, and explicitly approved HTTPS trust. Open a new
 PowerShell terminal at the repository root:
@@ -35,3 +46,8 @@ Native Windows and browser authentication were unavailable. Mocked adapters do n
 establish Windows acceptance. Pending Greenfield migration backup/restore remains
 blocked on Windows. See [platform evidence](engineering/dev-launcher-platform-matrix.md)
 and [HCL settings](HCL_IAM_CONFIGURATION.md).
+
+After validated HCL.CS login, SBOM resolves identity by issuer and immutable subject.
+Grant local tenant membership/roles through authorized SBOM administration; a token
+claim cannot grant or select tenant access. Revalidate provider build and redirects
+against preserved settings before use.

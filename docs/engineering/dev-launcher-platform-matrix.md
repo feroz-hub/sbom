@@ -6,6 +6,23 @@ deleted files and retained production/data tools. This matrix distinguishes
 observed execution from adapter tests. Native Windows and full Linux application
 support are **not established** by this change.
 
+## Merge integration with main
+
+The merge of main into feature commit 703baa73 retains the original 540-case
+consolidation baseline and adds 53 adapted safety/diagnostic regressions in
+[tests/test_dev_main_merge.py](../../tests/test_dev_main_merge.py): **593 passed**
+on macOS with CI's SQLite/no-conftest safeguards. Python compilation, Ruff,
+workflow YAML/target checks and six disposable Linux process smoke tests passed.
+The running Mac stack passed read-only status/doctor; database identity/schema
+marker, private credential/key/certificate bytes, recorded container identity and
+application PIDs were preserved. No restart, provisioning or migration was run.
+
+The workflow now tests the canonical manager on Windows/macOS/Linux runners,
+with additional POSIX guard/native-process fixture steps. Hosted CI and native
+Windows were not executed locally. These are not full cross-platform application
+or browser acceptance claims. The original baseline below remains historical
+consolidation evidence.
+
 ## Environments and evidence
 
 | Scenario | macOS host | Linux container | Native Windows |
@@ -50,7 +67,7 @@ python -m pytest --noconftest -q \
 ```
 
 Use the project virtualenv. On Windows enter arguments on one line or use
-PowerShell continuation syntax. Final focused suite: **540 passed**.
+PowerShell continuation syntax. Original consolidation suite: **540 passed**; merge integration adds the 53 cases described above.
 The native smoke subset also ran inside Linux with a read-only fixture containing
 only the canonical launcher, empty synthetic manifests and tests: **6 passed**.
 No private environment/data was mounted. Linux tests establish process/CLI safety,

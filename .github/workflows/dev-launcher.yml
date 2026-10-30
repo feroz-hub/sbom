@@ -1,0 +1,94 @@
+# Unit/adapter regression tests only: no application database or provisioning.
+# POSIX smoke tests below create disposable fixture-owned processes only.
+# Passing this workflow is not Windows/macOS/Linux full-stack acceptance.
+name: dev-launcher
+
+on:
+  pull_request:
+    paths:
+      - "scripts/dev.py"
+      - "scripts/greenfield*migration*.py"
+      - "tests/test_dev*.py"
+      - "tests/test_greenfield*.py"
+      - "docs/engineering/dev-launcher*.md"
+      - "requirements.txt"
+      - ".github/workflows/dev-launcher.yml"
+      - "app/public_identity.py"
+      - "app/workers/celery_app.py"
+      - "Dockerfile"
+      - "docker-compose.server.yml"
+      - "frontend/package.json"
+      - "frontend/package-lock.json"
+      - "alembic.ini"
+      - "alembic/versions/**"
+  push:
+    paths:
+      - "scripts/dev.py"
+      - "scripts/greenfield*migration*.py"
+      - "tests/test_dev*.py"
+      - "tests/test_greenfield*.py"
+      - "docs/engineering/dev-launcher*.md"
+      - "requirements.txt"
+      - ".github/workflows/dev-launcher.yml"
+      - "app/public_identity.py"
+      - "app/workers/celery_app.py"
+      - "Dockerfile"
+      - "docker-compose.server.yml"
+      - "frontend/package.json"
+      - "frontend/package-lock.json"
+      - "alembic.ini"
+      - "alembic/versions/**"
+
+permissions:
+  contents: read
+
+jobs:
+  launcher-tests:
+    strategy:
+      fail-fast: false
+      matrix:
+        os: [ubuntu-latest, windows-latest, macos-latest]
+        python: ["3.12"]
+        include:
+          - os: ubuntu-latest
+            python: "3.11"
+    runs-on: ${{ matrix.os }}
+    env:
+      PYTHONDONTWRITEBYTECODE: "1"
+      PYTHON_DOTENV_DISABLED: "1"
+      DATABASE_URL: "sqlite:///:memory:"
+      TEST_DATABASE_URL: "sqlite:///:memory:"
+    steps:
+      - uses: actions/checkout@v4
+      - uses: actions/setup-python@v5
+        with:
+          python-version: ${{ matrix.python }}
+          cache: pip
+          cache-dependency-path: requirements.txt
+      - name: Install isolated test dependencies
+        run: python -m pip install -r requirements.txt ruff
+      - name: Compile and lint the canonical launcher
+        run: >-
+          python -m ruff check scripts/dev.py tests/test_dev_main_merge.py
+      - name: Compile without starting the launcher
+        run: python -c "from pathlib import Path; compile(Path('scripts/dev.py').read_text(encoding='utf-8'), 'scripts/dev.py', 'exec')"
+      - name: Cross-platform unit and mocked adapter regressions
+        run: >-
+          python -m pytest -p no:cacheprovider --noconftest -q
+          tests/test_dev_launcher.py tests/test_dev_lifecycle.py
+          tests/test_dev_background.py tests/test_dev_main_merge.py
+          tests/test_greenfield_windows_compat.py
+      - name: POSIX TLS, setup and migration guard unit regressions
+        if: runner.os != 'Windows'
+        run: >-
+          python -m pytest -p no:cacheprovider --noconftest -q
+          tests/test_dev_cleanup.py tests/test_dev_consolidation.py
+          tests/test_dev_greenfield.py tests/test_greenfield_https.py
+          tests/test_greenfield_service_ports.py tests/test_dev_private_setup.py
+          tests/test_greenfield_startup_migrations.py tests/test_greenfield_auto_migrations.py
+          tests/test_greenfield_resource_startup.py tests/test_greenfield_governance_startup.py
+      - name: POSIX native process smoke fixtures (not full stack)
+        if: runner.os != 'Windows'
+        run: >-
+          python -m pytest -p no:cacheprovider --noconftest -q
+          tests/test_dev_native_process.py

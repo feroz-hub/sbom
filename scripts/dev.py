@@ -30,6 +30,12 @@ from pathlib import Path
 from urllib.parse import quote, unquote, urlsplit
 from urllib.request import urlopen
 
+MIN_PYTHON = (3, 11)
+MIN_NODE = (20, 9, 0)
+REQUIRED_FILES = ("requirements.txt", "alembic.ini", "frontend/package.json", "frontend/package-lock.json")
+GREENFIELD_UUID_BASELINE = "100_greenfield_uuid_final"
+PUBLIC_IDENTITY_TABLES = ("tenants", "projects", "products", "logical_sbom", "sbom_source", "sbom_component")
+
 UTC = timezone.utc  # noqa: UP017 - keep old-Python prerequisite diagnostics importable
 
 
@@ -945,11 +951,92 @@ def supervise_runtime(runtime, env, processes):
         time.sleep(0.5)
 
 
+def launcher_command(platform_name: str | None = None) -> str:
+    """The command a developer should type on this platform."""
+    return "python scripts/dev.py" if (platform_name or os.name) == "nt" else "python3 scripts/dev.py"
+
+
+def explain_failed_command(result: subprocess.CompletedProcess, env: dict[str, str] | None = None) -> None:
+    """Show the redacted tail of a failed setup command when --verbose is off.
+
+    Only callers running a required setup step (venv, pip, npm, Compose,
+    Alembic) use this; routine probes stay silent. Application service logs
+    are never printed here.
+    """
+    if result.returncode == 0 or VERBOSE:
+        return
+    lines = redact("\n".join(filter(None, (result.stdout, result.stderr))), env).splitlines()
+    if lines:
+        print("[DETAIL] Failed command output (last 35 lines):", file=sys.stderr)
+        for line in lines[-35:]:
+            print("  " + line, file=sys.stderr)
+    else:
+        print(f"[DETAIL] Command exited with code {result.returncode} without output.", file=sys.stderr)
+
+
+def validate_python_version(version: tuple[int, ...] | None = None) -> None:
+    version = tuple(version or sys.version_info[:3])
+    if version >= MIN_PYTHON:
+        return
+    found = ".".join(str(part) for part in version)
+    required = ".".join(str(part) for part in MIN_PYTHON)
+    if Path(sys.prefix).resolve() == VENV.resolve():
+        raise SetupError(
+            f"The existing .venv uses Python {found}; Python {required}+ is required. "
+            "Move or delete .venv, then rerun with a Python 3.11+ interpreter."
+        )
+    raise SetupError(f"Python {found} is too old. Install Python {required} or newer and rerun.")
+
+
+def pre_uuid_revisions(script) -> set[str]:
+    """Strict ancestors of the UUID baseline: revisions an upgrade would carry across revision 100."""
+    return {revision.revision for revision in script.iterate_revisions(GREENFIELD_UUID_BASELINE, "base")} - {
+        GREENFIELD_UUID_BASELINE
+    }
+
+
+def check_pre_uuid_crossing(revision: str | None, populated: list[str]) -> None:
+    """Fail closed before Alembic instead of relying on revision 100's in-migration refusal."""
+    if populated:
+        raise SetupError(
+            f"sbom_analyser_dev is at pre-UUID revision {revision} and has rows in {', '.join(populated)}. "
+            f"Revision {GREENFIELD_UUID_BASELINE} refuses populated application tables and no supported "
+            "in-place upgrade exists. Alembic was not run and nothing was changed. Keep this database, and "
+            "see docs/DATABASE_BOOTSTRAP_AND_UPGRADE.md before choosing a fresh development database."
+        )
+
+
+def node_version() -> tuple[int, int, int] | None:
+    """Return the installed Node.js version, or None when node is missing or unreadable."""
+    node = GreenfieldStack.node_binary()
+    if not node:
+        return None
+    try:
+        result = run([str(node), "--version"])
+    except (OSError, subprocess.SubprocessError):
+        return None
+    if result.returncode:
+        return None
+    # Leading numbers only, so prerelease/nightly suffixes (v23.0.0-rc.1) still parse.
+    match = re.match(r"v?(\d+)\.(\d+)\.(\d+)", (result.stdout or "").strip())
+    return (int(match[1]), int(match[2]), int(match[3])) if match else None
+
+
+def node_problem(version: tuple[int, int, int] | None) -> str | None:
+    required = ".".join(str(part) for part in MIN_NODE)
+    if version is None:
+        return f"Node.js was not found or did not report a version. Install Node.js {required}+."
+    if version < MIN_NODE:
+        found = ".".join(str(part) for part in version)
+        return f"Node.js {found} is too old for the locked Next.js release. Install Node.js {required}+."
+    return None
+
+
 def validate_repository_layout() -> None:
-    required = ("requirements.txt", "alembic.ini", "frontend/package.json", "frontend/package-lock.json")
+    required = REQUIRED_FILES
     missing = [name for name in required if not (ROOT / name).is_file()]
     if missing:
-        raise SetupError("Incomplete checkout: missing " + ", ".join(missing) + ". Restore the complete repository.")
+        raise SetupError("Incomplete checkout. Missing: " + ", ".join(missing) + ". Restore the complete repository.")
 
 
 def resolve_profile(requested: str = "auto") -> str:
@@ -1191,6 +1278,7 @@ def setup_application(args):
                     os.environ.clear()
                     os.environ.update(previous)
             else:
+                validate_existing_schema(env["DATABASE_URL"], validate_target=ACTIVE_LEGACY_CONFIG == "managed")
                 run_migrations(env)
     say(
         "OK",
@@ -1247,13 +1335,14 @@ def validate_prerequisites() -> None:
     node = GreenfieldStack.node_binary()
     try:
         result = subprocess.run([str(node), "--version"], capture_output=True, text=True, timeout=10)
-        parts = tuple(int(part) for part in result.stdout.strip().lstrip("v").split(".")[:3])
+        match = re.match(r"v?(\d+)\.(\d+)\.(\d+)", result.stdout.strip())
+        parts = tuple(int(match[i]) for i in (1, 2, 3)) if match else ()
     except (OSError, ValueError, subprocess.TimeoutExpired):
         raise SetupError(
             "A working Node.js 20.9+ runtime is required. Install Node.js LTS from nodejs.org "
             "(Windows/macOS) or your Linux package manager; reopen the terminal."
         ) from None
-    if result.returncode or parts < (20, 9, 0):
+    if result.returncode or parts < MIN_NODE:
         raise SetupError("Node.js 20.9+ is required by Next.js. Install a current Node.js LTS and reopen the terminal.")
     npm = shutil.which("npm", path=str(node.parent) + os.pathsep + os.environ.get("PATH", ""))
     if not npm:
@@ -1858,6 +1947,7 @@ class GreenfieldStack:
                 "HCL_AUTH_ENABLED": "false",
                 "NATIVE_AUTH_ENABLED": "true",
                 "ENTRA_ENABLED": "false",
+                "NATIVE_JWT_VERIFICATION_KEYS_JSON": "{}",
                 "DEV_DEFAULT_TENANT": "false",
                 "NATIVE_IAM_PRODUCTION": "false",
                 "NATIVE_SECURITY_OUTBOX_ENABLED": "true",
@@ -2384,7 +2474,14 @@ def run(command: list[str], *, env: dict[str, str] | None = None, cwd: Path = RO
     execution_env = dict(os.environ if env is None else env)
     execution_env["PATH"] = str(GreenfieldStack.node_binary().parent) + os.pathsep + execution_env.get("PATH", "")
     result = subprocess.run(
-        normalize_command(command), cwd=cwd, env=execution_env, text=True, capture_output=True, check=False
+        normalize_command(command),
+        cwd=cwd,
+        env=execution_env,
+        text=True,
+        encoding="utf-8",
+        errors="replace",
+        capture_output=True,
+        check=False,
     )
     if ACTIVE_RUNTIME:
         ACTIVE_RUNTIME.check_stop()
@@ -2559,7 +2656,9 @@ def start_compose(service: str, env: dict[str, str]) -> None:
         time.sleep(1)
         result = run(["docker", "compose", "up", "-d", service], env=env)
     if result.returncode and not compose_container(service):
-        raise SetupError(f"Could not start project {service} service. Check Docker Compose and its fixed port.")
+        error = SetupError(f"Could not start project {service} service. Check Docker Compose and its fixed port.")
+        error.failed_result = result
+        raise error
 
 
 def wait_for_service(service: str, port: int) -> bool:
@@ -2603,9 +2702,11 @@ def select_service(
             return "Docker (available to start)", docker_port
         try:
             start_compose(service, env)
-        except SetupError:
+        except SetupError as error:
             if not preferred and service_available(service, local_port) and local_port != docker_port:
                 continue
+            if getattr(error, "failed_result", None) is not None:
+                explain_failed_command(error.failed_result, env)
             raise
         if wait_for_service(service, docker_port):
             return "Docker", docker_port
@@ -2650,6 +2751,7 @@ def ensure_virtualenv() -> None:
     if not venv_python().exists():
         result = run([sys.executable, "-m", "venv", str(VENV)])
         if result.returncode:
+            explain_failed_command(result)
             raise SetupError("Could not create .venv. Install Python 3.11+ with venv support.")
     if Path(sys.prefix).resolve() != VENV.resolve():
         command = [str(venv_python()), str(Path(__file__).resolve()), *sys.argv[1:]]
@@ -2675,6 +2777,7 @@ def ensure_dependencies() -> None:
     digest = hashlib.sha256((ROOT / "requirements.txt").read_bytes()).hexdigest()
     try:
         import alembic  # noqa: F401
+        import celery  # noqa: F401
         import cryptography  # noqa: F401
         import psycopg  # noqa: F401
         import uvicorn  # noqa: F401
@@ -2688,7 +2791,7 @@ def ensure_dependencies() -> None:
     stamp.unlink(missing_ok=True)
     result = run([str(venv_python()), "-m", "pip", "install", "-r", "requirements.txt"])
     if result.returncode:
-        print(redact((result.stderr or result.stdout or "")[-6000:], None), file=sys.stderr)
+        explain_failed_command(result)
         raise SetupError(
             "Python dependency installation failed. Check the pip diagnostic above and network/index access, then retry."
         )
@@ -3049,6 +3152,8 @@ def resolve_config(
         "DEV_FRONTEND_PORT": str(DEV_FRONTEND_PORT),
         "AUTH_ENABLED": "true",
         "HCL_AUTH_ENABLED": "false",
+        "ENTRA_ENABLED": "false",
+        "NATIVE_JWT_VERIFICATION_KEYS_JSON": "{}",
         "NATIVE_AUTH_ENABLED": "true",
         "NATIVE_USER_CREATION_ENABLED": "true",
         "NATIVE_IAM_PRODUCTION": "false",
@@ -3132,17 +3237,21 @@ def check_schema_objects(objects: set[str], revision: str | None, known_revision
         )
 
 
-def validate_existing_schema(url: str) -> None:
+def validate_existing_schema(url: str, *, validate_target=True) -> None:
     """Refuse to migrate an unrelated database that happens to have the dev name."""
     import psycopg
     from alembic.config import Config
     from alembic.script import ScriptDirectory
 
-    validate_database_url(url)
+    if validate_target:
+        validate_database_url(url)
     script = ScriptDirectory.from_config(Config(str(ROOT / "alembic.ini")))
     known = {revision.revision for revision in script.walk_revisions()}
+    pre_uuid = pre_uuid_revisions(script)
+    populated: list[str] = []
     try:
         with psycopg.connect(url.replace("postgresql+psycopg://", "postgresql://", 1)) as connection:
+            connection.read_only = True
             rows = connection.execute(
                 "SELECT n.nspname, c.relname FROM pg_class c JOIN pg_namespace n ON n.oid = c.relnamespace "
                 "WHERE n.nspname NOT IN ('pg_catalog', 'information_schema') "
@@ -3156,17 +3265,30 @@ def validate_existing_schema(url: str) -> None:
                 if "alembic_version" in public_objects
                 else []
             )
+            current = revisions[0] if len(revisions) == 1 else None
+            if current in pre_uuid:
+                # Table names come from the fixed tuple above, never from input.
+                populated = [
+                    table
+                    for table in PUBLIC_IDENTITY_TABLES
+                    if table in public_objects
+                    and connection.execute(f'SELECT EXISTS (SELECT 1 FROM public."{table}")').fetchone()[0]
+                ]
     except psycopg.Error as exc:
         raise SetupError("Could not inspect the development database schema before Alembic.") from exc
-    check_schema_objects(public_objects if objects else set(), revisions[0] if len(revisions) == 1 else None, known)
+    check_schema_objects(public_objects if objects else set(), current, known)
     if objects and not public_objects:
         raise SetupError("Existing sbom_analyser_dev has an unknown non-empty schema. Alembic was not run.")
+    check_pre_uuid_crossing(current, populated)
 
 
 def run_migrations(env: dict[str, str]) -> str:
     result = run([str(venv_python()), "-m", "alembic", "upgrade", "head"], env=env)
     if result.returncode:
-        raise SetupError("Alembic upgrade failed for the development database. Run with --verbose to inspect it.")
+        explain_failed_command(result, env)
+        raise SetupError(
+            "Alembic upgrade failed for the development database. Fix the error above or rerun with --verbose."
+        )
     import psycopg
     from alembic.config import Config
     from alembic.script import ScriptDirectory
@@ -3181,6 +3303,16 @@ def run_migrations(env: dict[str, str]) -> str:
 
 def ensure_frontend(*, certificate: bool = True) -> str:
     import hashlib
+
+    cert = ROOT / "frontend/certificates/localhost.pem"
+    key = ROOT / "frontend/certificates/localhost-key.pem"
+    if certificate and (cert.exists() != key.exists() or cert.is_symlink() or key.is_symlink()):
+        raise SetupError(
+            "Legacy HTTPS certificate pair is incomplete or redirected. Restore both existing files; no key was replaced."
+        )
+    problem = node_problem(node_version())
+    if problem:
+        raise SetupError(problem)
 
     npm = shutil.which("npm", path=str(GreenfieldStack.node_binary().parent) + os.pathsep + os.environ.get("PATH", ""))
     if not npm:
@@ -3206,7 +3338,7 @@ def ensure_frontend(*, certificate: bool = True) -> str:
         stamp.unlink(missing_ok=True)
         result = run([npm, "ci", "--prefix", "frontend"])
         if result.returncode:
-            print(redact((result.stderr or result.stdout or "")[-6000:], None), file=sys.stderr)
+            explain_failed_command(result)
             raise SetupError(
                 "Frontend npm ci failed. Check network access and package manifests; rerun with --verbose for details."
             )
@@ -3275,13 +3407,20 @@ def acquire_beat_lock() -> None:
     try:
         fd = os.open(BEAT_LOCK, os.O_WRONLY | os.O_CREAT | os.O_EXCL, 0o600)
     except FileExistsError:
+        # Inspect without signalling: on Windows os.kill(pid, 0) sends CTRL_C_EVENT
+        # rather than probing, so liveness comes from the read-only process lookup.
         try:
-            pid = int(BEAT_LOCK.read_text())
-            os.kill(pid, 0)
-        except (ValueError, ProcessLookupError):
+            alive = process_info(int(BEAT_LOCK.read_text(encoding="ascii"))) is not None
+        except ValueError:
+            alive = False
+        except OwnershipError:
+            alive = True  # An uninspectable process is not proof the lock is stale.
+        if not alive:
             BEAT_LOCK.unlink(missing_ok=True)
             return acquire_beat_lock()
-        raise SetupError("A dev launcher already owns Celery Beat. Stop it before starting another.")
+        raise SetupError(
+            f"A dev launcher already owns Celery Beat. Run {launcher_command()} status, and stop it before starting another."
+        )
     with os.fdopen(fd, "w") as stream:
         stream.write(str(os.getpid()))
 
@@ -3348,7 +3487,15 @@ def legacy_https_context():
 
 
 def port_diagnostic(port: int) -> str:
-    """Best-effort Linux socket owner name; never print arbitrary command arguments."""
+    """Best-effort Linux socket owner name; never print arbitrary command arguments.
+
+    Other platforms get a read-only command the developer can run to inspect the
+    owner themselves; the launcher never stops a process found by port.
+    """
+    if sys.platform == "win32":
+        return f"PID: unavailable; ownership: unrelated/unknown; inspect with: netstat -ano | findstr :{port}"
+    if sys.platform == "darwin":
+        return f"PID: unavailable; ownership: unrelated/unknown; inspect with: lsof -nP -iTCP:{port} -sTCP:LISTEN"
     if not sys.platform.startswith("linux"):
         return "PID: unavailable; ownership: unrelated/unknown"
     try:
@@ -3752,6 +3899,12 @@ def main() -> None:
     global VERBOSE, ACTIVE_RUNTIME, ACTIVE_PROFILE, ACTIVE_LEGACY_CONFIG
     args = parse_args()
     VERBOSE = args.verbose
+    if args.check or args.command in {"setup", "start", "restart", "doctor"}:
+        if not venv_python().exists() or Path(sys.prefix).resolve() == VENV.resolve():
+            validate_python_version()
+        validate_repository_layout()
+        if sys.version_info < MIN_PYTHON:
+            ensure_virtualenv()  # Existing supported environment performs its own checks.
     if args.command != "setup" and any(
         (args.provision_greenfield, args.initialize_database, args.migrate, args.frontend_build, args.confirm_database)
     ):

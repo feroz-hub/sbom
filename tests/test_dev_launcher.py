@@ -615,6 +615,7 @@ def test_startup_commands_are_native_and_consume_both_queues(monkeypatch, tmp_pa
 
 @pytest.fixture
 def frontend_install(monkeypatch, tmp_path):
+    monkeypatch.setattr(dev, "node_version", lambda: (20, 9, 0))
     frontend = tmp_path / "frontend"
     frontend.mkdir()
     (frontend / "package.json").write_text('{"name":"test"}')

@@ -4,6 +4,7 @@ from __future__ import annotations
 import errno
 import json
 import os
+import sys
 from types import SimpleNamespace
 from unittest.mock import MagicMock
 
@@ -12,10 +13,17 @@ from scripts import dev
 from scripts import dev as lifecycle
 
 process_info_adapter = lifecycle.process_info
+# These cases exercise POSIX process-group and macOS libproc branches whose
+# primitives (os.killpg, os.getsid, signal.SIGKILL) do not exist on Windows;
+# CI runs them on Linux and macOS.
+posix_only = pytest.mark.skipif(sys.platform == "win32", reason="POSIX/macOS process primitives")
 
 
 @pytest.fixture(autouse=True)
 def isolated(monkeypatch, tmp_path):
+    for name in dev.REQUIRED_FILES:  # A complete checkout, so layout validation passes.
+        (tmp_path / name).parent.mkdir(parents=True, exist_ok=True)
+        (tmp_path / name).touch()
     monkeypatch.setattr(dev, "ROOT", tmp_path)
     monkeypatch.setattr(dev, "BEAT_LOCK", tmp_path / ".dev-beat.pid")
     monkeypatch.setattr(dev, "ACTIVE_RUNTIME", None)
@@ -30,7 +38,8 @@ def isolated(monkeypatch, tmp_path):
     monkeypatch.setattr(lifecycle, "process_info", lambda pid: None)
     monkeypatch.setattr(lifecycle, "group_members", lambda pid: [])
     monkeypatch.setattr(dev, "process_info", lambda pid: None)
-    monkeypatch.setattr(lifecycle.os, "killpg", lambda *args: pytest.fail("Unmocked signal"))
+    # raising=False: os.killpg does not exist on Windows, where this tripwire is simply added.
+    monkeypatch.setattr(lifecycle.os, "killpg", lambda *args: pytest.fail("Unmocked signal"), raising=False)
     monkeypatch.setattr(lifecycle.subprocess, "run", lambda *args, **kwargs: pytest.fail("Unmocked process command"))
 
 
@@ -88,6 +97,7 @@ def test_unknown_identity_is_retained(monkeypatch, tmp_path):
     assert runtime.path.exists()
 
 
+@posix_only
 def test_owned_group_gracefully_stopped(monkeypatch, tmp_path):
     runtime = lifecycle.Runtime(tmp_path)
     record = identity()
@@ -102,6 +112,7 @@ def test_owned_group_gracefully_stopped(monkeypatch, tmp_path):
     assert signals == [(100, lifecycle.signal.SIGTERM)]
 
 
+@posix_only
 def test_shutdown_reaps_exited_child_before_inspection(monkeypatch, tmp_path):
     runtime = lifecycle.Runtime(tmp_path)
     record = identity()
@@ -143,6 +154,7 @@ def test_refresh_reaps_exited_child_before_macos_inspection(monkeypatch, tmp_pat
     assert runtime.state["services"]["API"]["pid"] == 100
 
 
+@posix_only
 def test_owned_surviving_member_allows_orphan_group_cleanup(monkeypatch, tmp_path):
     runtime = lifecycle.Runtime(tmp_path)
     child = identity(101, pgid=100, sid=100)
@@ -154,12 +166,14 @@ def test_owned_surviving_member_allows_orphan_group_cleanup(monkeypatch, tmp_pat
     assert runtime.terminate(record)
 
 
+@posix_only
 def test_unknown_surviving_group_is_not_killed(monkeypatch, tmp_path):
     runtime = lifecycle.Runtime(tmp_path)
     monkeypatch.setattr(lifecycle, "group_members", lambda pid: [identity(101, pgid=100)])
     assert not runtime.terminate(identity())
 
 
+@posix_only
 def test_force_kill_rechecks_identity(monkeypatch, tmp_path):
     runtime = lifecycle.Runtime(tmp_path)
     record = identity()
@@ -175,6 +189,7 @@ def test_force_kill_rechecks_identity(monkeypatch, tmp_path):
     assert signals == [lifecycle.signal.SIGTERM]
 
 
+@posix_only
 def test_owned_stubborn_group_escalates(monkeypatch, tmp_path):
     runtime = lifecycle.Runtime(tmp_path)
     record = identity()
@@ -243,6 +258,7 @@ def test_concurrent_start_lock_and_crash_release(tmp_path):
 
 
 @pytest.mark.parametrize("failure", [KeyboardInterrupt, dev.SetupError("startup failure")])
+@posix_only
 def test_cleanup_on_interrupt_or_startup_failure(monkeypatch, tmp_path, failure):
     monkeypatch.setattr(dev.sys, "argv", ["dev.py", "start"])
     current = {os.getpid(): identity(os.getpid())}
@@ -366,6 +382,7 @@ def test_windows_termination_validates_each_tree(monkeypatch, tmp_path):
         ["taskkill", "/PID", "100", "/T", "/F"], ["taskkill", "/PID", "101", "/T", "/F"]]
 
 
+@posix_only
 def test_macos_birth_identity_uses_microseconds(monkeypatch):
     # Exercise the native adapter (without invoking a real OS process API).
     original = process_info_adapter
@@ -476,6 +493,7 @@ def macos_missing_executable(monkeypatch):
     return library
 
 
+@posix_only
 def test_macos_missing_executable_retains_kernel_birth_identity(macos_missing_executable):
     current = process_info_adapter(100)
     assert current == {**identity(birth='1700000000:123456', exe='', ppid=99), 'exe_unavailable': 'ENOENT'}
@@ -483,6 +501,7 @@ def test_macos_missing_executable_retains_kernel_birth_identity(macos_missing_ex
 
 
 @pytest.mark.parametrize('error', [0, errno.EPERM, errno.EACCES, errno.EIO, errno.ESRCH])
+@posix_only
 def test_macos_executable_inspection_errors_remain_fail_closed(macos_missing_executable, error):
     def failed_path(pid, buffer, size):
         lifecycle.ctypes.set_errno(error)
@@ -550,6 +569,7 @@ def test_macos_missing_executable_preserves_member_proof_during_refresh(monkeypa
     assert {info['pid']: info['exe'] for info in recorded['members']} == {100: '/venv/python', 101: '/venv/python'}
 
 
+@posix_only
 def test_macos_missing_executable_stops_recorded_surviving_child(monkeypatch, tmp_path):
     monkeypatch.setattr(lifecycle.sys, 'platform', 'darwin')
     child = identity(101, pgid=100, sid=100)

@@ -4,7 +4,11 @@
 
 Implemented on `feat/sbom-version-lineage-vex-import`; the feature migrations were
 `051_report_subscription` → `052_report_delivery_artifact` → `053_tenant_analysis_schedule` → `054_hierarchical_scheduler` → `055_ai_model_registry`.
-The current repository head is `079_lifecycle_provider_verification`.
+The source head verified on 28 October 2026 is
+103_tenant_admin_governance; the feature revision sequence above is historical.
+Read the [database compatibility gate](DATABASE_BOOTSTRAP_AND_UPGRADE.md) before
+deployment and the [profile/queue guidance](development/README.md#ports-environment-and-queues)
+before interpreting local delivery readiness.
 The feature is opt-in. Existing analysis, verification mail and env-only local workflows remain available with it disabled.
 
 ## Product decisions confirmed on 2026-09-07
@@ -39,7 +43,12 @@ The feature is opt-in. Existing analysis, verification mail and env-only local w
 5. Restart API and workers to load operational environment changes. Subscription changes are DB-backed and do **not** require restart. `AUTH_ENABLED=false` always results in `SKIPPED / DELIVERY_DISABLED`; configuring SMTP alone cannot send reports from local unauthenticated mode.
 6. Run one ordinary analysis worker, one **separate** report worker (`bash scripts/dev.py`), and exactly one Beat (`bash scripts/dev.py`). Report tasks are routed to `reports`; a default worker consuming only `celery` will not pick them up. The report script uses concurrency 1, prefetch 1 and process recycling to isolate CPU/memory from analysis.
 
-For local Windows development without Redis, `CELERY_USE_DATABASE_BROKER=true` safely derives Kombu's polling SQLAlchemy broker from the existing `DATABASE_URL`; a full `CELERY_BROKER_URL=sqla+postgresql+psycopg://...` value also works. The application derives the required `db+postgresql+psycopg://...` result backend automatically. This is suitable for exercising report generation and MailHog delivery locally; keep Redis or another production-grade broker for deployed environments.
+The application also supports an explicitly configured database-backed Kombu
+transport for separate operator integrations. The canonical local development
+manager requires Redis for responsive consumer/queue checks and refuses a saved
+database transport without changing it. Keep production broker requirements and
+controlled delivery acceptance separate from local runtime health.
+
 7. Check `GET /api/report-notifications/config` while authenticated. Safe diagnostic codes identify missing URL/private storage. Startup logs show flags and codes, never SMTP credentials or filesystem contents.
 
 Preferences may be prepared and previewed before delivery is enabled. The UI explicitly distinguishes saved preferences from delivery readiness.
@@ -119,3 +128,10 @@ The report tests use PostgreSQL, real PDF/XLSX renderers and fake SMTP, includin
 ## Rollback
 
 Disable `REPORT_NOTIFICATIONS_ENABLED` on API, Beat and report workers, then restart those processes. Keep the private volume and delivery ledger for audit/downloads. For schema rollback, archive reports and remove tenant-level analysis schedules explicitly first; migration 053 refuses to downgrade while any tenant schedule exists. Do not silently delete user schedules or drop reporting history just to roll back application code.
+
+Local development uses only python scripts/dev.py: both profiles manage separate
+default/reports workers and exactly one full Beat with existing feature guards.
+Do not add a manual worker or scheduler. A saved database-backed Celery transport
+must be explicitly configured for Redis before using the local manager; it is not
+silently changed. Direct production commands above retain their own execution
+requirements and are separate from local startup.
