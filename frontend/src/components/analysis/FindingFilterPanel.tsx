@@ -592,6 +592,26 @@ interface DualRangeProps {
   onChange: (min: number, max: number) => void;
 }
 
+/**
+ * SBO-97 — both DualRange thumbs are solid brand blue (matching the EPSS
+ * slider's ``accent-primary``) with a surface-coloured ring so they stand
+ * out from the pale track and the severity gradient. ``border-solid`` is
+ * explicit because Tailwind's preflight border reset never reaches the
+ * vendor thumb pseudo-elements, so the ring would otherwise not paint.
+ * Hover, keyboard focus and drag each add a blue halo to the active thumb.
+ */
+const DUAL_RANGE_INPUT_CLASS = cn(
+  'pointer-events-none absolute inset-0 h-9 w-full appearance-none bg-transparent focus-visible:outline-none',
+  '[&::-webkit-slider-thumb]:pointer-events-auto [&::-webkit-slider-thumb]:relative [&::-webkit-slider-thumb]:z-10 [&::-webkit-slider-thumb]:h-4 [&::-webkit-slider-thumb]:w-4 [&::-webkit-slider-thumb]:cursor-grab [&::-webkit-slider-thumb]:appearance-none [&::-webkit-slider-thumb]:rounded-full [&::-webkit-slider-thumb]:border-2 [&::-webkit-slider-thumb]:border-solid [&::-webkit-slider-thumb]:border-surface [&::-webkit-slider-thumb]:bg-primary [&::-webkit-slider-thumb]:shadow-md [&::-webkit-slider-thumb]:transition-shadow',
+  '[&:hover::-webkit-slider-thumb]:ring-4 [&:hover::-webkit-slider-thumb]:ring-primary/25',
+  '[&:focus-visible::-webkit-slider-thumb]:ring-4 [&:focus-visible::-webkit-slider-thumb]:ring-primary/40',
+  '[&:active::-webkit-slider-thumb]:cursor-grabbing [&:active::-webkit-slider-thumb]:bg-primary-600 [&:active::-webkit-slider-thumb]:ring-4 [&:active::-webkit-slider-thumb]:ring-primary/40',
+  '[&::-moz-range-thumb]:pointer-events-auto [&::-moz-range-thumb]:h-4 [&::-moz-range-thumb]:w-4 [&::-moz-range-thumb]:cursor-grab [&::-moz-range-thumb]:rounded-full [&::-moz-range-thumb]:border-2 [&::-moz-range-thumb]:border-solid [&::-moz-range-thumb]:border-surface [&::-moz-range-thumb]:bg-primary [&::-moz-range-thumb]:shadow-md',
+  '[&:hover::-moz-range-thumb]:ring-4 [&:hover::-moz-range-thumb]:ring-primary/25',
+  '[&:focus-visible::-moz-range-thumb]:ring-4 [&:focus-visible::-moz-range-thumb]:ring-primary/40',
+  '[&:active::-moz-range-thumb]:cursor-grabbing [&:active::-moz-range-thumb]:bg-primary-600 [&:active::-moz-range-thumb]:ring-4 [&:active::-moz-range-thumb]:ring-primary/40',
+);
+
 /** Dual-thumb range slider — two stacked native ranges with a single track. */
 function DualRange({ min, max, onChange }: DualRangeProps) {
   const minPct = (min / 10) * 100;
@@ -618,7 +638,7 @@ function DualRange({ min, max, onChange }: DualRangeProps) {
           onChange(v, max);
         }}
         aria-label="CVSS minimum slider"
-        className="pointer-events-none absolute inset-0 h-9 w-full appearance-none bg-transparent [&::-webkit-slider-thumb]:pointer-events-auto [&::-webkit-slider-thumb]:relative [&::-webkit-slider-thumb]:z-10 [&::-webkit-slider-thumb]:appearance-none [&::-webkit-slider-thumb]:h-4 [&::-webkit-slider-thumb]:w-4 [&::-webkit-slider-thumb]:rounded-full [&::-webkit-slider-thumb]:bg-surface [&::-webkit-slider-thumb]:border-2 [&::-webkit-slider-thumb]:border-primary [&::-webkit-slider-thumb]:shadow-md [&::-moz-range-thumb]:pointer-events-auto [&::-moz-range-thumb]:h-4 [&::-moz-range-thumb]:w-4 [&::-moz-range-thumb]:rounded-full [&::-moz-range-thumb]:bg-surface [&::-moz-range-thumb]:border-2 [&::-moz-range-thumb]:border-primary"
+        className={DUAL_RANGE_INPUT_CLASS}
       />
       <input
         type="range"
@@ -631,7 +651,7 @@ function DualRange({ min, max, onChange }: DualRangeProps) {
           onChange(min, v);
         }}
         aria-label="CVSS maximum slider"
-        className="pointer-events-none absolute inset-0 h-9 w-full appearance-none bg-transparent [&::-webkit-slider-thumb]:pointer-events-auto [&::-webkit-slider-thumb]:relative [&::-webkit-slider-thumb]:z-10 [&::-webkit-slider-thumb]:appearance-none [&::-webkit-slider-thumb]:h-4 [&::-webkit-slider-thumb]:w-4 [&::-webkit-slider-thumb]:rounded-full [&::-webkit-slider-thumb]:bg-surface [&::-webkit-slider-thumb]:border-2 [&::-webkit-slider-thumb]:border-primary [&::-webkit-slider-thumb]:shadow-md [&::-moz-range-thumb]:pointer-events-auto [&::-moz-range-thumb]:h-4 [&::-moz-range-thumb]:w-4 [&::-moz-range-thumb]:rounded-full [&::-moz-range-thumb]:bg-surface [&::-moz-range-thumb]:border-2 [&::-moz-range-thumb]:border-primary"
+        className={DUAL_RANGE_INPUT_CLASS}
       />
     </div>
   );
