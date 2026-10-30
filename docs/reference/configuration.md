@@ -415,6 +415,16 @@ loader contract and preload inheritance; it is not an OS/network sandbox for
 trusted project JavaScript. Review its regression tests on dependency upgrades.
 Read-only diagnostics inspect the guard file without executing Node.
 
+The same preload narrowly adapts the pinned Next route-discovery Watchpack
+import. Next otherwise scans only the workspace root, treating linked `src` as a
+file and reporting Ready without application routes. The adapter also watches
+the verified lexical `workspace/src` path, preserving Next's route-prefix checks
+and atomic source edits. It validates trusted launcher metadata, directory/link
+identity, caller and exact watcher shape; unsupported contracts fail with
+`FRONTEND_WATCHER_CONTRACT_REQUIRED`. Other Watchpack consumers and global
+filesystem behavior are unchanged. Real route discovery, HMR and route
+addition/removal must pass the dedicated acceptance job after dependency upgrades.
+
 HCL CA paths keep the BFF's existing ECMAScript trimming behavior before absolute
 path conversion; Node CA files and transaction-key paths retain their own existing
 semantics.
