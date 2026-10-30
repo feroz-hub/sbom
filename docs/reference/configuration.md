@@ -1,7 +1,7 @@
 # Configuration reference
 
 Scope: development configuration boundaries, SBO-98 Phases 1–4 and the separately
-reviewable Native status increment of Phase 5, based on
+reviewable Native status and gated enrollment increments of Phase 5, based on
 approved main `69e71088d7fef06874fe1e2eac7a53db0fd2f333`. Examples are templates,
 not one interchangeable environment.
 
@@ -63,11 +63,14 @@ projections initially retain complete shared Settings/task inputs for
 compatibility; this is not least privilege between those three backend roles.
 Further narrowing requires additional consumer review.
 
-Later separately reviewed work covers shared operator configuration and authorized
-Native enrollment. It must not reuse mutable preparation as a resolver, automatically
-migrate/create databases, replace saved keys or install certificate trust.
+Shared operator configuration now supports read-only status and a staged Native
+enrollment adapter whose public default remains BLOCKED. Live enrollment still
+requires separately reviewed readiness attestations and authorization. It must not
+reuse mutable preparation as a resolver, automatically migrate/create databases,
+replace saved keys or install certificate trust.
 The Native bootstrap CLI can opt into the shared resolver for aggregate status
-only; profile-based create/resend execution is not implemented.
+only; its profile-based create/resend execution remains unavailable. The separate
+launcher create/resend entry points are described under the readiness gate below.
 HCL.CS first-eligible-user provisioning still requires Engineering Lead and
 identity-provider-owner design approval.
 
@@ -511,9 +514,10 @@ This exception does not change application startup precedence. The internal
 `native_child_environment()` is a disabled-bootstrap snapshot only, with
 `NATIVE_PLATFORM_BOOTSTRAP_ENABLED=false`; it refuses an unselected Settings
 dotenv source and rechecks full projection of a selected env file. No privileged
-child runner is wired. Future execution still needs separately reviewed
-`Settings(_env_file=None)`/cache isolation and source revalidation: Python-dotenv's
-disable flag alone does not disable Pydantic's independent `.env` reader.
+execution is authorized by that snapshot. The separate staged enrollment adapter
+below implements fresh `Settings(_env_file=None)`/cache isolation and source
+revalidation, while its public default remains BLOCKED. Python-dotenv's disable
+flag alone does not disable Pydantic's independent `.env` reader.
 
 Successful output is aggregate JSON: allowlisted `code`/`state` plus booleans for
 usable administrator availability, enrollment need, existing users
@@ -549,8 +553,8 @@ authority through the existing service transaction. Verify the effective grant,
 then disable temporary bootstrap enablement. Pending activation can complete
 after that temporary flag is disabled.
 
-This describes the existing service contract and the proposed controlled runner;
-the new runner is **not implemented**, and no live enrollment was performed.
+This describes the existing service contract and the implemented staged adapter;
+its public default readiness remains **BLOCKED**, and no live enrollment was performed.
 Exact target confirmation alone cannot authorize it. Use approved disposable
 resources, approved identity/mail destinations and explicit live-operation
 approval for later validation. Never insert a password, activation state, grant
@@ -605,9 +609,11 @@ proof and the existing approved create/resend service. No SQL inserts, password
 creation, manual grants or alternate bootstrap service are introduced. Bootstrap
 enablement is child-local; no saved configuration is rewritten.
 
-Cancellation, timeout, malformed/lost acknowledgment or unconfirmed cleanup means
-`OUTCOME_UNCONFIRMED`. Do not retry automatically. Inspect aggregate status and
-the durable reservation before recovery; retain uncertain owned-helper details.
+Cancellation before helper handoff returns `ENROLLMENT_CANCELLED` (exit 130).
+After handoff, a lost execution outcome, timeout, malformed/lost acknowledgment or
+unconfirmed cleanup is reported as `OUTCOME_UNCONFIRMED`. Do not retry
+automatically. Inspect aggregate status and the durable reservation before
+recovery; retain uncertain owned-helper details.
 Cleanup uses only the original helper handle. Existing email activation, password
 creation and effective-grant services remain authoritative.
 
