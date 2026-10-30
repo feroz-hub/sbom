@@ -13,12 +13,26 @@ export function verificationState(result?: AiConnectionTestResult | null, error?
   }
   if (result?.success) return 'VERIFIED';
   if (result?.error_kind === 'auth') return 'INVALID_CREDENTIALS';
-  if (['rate_limit', 'provider_unavailable'].includes(result?.error_kind ?? '')) return 'TEMPORARILY_UNAVAILABLE';
+  if (['rate_limit', 'provider_unavailable', 'timeout'].includes(result?.error_kind ?? '')) return 'TEMPORARILY_UNAVAILABLE';
   return 'UNVERIFIED';
 }
 
 export function verificationMessage(result?: AiConnectionTestResult | null, error?: unknown) {
   const state = verificationState(result, error);
+  const diagnostics: Record<string, string> = {
+    budget_exceeded: 'Model test exceeds the configured AI budget. Review spending limits.',
+    permission: 'This credential lacks permission to invoke the selected model. Check project model access.',
+    unsupported_model: 'This model needs a reviewed generation profile and pricing before use.',
+    unsupported_parameter: 'The selected model rejected a request parameter. Review its capability profile.',
+    quota: 'The provider quota is exhausted. Check project billing and spending limits.',
+    timeout: 'The provider timed out. Retry later or select a faster model.',
+    invalid_json: 'The model generated output that did not match the required JSON schema.',
+    incomplete: 'Generation was incomplete. The output limit includes reasoning tokens; review the bounded token budget.',
+    refusal: 'The model declined the test request. Review the task and supplied evidence.',
+  };
+  if (result?.error_kind && diagnostics[result.error_kind]) {
+    return { state, title: 'Model verification failed', text: diagnostics[result.error_kind] };
+  }
   switch (state) {
     case 'VERIFIED': return { state, title: 'Connection successful', text: 'The provider configuration was verified successfully.' };
     case 'INVALID_CREDENTIALS': return { state, title: 'Authentication failed', text: 'The provider rejected these credentials. Check the API key and permissions before continuing.' };

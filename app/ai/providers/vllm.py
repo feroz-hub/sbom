@@ -40,6 +40,7 @@ class VllmProvider(LlmProvider):
         # vLLM accepts any non-empty token by default, but operators can
         # configure a real key — pass it through unchanged.
         self._inner = OpenAiProvider(
+            native_openai=False,
             api_key=api_key,
             default_model=default_model,
             base_url=base_url,

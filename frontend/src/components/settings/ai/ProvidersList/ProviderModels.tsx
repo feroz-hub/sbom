@@ -199,6 +199,20 @@ export function ProviderModels({
                       {capability('stream', model.supports_streaming)}
                     </div>
                     <dl className="mt-3 space-y-1 text-xs">
+                      {[
+                        ['Discovered', model.discovered],
+                        ['Accessible', model.accessible],
+                        ['Generation verified', model.generation_verified],
+                        ['Workload compatible', model.workload_compatible],
+                        ['Active', model.is_selected],
+                      ].map(([label, value]) => (
+                        <div key={String(label)}>
+                          <dt className="inline">{label}: </dt>
+                          <dd className="inline">{value == null ? 'Not tested' : value ? 'Yes' : 'No'}</dd>
+                        </div>
+                      ))}
+                      {model.last_test_error && <div role="status">{model.last_test_error}</div>}
+
                       <div>
                         <dt className="inline">Context tokens: </dt>
                         <dd className="inline">
@@ -236,7 +250,7 @@ export function ProviderModels({
                       </div>
                       {model.last_verified_at && (
                         <div>
-                          Last verified:{' '}
+                          Last tested:{' '}
                           <time
                             dateTime={model.last_verified_at}
                             title={model.last_verified_at}

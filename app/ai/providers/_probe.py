@@ -15,7 +15,21 @@ from typing import Any
 
 import httpx
 
-from .base import ConnectionErrorKind, ConnectionTestResult
+from .base import ConnectionErrorKind, ConnectionTestResult, LlmRequest
+
+
+def structured_probe_request(model: str, *, max_output_tokens: int, request_id: str) -> LlmRequest:
+    """One bounded workload contract for connection and registry verification."""
+    return LlmRequest(
+        system="Return only JSON matching the requested schema.",
+        user='Return {"ok": true}.',
+        response_schema={
+            "type": "object", "properties": {"ok": {"type": "boolean", "enum": [True]}},
+            "required": ["ok"], "additionalProperties": False,
+        },
+        max_output_tokens=max_output_tokens, temperature=0,
+        request_id=request_id, purpose="model_test", model=model,
+    )
 
 
 def classify_http_error(status_code: int, body_text: str = "") -> ConnectionErrorKind:
@@ -169,5 +183,8 @@ def sanitized_result(result: ConnectionTestResult) -> ConnectionTestResult:
     if result.success:
         return result.model_copy(update={"error_message": None, "error_kind": None})
     kind = result.error_kind or "unknown"
+    from .openai_compat import MESSAGES
+    if result.provider == "openai" and kind in MESSAGES:
+        return result.model_copy(update={"error_message": f"{kind} {MESSAGES[kind]}"})
     detail = f"{kind}" + (f" (HTTP {result.http_status})" if result.http_status else "")
     return result.model_copy(update={"error_message": detail})

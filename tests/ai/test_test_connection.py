@@ -35,7 +35,7 @@ async def test_openai_test_connection_via_models_endpoint():
                 json={"data": [{"id": "gpt-4o-mini"}, {"id": "gpt-4o"}]},
             )
         assert str(request.url).endswith("/chat/completions")
-        return httpx.Response(200, json={"choices": [{"message": {"content": "ok"}}]})
+        return httpx.Response(200, json={"choices": [{"message": {"content": '{"ok":true}'}}]})
 
     provider = OpenAiProvider(api_key="sk-test", client_factory=lambda: _make_client(handler))
     result = await provider.test_connection()
@@ -122,7 +122,7 @@ async def test_openai_falls_back_to_completion_when_models_404():
         return httpx.Response(
             200,
             json={
-                "choices": [{"message": {"content": "ok"}}],
+                "choices": [{"message": {"content": '{"ok":true}'}}],
                 "usage": {"prompt_tokens": 1, "completion_tokens": 1},
             },
         )
@@ -141,18 +141,18 @@ async def test_openai_test_connection_rejects_listed_but_unusable_model():
 
     def handler(request: httpx.Request) -> httpx.Response:
         if request.method == "GET":
-            return httpx.Response(200, json={"data": [{"id": "retired-model"}]})
+            return httpx.Response(200, json={"data": [{"id": "gpt-4o-mini"}]})
         return httpx.Response(404, json={"error": {"message": "model is unavailable"}})
 
     provider = OpenAiProvider(
         api_key="k",
-        default_model="retired-model",
+        default_model="gpt-4o-mini",
         client_factory=lambda: _make_client(handler),
     )
     result = await provider.test_connection()
     assert result.success is False
     assert result.error_kind == "model_not_found"
-    assert result.detected_models == ["retired-model"]
+    assert result.detected_models == ["gpt-4o-mini"]
 
 
 @pytest.mark.asyncio
@@ -174,7 +174,7 @@ async def test_vllm_test_connection_overrides_provider_label():
     def handler(request):
         if request.method == "GET":
             return httpx.Response(200, json={"data": [{"id": "llama-70b"}]})
-        return httpx.Response(200, json={"choices": [{"message": {"content": "ok"}}]})
+        return httpx.Response(200, json={"choices": [{"message": {"content": '{"ok":true}'}}]})
 
     provider = VllmProvider(
         base_url="http://localhost:8000/v1",
@@ -192,7 +192,7 @@ async def test_gemini_test_connection_labels_correctly():
     def handler(request):
         if request.method == "GET":
             return httpx.Response(200, json={"data": [{"id": "gemini-3.6-flash"}]})
-        return httpx.Response(200, json={"choices": [{"message": {"content": "ok"}}]})
+        return httpx.Response(200, json={"choices": [{"message": {"content": '{"ok":true}'}}]})
 
     provider = GeminiProvider(api_key="k", client_factory=lambda: _make_client(handler))
     result = await provider.test_connection()
@@ -205,7 +205,7 @@ async def test_grok_test_connection_labels_correctly():
     def handler(request):
         if request.method == "GET":
             return httpx.Response(200, json={"data": [{"id": "grok-2-mini"}]})
-        return httpx.Response(200, json={"choices": [{"message": {"content": "ok"}}]})
+        return httpx.Response(200, json={"choices": [{"message": {"content": '{"ok":true}'}}]})
 
     provider = GrokProvider(api_key="k", client_factory=lambda: _make_client(handler))
     result = await provider.test_connection()
@@ -218,7 +218,7 @@ async def test_custom_test_connection_labels_correctly():
     def handler(request):
         if request.method == "GET":
             return httpx.Response(200, json={"data": [{"id": "my-model"}]})
-        return httpx.Response(200, json={"choices": [{"message": {"content": "ok"}}]})
+        return httpx.Response(200, json={"choices": [{"message": {"content": '{"ok":true}'}}]})
 
     provider = CustomOpenAiCompatibleProvider(
         base_url="http://localhost:8000/v1",
@@ -242,7 +242,8 @@ async def test_all_adapters_classify_and_sanitize_failures(name, status, kind, c
     provider = build_provider(ProviderConfig(name=name, enabled=True, api_key=secret, base_url='http://localhost:8000/v1', default_model='test-model'), client_factory=lambda: _make_client(handler))
     result = await provider.test_connection()
     assert not result.success
-    assert result.error_kind == kind
+    expected = {403: "permission", 408: "timeout"}.get(status, kind) if name == "openai" else kind
+    assert result.error_kind == expected
     assert result.http_status == status
     assert secret not in result.model_dump_json()
     assert secret not in caplog.text
@@ -255,7 +256,7 @@ async def test_probe_network_exception_never_exposes_secrets(exc_type, caplog):
         raise exc_type('secret-key-in-url', request=request)
     provider = OpenAiProvider(api_key='secret-key-in-url', client_factory=lambda: _make_client(handler))
     result = await provider.test_connection()
-    assert result.error_kind == 'network'
+    assert result.error_kind == ('timeout' if issubclass(exc_type, httpx.TimeoutException) else 'network')
     assert 'secret-key-in-url' not in result.model_dump_json()
     assert 'secret-key-in-url' not in caplog.text
 

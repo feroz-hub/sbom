@@ -251,6 +251,11 @@ class ProviderModelResponse(BaseModel):
     last_verified_at: str | None
     last_test_success: bool | None
     last_test_error: str | None
+    discovered: bool | None = None
+    accessible: bool | None = None
+    generation_verified: bool | None = None
+    workload_compatible: bool | None = None
+    error_kind: str | None = None
 
 
 class ModelRefreshResponse(BaseModel):
@@ -370,7 +375,9 @@ def _row_to_response(row: AiProviderCredential, *, decrypted_key: str | None = N
 
 
 def _model_response(row: AiProviderModel) -> ProviderModelResponse:
-    return ProviderModelResponse.model_validate(row, from_attributes=True)
+    result = ProviderModelResponse.model_validate(row, from_attributes=True)
+    verification = (row.raw_metadata or {}).get("verification", {})
+    return result.model_copy(update={"discovered": bool(row.last_discovered_at), **{key: verification.get(key) for key in ("accessible", "generation_verified", "workload_compatible", "error_kind")}})
 
 
 def _credential_or_404(db: Session, cred_id: int) -> AiProviderCredential:
@@ -458,6 +465,9 @@ def _build_transient_provider(payload: TestConnectionRequest):
 def _safe_stored_test_error(row: AiProviderCredential) -> str | None:
     # Legacy rows may contain raw provider JSON. Do not return it to clients.
     value = row.last_test_error or ""
+    from ..ai.providers.openai_compat import MESSAGES
+    if value in {f"{kind} {message}" for kind, message in MESSAGES.items()}:
+        return value
     if not value:
         return None
     safe_pattern = (
@@ -480,10 +490,57 @@ def _stamp_test_result(row: AiProviderCredential, result: ConnectionTestResult) 
 
 
 async def _run_probe(provider, model: str | None) -> ConnectionTestResult:
+    guard = None
     try:
-        return sanitized_result(await provider.test_connection(model=model))
+        if getattr(provider, "name", None) == "openai":
+            from ..ai.cost import estimate_cost_usd, write_usage_log_row
+            from ..ai.providers.base import BudgetExceededError
+            from ..ai.providers.openai_models import profile_for
+            from ..ai.runtime_config import build_budget_guard
+
+            target = model or provider.default_model
+            guard = build_budget_guard()
+            guard.check_request(
+                estimated_usd=estimate_cost_usd(
+                    provider="openai",
+                    model=target,
+                    input_tokens=128,
+                    output_tokens=2048 if profile_for(target).reasoning_efforts else 256,
+                )
+            )
+        result = sanitized_result(await provider.test_connection(model=model))
+        if guard is not None and result.usage is not None:
+            from uuid import uuid4
+
+            from ..db import SessionLocal
+
+            usage = result.usage
+            guard.record(actual_usd=usage.cost_usd)
+            with SessionLocal() as session:
+                write_usage_log_row(
+                    session,
+                    request_id=f"connection-test-{uuid4()}",
+                    provider=provider.name,
+                    model=target,
+                    purpose="connection_test",
+                    finding_cache_key=None,
+                    input_tokens=usage.input_tokens,
+                    output_tokens=usage.output_tokens,
+                    cost_usd=usage.cost_usd,
+                    latency_ms=result.latency_ms or 0,
+                    error=None if result.success else result.error_kind,
+                )
+        return result
     except Exception as exc:  # noqa: BLE001
-        return sanitized_result(network_failure(provider=provider.name, model=model, exc=exc))
+        if guard is not None and isinstance(exc, BudgetExceededError):
+            return ConnectionTestResult(
+                success=False,
+                provider=provider.name,
+                model_tested=model,
+                error_kind="budget_exceeded",
+                error_message="Model test exceeds the configured AI budget. Review spending limits.",
+            )
+        return sanitized_result(network_failure(provider=getattr(provider, "name", ""), model=model, exc=exc))
 
 
 # ---------------------------------------------------------------------------

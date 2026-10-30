@@ -101,6 +101,7 @@ class GeminiProvider(LlmProvider):
         # the schema shape on top of valid-JSON-ness.
         # Reference: https://ai.google.dev/gemini-api/docs/openai
         self._inner = OpenAiProvider(
+            native_openai=False,
             api_key=api_key,
             default_model=default_model,
             base_url=_BASE_URL,

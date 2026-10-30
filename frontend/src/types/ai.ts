@@ -360,6 +360,8 @@ export interface AiTopCachedItem {
 export type AiTier = 'free' | 'paid';
 
 export type AiConnectionErrorKind =
+  | 'permission' | 'unsupported_model' | 'unsupported_parameter' | 'quota'
+  | 'timeout' | 'invalid_json' | 'incomplete' | 'refusal' | 'budget_exceeded'
   | 'network'
   | 'auth'
   | 'rate_limit'
@@ -492,6 +494,11 @@ export interface AiProviderModel {
   last_verified_at: string | null;
   last_test_success: boolean | null;
   last_test_error: string | null;
+  discovered?: boolean | null;
+  accessible?: boolean | null;
+  generation_verified?: boolean | null;
+  workload_compatible?: boolean | null;
+  error_kind?: string | null;
 }
 
 export interface AiModelRefreshResult {

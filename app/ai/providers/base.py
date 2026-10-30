@@ -165,6 +165,15 @@ ConnectionErrorKind = Literal[
     "configuration",
     "model_not_found",
     "invalid_response",
+    "permission",
+    "unsupported_model",
+    "unsupported_parameter",
+    "quota",
+    "timeout",
+    "invalid_json",
+    "incomplete",
+    "refusal",
+    "budget_exceeded",
     "unknown",
 ]
 
@@ -186,6 +195,11 @@ class ConnectionTestResult(BaseModel):
     http_status: int | None = None
     provider: str = ""
     model_tested: str | None = None
+    discovered: bool | None = None
+    accessible: bool | None = None
+    generation_verified: bool | None = None
+    workload_compatible: bool | None = None
+    usage: LlmUsage | None = Field(default=None, exclude=True)
 
 
 # ---------------------------------------------------------------------------

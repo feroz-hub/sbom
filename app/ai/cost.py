@@ -32,6 +32,7 @@ from sqlalchemy.exc import SQLAlchemyError
 from sqlalchemy.orm import Session
 
 from .providers.base import BudgetExceededError
+from .providers.openai_models import PROFILES as _OPENAI_PROFILES
 
 log = logging.getLogger("sbom.ai.cost")
 
@@ -60,12 +61,7 @@ PRICING: dict[str, ModelPricing] = {
         "claude-haiku-4-5": (0.0008, 0.004),
         "claude-haiku-4-5-20251001": (0.0008, 0.004),
     },
-    "openai": {
-        "gpt-4o": (0.0025, 0.010),
-        "gpt-4o-mini": (0.00015, 0.00060),
-        "gpt-4.1": (0.0025, 0.010),
-        "gpt-4.1-mini": (0.00015, 0.00060),
-    },
+    "openai": {},  # Populated from the reviewed capability profiles below.
     # Gemini — paid-tier pricing per 1k tokens (Flash / Pro / Lite).
     # Source: https://ai.google.dev/gemini-api/docs/pricing (verified 2026-09-06).
     # Free-tier usage is reported as $0.00 — the registry passes
@@ -98,6 +94,10 @@ PRICING: dict[str, ModelPricing] = {
 }
 
 
+# SBO-99: one reviewed source for native OpenAI capabilities and pricing.
+PRICING["openai"].update({model: profile.pricing for model, profile in _OPENAI_PROFILES.items() if profile.pricing is not None})
+
+
 def estimate_cost_usd(
     *,
     provider: str,
@@ -124,6 +124,9 @@ def estimate_cost_usd(
         )
         return 0.0
     in_rate, out_rate = pair
+    profile = _OPENAI_PROFILES.get(model) if provider == "openai" else None
+    if profile and profile.context_window == 1050000 and input_tokens > 272000:
+        in_rate, out_rate = in_rate * 2, out_rate * 1.5
     return round((input_tokens / 1000.0) * in_rate + (output_tokens / 1000.0) * out_rate, 6)
 
 

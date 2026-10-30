@@ -25,6 +25,7 @@ The Phase 3 batch worker treats those as per-finding skips.
 
 from __future__ import annotations
 
+import json
 import logging
 import time
 import uuid
@@ -332,10 +333,11 @@ class AiFixGenerator:
         # produced, not the headroom.
         max_output_tokens = 3000
         estimated_input = estimate_tokens(sys_p) + estimate_tokens(usr_p)
+        schema_tokens = estimate_tokens(json.dumps(schema))
         estimated_cost = estimate_cost_usd(
             provider=provider.name,
             model=provider.default_model,
-            input_tokens=estimated_input,
+            input_tokens=estimated_input + (schema_tokens if provider.name == "openai" else 0),
             output_tokens=max_output_tokens,
             is_local=getattr(provider, "is_local", False),
         )
@@ -352,7 +354,7 @@ class AiFixGenerator:
                 estimate_cost_usd(
                     provider=fallback.name,
                     model=fallback.default_model,
-                    input_tokens=estimated_input,
+                    input_tokens=estimated_input + (schema_tokens if fallback.name == "openai" else 0),
                     output_tokens=max_output_tokens,
                     is_local=getattr(fallback, "is_local", False),
                 ),
@@ -440,13 +442,17 @@ class AiFixGenerator:
                 model_name=provider.default_model,
             )
         except AiProviderError as exc:
+            usage = getattr(exc, "usage", None)
+            if usage is not None:
+                self._budget.record(actual_usd=usage.cost_usd, scan_id=scan_id)
             error_code = _failure_to_error_code(exc.failure)
             self._log_failed_call(
                 request_id=request_id,
-                provider=provider.name,
-                model=provider.default_model,
+                provider=exc.failure.provider_name if usage is not None and exc.failure else provider.name,
+                model=getattr(exc, "model", provider.default_model),
                 cache_key=cache_key,
                 error=f"{error_code}:{exc}",
+                usage=usage,
             )
             return self._error(
                 finding,
@@ -530,7 +536,7 @@ class AiFixGenerator:
             retry_estimated = estimate_cost_usd(
                 provider=provider.name,
                 model=provider.default_model,
-                input_tokens=estimate_tokens(sys_p) + estimate_tokens(retry_user),
+                input_tokens=estimate_tokens(sys_p) + estimate_tokens(retry_user) + (schema_tokens if provider.name == "openai" else 0),
                 output_tokens=max_output_tokens,
                 is_local=getattr(provider, "is_local", False),
             )
@@ -778,6 +784,7 @@ class AiFixGenerator:
         cache_key: str,
         error: str,
         raw_response: str | None = None,
+        usage=None,
     ) -> None:
         # Provider/model output may contain tenant data. Keep only the safe
         # classification in the durable ledger; ``log_ai_call`` records a
@@ -790,9 +797,9 @@ class AiFixGenerator:
             model=model,
             purpose="fix_bundle",
             finding_cache_key=cache_key,
-            input_tokens=0,
-            output_tokens=0,
-            cost_usd=0.0,
+            input_tokens=usage.input_tokens if usage is not None else 0,
+            output_tokens=usage.output_tokens if usage is not None else 0,
+            cost_usd=usage.cost_usd if usage is not None else 0.0,
             latency_ms=0,
             cache_hit=False,
             error=ledger_error[:500],
@@ -807,7 +814,7 @@ class AiFixGenerator:
             purpose="fix_bundle",
             outcome=outcome,
             latency_seconds=0.0,
-            cost_usd=0.0,
+            cost_usd=usage.cost_usd if usage is not None else 0.0,
             cache_hit=False,
         )
         log_ai_call(
@@ -816,9 +823,9 @@ class AiFixGenerator:
             model=model,
             purpose="fix_bundle",
             finding_cache_key=cache_key,
-            input_tokens=0,
-            output_tokens=0,
-            cost_usd=0.0,
+            input_tokens=usage.input_tokens if usage is not None else 0,
+            output_tokens=usage.output_tokens if usage is not None else 0,
+            cost_usd=usage.cost_usd if usage is not None else 0.0,
             latency_ms=0,
             cache_hit=False,
             outcome=outcome,

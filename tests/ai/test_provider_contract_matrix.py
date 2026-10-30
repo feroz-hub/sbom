@@ -86,7 +86,7 @@ def _mock_provider_builder(requests: list[httpx.Request]) -> Callable:
             return httpx.Response(
                 200,
                 json={
-                    "choices": [{"message": {"content": "ok"}}],
+                    "choices": [{"message": {"content": '{"ok":true}' if b'"response_format"' in request.content else "ok"}}],
                     "usage": {"prompt_tokens": 1, "completion_tokens": 1},
                 },
             )
