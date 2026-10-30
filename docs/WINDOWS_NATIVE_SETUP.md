@@ -38,6 +38,17 @@ Selected Legacy services must already be running. Missing original material is
 restored through review rather than replaced. New managed/private-key files use
 protected Windows DACLs on supported filesystems; existing ACLs and OS trust are
 not repaired. See [setup recovery limits](reference/configuration.md#controlled-setup-and-prepared-startup-sbo-98-phase-3).
+The separate `frontend-workspace` category creates verified nonprivileged Windows
+directory junctions to source/dependencies; no Developer Mode or trust setting is
+changed. Unknown/redirected workspaces and `.env*` files in them block use and are
+retained. The [component environment contract](reference/configuration.md#component-environments-and-frontend-workspace-sbo-98-phase-4)
+preserves selected ports and original certificate/CA/transaction-key paths while
+excluding backend-only secrets from Node runtime/build.
+The native compiler probe checks the selected Node architecture's installed SWC
+binding without invoking Next's downloader. If missing/incompatible, review
+`setup --plan --repair-dependencies`; repair still needs category consent and
+does not bypass private-file, ownership or database safeguards. Verified HTTPS,
+HMR and full SBOM acceptance remain separately reported validation work.
 
 `diagnose` is the primary read-only inspection command. `--check` and
 `setup --check` use that path before mutable setup; mutation flags are refused.

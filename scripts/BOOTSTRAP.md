@@ -32,10 +32,33 @@ initialization, migration or build flags. The temporary `doctor` alias emits one
 stderr deprecation notice. See [diagnostic results and exit codes](../docs/reference/configuration.md#read-only-diagnostics-sbo-98-phase-2).
 
 See [controlled setup and recovery](../docs/reference/configuration.md#controlled-setup-and-prepared-startup-sbo-98-phase-3)
-for category consent, source/configuration drift, dependency-only repair limits,
+for category consent, source/configuration drift, guarded dependency repair,
 Windows private-file safeguards and retained partial artifacts. Shared operator
 configuration and privileged enrollment remain separately reviewed work. Setup
 does not authorize administrator creation or HCL.CS first-user provisioning.
+Existing installations also need a reviewed `frontend-workspace` action before
+the new frontend boundary can start. It creates `.dev-frontend` for Legacy or
+`frontend-isolated` in Greenfield state, without reusing/removing old frontend
+workspaces or copying private `.env`/certificate files. Source/dependency links
+preserve ordinary source saves; stale public config copies need authorized
+refresh, while unknown files/links require review. See [component isolation](../docs/reference/configuration.md#component-environments-and-frontend-workspace-sbo-98-phase-4).
+
+Missing/incompatible native compiler bindings block frontend startup/build;
+the readiness probe loads only an existing native SWC package and never invokes
+Next's downloader. The Node service/build run with CI/no-WASM-fallback guards
+and telemetry disabled by default. Repair is a separate reviewed operation:
+
+```sh
+python scripts/dev.py setup --plan --repair-dependencies --profile legacy --legacy-config managed
+# After review and explicit project-dependencies category consent:
+python scripts/dev.py setup --repair-dependencies --profile legacy --legacy-config managed
+```
+
+This reruns pinned installers, retaining configuration/data/ownership gates. It
+does not rotate keys, migrate a database or authorize arbitrary package upgrades.
+An invalid/incomplete private installation can still block repair; restore its
+original material through review. Ordinary start and `diagnose` never repair
+dependencies or download a compiler implicitly.
 
 ## New Managed Legacy Native installation
 

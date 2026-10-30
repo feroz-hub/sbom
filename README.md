@@ -54,6 +54,9 @@ No command means start; `diagnose` is read-only and `--check` is its compatibili
 form. `doctor` remains a temporary alias with one deprecation notice on stderr.
 `setup --plan` is read-only; interactive setup requires category-specific consent
 and rechecks its inputs before changes. See [controlled setup and recovery](docs/reference/configuration.md#controlled-setup-and-prepared-startup-sbo-98-phase-3).
+The `frontend-workspace` action prepares live source links and owned public config
+copies. Node runtime/build use an [isolated workspace and projected environment](docs/reference/configuration.md#component-environments-and-frontend-workspace-sbo-98-phase-4)
+without backend-only secrets; existing private environment files remain untouched.
 See the [diagnostic contract](docs/reference/configuration.md#read-only-diagnostics-sbo-98-phase-2)
 for checks, statuses, exit codes and limitations. Start/restart stay
 in the foreground. Stop/Ctrl+C manage only verified owned application processes

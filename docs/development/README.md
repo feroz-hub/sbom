@@ -81,9 +81,16 @@ an explicitly authorized corrective action. HCL.CS first-eligible-user privilege
 provisioning still requires Engineering Lead and identity-provider-owner approval.
 Do not change providers, enable a bypass or create an administrator to make a check
 pass. Read the [controlled setup and recovery contract](../reference/configuration.md#controlled-setup-and-prepared-startup-sbo-98-phase-3), including
-the existing-interpreter repair limit and retained partial artifacts. Component
-environment isolation and shared operator-script configuration remain later work;
-neither setup nor diagnostics authorizes privileged enrollment.
+explicit dependency-repair safeguards and retained partial artifacts. Use
+`setup --plan --repair-dependencies` to review a pinned repair; only subsequent
+category consent permits installers, and private-material/ownership gates remain.
+Startup/build verify the already-installed native compiler without invoking
+Next's downloader. Ordinary start/diagnostics never perform that repair. Setup also
+requests `frontend-workspace` consent for linked source/dependencies and verified
+public configuration copies. Node runtime/build use the [projected environment
+and isolated workspace](../reference/configuration.md#component-environments-and-frontend-workspace-sbo-98-phase-4);
+source private environment files remain untouched. Shared operator-script
+configuration remains later work; setup/diagnostics never authorizes enrollment.
 
 ## Ports, environment and queues
 

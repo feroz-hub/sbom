@@ -56,6 +56,10 @@ interactive `setup` requests category-specific consent and revalidates inputs.
 Project virtualenv/pip/npm dependencies are prepared only by authorized setup,
 using content-based freshness checks. Bare startup requires prepared dependencies
 and never installs packages, discovers database credentials or generates keys.
+Startup/build probe only the already-installed native compiler through an owned
+Node process; they never use Next's compiler downloader. An explicit
+`setup --repair-dependencies` plan and category consent are required to rerun
+pinned installers; normal startup and diagnostics never repair dependencies.
 System software, OS services and trusted roots are not installed silently.
 
 Ordinary startup authenticates to PostgreSQL/Redis and validates the existing
@@ -71,15 +75,18 @@ reuses its pair, or authorized setup creates a missing self-signed leaf;
 browser/OS trust requires explicit operator approval. Incomplete pairs fail
 without replacing surviving material. TLS and hostname verification remain enabled.
 See [controlled preparation and recovery limits](reference/configuration.md#controlled-setup-and-prepared-startup-sbo-98-phase-3)
-for new-file Windows DACL safeguards, existing-interpreter dependency blockers
+for new-file Windows DACL safeguards, guarded dependency repair
 and retained partial artifacts. Existing private files and trust are not repaired.
 
 ## Complete runtime
 
 Dependency order is verified data services (including managed Mailpit),
 authenticated PostgreSQL/Redis checks, default celery queue worker, reports queue
-worker, one separate Beat, FastAPI, then HTTPS Next.js. All receive the resolved
-profile environment. Saved RELOAD=true enables the backend reloader using the same owned API command.
+worker, one separate Beat, FastAPI, then HTTPS Next.js. API/workers/Beat retain
+shared server settings; Node receives only its approved BFF/public inputs in the
+prepared environment-free workspace. Parent runtime metadata retains selected
+ports and ownership information. See [component environments](reference/configuration.md#component-environments-and-frontend-workspace-sbo-98-phase-4).
+Saved RELOAD=true enables the backend reloader using the same owned API command.
 Linux workers use prefork, concurrency 1; macOS/Windows use
 solo. Windows Celery has upstream platform limitations.
 

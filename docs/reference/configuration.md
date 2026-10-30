@@ -1,6 +1,6 @@
 # Configuration reference
 
-Scope: development configuration boundaries and SBO-98 Phases 1–3, based on
+Scope: development configuration boundaries and SBO-98 Phases 1–4, based on
 approved main `69e71088d7fef06874fe1e2eac7a53db0fd2f333`. Examples are templates,
 not one interchangeable environment.
 
@@ -55,12 +55,14 @@ contain secrets and must never be serialized into logs or issues. Frontend and
 public projections use explicit allowlists: the BFF keeps its legitimate session
 encryption key and Redis session connection, but not database, Native signing,
 SMTP, outbox or provider-storage secrets. Browser projection permits only
-reviewed public names. API/worker/Beat projections retain the complete server
-configuration for compatibility; narrower backend roles require the Phase 4
-consumer audit. These projections are not yet used to launch processes.
+reviewed public names. Runtime spawning and the development frontend build now
+apply role projections at the actual child-process boundary. API/worker/Beat
+projections initially retain complete shared Settings/task inputs for
+compatibility; this is not least privilege between those three backend roles.
+Further narrowing requires additional consumer review.
 
-Later separately reviewed phases cover component injection and authorized Native
-enrollment. They must not reuse mutable preparation as a resolver, automatically
+Later separately reviewed work covers shared operator configuration and authorized
+Native enrollment. It must not reuse mutable preparation as a resolver, automatically
 migrate/create databases, replace saved keys or install certificate trust.
 Standalone bootstrap scripts are not yet connected to the shared resolver.
 HCL.CS first-eligible-user provisioning still requires Engineering Lead and
@@ -81,8 +83,9 @@ python scripts/dev.py diagnose --profile greenfield
 which emits one deprecation notice on stderr and uses the same checks/exit policy.
 Existing supported `--check` forms use the diagnostic path before mutable setup
 or runtime dispatch, including `python scripts/dev.py setup --check`. Combining
-diagnostics with provisioning, database initialization/migration or frontend-build
-flags is a usage error, not permission to apply those changes.
+diagnostics with setup planning/provider selection, dependency repair,
+provisioning, database initialization/migration or frontend-build flags is a
+usage error, not permission to apply those changes.
 
 The command inspects already selected configuration and uses bounded observational
 checks. It never installs packages, prepares a virtualenv, writes configuration,
@@ -182,8 +185,9 @@ continues to mean diagnostics, not setup planning or permission to apply a plan.
 
 Interactive `setup` requires an explicit `yes` for each required category:
 project dependencies, new configuration, fresh secrets, missing certificates,
-explicit Greenfield data providers, database initialization/migration and optional
-frontend build. Declining any category applies nothing. Noninteractive setup with
+the frontend workspace, explicit Greenfield data providers, database
+initialization/migration and optional frontend build. Declining any category
+applies nothing. Noninteractive setup with
 required actions refuses rather than assuming consent. A successful plan-only or
 unchanged invocation returns 0; blockers, declined authorization and changed
 inputs return 1; cancellation/EOF during consent returns 130.
@@ -252,10 +256,25 @@ failure can leave authorized project/private artifacts already created; the
 `SETUP_PARTIAL_PREPARATION` report requires diagnosis and a new plan, not automatic
 rollback, database reset or broad file cleanup.
 
-Two limits remain explicit. If neither the invoking interpreter nor the existing
-project interpreter can validate protected keys/certificates because required
-dependencies are missing, setup blocks before mutation; this phase provides no
-dependency-only repair bypass. New managed private configuration and localhost
+Dependency repair is explicit, rather than an ordinary-start side effect:
+
+```sh
+python scripts/dev.py setup --plan --repair-dependencies --profile legacy --legacy-config managed
+# After reviewing the plan and obtaining the required category approval:
+python scripts/dev.py setup --repair-dependencies --profile legacy --legacy-config managed
+```
+
+The `project-dependencies` category authorizes rerunning the pinned Python
+requirements installer and `npm ci` from the existing manifests/lockfile even
+when their stamps match. It does not authorize arbitrary package upgrades,
+configuration/key replacement, database operations or certificate trust changes.
+Scope, ownership, private-material inspection and plan-revalidation gates still
+apply. If neither the invoking nor the existing project interpreter can validate
+protected material, setup may remain blocked; repair is not permission to bypass
+those checks. Review a new frontend-workspace plan if dependency directory
+identity changes. Ordinary start and diagnostics never perform dependency repair.
+
+New managed private configuration and localhost
 private keys use exclusive creation and protected Windows DACLs, requiring
 persistent-ACL filesystem support. Existing ACLs are not repaired, and failed
 creation can retain incomplete new artifacts for operator review. Redirected
@@ -270,6 +289,129 @@ path limits; no long-path or other machine policy is enabled automatically.
 Native Windows/macOS/Linux, real provider login and fresh-install acceptance remain
 separate validation work; documentation and fixture tests do not establish them.
 
+## Component environments and frontend workspace (SBO-98, Phase 4)
+
+The launcher keeps its complete resolved environment for readiness, redaction and
+process ownership, but projects a separate environment for each child. FastAPI,
+default/reports workers and Beat retain their shared server inputs initially.
+Next.js runtime and the explicit development frontend build receive only approved
+BFF, browser and operating-system inputs. Database credentials, Native signing
+keys, SMTP passwords, encrypted-outbox keys and provider-storage keys are absent
+from these Node environments. The BFF still needs its legitimate Redis session
+connection and session encryption key; those remain server-only secrets and must
+not be printed or copied into browser variables.
+
+```mermaid
+flowchart TD
+    A[Selected profile configuration] --> B[Validated configuration plan]
+    B --> C[diagnose: read-only checks]
+    B --> D[setup: inspect, consent, revalidate]
+    D --> E[Prepared frontend workspace]
+    B --> F[Component environment projection]
+    E --> F
+    F --> G[API, workers, Beat: shared server inputs]
+    F --> H[Node runtime/build: BFF and approved public inputs]
+    H --> I[Browser: approved public build values]
+```
+
+Greenfield retains its protected existing reader and private configuration format;
+the same role projection applies before its Node runtime/build execution. This
+development-only wiring changes neither production Docker/Compose environment
+forwarding nor frontend/API contracts or database schema.
+
+Only explicitly allowlisted browser names are projected; an arbitrary
+`NEXT_PUBLIC_*` prefix does not authorize publication. Current names cover auth
+provider flags, API URL, HCL issuer/client/redirect/logout/scopes and the comparison
+fallback. Public endpoint values containing credentials are refused. Public values
+still have Next.js build-time semantics: editing runtime settings is not a claim
+that an existing browser bundle was rebuilt. Custom API/frontend ports remain in
+the parent's ownership metadata and command arguments; they do not need to enter
+the Node environment for registration to remain correct.
+
+Next.js automatically loads and can reload `.env*` files from its working
+directory. Filtering inherited environment alone would let stripped secrets
+re-enter through dotenv. Authorized `setup` therefore offers the
+`frontend-workspace` category and prepares:
+
+| Profile | New frontend working directory |
+| --- | --- |
+| Legacy | `<checkout>/.dev-frontend` |
+| Greenfield | `~/.sbom-greenfield-uuid/frontend-isolated` |
+
+The source `frontend` directory, original private environment files and old
+Greenfield `frontend`/`frontend-build` directories are retained. Environment files
+are never copied into the new workspace. Supported selected-file resolution,
+including Legacy Windows/env `frontend/.env.local` layering, happens before role
+projection. A read-only Legacy source-environment guard reviews the effective
+Next development/test fallback files in their original order. If a file would
+supply an approved frontend input absent from the authoritative profile, or an
+ambiguous spelling of such a setting, startup refuses instead of silently losing
+or adopting it. Unreadable/redirected files also require review. Original files
+are not rewritten, expanded or copied; review the selected authoritative profile
+rather than moving an old private file into the generated workspace. Greenfield
+retains its existing exclusion of source dotenv files.
+
+Verified links point `src`, optional `public` and `node_modules` at their
+authoritative source directories. Windows uses nonprivileged directory junctions;
+POSIX uses directory symlinks. Setup never enables Developer Mode or changes OS
+policy as a fallback. Source links preserve visibility of ordinary atomic source
+file saves instead of serving a source snapshot. End-to-end Next.js hot reload
+still requires separate acceptance.
+
+An ownership manifest pins repository/source/workspace/parent identities, link
+objects and exact targets, and approved public configuration copies. Source
+configuration changes require explicit setup refresh; only unchanged,
+manifest-owned copies may be refreshed. Modified workspace copies, unknown
+existing directories, redirected inputs, removed source configuration and any
+workspace `.env*` file block use and remain untouched. Known Next-generated files
+and cache directories are permitted with regular-file/directory checks. Startup
+and `diagnose` validate this state without creating, repairing or deleting it.
+An interrupted setup can leave new artifacts requiring review; do not remove
+private or unknown files automatically. This is configuration isolation, not an
+OS sandbox around trusted frontend code.
+
+HTTPS uses the original existing certificate/key through absolute paths. The
+BFF transaction key defaults to the preserved Legacy
+`frontend/certificates/localhost-key.pem` or Greenfield `cert-key.pem`. Explicit
+transaction-key, provider CA, Node extra-CA and OpenSSL CA paths retain their
+original frontend working-directory meaning when made absolute; private key
+material is not copied into the workspace. `SSL_CERT_FILE` and each entry in
+`SSL_CERT_DIR` are preserved; empty/ambiguous CA-directory entries require review.
+Backend/BFF CA ambiguity still requires review, not a TLS bypass or silent
+reinterpretation.
+
+`NODE_EXTRA_CA_CERTS` is retained. Supported `NODE_OPTIONS` are
+`--use-system-ca`, `--use-openssl-ca`, `--use-bundled-ca`, `--tls-min-v1.2`,
+`--tls-min-v1.3`, `--enable-source-maps`, `--no-warnings`, `--trace-warnings` and
+`--max-old-space-size=N` for 100–99999. Their availability still depends on the
+selected Node version. Unsupported options, preload/import hooks and
+`NODE_TLS_REJECT_UNAUTHORIZED=0` in resolved runtime configuration fail before
+Node/log creation; stronger TLS
+settings are not silently discarded. Obtain explicit configuration review
+instead of weakening verification to pass the gate.
+
+Frontend runtime/build force `CI=1` and `NEXT_DISABLE_SWC_WASM=1`; telemetry is
+disabled by default with `NEXT_TELEMETRY_DISABLED=1` unless explicitly configured
+otherwise. These development controls make missing dependencies fail instead of
+letting Next repair installations or rewrite lockfiles during startup. They are
+paired with a bounded native compiler probe before runtime/build: an owned Node
+process loads only an already-installed matching native SWC package and reports
+a readiness boolean. It never invokes Next's compiler downloader and receives
+only transport metadata, not application/BFF secrets. Missing/incompatible native
+bindings direct the developer to a reviewed dependency-repair plan. Timeout
+cleanup uses that probe's original owned process handle only; unconfirmed cleanup
+blocks retry and reports the owned probe PID. It never targets a saved PID or an
+unrelated process. Strictly read-only `diagnose` does not execute this compiler
+probe.
+
+Focused Windows fixtures have exercised role boundaries, workspace links and the
+installed `@next/env` loader's forced reload using synthetic source environment
+files. Real Next/HTTPS/Webpack HMR and compiled-browser-asset integration is
+pending execution/review; do not treat the existence of that fixture as a passed
+acceptance test. Complete SBOM startup, provider login and native acceptance on
+every platform remain separate work. No production or live database operation is
+implied.
+
 ## Sources and precedence
 
 | Execution path | Effective sources |
@@ -277,7 +419,8 @@ separate validation work; documentation and fixture tests do not establish them.
 | Manual API / Alembic | Process environment is preferred; app/db.py and alembic/env.py use dotenv, and Settings reads .env. Settings defaults fill remaining fields. A working directory/environment change can change the target. |
 | Managed Legacy launcher | Reads saved .env.dev.local through the shared snapshot resolver, validates its saved providers/keys/TLS, then applies the existing fixed local Native runtime settings. Ordinary start never generates keys, discovers credentials or writes this file. Explicit fresh setup is separately authorized. Inherited values and downstream Settings/dotenv fallback can still affect fields not fixed by the launcher. |
 | Existing Legacy Windows/env | Process values, then frontend .env.local, then the selected literal .windows/sbom.env.ps1 or explicitly selected root .env; defined later values win. Existing defaults and repository PYTHONPATH apply. Authenticated development, local-target and saved-mode checks refuse conflicts without conversion. |
-| Greenfield launcher | Reads protected home-directory state, constructs an allowlisted environment and runs services from private working directories; disables ordinary dotenv loading and does not use legacy .env.dev.local. The private frontend copy excludes .env files. |
+| Greenfield launcher | Reads protected home-directory state, constructs an allowlisted environment and runs services from private working directories; disables ordinary Python dotenv loading and does not use legacy .env.dev.local. Node runtime/build use the prepared environment-free frontend-isolated workspace and frontend projection. |
+| Launcher-managed Next.js | Receives projected BFF/public settings in the prepared environment-free workspace. Source private .env files are not handed back to Next's loader; the old source-relative transaction-key/CA meanings are preserved through explicit absolute paths. |
 | Server Compose | --env-file .env.server supplies Compose interpolation. Only explicitly forwarded environment values, mounted files and public image build values reach containers; an arbitrary key in .env.server is not automatically forwarded. |
 | Manual Next.js | Next.js environment loading and process variables apply. Public values can be compiled into browser code; BFF-only values stay on the server. |
 
