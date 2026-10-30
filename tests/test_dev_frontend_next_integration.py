@@ -534,6 +534,8 @@ def test_real_next_verified_https_websocket_hmr_assets_and_verified_owned_cleanu
                             break
         finally:
             runtime.release()
+        if child is not None:
+            dev.show_log("Frontend", environment)  # Synthetic fixture only; bounded and redacted by the launcher.
         if not stopped:
             pytest.fail(f"Verified cleanup was incomplete; fixture runtime and artifacts retained at {root}")
         if runtime.path.exists() or not runtime.stop_services(dev.say):
