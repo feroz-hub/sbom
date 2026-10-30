@@ -1,25 +1,31 @@
 # Troubleshooting
 
-Scope: current diagnostic entry points, checked against e62951c2 on
-28 October 2026. Use the same checkout/profile as the running instance.
+Scope: read-only SBO-98 diagnostics and existing recovery entry points.
+Use the same checkout/profile as the running instance.
 A separate Git worktree does not isolate home-directory Greenfield resources.
 
 ## Begin with existing inspection commands
 
 From the repository root:
 
-    python scripts/dev.py --check --profile legacy
+    python scripts/dev.py diagnose --profile legacy
     python scripts/dev.py status --profile legacy
 
-Use greenfield only for the intended installed macOS Greenfield stack.
---check is prerequisite inspection, not full schema/readiness or service startup.
-status reports observed processes/services; it does not establish authenticated
-application acceptance. There is no canonical doctor command.
+Select Greenfield only for the intended private installation. `diagnose` performs
+bounded read-only dependency, configuration, target/schema, authentication,
+certificate and service observations. `--check`, including `setup --check`, uses
+the same path; mutation flags are refused. `doctor` remains a temporary alias
+with one stderr deprecation notice. See the [diagnostic contract](../reference/configuration.md#read-only-diagnostics-sbo-98-phase-2).
+`status` reports observed processes/services. Neither command establishes browser,
+provider-login, SMTP-delivery or full-stack acceptance, nor authorizes repair.
 
 | Symptom | Safe next step |
 | --- | --- |
 | Wrong ports or Mailpit UI | Check the [profile port table](../development/README.md#ports-environment-and-queues); legacy uses 8025/1025, Greenfield 8026/1026. |
-| Missing Node/npm, dependencies or frontend types | --check reports Node/npm; start requires Node 20.9.0+ and prints the redacted tail of a failed pip/npm ci. --check does not prove a frontend install/build. cross-env is already declared. |
+| Missing Node/npm, dependencies or frontend types | diagnose reports missing prerequisites without installing them. Review approved setup actions; start requires Node 20.9.0+ and reports a redacted failed-command tail. Diagnostics do not prove frontend install/build acceptance. |
+| Missing/ambiguous configuration or wrong database target | Check selected profile/family and safe provenance. Preserve private files; do not export a connection string or switch profiles to bypass refusal. |
+| Missing Native administrator or pending activation | Review aggregate enrollment state, mail/worker and HTTPS prerequisites. Use only authorized existing bootstrap/activation services; diagnostics create no user, token or grant. |
+| HCL.CS first eligible user unavailable | Escalate the privileged provisioning design to the Engineering Lead and identity-provider owner. Do not substitute Native enrollment, direct SQL or an auth-disabled grant. |
 | Unowned/unknown PID or occupied API/frontend port | Inspect ownership; use [lifecycle recovery](../dev-launcher-lifecycle.md). Do not kill by port/name or delete a lock to bypass refusal. |
 | Missing/untrusted Greenfield CA | The selected native adapter requires an independently approved mkcert CA. Ordinary start does not install root trust. Do not switch profiles to bypass a trust error; consult the platform matrix. |
 | Missing/incomplete Greenfield state | Stop. Do not fall back to a different profile/database to bypass refusal. Review the specialist installation record and target with the operator. |

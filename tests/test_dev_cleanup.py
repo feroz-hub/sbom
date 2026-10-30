@@ -89,7 +89,7 @@ def test_help_requires_no_retired_modules_or_project_dependencies():
         timeout=10,
     )
     assert result.returncode == 0, result.stderr
-    assert "setup,start,stop,restart,status,doctor,logs" in result.stdout
+    assert "setup,start,stop,restart,status,diagnose,doctor,logs" in result.stdout
 
 
 def test_optional_saved_backend_reload_uses_same_canonical_command():

@@ -593,7 +593,7 @@ def test_check_mode_does_not_start_services_or_processes(
     monkeypatch.setattr(dev, "ensure_database", lambda url: pytest.fail("database touched"))
     monkeypatch.setattr(dev, "start_process", lambda *args: pytest.fail("process started"))
     monkeypatch.setattr(dev, "wait_for_mailpit_ready", lambda *args: pytest.fail("readiness wait started"))
-    dev.main()
+    assert dev.main() == 1  # Missing prepared configuration is reported, never created.
     output = capsys.readouterr().out
     assert "read-only checks finished" in output
     assert "BEGIN PRIVATE KEY" not in output

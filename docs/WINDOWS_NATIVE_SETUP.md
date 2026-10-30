@@ -16,7 +16,7 @@ Docker Desktop where required, and explicitly approved HTTPS trust. Open a new
 PowerShell terminal at the repository root:
 
 ```powershell
-python scripts/dev.py doctor --profile legacy --legacy-config windows
+python scripts/dev.py diagnose --profile legacy --legacy-config windows
 python scripts/dev.py setup --profile legacy --legacy-config windows
 python scripts/dev.py --profile legacy --legacy-config windows
 python scripts/dev.py status --profile legacy
@@ -31,6 +31,14 @@ credentials, Redis broker, ports, authentication and provider CA/redirect settin
 remain authoritative. Missing API/frontend ports default to 8000/3000.
 Managed Legacy and Greenfield remain separate.
 
+`diagnose` is the primary read-only inspection command. `--check` and
+`setup --check` use that path before mutable setup; mutation flags are refused.
+The temporary `doctor` alias emits one deprecation notice on stderr. See the
+[diagnostic contract](reference/configuration.md#read-only-diagnostics-sbo-98-phase-2)
+for statuses, exit codes and limitations. Diagnostics never install dependencies,
+change root trust, generate credentials/certificates, alter database state or
+write/clear runtime ownership records. Preserve UNKNOWN records for investigation.
+
 Keep the foreground terminal open. The launcher manages the default worker,
 reports worker, separate Beat, API and HTTPS frontend. Windows workers use solo.
 Verified process birth identity and descendant checks protect unrelated processes;
@@ -42,8 +50,10 @@ registered redirects, provider CA bundles and initial administrators remain expl
 operator prerequisites. TLS verification is never disabled. Database initialization/
 upgrade needs explicit controls in the [bootstrap guide](../scripts/BOOTSTRAP.md).
 
-Native Windows and browser authentication were unavailable. Mocked adapters do not
-establish Windows acceptance. Pending Greenfield migration backup/restore remains
+The merged [PR #44 report](engineering/dev-launcher-windows-lifecycle.md) records
+prior Managed Legacy native Windows lifecycle acceptance. This HCL.CS guide does
+not establish current provider/browser or new diagnostic acceptance; mocked
+adapters are not native acceptance. Pending Greenfield migration backup/restore remains
 blocked on Windows. See [platform evidence](engineering/dev-launcher-platform-matrix.md)
 and [HCL settings](HCL_IAM_CONFIGURATION.md).
 

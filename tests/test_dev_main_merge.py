@@ -45,6 +45,7 @@ def test_cli_surface_is_unchanged() -> None:
     args = dev.parse_args(["--check", "--verbose", "--profile", "greenfield"])
     assert (args.check, args.verbose, args.profile) == (True, True, "greenfield")
     assert dev.parse_args(["doctor"]).command == "doctor"
+    assert dev.parse_args(["diagnose"]).command == "diagnose"
     assert dev.parse_args(["setup"]).command == "setup"
     assert dev.parse_args(["logs"]).command == "logs"
 
@@ -76,8 +77,8 @@ def test_greenfield_native_trust_failure_precedes_container_operations(monkeypat
     )
     inventory = MagicMock(side_effect=AssertionError("container operation before trust"))
     monkeypatch.setattr(dev.GreenfieldProfile, "inventory", inventory)
-    with pytest.raises(dev.LocalHttps.HttpsTrustError, match="unapproved trust"):
-        dev.doctor(dev.parse_args(["doctor", "--profile", "greenfield"]))
+    assert dev.doctor(dev.parse_args(["doctor", "--profile", "greenfield"])) == 1
+    dev.LocalHttps.ensure_certificate.assert_called_once()
     inventory.assert_not_called()
 
 
@@ -116,12 +117,14 @@ def test_old_python_inside_existing_venv_explains_recreation(monkeypatch, tmp_pa
     dev.validate_python_version((3, 11, 0))
 
 
-def test_incomplete_checkout_is_refused_before_any_setup(monkeypatch) -> None:
+def test_incomplete_checkout_is_refused_before_any_setup(monkeypatch, capsys) -> None:
     (dev.ROOT / "frontend/package-lock.json").unlink()
     monkeypatch.setattr(dev.sys, "argv", ["dev.py", "--check", "--profile", "legacy"])
     monkeypatch.setattr(dev, "start_application", lambda args: pytest.fail("setup started"))
-    with pytest.raises(dev.SetupError, match="Missing: frontend/package-lock.json"):
-        dev.main()
+    assert dev.main() == 1
+    output = capsys.readouterr()
+    assert "FAIL" in output.out
+    assert not (dev.ROOT / ".venv").exists()
 
 
 @pytest.mark.parametrize("command", ["stop", "status"])

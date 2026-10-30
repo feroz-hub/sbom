@@ -7,7 +7,7 @@ checkout with Python 3.11+ (use python3 where needed):
 python scripts/dev.py
 python scripts/dev.py setup
 python scripts/dev.py status
-python scripts/dev.py doctor
+python scripts/dev.py diagnose
 python scripts/dev.py logs --service reports --lines 80
 python scripts/dev.py logs --service postgres --lines 80
 python scripts/dev.py stop
@@ -16,9 +16,14 @@ python scripts/dev.py restart
 
 No command means start. Start/restart stay in the foreground; keep that terminal
 open and use another for management. Ctrl+C stops owned application processes.
-Doctor (also --check) inspects without installing dependencies or changing data.
-Status returns 0 when healthy and 3 when stopped/unhealthy. Setup/start failures
-return 1.
+`diagnose` performs bounded read-only checks. `--check`, including `setup --check`,
+uses the same path before mutable preparation. The temporary `doctor` alias emits
+one stderr deprecation notice. Provisioning/initialization/migration/build flags
+cannot be combined with diagnostics. See the [diagnostic contract](reference/configuration.md#read-only-diagnostics-sbo-98-phase-2).
+Diagnostic results are PASS, WARN, FAIL, BLOCKED or SKIPPED: exit 0 has no failed or
+blocked required checks, 1 reports a required failure/block, 2 is invalid usage,
+and 130 is cancellation. Status retains exit 0 when healthy and 3 when
+stopped/unhealthy. Setup/start failures return 1.
 
 ## Profiles
 

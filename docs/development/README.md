@@ -16,8 +16,10 @@ state, unknown ownership or wrong-profile configuration fails without fallback.
 
 Windows/macOS/Linux adapters exist in scripts/dev.py. The actual
 [verification matrix](../engineering/dev-launcher-platform-matrix.md) separates
-macOS Greenfield acceptance, Linux process smoke checks, mocked adapters and
-untested full Windows/Linux operation. Greenfield's old macOS-only helper
+macOS Greenfield acceptance, Linux process smoke checks and mocked adapters.
+The merged [PR #44 report](../engineering/dev-launcher-windows-lifecycle.md) records
+separate Managed Legacy native Windows lifecycle evidence, not new diagnostic,
+HCL.CS/browser or full Linux acceptance. Greenfield's old macOS-only helper
 restriction is superseded by native trust adapters; that does not establish
 full platform acceptance. Pending upgrades remain blocked on Windows until its
 backup/restore procedure is verified.
@@ -55,15 +57,27 @@ python scripts/dev.py start
 python scripts/dev.py stop
 python scripts/dev.py restart
 python scripts/dev.py status
-python scripts/dev.py doctor
+python scripts/dev.py diagnose
 python scripts/dev.py logs --service reports --lines 80
 python scripts/dev.py --check
 ```
 
-No command means start. --check is a read-only doctor alias. Start/restart run in
+No command means start. `diagnose` is read-only; `--check` and `setup --check` use
+the same inspection path. `doctor` is temporarily accepted with one stderr
+deprecation notice. Diagnostic mutation-flag combinations are refused before
+preparation. See [diagnostic results and exit codes](../reference/configuration.md#read-only-diagnostics-sbo-98-phase-2).
+Start/restart run in
 the foreground; keep that terminal open and use another for inspection/stop.
 Only verified launcher-owned processes are managed. Stop preserves data services,
 volumes, credentials and logs. Missing startup prerequisites do not block stop/status.
+
+Diagnostics neither install nor repair an environment. A missing configuration,
+pending migration, uncreated/pending administrator or untrusted certificate needs
+an explicitly authorized corrective action. HCL.CS first-eligible-user privileged
+provisioning still requires Engineering Lead and identity-provider-owner approval.
+Do not change providers, enable a bypass or create an administrator to make a check
+pass. Controlled setup and component-specific runtime injection are later SBO-98
+phases; current preparation behavior remains unchanged by diagnostic inspection.
 
 ## Ports, environment and queues
 
@@ -91,7 +105,7 @@ See [configuration precedence](../reference/configuration.md) and
 
 Do not use another profile, kill an unrelated port owner, rotate keys or reset
 data to bypass a refusal. Preserve unresolved journals, backup material and
-ownership records for diagnosis. Use status, doctor and redacted logs, then
+ownership records for diagnosis. Use status, diagnose and redacted logs, then
 [operations troubleshooting](../operations/troubleshooting.md).
 
 Do not start the same private home-directory Greenfield installation from two
