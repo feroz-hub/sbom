@@ -146,5 +146,5 @@ jobs:
       - name: Real frontend TLS, HMR, environment and owned-cleanup acceptance
         run: >-
           python -m pytest -p pytest_timeout -p no:cacheprovider --noconftest
-          --basetemp .dev-logs/next-ci -q
+          --basetemp "${{ runner.temp }}/sbom-next-fixture" -q
           tests/test_dev_frontend_next_integration.py
