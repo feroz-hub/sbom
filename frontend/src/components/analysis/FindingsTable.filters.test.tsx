@@ -183,3 +183,60 @@ describe('FindingsTable KEV filters', () => {
     expect(screen.queryByRole('button', { name: 'Clear filters' })).not.toBeInTheDocument();
   });
 });
+
+describe('FindingsTable CVSS score range slider (SBO-97)', () => {
+  beforeEach(() => window.localStorage.clear());
+
+  const thumbClasses = [
+    '[&::-webkit-slider-thumb]:bg-primary',
+    '[&::-webkit-slider-thumb]:border-solid',
+    '[&::-webkit-slider-thumb]:border-surface',
+    '[&:hover::-webkit-slider-thumb]:ring-4',
+    '[&:focus-visible::-webkit-slider-thumb]:ring-4',
+    '[&:active::-webkit-slider-thumb]:ring-4',
+    '[&::-moz-range-thumb]:bg-primary',
+    '[&::-moz-range-thumb]:border-solid',
+    '[&:focus-visible::-moz-range-thumb]:ring-4',
+  ];
+
+  it('renders both CVSS thumbs in the blue accent without restyling the EPSS or confidence sliders', () => {
+    renderTable([makeFinding(1)]);
+    openAdvancedFilters();
+
+    for (const name of ['CVSS minimum slider', 'CVSS maximum slider']) {
+      const slider = screen.getByRole('slider', { name });
+      expect(slider).toHaveClass(...thumbClasses);
+      expect(slider).not.toHaveClass('[&::-webkit-slider-thumb]:bg-surface');
+      expect(slider).not.toHaveClass('[&::-moz-range-thumb]:bg-surface');
+    }
+    for (const name of ['EPSS minimum percentile', 'Minimum match confidence']) {
+      expect(screen.getByRole('slider', { name })).toHaveAttribute('class', 'flex-1 accent-primary');
+    }
+  });
+
+  it('keeps CVSS filtering and the numeric fields in sync when either thumb moves', () => {
+    renderTable([
+      makeFinding(1, { score: 2.0 }),
+      makeFinding(2, { score: 5.0 }),
+      makeFinding(3, { score: 7.5 }),
+      makeFinding(4, { score: 9.8 }),
+    ]);
+    openAdvancedFilters();
+    const minSlider = screen.getByRole('slider', { name: 'CVSS minimum slider' });
+    const maxSlider = screen.getByRole('slider', { name: 'CVSS maximum slider' });
+
+    fireEvent.change(minSlider, { target: { value: '5' } });
+    expect(screen.getByText(/Matching findings/)).toHaveTextContent('3');
+    expect(screen.getByRole('spinbutton', { name: 'CVSS minimum' })).toHaveValue(5);
+
+    fireEvent.change(maxSlider, { target: { value: '9' } });
+    expect(screen.getByText(/Matching findings/)).toHaveTextContent('2');
+    expect(screen.getByRole('spinbutton', { name: 'CVSS maximum' })).toHaveValue(9);
+    expect(screen.getByText('Show findings with score between 5.0 and 9.0.')).toBeInTheDocument();
+
+    // The minimum thumb cannot cross the maximum one.
+    fireEvent.change(minSlider, { target: { value: '9.5' } });
+    expect(minSlider).toHaveValue('9');
+    expect(screen.getByText(/Matching findings/)).toHaveTextContent('0');
+  });
+});
