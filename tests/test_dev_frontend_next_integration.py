@@ -313,6 +313,7 @@ def _refresh(runtime, identities):
 
 def _wait_probe(opener, origin, runtime, identities):
     deadline = time.monotonic() + 60
+    observation = "NOT_OBSERVED"
     while time.monotonic() < deadline:
         _refresh(runtime, identities)
         try:
@@ -327,9 +328,20 @@ def _wait_probe(opener, origin, runtime, identities):
             }:
                 return
             pytest.fail("Synthetic probe reported an environment-isolation failure; values withheld")
-        except (HTTPError, URLError, OSError, ValueError):
+        except (HTTPError, URLError, OSError, ValueError) as error:
+            reason = error.reason if isinstance(error, URLError) else error
+            if isinstance(error, HTTPError):
+                observation = f"HTTP_{error.code}"
+            elif isinstance(reason, ssl.SSLCertVerificationError):
+                observation = f"TLS_VERIFY_{reason.verify_code}"
+            elif isinstance(reason, OSError):
+                observation = f"OS_{reason.errno}"
+            else:
+                observation = "RESPONSE_INVALID"
             time.sleep(min(0.2, max(0, deadline - time.monotonic())))
-    pytest.fail("Owned Next fixture did not reach verified HTTPS readiness within 60 seconds; inspect fixture logs")
+    pytest.fail(
+        f"Owned Next fixture did not reach verified HTTPS readiness within 60 seconds; last status={observation}; inspect fixture logs"
+    )
 
 
 def _hmr_message(connection, wanted, deadline):
