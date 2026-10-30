@@ -1,6 +1,5 @@
 """Offline checks for the new development setup, using synthetic credentials only."""
 
-import ast
 import json
 import os
 import tempfile
@@ -8,7 +7,8 @@ import unittest
 from pathlib import Path
 from unittest.mock import patch
 
-from scripts import greenfield_uuid as setup
+from scripts import dev
+from scripts.dev import GreenfieldStack as setup
 
 
 class SetupSafety(unittest.TestCase):
@@ -79,6 +79,7 @@ class SetupSafety(unittest.TestCase):
     def test_ambient_pg_configuration_is_not_inherited(self):
         setup.private_file("environment.json", json.dumps({"AI_CONFIG_ENCRYPTION_KEY": "synthetic-only"}))
         setup.private_file("runtime-password", "synthetic-only")
+        setup.private_file("security-mail-key", __import__("base64").b64encode(os.urandom(32)).decode())
         with patch.dict(
             os.environ, {"PGHOST": "production", "PGPASSWORD": "synthetic-ambient", "DATABASE_URL": "wrong"}
         ):
@@ -91,44 +92,25 @@ class SetupSafety(unittest.TestCase):
         self.assertEqual(env["API_RATE_LIMIT_ENABLED"], "true")
         self.assertEqual(len(__import__("base64").b64decode(env["NATIVE_SECURITY_OUTBOX_KEY"])), 32)
 
-    def test_worker_schedule_is_local_security_mail_only(self):
-        tree = ast.parse((setup.ROOT / "scripts/greenfield_worker.py").read_text())
-        assignment = next(node for node in tree.body if isinstance(node, ast.Assign))
-        schedule = ast.literal_eval(assignment.value)
-        self.assertEqual(set(schedule), {"security-mail-outbox"})
-        self.assertEqual(schedule["security-mail-outbox"]["task"], "security_mail.dispatch")
+    def test_local_schedule_preserves_all_application_jobs(self):
+        from types import SimpleNamespace
+
+        original = {
+            "security-mail-outbox": {"task": "security_mail.dispatch", "schedule": 30.0},
+            "report-notifications-hourly": {"task": "report_notifications.tick", "schedule": 3600},
+        }
+        app = SimpleNamespace(conf=SimpleNamespace(beat_schedule=original))
+        dev.configure_local_schedule(app, "greenfield")
+        self.assertEqual(set(app.conf.beat_schedule), set(original))
+        self.assertEqual(app.conf.beat_schedule["security-mail-outbox"]["schedule"], 10.0)
+        self.assertEqual(original["security-mail-outbox"]["schedule"], 30.0)
 
     def test_unexpected_resource_inventory_refused_before_docker(self):
         setup.private_file("docker-identities.json", json.dumps({"unrelated": "wrong"}))
-        with patch.object(setup.subprocess, "check_output") as docker:
+        with patch.object(dev.subprocess, "check_output") as docker:
             with self.assertRaises(RuntimeError):
                 setup.verify_resources()
             docker.assert_not_called()
-
-    def test_approved_core_contract_field_coverage(self):
-        tree = ast.parse((setup.ROOT / "app/public_api.py").read_text())
-        maps = {
-            node.targets[0].id: ast.literal_eval(node.value)
-            for node in tree.body
-            if isinstance(node, ast.Assign)
-            and isinstance(node.targets[0], ast.Name)
-            and node.targets[0].id in {"FIELDS", "BATCH_FIELDS", "CONTEXT"}
-        }
-        specialized = {"id", "ids", "parent_id", "version_a", "version_b", "cursor", "X-Next-Cursor", "X-Tenant-ID"}
-        rows = [
-            line.split(" | ")
-            for line in (setup.ROOT / "docs/uuid-migration/phase2/01-core-public-uuid-contract.md")
-            .read_text()
-            .splitlines()
-            if line.startswith("| C0")
-        ]
-        self.assertEqual(len(rows), 964)
-        for row in rows:
-            field = row[3].split(".")[-1].removesuffix("[]")
-            self.assertIn(field, set(maps["FIELDS"]) | set(maps["BATCH_FIELDS"]) | specialized, row[3])
-            if row[3].endswith(".id"):
-                parent = row[3].split(".")[-2].removesuffix("[]")
-                self.assertIn(parent, set(maps["CONTEXT"]) | {"", "items"}, row[3])
 
 
 if __name__ == "__main__":

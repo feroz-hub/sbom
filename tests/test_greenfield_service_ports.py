@@ -8,9 +8,8 @@ from types import SimpleNamespace
 from unittest.mock import Mock
 
 import pytest
-
-from scripts import dev, dev_greenfield
-from scripts import greenfield_uuid as stack
+from scripts import dev
+from scripts.dev import GreenfieldStack as stack
 
 
 @pytest.mark.skipif(sys.platform == "win32", reason="POSIX TIME_WAIT reuse policy")
@@ -59,16 +58,18 @@ def test_conflict_precedes_credentials_workspace_and_process_creation(monkeypatc
     monkeypatch.setattr(stack, "settings", forbidden)
     monkeypatch.setattr(stack, "frontend_workspace", forbidden)
     monkeypatch.setattr(stack, "verify_resources", forbidden)
-    monkeypatch.setattr(stack.subprocess, "Popen", forbidden)
-    monkeypatch.setattr(dev_greenfield.https, "ensure_certificate", forbidden)
+    monkeypatch.setattr(dev.subprocess, "Popen", forbidden)
+    monkeypatch.setattr(dev.LocalHttps, "ensure_certificate", forbidden)
     with pytest.raises(stack.ServicePortError, match="18000"):
-        stack.start_services()
+        dev.GreenfieldProfile.start_services(Mock())
     forbidden.assert_not_called()
 
 
 def test_launcher_reports_specific_conflict_without_verbose(monkeypatch):
     monkeypatch.setattr(dev, "check_application_ports", Mock())
-    monkeypatch.setattr(dev_greenfield, "start", Mock(side_effect=stack.ServicePortError("port 18000 already in use")))
+    monkeypatch.setattr(dev, "ensure_dependencies", Mock())
+    monkeypatch.setattr(dev, "ensure_frontend", Mock())
+    monkeypatch.setattr(dev.GreenfieldProfile, "start", Mock(side_effect=dev.GreenfieldStack.ServicePortError("port 18000 already in use")))
     with pytest.raises(dev.SetupError, match="port 18000 already in use"):
         dev.start_application(SimpleNamespace(profile="greenfield", check=False))
 
@@ -79,8 +80,8 @@ def test_reuse_policy_never_enables_reuse_on_windows(monkeypatch, platform, reus
     factory = Mock()
     factory.return_value.__enter__ = Mock(return_value=sock)
     factory.return_value.__exit__ = Mock(return_value=False)
-    monkeypatch.setattr(stack.socket, "socket", factory)
-    monkeypatch.setattr(stack.sys, "platform", platform)
+    monkeypatch.setattr(dev.socket, "socket", factory)
+    monkeypatch.setattr(dev.sys, "platform", platform)
     stack.check_service_ports((18000,))
     if reuse:
         sock.setsockopt.assert_called_once_with(socket.SOL_SOCKET, socket.SO_REUSEADDR, 1)

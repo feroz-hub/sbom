@@ -1,95 +1,106 @@
 # Local development lifecycle
 
-Run from the repository using Python 3.11+ (`python` on Windows if needed):
+The sole local development manager is `scripts/dev.py`. Run from a complete
+checkout with Python 3.11+ (use python3 where needed):
 
 ```sh
-python3 scripts/dev.py start
-python3 scripts/dev.py stop
-python3 scripts/dev.py restart
-python3 scripts/dev.py status
-python3 scripts/dev.py --check
-python3 scripts/dev.py start --verbose
+python scripts/dev.py
+python scripts/dev.py setup
+python scripts/dev.py status
+python scripts/dev.py doctor
+python scripts/dev.py logs --service reports --lines 80
+python scripts/dev.py logs --service postgres --lines 80
+python scripts/dev.py stop
+python scripts/dev.py restart
 ```
 
-No command means `start`. Start/restart run in the foreground. Ctrl+C and SIGTERM
-perform cleanup. Stop works from a different terminal and is idempotent. There is
-no detached mode; use another terminal for stop/status while the launcher runs.
-`--check` overrides any command and remains inspection-only.
+No command means start. Start/restart stay in the foreground; keep that terminal
+open and use another for management. Ctrl+C stops owned application processes.
+Doctor (also --check) inspects without installing dependencies or changing data.
+Status returns 0 when healthy and 3 when stopped/unhealthy. Setup/start failures
+return 1.
 
-## Ports and environment
+## Profiles
 
-The current launcher fixes API to 18000 and HTTPS frontend to 13000. Docker
-PostgreSQL uses 55439, Redis 56379, Mailpit SMTP 1025 and web UI 8025. Local fallback
-PostgreSQL/Redis use 5432/6379. Status probes the dependency ports saved in
-`.env.dev.local`, with the existing protocol checks. It does not start containers.
+Auto selects an installed private Greenfield directory, otherwise Legacy.
+Incomplete state fails without choosing another profile/database. An existing
+runtime pins its profile and Legacy configuration family.
 
-Existing `.env.dev.local` resolution, Native IAM setup, migration/schema checks,
-HTTPS certificate generation and dependency-install caching remain in place.
-The same resolved environment is passed to API, Celery and frontend. Explicit
-`AI_FIXES_ENABLED` values are preserved; the launcher does not add an AI default.
+| Property | Greenfield | Managed Legacy | Existing Legacy Windows/env |
+| --- | --- | --- | --- |
+| Configuration | Private ~/.sbom-greenfield-uuid | Ignored .env.dev.local | .windows/sbom.env.ps1 or explicitly selected .env |
+| PostgreSQL | sbom_greenfield_uuid, 56044 | sbom_analyser_dev, Docker 55439 or saved local port | Saved local database, excluding Greenfield/system databases |
+| Redis | 56381 | Docker 56379 or saved local port | Saved Redis broker |
+| Mailpit UI/SMTP | 8026/1026 | 8025/1025 | Saved configuration |
+| API/frontend | 18000/13000 | 18000/13000 | Saved ports, defaults 8000/3000 |
+| Logs | Private state directory | .dev-logs | .dev-logs |
 
-## Ownership and safety
+Use --legacy-config managed|windows|env explicitly. Auto prefers existing managed
+settings, then saved Windows settings. Root .env requires explicit selection.
+Windows settings are parsed as literal $env:NAME = 'value' assignments; executable
+PowerShell is rejected. Existing credentials, signing/encryption keys, authentication
+flags, ports and database identities remain authoritative and are not overwritten.
 
-`.dev-runtime.json` is private (0600 on Unix), ignored by Git, and written through
-an fsynced temporary file and atomic replacement. It contains repository identity,
-instance ID, start time, launcher/process birth identities, service ports and
-recorded group members. It contains no environment, secrets or raw command lines.
+## Preparation and HTTPS
 
-Only processes recorded directly after this launcher's Popen calls are managed.
-Each termination checks OS process birth identity and executable, plus UID,
-working directory, process group and session where available. A port, executable
-name or PID alone never establishes ownership. Linux uses `/proc` start ticks and
-boot ID; macOS uses libproc's microsecond creation time; Windows uses native
-process creation FILETIME and executable identity.
+Python 3.11+, Node.js 20.9+ with npm and selected data services are prerequisites.
+Greenfield requires Docker/Compose and its approved mkcert CA. Missing system
+software produces install instructions. Project virtualenv/pip/npm dependencies
+are prepared only when needed, using content-based freshness checks.
+System software, OS services and trusted roots are not installed silently.
 
-On Unix each service starts a new session/group. Stop sends SIGTERM to verified
-groups, waits up to five seconds, then rechecks ownership before SIGKILL. Recorded
-surviving children permit cleanup after their immediate parent dies. Windows uses
-native process-tree snapshots and verified `taskkill /T`, escalating to `/F` only
-if necessary. Windows workers retain the existing solo pool.
+Ordinary startup authenticates to PostgreSQL/Redis and validates the existing
+schema. It does not initialize, reset or implicitly upgrade a database.
+See [bootstrap instructions](../scripts/BOOTSTRAP.md) for guarded setup flags.
+Stop application processes before schema changes. First-user creation remains
+the [Native IAM operator procedure](native-iam-greenfield-setup.md).
 
-`.dev-runtime.lock` uses flock on Unix or a byte-range lock on Windows. The OS
-releases it even after a crash. The file intentionally remains: unlinking a locked
-inode can allow two launchers. `.dev-runtime.stop` is an atomic, instance-scoped
-cooperative cancellation request. A live launcher handles it at startup checkpoints
-and during readiness/monitoring; stop waits for its lock to release before orphan
-cleanup. A long-running setup subprocess may delay this response; stop reports
-that cancellation remains pending and can be retried. It never forcibly kills an
-unverified launcher or shared setup tool.
+Greenfield reuses verified containers, networks, volumes, private credentials and
+its independently trusted mkcert CA. A missing leaf may be prepared after trust
+verification. Legacy reuses its certificate pair or creates a self-signed leaf;
+browser/OS trust requires explicit operator approval. Incomplete pairs fail
+without replacing surviving material. TLS and hostname verification remain enabled.
 
-## Recovery
+## Complete runtime
 
-- A second start reports the current instance instead of starting duplicate work.
-- `status` reports RUNNING, STOPPED, PARTIAL, UNOWNED or UNKNOWN without modifying
-  process state. STARTING/STOPPING launchers may have incomplete service rows.
-- `stop` and the next `start` reconcile stale records and safely stop verified
-  surviving children. Dead Beat PID locks are removed; live legacy locks remain.
-- Reused PIDs, inaccessible ownership data and unknown surviving groups are never
-  killed. Their records are retained for diagnosis rather than falsely claiming
-  successful cleanup.
-- Malformed or wrong-repository registry files fail closed. Atomic replacement
-  prevents normal interrupted writes from creating partial registry files.
-- Instances started by older launcher versions have no trustworthy registry.
-  Stop those using Ctrl+C in the original terminal. This launcher will report their
-  occupied ports (and PID/executable when Linux permits inspection), but cannot
-  safely adopt or kill them.
+Dependency order is verified/resumed data services (including managed Mailpit),
+authenticated PostgreSQL/Redis checks, default celery queue worker, reports queue
+worker, one separate Beat, FastAPI, then HTTPS Next.js. All receive the resolved
+profile environment. Saved RELOAD=true enables the backend reloader using the same owned API command.
+Linux workers use prefork, concurrency 1; macOS/Windows use
+solo. Windows Celery has upstream platform limitations.
 
-Stop leaves PostgreSQL, Redis and Mailpit running, preserves volumes and keeps
-`.dev-logs/` (api.log, celery-worker.log, celery-beat.log, frontend.log).
+The real application registry/routing and full Beat schedule remain authoritative.
+Greenfield retains a 10-second mail cadence while including other schedules and
+their existing feature/security guards. Beat uses a profile/database Redis lease
+and private schedule file.
 
-## Validation
+Readiness requires owned processes, worker control pings, assigned queues,
+matching worker PIDs, fresh connected-consumer heartbeats, real scheduler ticks,
+API database/IAM readiness where applicable, and verified HTTPS. A process alone
+is insufficient. Monitoring detects crashed processes and lost database/broker/
+consumer/scheduler health, reports the component/log/action and cleans owned
+application processes. Busy solo workers use consumer heartbeats because task
+execution can delay control RPCs. Browser login/providers/delivery need separate
+acceptance.
 
-Unit tests in `tests/test_dev_launcher.py` and `tests/test_dev_lifecycle.py` mock
-process operations. Real Linux smoke validation used an isolated temporary
-repository and only fixture-owned processes, including descendants, listeners,
-crashes, restart, Ctrl+C and SIGTERM. macOS/Windows native code paths are covered
-with mocks; execution on those operating systems is still recommended.
+## Ownership, logs and recovery
 
-On the development server, help/check/status/stop/start/restart were also exercised.
-Prerequisites passed. Actual application startup/restart was safely blocked by
-pre-existing unregistered listeners on 18000 and 13000; no existing developer
-process was terminated to force validation through.
+The ignored private .dev-runtime.json stores checkout/profile/instance and OS
+process birth identity. Only recorded children and verified descendants are
+managed. PID/name/port alone never establishes ownership. Linux uses /proc boot/
+start identity, macOS libproc creation time and Windows native FILETIME/executable
+identity. Inaccessible or mismatched identity fails closed. POSIX uses isolated
+sessions/groups; Windows uses checked process trees. A persistent OS lock prevents
+concurrent owners; instance-specific stop requests trigger cooperative cleanup.
 
-Final focused result: **107 tests passed**. Python compilation and `git diff
---check` passed. The isolated real-process harness passed all eight scenarios and
-verified that its service groups and listening ports were gone after shutdown.
+Repeated start verifies the ready instance without spawning duplicates.
+Unready/unhealthy instances return a diagnostic failure. Stop/restart reconcile
+verified stale children; unrelated port owners are never killed or adopted.
+Resolve port conflicts deliberately.
+
+Logs are bounded and redacted; inspect output before sharing. Select postgres,
+redis or mailpit for verified Docker logs; external services require their OS
+manager. Stop preserves data containers, volumes, databases, credentials,
+certificates and logs. See the [cleanup inventory](engineering/dev-launcher-cleanup.md)
+and [platform matrix](engineering/dev-launcher-platform-matrix.md).

@@ -20,38 +20,57 @@ components so the analyzer has something to find.
 
 ## 1. Start the stack
 
-Open **two terminals**.
+From the repository root, run the single local development manager:
 
-### Terminal A — backend
-
-```bash
-cd /Users/ferozebasha/Spectra/sbom
-PORT=8001 python run.py
+```sh
+python3 scripts/dev.py
 ```
 
-> Port `8000` is occupied by an unrelated app on this machine. Use `8001`
-> until that is resolved.
+No command means `start`. Keep this foreground process running while testing.
+The launcher prepares project dependencies as needed, verifies or resumes the
+selected profile's PostgreSQL/Redis dependencies, and manages FastAPI, Next.js,
+the default Celery worker, the reports worker, and exactly one Celery Beat.
+Wait for the launcher's application-ready message; a process merely running is
+not sufficient. Missing system software, approved HTTPS trust, external identity
+services and explicit database setup may still require operator action. See the
+[setup guide](scripts/BOOTSTRAP.md) and [lifecycle guide](docs/dev-launcher-lifecycle.md).
 
-Wait for: `Application startup complete.`
+Manage the same checkout from another terminal; do not start individual services:
 
-### Terminal B — frontend
-
-```bash
-cd /Users/ferozebasha/Spectra/sbom/frontend
-NEXT_PUBLIC_API_URL=http://localhost:8001 ./node_modules/.bin/next dev -p 3000
+```sh
+python3 scripts/dev.py start
+python3 scripts/dev.py stop
+python3 scripts/dev.py restart
+python3 scripts/dev.py status
+python3 scripts/dev.py doctor
+python3 scripts/dev.py logs
+python3 scripts/dev.py logs --service reports --lines 80
 ```
 
-> `npm run dev` is currently broken because `cross-env` is not installed.
-> Either run `next` directly (above) or `npm install --save-dev cross-env`
-> first.
+`status`, `doctor` and `logs` inspect the environment. Use `restart` only when
+needed. `stop` or Ctrl+C stops verified launcher-owned application processes;
+database containers, persisted data, credentials and certificates are preserved.
+Ordinary startup does not initialize or implicitly upgrade a database.
 
-Wait for: `✓ Ready in …ms`
+The **verified macOS Greenfield environment** uses:
 
-Open **http://localhost:3000** in your browser.
+- Frontend: **https://localhost:13000**
+- API: **http://127.0.0.1:18000**
+
+These are environment-specific URLs, not universal defaults. Use the selected
+profile's reported URLs and preserved configuration on other installations.
+The UI links below target this verified Greenfield frontend. Native Windows and
+full Linux application acceptance remain unverified; consult the
+[platform matrix](docs/engineering/dev-launcher-platform-matrix.md).
+
+The manual UI procedures below are preserved. Read the
+[expectations requiring review](#expectations-requiring-review) before treating
+their older labels, IDs, timing or limits as acceptance criteria. This documentation
+cleanup does not constitute a new UI test run.
 
 ---
 
-## 2. Dashboard — [/](http://localhost:3000/)
+## 2. Dashboard — [/](https://localhost:13000/)
 
 **Expect:**
 - Top stat cards render (Total SBOMs, Total Findings, Critical, etc.)
@@ -64,7 +83,7 @@ calls should be `200`. No red errors in Console.
 
 ---
 
-## 3. Projects — [/projects](http://localhost:3000/projects)
+## 3. Projects — [/projects](https://localhost:13000/projects)
 
 ### 3.1 Create a project
 
@@ -84,7 +103,7 @@ calls should be `200`. No red errors in Console.
 
 ---
 
-## 4. SBOMs — [/sboms](http://localhost:3000/sboms)
+## 4. SBOMs — [/sboms](https://localhost:13000/sboms)
 
 ### 4.1 Upload CycloneDX sample
 
@@ -144,7 +163,7 @@ Repeat for the **spdx-web-app** row.
 
 ---
 
-## 6. Analysis runs — [/analysis](http://localhost:3000/analysis)
+## 6. Analysis runs — [/analysis](https://localhost:13000/analysis)
 
 **Expect:**
 - Table lists at least 2 runs (one per uploaded SBOM).
@@ -174,7 +193,7 @@ Click any run.
 
 ---
 
-## 7. Compare runs — [/analysis/compare](http://localhost:3000/analysis/compare)
+## 7. Compare runs — [/analysis/compare](https://localhost:13000/analysis/compare)
 
 1. Pick two run IDs from the analysis table (e.g. `1` and `2`).
 2. URL form: `/analysis/compare?run_a=1&run_b=2`.
@@ -189,12 +208,12 @@ Click any run.
 
 ## 8. Re-analyse an SBOM
 
-1. Back on [/sboms](http://localhost:3000/sboms), open the **cyclonedx-multi-ecosystem** row.
+1. Back on [/sboms](https://localhost:13000/sboms), open the **cyclonedx-multi-ecosystem** row.
 2. Click **Re-analyse** (or **Analyze again**).
 
 **Expect:**
 - Status flips back to **ANALYSING**.
-- A new run appears in [/analysis](http://localhost:3000/analysis).
+- A new run appears in [/analysis](https://localhost:13000/analysis).
 - On completion the new run is selectable in the compare page.
 
 ---
@@ -212,7 +231,7 @@ From any analysis run detail page, click **Download PDF report**.
 
 ## 10. Project ↔ SBOM linkage
 
-1. Go to [/projects](http://localhost:3000/projects).
+1. Go to [/projects](https://localhost:13000/projects).
 2. Open **Sample Test Project**.
 
 **Expect:** both uploaded SBOMs are listed under the project.
@@ -223,16 +242,13 @@ From any analysis run detail page, click **Download PDF report**.
 
 If you want to leave the DB clean for the next run:
 
-1. [/sboms](http://localhost:3000/sboms) → delete both uploaded SBOMs (row action → Delete → confirm).
-2. [/projects](http://localhost:3000/projects) → delete `Sample Test Project`.
+1. [/sboms](https://localhost:13000/sboms) → delete both uploaded SBOMs (row action → Delete → confirm).
+2. [/projects](https://localhost:13000/projects) → delete `Sample Test Project`.
 
-Or wipe the SQLite file directly:
-
-```bash
-rm /Users/ferozebasha/Spectra/sbom/sbom_api.db
-```
-
-(The backend will recreate the schema on next start.)
+Delete only test records created for this run and authorized for cleanup through
+the UI. The former SQLite-file reset is obsolete for the PostgreSQL profiles.
+Do not delete database files, containers or volumes, or expect startup to recreate
+existing data/schema. Stopping the launcher is not a data reset.
 
 ---
 
@@ -256,15 +272,37 @@ rm /Users/ferozebasha/Spectra/sbom/sbom_api.db
 
 ---
 
+## Expectations requiring review
+
+The UI procedures and checklist above retain their original workflow coverage;
+the following expectations are outdated or need fresh UI/source validation.
+Record an observed mismatch separately rather than changing the application to
+match this older plan or marking an unexecuted case as passed.
+
+- Sections 4, 6 and 8 use older `ANALYSING`/`COMPLETED` labels. Current run-status
+  vocabulary is defined in [analysisRunStatusLabels.ts](frontend/src/lib/analysisRunStatusLabels.ts);
+  confirm each UI surface's displayed label during the manual run.
+- Section 7's numeric run-ID examples are historical. They do not establish valid
+  selectors for the current public UUID contract, and same-run comparison behavior
+  needs revalidation.
+- Upload auto-fill/format assumptions, Project/Application selection, the
+  duplicate-name guard, exact toasts, dashboard widgets, export labels and file
+  names need confirmation against the current UI.
+- The 30–120 second analysis estimate, expected run/component/finding counts and
+  former fixed 20 MB upload limit are not verified guarantees. Providers, enabled
+  features, input data and configured limits can change observed outcomes.
+- The direct SQLite reset is retired; only the UI cleanup steps apply to test
+  records in the selected PostgreSQL environment.
+
 ## Troubleshooting
 
 | Symptom | Likely cause | Fix |
 |---|---|---|
-| Frontend stuck on loading skeletons | `NEXT_PUBLIC_API_URL` wrong / backend down | Verify `curl http://localhost:8001/health` returns `{"status":"ok"}` |
-| `ECONNREFUSED` in browser console | Backend not running on `:8001` | Restart Terminal A |
-| CORS error in console | Backend `CORS_ORIGINS` doesn't include `http://localhost:3000` | Check `app/settings.py` / env |
-| Upload returns 409 | SBOM with that name already exists | Rename or delete the existing one |
-| Upload returns 413 | File > 20 MB | Use a smaller SBOM |
-| Analysis stuck on ANALYSING | NVD / OSV / GitHub API rate-limited or unreachable | Check backend logs; configure API tokens in `.env` |
-| `npm run dev` → `cross-env: command not found` | Dev dep missing | `npm install --save-dev cross-env` |
-| Backend on `:8000` returns wrong API (`/api/interview/*`) | Foreign app shadowing port | Use `PORT=8001` |
+| Frontend stuck on loading skeletons | API/dependency or selected-profile configuration problem | Run `python3 scripts/dev.py status` and `python3 scripts/dev.py logs --service api`; the verified Mac Greenfield health URL is `http://127.0.0.1:18000/health` |
+| `ECONNREFUSED` in browser console | An essential component is unavailable | Inspect `status`, `doctor` and the named component's `logs`; correct the cause before `python3 scripts/dev.py restart` |
+| CORS or HTTPS error | Selected origin, provider CA or approved certificate trust differs | Check the preserved profile settings and [HTTPS policy](docs/dev-launcher-lifecycle.md#preparation-and-https); do not disable TLS verification |
+| Upload returns 409 | Upload conflicts with existing data | Inspect the response and current version/duplicate rules; do not delete unrelated records to satisfy an older expectation |
+| Upload returns 413 | Input exceeds an enforced limit | Check the active limit and response; the historical 20 MB assumption needs review |
+| Analysis remains in progress | Worker, broker or provider problem | Use `logs --service worker`, `logs --service reports` and `logs --service api` through `python3 scripts/dev.py`; inspect provider settings for the selected environment |
+| Missing frontend dependency | Project installation is incomplete | Follow the launcher's setup diagnostic; `python3 scripts/dev.py setup --verbose` prepares dependencies without editing package manifests |
+| Application port is occupied | Existing instance or unrelated listener | Inspect `status` and the launcher's ownership diagnostic; do not kill a process by name/port or silently change profiles |

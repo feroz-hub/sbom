@@ -91,7 +91,7 @@ SBO-54 requires review of the final frozen run plus current frontend/static resu
 ## Round 4 changed source files
 
 - `app/public_api.py` (modified)
-- `scripts/greenfield_uuid.py` (modified)
+- `scripts/dev.py` (modified)
 - `scripts/reconcile_analysis_run_finding_counts.py` (modified)
 - `tests/public_id_fixture.py` (modified)
 - `tests/test_auth_integration.py` (modified)

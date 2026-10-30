@@ -5,29 +5,512 @@ from __future__ import annotations
 import argparse
 import base64
 import binascii
+import ctypes
+import errno
 import getpass
 import json
 import os
 import platform
+import re
 import secrets
 import shutil
 import signal
 import socket
 import ssl
+import stat
 import struct
 import subprocess
 import sys
+import tempfile
 import time
+import uuid
+from collections import deque
+from datetime import datetime, timedelta, timezone
 from pathlib import Path
 from urllib.parse import quote, unquote, urlsplit
 from urllib.request import urlopen
 
-if __package__:
-    from .dev_runtime import OwnershipError, Runtime, atomic_json, process_info
-else:
-    from dev_runtime import OwnershipError, Runtime, atomic_json, process_info
+UTC = timezone.utc  # noqa: UP017 - keep old-Python prerequisite diagnostics importable
+
+
+# Process identity and lifecycle are canonical here; never infer ownership from ports.
+class OwnershipError(RuntimeError):
+    pass
+
+
+def process_info(pid: int) -> dict | None:
+    """None means absent; access/inspection failure raises (never means safe to kill)."""
+    if not isinstance(pid, int) or pid <= 0:
+        raise OwnershipError("Invalid process identifier in runtime state.")
+    try:
+        if sys.platform.startswith("linux"):
+            base = Path(f"/proc/{pid}")
+            stat = (base / "stat").read_text().rsplit(")", 1)[1].split()
+            if stat[0] == "Z":
+                return None
+            return {
+                "pid": pid,
+                "birth": Path("/proc/sys/kernel/random/boot_id").read_text().strip() + ":" + stat[19],
+                "exe": os.readlink(base / "exe"),
+                "cwd": os.readlink(base / "cwd"),
+                "ppid": int(stat[1]),
+                "pgid": int(stat[2]),
+                "sid": int(stat[3]),
+                "uid": base.stat().st_uid,
+            }
+        if sys.platform == "win32":
+            from ctypes import wintypes
+
+            kernel = ctypes.WinDLL("kernel32", use_last_error=True)
+            kernel.OpenProcess.restype = wintypes.HANDLE
+            kernel.OpenProcess.argtypes = [wintypes.DWORD, wintypes.BOOL, wintypes.DWORD]
+            kernel.CloseHandle.argtypes = [wintypes.HANDLE]
+            kernel.GetProcessTimes.argtypes = [wintypes.HANDLE] + [ctypes.POINTER(wintypes.FILETIME)] * 4
+            kernel.QueryFullProcessImageNameW.argtypes = [
+                wintypes.HANDLE,
+                wintypes.DWORD,
+                wintypes.LPWSTR,
+                ctypes.POINTER(wintypes.DWORD),
+            ]
+            handle = kernel.OpenProcess(0x1000, False, pid)
+            if not handle:
+                if ctypes.get_last_error() == 87:
+                    return None
+                raise OwnershipError(f"Cannot inspect PID {pid}.")
+            try:
+                times = [wintypes.FILETIME() for _ in range(4)]
+                size = wintypes.DWORD(32768)
+                path = ctypes.create_unicode_buffer(size.value)
+                if not kernel.GetProcessTimes(
+                    handle, *(ctypes.byref(t) for t in times)
+                ) or not kernel.QueryFullProcessImageNameW(handle, 0, path, ctypes.byref(size)):
+                    raise OwnershipError(f"Cannot inspect PID {pid}.")
+                # A terminated process handle may remain open in its parent.
+                if times[1].dwHighDateTime or times[1].dwLowDateTime:
+                    return None
+                return {
+                    "pid": pid,
+                    "birth": str((times[0].dwHighDateTime << 32) | times[0].dwLowDateTime),
+                    "exe": path.value,
+                }
+            finally:
+                kernel.CloseHandle(handle)
+        if sys.platform == "darwin":
+            # libproc gives microsecond birth time; ps lstart alone has only
+            # second resolution and is not sufficient to rule out PID reuse.
+            class BsdInfo(ctypes.Structure):
+                _fields_ = (
+                    [
+                        (name, ctypes.c_uint32)
+                        for name in (
+                            "flags",
+                            "status",
+                            "xstatus",
+                            "pid",
+                            "ppid",
+                            "uid",
+                            "gid",
+                            "ruid",
+                            "rgid",
+                            "svuid",
+                            "svgid",
+                            "rfu",
+                        )
+                    ]
+                    + [("comm", ctypes.c_char * 16), ("name", ctypes.c_char * 32)]
+                    + [(name, ctypes.c_uint32) for name in ("nfiles", "pgid", "jobc", "tdev", "tpgid", "nice")]
+                    + [("sec", ctypes.c_uint64), ("usec", ctypes.c_uint64)]
+                )
+
+            lib = ctypes.CDLL("/usr/lib/libproc.dylib", use_errno=True)
+            info = BsdInfo()
+            if lib.proc_pidinfo(pid, 3, 0, ctypes.byref(info), ctypes.sizeof(info)) != ctypes.sizeof(info):
+                try:
+                    os.kill(pid, 0)
+                except ProcessLookupError:
+                    return None
+                raise OwnershipError(f"Cannot inspect PID {pid}.")
+            if info.status == 5:  # SZOMB
+                return None
+            path = ctypes.create_string_buffer(4096)
+            ctypes.set_errno(0)
+            if lib.proc_pidpath(pid, path, len(path)) <= 0:
+                if ctypes.get_errno() != errno.ENOENT:
+                    raise OwnershipError(f"Cannot inspect executable for PID {pid}.")
+                # A runtime update can move/unlink a running executable. Its
+                # vnode path disappears while BSD birth identity stays valid.
+                # Only an existing complete record may use this exception.
+                return {
+                    "pid": pid,
+                    "birth": f"{info.sec}:{info.usec}",
+                    "exe": "",
+                    "exe_unavailable": "ENOENT",
+                    "pgid": info.pgid,
+                    "ppid": info.ppid,
+                    "uid": info.uid,
+                    "sid": os.getsid(pid),
+                }
+            return {
+                "pid": pid,
+                "birth": f"{info.sec}:{info.usec}",
+                "exe": os.fsdecode(path.value),
+                "pgid": info.pgid,
+                "ppid": info.ppid,
+                "uid": info.uid,
+                "sid": os.getsid(pid),
+            }
+        raise OwnershipError("Process ownership inspection is unsupported on this OS.")
+    except (FileNotFoundError, ProcessLookupError):
+        return None
+    except (PermissionError, OSError) as exc:
+        raise OwnershipError(f"Cannot safely inspect PID {pid} ({type(exc).__name__}).") from None
+
+
+def matches(record: dict, current: dict | None) -> bool:
+    # npm's shebang launches /usr/bin/env, which execs node without changing
+    # the PID or OS birth identity. Popen can return before that exec finishes.
+    # Permit this narrow transition only with the same Unix ownership context.
+    npm_exec = bool(
+        current
+        and Path(record.get("exe", "")).name == "env"
+        and Path(current.get("exe", "")).name in {"node", "nodejs"}
+        and all(key in record and record[key] == current.get(key) for key in ("uid", "pgid", "sid"))
+        # libproc does not supply cwd on macOS. Keep requiring it elsewhere,
+        # and compare it whenever either identity includes it.
+        and (
+            (sys.platform == "darwin" and "cwd" not in record and "cwd" not in current)
+            or ("cwd" in record and record["cwd"] == current.get("cwd"))
+        )
+    )
+    missing_macos_path = bool(
+        sys.platform == "darwin"
+        and current
+        and current.get("exe") == ""
+        and current.get("exe_unavailable") == "ENOENT"
+        and all(key in record and key in current and record[key] == current[key] for key in ("uid", "pgid", "sid"))
+    )
+    return bool(
+        current
+        and all(record.get(key) == current.get(key) for key in ("pid", "birth"))
+        and record.get("birth")
+        and record.get("exe")
+        and (record["exe"] == current.get("exe") or npm_exec or missing_macos_path)
+        and all(record.get(key) == current.get(key) for key in ("uid", "pgid", "sid", "cwd") if key in record)
+    )
+
+
+def group_members(pgid: int) -> list[dict]:
+    if sys.platform == "win32":
+        return []  # taskkill /T walks the verified parent's tree on Windows.
+    if sys.platform.startswith("linux"):
+        pids = [int(p.name) for p in Path("/proc").iterdir() if p.name.isdigit()]
+    else:
+        result = subprocess.run(["ps", "-axo", "pid=,pgid="], capture_output=True, text=True, check=False)
+        if result.returncode:
+            raise OwnershipError("Cannot inspect process groups.")
+        pids = [
+            int(parts[0])
+            for line in result.stdout.splitlines()
+            if len(parts := line.split()) == 2 and parts[1] == str(pgid)
+        ]
+    members = []
+    for pid in pids:
+        try:
+            info = process_info(pid)
+        except OwnershipError:
+            continue
+        if info and info.get("pgid") == pgid:
+            members.append(info)
+    return members
+
+
+def windows_children(pid: int) -> list[dict]:
+    """Snapshot descendant birth identities with the native Toolhelp API."""
+    from ctypes import wintypes
+
+    class Entry(ctypes.Structure):
+        _fields_ = [
+            ("size", wintypes.DWORD),
+            ("usage", wintypes.DWORD),
+            ("pid", wintypes.DWORD),
+            ("heap", ctypes.c_size_t),
+            ("module", wintypes.DWORD),
+            ("threads", wintypes.DWORD),
+            ("parent", wintypes.DWORD),
+            ("priority", wintypes.LONG),
+            ("flags", wintypes.DWORD),
+            ("exe", wintypes.WCHAR * 260),
+        ]
+
+    kernel = ctypes.WinDLL("kernel32", use_last_error=True)
+    kernel.CreateToolhelp32Snapshot.restype = wintypes.HANDLE
+    kernel.CreateToolhelp32Snapshot.argtypes = [wintypes.DWORD, wintypes.DWORD]
+    kernel.Process32FirstW.argtypes = [wintypes.HANDLE, ctypes.POINTER(Entry)]
+    kernel.Process32NextW.argtypes = [wintypes.HANDLE, ctypes.POINTER(Entry)]
+    kernel.CloseHandle.argtypes = [wintypes.HANDLE]
+    handle = kernel.CreateToolhelp32Snapshot(2, 0)
+    if handle == ctypes.c_void_p(-1).value:
+        raise OwnershipError("Cannot inspect Windows process tree.")
+    try:
+        entry = Entry()
+        entry.size = ctypes.sizeof(entry)
+        parents = {}
+        more = kernel.Process32FirstW(handle, ctypes.byref(entry))
+        while more:
+            parents[entry.pid] = entry.parent
+            more = kernel.Process32NextW(handle, ctypes.byref(entry))
+        owned = {pid}
+        while additions := {child for child, parent in parents.items() if parent in owned} - owned:
+            owned.update(additions)
+        return [info for child in owned if (info := process_info(child))]
+    finally:
+        kernel.CloseHandle(handle)
+
+
+def atomic_json(path: Path, value: dict) -> None:
+    fd, name = tempfile.mkstemp(prefix=path.name + ".", suffix=".tmp", dir=path.parent)
+    try:
+        with os.fdopen(fd, "w", encoding="utf-8") as stream:
+            json.dump(value, stream, indent=2)
+            stream.write("\n")
+            stream.flush()
+            os.fsync(stream.fileno())
+        os.replace(name, path)
+    finally:
+        Path(name).unlink(missing_ok=True)
+
+
+class Runtime:
+    def __init__(self, root: Path):
+        self.root = root.resolve()
+        self.path = self.root / ".dev-runtime.json"
+        self.lock_path = self.root / ".dev-runtime.lock"
+        self.stop_path = self.root / ".dev-runtime.stop"
+        self.lock = None
+        self.state = None
+        self.processes: dict[int, subprocess.Popen] = {}
+
+    def acquire(self) -> bool:
+        # Keep this inode permanently. Unlinking a lock allows two independent
+        # lock holders; OS locks automatically release on exit, including crashes.
+        fd = os.open(self.lock_path, os.O_RDWR | os.O_CREAT, 0o600)
+        self.lock = os.fdopen(fd, "r+b")
+        try:
+            if sys.platform == "win32":
+                import msvcrt
+
+                if self.lock.seek(0, 2) == 0:
+                    self.lock.write(b"\0")
+                    self.lock.flush()
+                self.lock.seek(0)
+                msvcrt.locking(self.lock.fileno(), msvcrt.LK_NBLCK, 1)
+            else:
+                import fcntl
+
+                fcntl.flock(self.lock.fileno(), fcntl.LOCK_EX | fcntl.LOCK_NB)
+        except OSError:
+            self.lock.close()
+            self.lock = None
+            return False
+        return True
+
+    def release(self) -> None:
+        if self.lock:
+            self.lock.close()
+            self.lock = None
+
+    def load(self) -> dict | None:
+        try:
+            state = json.loads(self.path.read_text())
+            if (
+                not isinstance(state, dict)
+                or state.get("version") != 1
+                or state.get("root") != str(self.root)
+                or not isinstance(state.get("services"), dict)
+                or not isinstance(state.get("instance"), str)
+            ):
+                raise ValueError()
+            if any(
+                not isinstance(record, dict) or not isinstance(record.get("pid"), int)
+                for record in state["services"].values()
+            ):
+                raise ValueError()
+            return state
+        except FileNotFoundError:
+            return None
+        except (ValueError, TypeError):
+            # No guesses from corrupted state: ports still protect startup.
+            raise OwnershipError(
+                "Runtime state is malformed or belongs to another repository; no process was stopped."
+            ) from None
+
+    def begin(self, profile: str | None = None) -> None:
+        launcher = process_info(os.getpid())
+        if not launcher or not launcher.get("exe"):
+            raise OwnershipError("Could not establish launcher identity.")
+        self.stop_path.unlink(missing_ok=True)
+        self.state = {
+            "version": 1,
+            "root": str(self.root),
+            "instance": uuid.uuid4().hex,
+            "launcher_pid": os.getpid(),
+            "launcher": launcher,
+            "started_at": datetime.now(UTC).isoformat(),
+            "services": {},
+        }
+        if profile is not None:
+            self.state["profile"] = profile
+        atomic_json(self.path, self.state)
+
+    def check_stop(self) -> None:
+        if self.state and self.stop_path.exists():
+            try:
+                requested = json.loads(self.stop_path.read_text())
+            except (OSError, ValueError):
+                return
+            if requested.get("instance") == self.state["instance"]:
+                raise KeyboardInterrupt
+
+    def register(self, name: str, pid: int, port: int | None = None) -> None:
+        info = process_info(pid)
+        if not info:
+            raise OwnershipError(f"{name} exited before ownership could be recorded.")
+        if not info.get("exe"):
+            raise OwnershipError(f"Cannot establish executable identity for {name}.")
+        if sys.platform != "win32" and (info.get("pgid") != pid or info.get("sid") != pid):
+            raise OwnershipError(f"{name} did not start in an isolated process group.")
+        self.state["services"][name] = {**info, "port": port, "members": [info]}
+        atomic_json(self.path, self.state)
+
+    def _snapshot_members(self, record: dict) -> list[dict]:
+        members = windows_children(record["pid"]) if sys.platform == "win32" else group_members(record["pid"])
+        saved = {info["pid"]: info for info in [record, *record.get("members", [])]}
+        # Retain the previously verified executable if its path has vanished.
+        # Otherwise losing the leader would discard a child's ownership proof.
+        return [
+            {**info, "exe": saved[info["pid"]]["exe"]}
+            if not info.get("exe") and info["pid"] in saved and matches(saved[info["pid"]], info)
+            else info
+            for info in members
+        ]
+
+    def refresh(self) -> None:
+        self.check_stop()
+        for record in self.state["services"].values():
+            # An exited macOS child is not inspectable until its parent reaps
+            # it. Do this here as well as during shutdown so the caller can
+            # report the service's real exit instead of a libproc error.
+            if child := self.processes.get(record["pid"]):
+                child.poll()
+            if matches(record, process_info(record["pid"])):
+                record["members"] = self._snapshot_members(record)
+        atomic_json(self.path, self.state)
+
+    def service_status(self, record: dict) -> str:
+        try:
+            # Reap children spawned by this launcher before inspecting them.
+            # macOS libproc cannot inspect an exited, unreaped child, while
+            # kill(pid, 0) still succeeds and would otherwise imply UNKNOWN.
+            if child := self.processes.get(record["pid"]):
+                child.poll()
+            current = process_info(record["pid"])
+            if matches(record, current):
+                return "RUNNING"
+            if current:
+                return "UNOWNED"
+            if sys.platform == "win32":
+                if any(matches(saved, process_info(saved["pid"])) for saved in record.get("members", [])):
+                    return "PARTIAL"
+            else:
+                members = group_members(record["pid"])
+                if any(matches(saved, member) for saved in record.get("members", []) for member in members):
+                    return "PARTIAL"
+                if members:
+                    return "UNOWNED"
+            return "STOPPED"
+        except (OwnershipError, KeyError, TypeError):
+            return "UNKNOWN"
+
+    def terminate(self, record: dict, timeout: float = 5) -> bool:
+        status = self.service_status(record)
+        if status == "STOPPED":
+            return True
+        if status not in {"RUNNING", "PARTIAL"}:
+            return False
+        pid = record["pid"]
+        if status == "RUNNING":
+            # Capture descendants before TERM: the leader may exit first while
+            # a child ignores TERM. Its birth identity must survive escalation.
+            record["members"] = self._snapshot_members(record)
+            if not matches(record, process_info(pid)):
+                return False
+        if sys.platform == "win32":
+            # Revalidate birth identity immediately before each tree operation.
+            self._windows_terminate(record, force=False)
+        else:
+            try:
+                os.killpg(pid, signal.SIGTERM)
+            except ProcessLookupError:
+                return True
+        deadline = time.monotonic() + timeout
+        while time.monotonic() < deadline:
+            if self.service_status(record) == "STOPPED":
+                return True
+            time.sleep(0.1)
+        # A terminated group leader may leave children behind. Only a recorded
+        # surviving member can establish ownership in that case.
+        if self.service_status(record) not in {"RUNNING", "PARTIAL"}:
+            return self.service_status(record) == "STOPPED"
+        if sys.platform == "win32":
+            self._windows_terminate(record, force=True)
+        else:
+            try:
+                os.killpg(pid, signal.SIGKILL)
+            except ProcessLookupError:
+                return True
+        for _ in range(30):
+            if self.service_status(record) == "STOPPED":
+                return True
+            time.sleep(0.1)
+        return False
+
+    def _windows_terminate(self, record: dict, *, force: bool) -> None:
+        # Children are retained separately so a dead npm/cmd parent does not
+        # prevent cleanup of a recorded surviving node process.
+        for saved in [record, *record.get("members", [])]:
+            if matches(saved, process_info(saved["pid"])):
+                subprocess.run(
+                    ["taskkill", "/PID", str(saved["pid"]), "/T", *(["/F"] if force else [])],
+                    capture_output=True,
+                    check=False,
+                )
+
+    def stop_services(self, say) -> bool:
+        state = self.state or self.load()
+        if not state:
+            return True
+        remaining = {}
+        for name, record in reversed(list(state["services"].items())):
+            if self.terminate(record):
+                say("OK", name, "stopped")
+            else:
+                remaining[name] = record
+                say("WARN", name, f"PID {record['pid']}: ownership unverified or process still running; not removed")
+        state["services"] = remaining
+        if remaining:
+            atomic_json(self.path, state)
+            return False
+        self.path.unlink(missing_ok=True)
+        self.stop_path.unlink(missing_ok=True)
+        self.state = None
+        return True
+
 
 ROOT = Path(__file__).resolve().parents[1]
+if str(ROOT) not in sys.path:
+    sys.path.insert(0, str(ROOT))
+if __name__ == "__main__":
+    sys.modules.setdefault("scripts.dev", sys.modules[__name__])
 CONFIG = ROOT / ".env.dev.local"
 VENV = ROOT / ".venv"
 DB_NAME = "sbom_analyser_dev"
@@ -41,10 +524,1854 @@ DEV_FRONTEND_PORT = 13000
 BEAT_LOCK = ROOT / ".dev-beat.pid"
 VERBOSE = False
 ACTIVE_RUNTIME: Runtime | None = None
+ACTIVE_PROFILE = "legacy"
+ACTIVE_LEGACY_CONFIG = "managed"
 
 
-class SetupError(Exception):
+class SetupError(RuntimeError):
     """A local prerequisite needs developer attention."""
+
+
+def runtime_environment(env: dict[str, str]) -> dict[str, str]:
+    values = dict(env)
+    values["SBOM_DEV_PROFILE"] = ACTIVE_PROFILE
+    values["SBOM_DEV_STATE_DIR"] = str(GreenfieldStack.STATE if ACTIVE_PROFILE == "greenfield" else ROOT / ".dev-logs")
+    values["SBOM_DEV_INSTANCE"] = (
+        (ACTIVE_RUNTIME.state or {}).get("instance", "unmanaged") if ACTIVE_RUNTIME else "unmanaged"
+    )
+    values["PYTHONPATH"] = str(ROOT)
+    return values
+
+
+def worker_node(role: str, instance: str, profile=None) -> str:
+    return f"sbom-{profile or ACTIVE_PROFILE}-{instance[:12]}-{role}@{socket.gethostname()}"
+
+
+def heartbeat_path(env: dict[str, str], role: str) -> Path:
+    return Path(env["SBOM_DEV_STATE_DIR"]) / f"{role}-health.json"
+
+
+def write_service_heartbeat(env, role, **metadata):
+    path = heartbeat_path(env, role)
+    path.parent.mkdir(mode=0o700, exist_ok=True)
+    atomic_json(path, {"instance": env["SBOM_DEV_INSTANCE"], "pid": os.getpid(), "time": time.time(), **metadata})
+
+
+def configure_local_schedule(app, profile):
+    if profile == "greenfield" and "security-mail-outbox" in app.conf.beat_schedule:
+        schedule = dict(app.conf.beat_schedule)
+        schedule["security-mail-outbox"] = {**schedule["security-mail-outbox"], "schedule": 10.0}
+        app.conf.beat_schedule = schedule
+
+
+def local_celery_app():
+    """Expose the real application tasks with local lifecycle instrumentation."""
+    cached = globals().get("_LOCAL_CELERY_APP")
+    if cached is not None:
+        return cached
+    import threading
+
+    from app.workers.celery_app import celery_app
+    from celery.signals import worker_ready, worker_shutdown
+
+    env = dict(os.environ)
+    role = env.get("SBOM_DEV_WORKER_ROLE", "default")
+    if not env.get("SBOM_DEV_INSTANCE") or not env.get("SBOM_DEV_STATE_DIR"):
+        raise SetupError("Local Celery must be started by python scripts/dev.py; its ownership context is missing.")
+    configure_local_schedule(celery_app, env.get("SBOM_DEV_PROFILE"))
+    stopped = threading.Event()
+
+    def ready(sender=None, **kwargs):
+        def emit():
+            while not stopped.is_set():
+                try:
+                    queues = [q.name for q in sender.task_consumer.queues]
+                    write_service_heartbeat(
+                        env,
+                        role,
+                        node=sender.hostname,
+                        queues=queues,
+                        connected=bool(sender.connection and sender.connection.connected),
+                    )
+                except (AttributeError, OSError, ValueError):
+                    # No false readiness if the consumer is reconnecting or its
+                    # health record cannot be published; the parent times out.
+                    pass
+                stopped.wait(2)
+
+        threading.Thread(target=emit, name="sbom-local-health", daemon=True).start()
+
+    worker_ready.connect(ready, weak=False)
+    worker_shutdown.connect(lambda **kwargs: stopped.set(), weak=False)
+    globals()["_LOCAL_CELERY_APP"] = celery_app
+    return celery_app
+
+
+def local_scheduler_class():
+    import redis
+    from celery.beat import PersistentScheduler
+
+    class LocalScheduler(PersistentScheduler):
+        """One scheduler per profile/database, with progress after real ticks."""
+
+        def tick(self, *args, **kwargs):
+            env = dict(os.environ)
+            token = env["SBOM_DEV_INSTANCE"]
+            client = redis.Redis.from_url(env["REDIS_URL"], socket_connect_timeout=2, socket_timeout=2)
+            target = urlsplit(env["DATABASE_URL"])
+            key = f"sbom:dev:beat:{env['SBOM_DEV_PROFILE']}:{target.hostname}:{target.port}:{target.path}"
+            owned = client.eval(
+                "if redis.call('get',KEYS[1]) == ARGV[1] then return redis.call('expire',KEYS[1],20) else return 0 end",
+                1,
+                key,
+                token,
+            )
+            deadline = time.monotonic() + 25
+            while not owned and not client.set(key, token, nx=True, ex=20):
+                if time.monotonic() >= deadline:
+                    raise SetupError(
+                        "Another scheduler holds this database/profile lease; it was not stopped. Inspect its own launcher."
+                    )
+                time.sleep(0.5)
+            interval = super().tick(*args, **kwargs)
+            write_service_heartbeat(env, "beat", scheduled_tasks=len(self.schedule))
+            self._local_lease = (client, key, token)
+            return min(interval, 5)
+
+        def close(self):
+            try:
+                super().close()
+            finally:
+                if lease := getattr(self, "_local_lease", None):
+                    client, key, token = lease
+                    client.eval(
+                        "if redis.call('get',KEYS[1]) == ARGV[1] then return redis.call('del',KEYS[1]) else return 0 end",
+                        1,
+                        key,
+                        token,
+                    )
+
+    return LocalScheduler
+
+
+def __getattr__(name):
+    # Celery imports these symbols only in its managed worker/Beat processes;
+    # help, status and prerequisite diagnosis stay standard-library-only.
+    if name == "celery_app":
+        return local_celery_app()
+    if name == "LocalScheduler":
+        return local_scheduler_class()
+    raise AttributeError(name)
+
+
+def verify_data_connectivity(env):
+    import psycopg
+    import redis
+
+    target = urlsplit(env["DATABASE_URL"])
+    try:
+        with psycopg.connect(
+            env["DATABASE_URL"].replace("postgresql+psycopg://", "postgresql://", 1),
+            connect_timeout=3,
+            options="-c default_transaction_read_only=on -c statement_timeout=3000",
+        ) as connection:
+            observed = connection.execute("SELECT current_database()").fetchone()[0]
+            if observed != target.path.lstrip("/"):
+                raise SetupError("PostgreSQL returned a different database; no service was started.")
+    except psycopg.Error as error:
+        raise SetupError(
+            f"PostgreSQL {target.hostname}:{target.port or 5432} connectivity failed ({type(error).__name__}, SQLSTATE {error.sqlstate or 'unavailable'}). Check this profile's server and saved credentials."
+        ) from None
+    try:
+        client = redis.Redis.from_url(env["REDIS_URL"], socket_connect_timeout=2, socket_timeout=2)
+        if not client.ping():
+            raise ValueError("no PONG")
+    except (redis.RedisError, ValueError) as error:
+        raise SetupError(
+            f"Redis connectivity failed ({type(error).__name__}). Check this profile's Redis service, port and saved credentials."
+        ) from None
+
+
+def celery_control(env):
+    from celery import Celery
+
+    app = Celery("sbom-local-health", broker=env["CELERY_BROKER_URL"])
+    app.conf.update(
+        broker_connection_timeout=2, broker_transport_options={"socket_connect_timeout": 2, "socket_timeout": 2}
+    )
+    return app
+
+
+def reject_foreign_workers(env):
+    try:
+        with celery_control(env) as control:
+            nodes = control.control.inspect(timeout=1).ping() or {}
+    except Exception as error:
+        raise service_failure(
+            "Celery worker",
+            f"broker control connection failed ({type(error).__name__}); check the selected profile's saved broker and Redis availability",
+        ) from None
+    if nodes:
+        raise SetupError(
+            "Unmanaged Celery workers are already using the selected broker. Stop them through their own manager before startup; no foreign process was terminated."
+        )
+
+
+def background_commands(env):
+    instance = env["SBOM_DEV_INSTANCE"]
+    base = [str(venv_python()), "-B", "-m", "celery", "-A", "scripts.dev:celery_app"]
+    commands = {}
+    for component, role, queue in (
+        ("Celery worker", "default", "celery"),
+        ("Celery reports worker", "reports", "reports"),
+    ):
+        command = [
+            *base,
+            "worker",
+            "--loglevel=info",
+            "--queues=" + queue,
+            "--hostname=" + worker_node(role, instance, env["SBOM_DEV_PROFILE"]),
+            "--concurrency=1",
+            "--prefetch-multiplier=1",
+        ]
+        command += (
+            ["--pool=prefork", "--max-tasks-per-child=20"] if sys.platform.startswith("linux") else ["--pool=solo"]
+        )
+        commands[component] = command
+    folder = Path(env["SBOM_DEV_STATE_DIR"])
+    commands["Celery Beat"] = [
+        *base,
+        "beat",
+        "--loglevel=info",
+        "--scheduler=scripts.dev:LocalScheduler",
+        "--schedule="
+        + str(
+            folder / ("security-mail-schedule" if env["SBOM_DEV_PROFILE"] == "greenfield" else "celerybeat-schedule")
+        ),
+        "--pidfile=" + str(folder / "celerybeat.pid"),
+    ]
+    return commands
+
+
+def service_failure(component, reason):
+    path = profile_log_paths(ACTIVE_PROFILE).get(component, ROOT / ".dev-logs")
+    return SetupError(
+        f"{component}: {reason}. Log: {path}. Correct the component/configuration, then run python scripts/dev.py restart --profile {ACTIVE_PROFILE}."
+    )
+
+
+def background_health(runtime, env, *, require_control=False):
+    state = runtime.state or runtime.load() or {}
+    records = state.get("services", {})
+    expected = {}
+    for component, role, queues in (
+        ("Celery worker", "default", {"celery"}),
+        ("Celery reports worker", "reports", {"reports"}),
+        ("Celery Beat", "beat", None),
+    ):
+        record = records.get(component)
+        if not record or runtime.service_status(record) != "RUNNING":
+            raise service_failure(component, "owned process is absent, stopped or unverifiable")
+        path = heartbeat_path(env, role)
+        try:
+            if path.is_symlink():
+                raise ValueError()
+            value = json.loads(path.read_text())
+            if (
+                value.get("instance") != state.get("instance")
+                or value.get("pid") != record["pid"]
+                or not 0 <= time.time() - value.get("time", 0) <= 20
+            ):
+                raise ValueError()
+        except (OSError, ValueError, TypeError):
+            raise service_failure(
+                component, "health/progress heartbeat is missing, stale or from another instance"
+            ) from None
+        if queues is not None:
+            node = worker_node(role, state["instance"], env["SBOM_DEV_PROFILE"])
+            if not value.get("connected") or value.get("node") != node or set(value.get("queues", [])) != queues:
+                raise service_failure(component, "worker is disconnected or is consuming the wrong queues")
+            expected[node] = (component, record["pid"], queues)
+    if require_control:
+        with celery_control(env) as control:
+            inspector = control.control.inspect(destination=list(expected), timeout=2)
+            pings, active, statistics = inspector.ping() or {}, inspector.active_queues() or {}, inspector.stats() or {}
+        for node, (component, pid, queues) in expected.items():
+            if pings.get(node, {}).get("ok") != "pong":
+                raise service_failure(component, "worker did not answer its control ping")
+            if {q["name"] for q in active.get(node, [])} != queues or statistics.get(node, {}).get("pid") != pid:
+                raise service_failure(component, "control response does not match the owned worker PID/assigned queues")
+
+
+def wait_for_background(runtime, env, timeout=90):
+    deadline = time.monotonic() + timeout
+    problem = None
+    while time.monotonic() < deadline:
+        runtime.refresh()
+        for component in background_commands(env):
+            record = runtime.state["services"].get(component)
+            if record and runtime.service_status(record) != "RUNNING":
+                raise service_failure(component, "process exited during background-service startup")
+        try:
+            background_health(runtime, env, require_control=True)
+            return
+        except SetupError as error:
+            problem = error
+        time.sleep(1)
+    raise problem or service_failure("Celery worker", "startup timed out")
+
+
+def start_background(runtime, env, cwd):
+    verify_data_connectivity(env)
+    reject_foreign_workers(env)
+    processes = {}
+    for name, command in background_commands(env).items():
+        child_env = dict(env)
+        if name != "Celery Beat":
+            child_env["SBOM_DEV_WORKER_ROLE"] = "reports" if name == "Celery reports worker" else "default"
+        processes[name] = start_process(name, command, child_env, cwd)
+    wait_for_background(runtime, env)
+    say("OK", "Background", "default/reports worker responses and queues verified; one Beat is making progress")
+    return processes
+
+
+def wait_http_component(runtime, env, component, urls, *, context=None, timeout=90):
+    deadline = time.monotonic() + timeout
+    problem = "HTTP readiness did not complete"
+    while time.monotonic() < deadline:
+        runtime.refresh()
+        record = runtime.state["services"][component]
+        if runtime.service_status(record) != "RUNNING":
+            raise service_failure(component, "owned process exited before readiness")
+        try:
+            background_health(runtime, env)
+            for url, expected in urls:
+                with urlopen(url, context=context if url.startswith("https:") else None, timeout=3) as response:
+                    if response.status != 200:
+                        raise ValueError(f"HTTP {response.status}")
+                    if expected:
+                        payload = json.load(response)
+                        if expected == "iam" and payload.get("ready") is not True:
+                            raise ValueError("IAM readiness is false")
+                        if expected == "database" and payload.get("database", {}).get("available") is not True:
+                            raise ValueError("API database connectivity is unavailable")
+            return
+        except (OSError, ValueError, SetupError) as error:
+            problem = redact(str(error), env)
+        time.sleep(0.5)
+    raise service_failure(component, problem)
+
+
+def api_command(env, port):
+    command = [
+        str(venv_python()),
+        "-B",
+        "-m",
+        "uvicorn",
+        "app.main:app",
+        "--host",
+        "127.0.0.1",
+        "--port",
+        str(port),
+        "--no-proxy-headers",
+    ]
+    if env.get("RELOAD", "false").lower() == "true":
+        command.extend(["--reload", "--reload-dir", str(ROOT / "app")])
+    return command
+
+
+def launch_services(env, api_port, frontend_port, frontend_command, *, cwd, frontend_cwd, tls_context):
+    if ACTIVE_RUNTIME is None:
+        raise SetupError("Application startup requires the canonical ownership registry.")
+    runtime = ACTIVE_RUNTIME
+    env = runtime_environment(env)
+    env.update(DEV_API_PORT=str(api_port), DEV_FRONTEND_PORT=str(frontend_port))
+    processes = start_background(runtime, env, cwd)
+    processes["API"] = start_process(
+        "API",
+        api_command(env, api_port),
+        env,
+        cwd,
+    )
+    api = f"http://127.0.0.1:{api_port}"
+    api_checks = [(api + "/health", "database")]
+    if env.get("NATIVE_AUTH_ENABLED", "false").lower() == "true":
+        api_checks.append((api + "/ready/iam", "iam"))
+    wait_http_component(runtime, env, "API", api_checks)
+    processes["Frontend"] = start_process("Frontend", frontend_command, env, frontend_cwd)
+    wait_http_component(
+        runtime,
+        env,
+        "Frontend",
+        [
+            (
+                f"https://localhost:{frontend_port}/native-sign-in"
+                if env.get("NATIVE_AUTH_ENABLED", "false").lower() == "true"
+                else f"https://localhost:{frontend_port}/",
+                None,
+            )
+        ],
+        context=tls_context,
+    )
+    background_health(runtime, env, require_control=True)
+    runtime.state["ready"] = True
+    atomic_json(runtime.path, runtime.state)
+    say("OK", "Application", f"ready: https://localhost:{frontend_port}; API {api}; all queues and scheduler healthy")
+    return processes, env
+
+
+def supervise_runtime(runtime, env, processes):
+    next_health = time.monotonic() + 5
+    while True:
+        runtime.refresh()
+        for name, process in processes.items():
+            if process.poll() is not None:
+                runtime.state["ready"] = False
+                atomic_json(runtime.path, runtime.state)
+                raise service_failure(name, f"process exited with code {process.returncode}")
+        if time.monotonic() >= next_health:
+            try:
+                verify_data_connectivity(env)
+                background_health(runtime, env)
+            except Exception as error:
+                runtime.state["ready"] = False
+                atomic_json(runtime.path, runtime.state)
+                if isinstance(error, SetupError):
+                    raise
+                raise service_failure(
+                    "Celery worker", f"background health check failed ({type(error).__name__})"
+                ) from None
+            next_health = time.monotonic() + 5
+        time.sleep(0.5)
+
+
+def validate_repository_layout() -> None:
+    required = ("requirements.txt", "alembic.ini", "frontend/package.json", "frontend/package-lock.json")
+    missing = [name for name in required if not (ROOT / name).is_file()]
+    if missing:
+        raise SetupError("Incomplete checkout: missing " + ", ".join(missing) + ". Restore the complete repository.")
+
+
+def resolve_profile(requested: str = "auto") -> str:
+    state = Path.home() / ".sbom-greenfield-uuid"
+    profile = ("greenfield" if state.exists() or state.is_symlink() else "legacy") if requested == "auto" else requested
+    if profile not in {"greenfield", "legacy"}:
+        raise SetupError("Unknown profile; select --profile greenfield or --profile legacy.")
+    if profile == "greenfield":
+        required = ("environment.json", "runtime-password", "setup-password", "docker-identities.json")
+        # Docker identity validation happens before container operations. Selection
+        # itself deliberately does not open private credentials.
+        missing = [name for name in required[:3] if not (state / name).is_file() or (state / name).is_symlink()]
+        if state.is_symlink() or not state.is_dir() or missing:
+            raise SetupError(
+                "Greenfield installation is absent/incomplete. Restore its private installation and credentials; "
+                "see docs/uuid-migration/GREENFIELD_UUID_ACCEPTANCE.md. No fallback to Legacy occurred."
+            )
+    return profile
+
+
+def validate_greenfield_installation(state=None):
+    state = GreenfieldStack.STATE if state is None else state
+    if (
+        state.is_symlink()
+        or not state.is_dir()
+        or any(
+            not (state / name).is_file() or (state / name).is_symlink()
+            for name in ("environment.json", "runtime-password", "setup-password")
+        )
+    ):
+        raise SetupError(
+            "Greenfield installation is incomplete. Restore its private files; no fallback or credential regeneration occurred."
+        )
+
+
+def select_legacy_configuration(requested="auto"):
+    if requested != "auto":
+        return requested
+    if CONFIG.exists():
+        return "managed"
+    return "windows" if (ROOT / ".windows/sbom.env.ps1").exists() else "managed"
+
+
+def pin_legacy_configuration(requested, state):
+    recorded = (state or {}).get("legacy_config")
+    if (state or {}).get("profile") == "legacy" and recorded:
+        if requested not in {"auto", recorded}:
+            raise SetupError(
+                "Recorded Legacy configuration differs. Stop using its recorded configuration before switching."
+            )
+        return recorded
+    return select_legacy_configuration(requested)
+
+
+def read_literal_windows_configuration(path):
+    """Read the saved assignment data; never invoke a PowerShell interpreter."""
+    if path.is_symlink():
+        raise SetupError("Saved Windows configuration must not be redirected.")
+    result = {}
+    for line in path.read_text(encoding="utf-8-sig").splitlines():
+        if not line.strip() or line.lstrip().startswith("#"):
+            continue
+        match = re.fullmatch(r"\s*\$env:([A-Za-z_][A-Za-z_0-9]*)\s*=\s*'((?:[^']|'')*)'\s*", line)
+        if not match:
+            raise SetupError(
+                "Saved Windows configuration contains executable/nonliteral content. Convert it to literal $env:NAME = 'value' assignments; it was not executed or modified."
+            )
+        result[match[1]] = match[2].replace("''", "'")
+    return result
+
+
+def existing_legacy_environment(configuration):
+    from dotenv import dotenv_values
+
+    path = ROOT / ".windows/sbom.env.ps1" if configuration == "windows" else ROOT / ".env"
+    if not path.is_file():
+        raise SetupError(
+            f"Selected Legacy {configuration} configuration is absent: {path}. No alternate database was selected."
+        )
+    values = (
+        read_literal_windows_configuration(path)
+        if configuration == "windows"
+        else dict(dotenv_values(path, interpolate=False))
+    )
+    frontend = ROOT / "frontend/.env.local"
+    front_values = dict(dotenv_values(frontend, interpolate=False)) if frontend.is_file() else {}
+    env = {
+        **os.environ,
+        **{key: value for key, value in front_values.items() if value is not None},
+        **{key: value for key, value in values.items() if value is not None},
+    }
+    target = urlsplit(env.get("DATABASE_URL", ""))
+    if (
+        target.scheme not in {"postgresql", "postgresql+psycopg"}
+        or target.hostname not in {"localhost", "127.0.0.1", "::1"}
+        or not target.path.strip("/")
+        or target.path.strip("/") in {"postgres", "template0", "template1", "sbom_greenfield_uuid"}
+        or target.port == 56044
+    ):
+        raise SetupError(
+            "Saved Legacy configuration must identify its own local development PostgreSQL database, outside Greenfield. No configuration or data was changed."
+        )
+    env.setdefault("DEV_API_PORT", "8000")
+    env.setdefault("DEV_FRONTEND_PORT", "3000")
+    native = env.get("NATIVE_AUTH_ENABLED", "false").lower() == "true"
+    env.setdefault("AUTH_ENABLED", "true")
+    env.setdefault("NATIVE_AUTH_ENABLED", "false")
+    env.setdefault("HCL_AUTH_ENABLED", "false" if native else "true")
+    env.setdefault("NEXT_PUBLIC_HCL_AUTH_ENABLED", "false" if native else "true")
+    env.setdefault("NEXT_PUBLIC_NATIVE_AUTH_ENABLED", "true" if native else "false")
+    env.setdefault("REDIS_URL", "redis://127.0.0.1:6379/0")
+    env.setdefault("CELERY_BROKER_URL", env["REDIS_URL"])
+    env.setdefault("CELERY_RESULT_BACKEND", env["REDIS_URL"])
+    if env.get("CELERY_USE_DATABASE_BROKER", "false").lower() == "true":
+        raise SetupError(
+            "Local worker-response verification requires Redis. Configure this saved Legacy installation's Redis broker explicitly; its database-broker setting was not changed."
+        )
+    env["PYTHONPATH"] = str(ROOT)
+    return env
+
+
+def profile_environment(profile):
+    if profile == "greenfield":
+        return runtime_environment(GreenfieldStack.settings())
+    if ACTIVE_LEGACY_CONFIG != "managed":
+        return runtime_environment(existing_legacy_environment(ACTIVE_LEGACY_CONFIG))
+    values = read_config()
+    if not values.get("DATABASE_URL"):
+        raise SetupError("Legacy configuration has not been prepared. Run python scripts/dev.py first.")
+    return runtime_environment({**os.environ, **values})
+
+
+def verify_existing_schema(env):
+    import psycopg
+    from alembic.config import Config
+    from alembic.script import ScriptDirectory
+
+    head = ScriptDirectory.from_config(Config(str(ROOT / "alembic.ini"))).get_current_head()
+    try:
+        with psycopg.connect(
+            env["DATABASE_URL"].replace("postgresql+psycopg://", "postgresql://", 1),
+            connect_timeout=3,
+            options="-c default_transaction_read_only=on -c statement_timeout=3000",
+        ) as connection:
+            row = connection.execute("SELECT version_num FROM public.alembic_version").fetchone()
+    except psycopg.Error as error:
+        raise SetupError(
+            f"Legacy schema preflight failed ({type(error).__name__}). Use setup with explicitly confirmed database initialization/upgrade; startup did not modify this database."
+        ) from None
+    if not row or row[0] != head:
+        raise SetupError(
+            "Legacy schema is not current. Review python scripts/dev.py setup --migrate --confirm-database <saved-database-name>; startup made no schema changes."
+        )
+    return head
+
+
+def setup_application(args):
+    global ACTIVE_PROFILE, ACTIVE_LEGACY_CONFIG
+    profile = args.profile
+    if profile == "auto":
+        profile = "greenfield" if GreenfieldStack.STATE.exists() else "legacy"
+    ACTIVE_PROFILE = profile
+    ACTIVE_LEGACY_CONFIG = select_legacy_configuration(args.legacy_config)
+    state = Runtime(ROOT).load() or {}
+    if state.get("services") and any((args.provision_greenfield, args.initialize_database, args.migrate)):
+        raise SetupError(
+            "Stop the managed runtime before explicit provisioning or schema setup. No database changes were made."
+        )
+    validate_repository_layout()
+    validate_prerequisites()
+    ensure_virtualenv()
+    ensure_dependencies()
+    if profile == "greenfield":
+        if args.provision_greenfield or args.initialize_database:
+            if args.confirm_database != GreenfieldStack.DB:
+                raise SetupError(
+                    "Explicit Greenfield setup requires --confirm-database sbom_greenfield_uuid. Existing databases are never reset."
+                )
+        if args.provision_greenfield:
+            LocalHttps.ensure_certificate(GreenfieldStack.STATE, prepare=True)
+            GreenfieldStack.provision()
+        else:
+            resolve_profile("greenfield")
+            LocalHttps.ensure_certificate(GreenfieldStack.STATE, prepare=True)
+        ensure_frontend(certificate=False)
+        if args.initialize_database:
+            previous, directory = dict(os.environ), Path.cwd()
+            try:
+                GreenfieldStack.bootstrap()
+            finally:
+                os.environ.clear()
+                os.environ.update(previous)
+                os.chdir(directory)
+        if args.migrate:
+            from scripts import greenfield_migrations
+
+            greenfield_migrations.ensure_current()
+        if args.frontend_build:
+            env = GreenfieldStack.settings()
+            env["NODE_ENV"] = "production"
+            result = run(
+                [
+                    str(GreenfieldStack.node_binary()),
+                    str(ROOT / "frontend/node_modules/next/dist/bin/next"),
+                    "build",
+                    "--webpack",
+                ],
+                env=env,
+                cwd=GreenfieldStack.frontend_workspace("frontend-build"),
+            )
+            if result.returncode:
+                raise SetupError(
+                    "Local frontend build failed. Rerun setup --frontend-build --verbose for the redacted diagnostic."
+                )
+    else:
+        if args.frontend_build:
+            raise SetupError("--frontend-build selects the isolated Greenfield workspace; use --profile greenfield.")
+        ensure_frontend()
+        legacy_https_context()
+        if args.provision_greenfield:
+            raise SetupError("--provision-greenfield cannot be used with Legacy.")
+        if args.initialize_database or args.migrate:
+            env = (
+                prepare_managed_legacy()
+                if ACTIVE_LEGACY_CONFIG == "managed"
+                else existing_legacy_environment(ACTIVE_LEGACY_CONFIG)
+            )
+            name = urlsplit(env["DATABASE_URL"]).path.lstrip("/")
+            if args.confirm_database != name:
+                raise SetupError("Database setup requires --confirm-database matching the saved local database name.")
+            if args.initialize_database:
+                from scripts.bootstrap_fresh_database import bootstrap
+
+                previous = dict(os.environ)
+                try:
+                    os.environ.update(env)
+                    bootstrap(env["DATABASE_URL"], name)
+                finally:
+                    os.environ.clear()
+                    os.environ.update(previous)
+            else:
+                run_migrations(env)
+    say(
+        "OK",
+        "Setup",
+        "project dependencies and local HTTPS prepared; existing configuration retained; no application processes started",
+    )
+
+
+def check_profile_ownership(runtime, profile: str) -> None:
+    state = runtime.load()
+    if not state:
+        return
+    recorded = state.get("profile")
+    if recorded is None:
+        # Upgrade an old registry interpretation without rewriting it or
+        # trusting process names/ports. Only recorded PID equality identifies
+        # which historical profile created these already-owned children.
+        try:
+            processes = json.loads((Path.home() / ".sbom-greenfield-uuid/processes.json").read_text())
+            managed = {item["pid"] for item in processes.values()}
+        except (OSError, ValueError, KeyError, TypeError):
+            managed = set()
+        pids = {item["pid"] for item in state["services"].values()}
+        recorded = "greenfield" if pids and pids <= managed else "legacy"
+    if recorded != profile:
+        raise SetupError(
+            f"This checkout has a {recorded} profile runtime; requested {profile}. "
+            f"Use --profile {recorded} to inspect/stop it first. No process was stopped."
+        )
+
+
+def control_profile(requested: str) -> str:
+    """Stop/status must remain available even if an installation credential is lost."""
+    state = Runtime(ROOT).load()
+    if state and state.get("profile") in {"greenfield", "legacy"}:
+        return state["profile"] if requested == "auto" else requested
+    if requested in {"greenfield", "legacy"}:
+        return requested
+    return "greenfield" if (Path.home() / ".sbom-greenfield-uuid").exists() else "legacy"
+
+
+def platform_spawn_options() -> dict:
+    if sys.platform == "win32":
+        return {"creationflags": getattr(subprocess, "CREATE_NEW_PROCESS_GROUP", 0x200)}
+    if sys.platform == "darwin" or sys.platform.startswith("linux"):
+        return {"start_new_session": True}
+    raise SetupError("The launcher supports Windows, macOS and Linux adapters only.")
+
+
+def validate_prerequisites() -> None:
+    if sys.version_info < (3, 11):  # noqa: UP036 - this script is the initial Python prerequisite probe
+        raise SetupError("Python 3.11 or newer is required. Install it from python.org, then rerun this launcher.")
+    platform_spawn_options()
+    node = GreenfieldStack.node_binary()
+    try:
+        result = subprocess.run([str(node), "--version"], capture_output=True, text=True, timeout=10)
+        parts = tuple(int(part) for part in result.stdout.strip().lstrip("v").split(".")[:3])
+    except (OSError, ValueError, subprocess.TimeoutExpired):
+        raise SetupError(
+            "A working Node.js 20.9+ runtime is required. Install Node.js LTS from nodejs.org "
+            "(Windows/macOS) or your Linux package manager; reopen the terminal."
+        ) from None
+    if result.returncode or parts < (20, 9, 0):
+        raise SetupError("Node.js 20.9+ is required by Next.js. Install a current Node.js LTS and reopen the terminal.")
+    npm = shutil.which("npm", path=str(node.parent) + os.pathsep + os.environ.get("PATH", ""))
+    if not npm:
+        raise SetupError("npm is missing. Install Node.js LTS including npm, then reopen the terminal.")
+    env = dict(os.environ)
+    env["PATH"] = str(node.parent) + os.pathsep + env.get("PATH", "")
+    try:
+        npm_result = subprocess.run(
+            normalize_command([npm, "--version"]), env=env, capture_output=True, text=True, timeout=15
+        )
+        if npm_result.returncode:
+            raise ValueError()
+    except (OSError, ValueError, subprocess.TimeoutExpired):
+        raise SetupError(
+            "npm cannot run with the selected Node.js runtime. Repair/reinstall Node.js LTS including npm and reopen the terminal."
+        ) from None
+    say("OK", "Prerequisites", f"Python {platform.python_version()}, Node {result.stdout.strip()}, npm found")
+
+
+def doctor(args) -> None:
+    """Read-only prerequisite inspection; never creates a venv, credentials or DB."""
+    global ACTIVE_PROFILE
+    validate_repository_layout()
+    validate_prerequisites()
+    profile = resolve_profile(args.profile)
+    ACTIVE_PROFILE = profile
+    say("OK", "Profile", profile)
+    if profile == "greenfield":
+        # Check trust before reading application passwords or resuming containers.
+        try:
+            import cryptography  # noqa: F401
+        except ImportError:
+            raise SetupError(
+                "Project cryptography dependency is missing. Run python scripts/dev.py start to prepare the project virtualenv, then rerun doctor."
+            ) from None
+        LocalHttps.ensure_certificate(GreenfieldStack.STATE, prepare=False)
+        GreenfieldProfile.inventory()
+        say("OK", "Greenfield", "existing container identities and HTTPS trust verified")
+    else:
+        if not docker_available():
+            if not service_available("postgres", 5432) or not service_available("redis", 6379):
+                raise SetupError(
+                    "Docker is unavailable and local PostgreSQL/Redis are not both reachable. "
+                    "Install/start Docker Desktop (Windows/macOS) or Docker Engine with Compose (Linux), "
+                    "or start your explicitly configured local services."
+                )
+        say(
+            "OK",
+            "Configuration",
+            "existing .env.dev.local will be preserved"
+            if CONFIG.is_file()
+            else "first start will prepare private Legacy settings",
+        )
+    if (Runtime(ROOT).load() or {}).get("services"):
+        if not application_status(profile):
+            raise SetupError(
+                "Doctor found an unhealthy managed runtime. Inspect the named component logs and restart after correcting it."
+            )
+    say("OK", "Doctor", "read-only checks finished; native authentication/browser acceptance is separate")
+
+
+def profile_log_paths(profile: str) -> dict[str, Path]:
+    if profile == "greenfield":
+        return {
+            "API": GreenfieldStack.STATE / "backend.log",
+            "Frontend": GreenfieldStack.STATE / "frontend.log",
+            "Celery worker": GreenfieldStack.STATE / "worker.log",
+            "Celery reports worker": GreenfieldStack.STATE / "reports-worker.log",
+            "Celery Beat": GreenfieldStack.STATE / "beat.log",
+        }
+    return {
+        name: ROOT / ".dev-logs" / (name.lower().replace(" ", "-") + ".log")
+        for name in ("API", "Frontend", "Celery worker", "Celery reports worker", "Celery Beat")
+    }
+
+
+def display_logs(args) -> None:
+    if args.service in {"postgres", "redis", "mailpit"}:
+        display_data_logs(args)
+        return
+    paths = profile_log_paths(args.profile)
+    if args.service != "all":
+        if args.service not in paths:
+            raise SetupError(
+                f"Service {args.service} has no separate log in {args.profile}. Choose: " + ", ".join(paths)
+            )
+        paths = {args.service: paths[args.service]}
+    env = (
+        (read_config() if ACTIVE_LEGACY_CONFIG == "managed" else existing_legacy_environment(ACTIVE_LEGACY_CONFIG))
+        if args.profile == "legacy"
+        else json.loads(GreenfieldStack.read_private("environment.json"))
+    )
+    # Runtime password is separate from environment.json; keep it only in
+    # memory to redact any accidentally logged URL/password text.
+    if args.profile == "greenfield":
+        env["RUNTIME_PASSWORD"] = GreenfieldStack.read_private("runtime-password")
+    for name, path in paths.items():
+        print(f"{name}: {path}")
+        if not path.exists():
+            print("No log yet. Start the selected profile first.")
+            continue
+        if path.is_symlink() or not path.is_file():
+            raise SetupError("Refusing a redirected/non-regular development log: " + str(path))
+        with path.open("rb") as stream:
+            stream.seek(0, os.SEEK_END)
+            size = stream.tell()
+            stream.seek(max(0, size - 1024 * 1024))
+            content = stream.read().decode("utf-8", errors="replace")
+        # Redact before tailing so a PEM beginning above the requested tail
+        # still protects its following lines. A byte-bounded read can itself
+        # start inside a PEM, so discard any such prefix through its END marker.
+        content = re.sub(
+            r"\A(?:(?!-----BEGIN [^-]*PRIVATE KEY-----).)*?-----END [^-]*PRIVATE KEY-----",
+            "[REDACTED PRIVATE KEY]",
+            content,
+            flags=re.S,
+        )
+        print("\n".join(deque(redact(content, env).splitlines(), maxlen=args.lines)))
+
+
+def display_data_logs(args):
+    """Read only verified profile containers; never guess ownership from a port."""
+    if args.profile == "greenfield":
+        GreenfieldProfile.inventory()
+        identities = json.loads(GreenfieldStack.read_private("docker-identities.json"))
+        container = identities.get(f"sbom-greenfield-uuid-dev-{args.service}-1")
+        command = GreenfieldStack.docker_command()
+    elif ACTIVE_LEGACY_CONFIG == "managed" and compose_container(args.service):
+        result = run(["docker", "compose", "ps", "-q", args.service])
+        container, command = result.stdout.strip(), ["docker"]
+    else:
+        raise SetupError(
+            f"{args.service} is externally managed. Read logs through its configured OS/service manager; no container ownership was inferred."
+        )
+    if not container:
+        raise SetupError(f"No recorded {args.service} container. Run doctor to check the selected installation.")
+    result = run(command + ["logs", "--tail", str(args.lines), container])
+    if result.returncode:
+        raise SetupError(f"Unable to read {args.service} Docker logs. Check Docker availability and run doctor.")
+    env = profile_environment(args.profile)
+    print(redact((result.stdout or "") + (result.stderr or ""), env))
+
+
+class LocalHttps:
+    """Native trust and private certificate adapters; never modifies root trust."""
+
+    HOSTS = ("localhost", "127.0.0.1", "::1")
+
+    class HttpsTrustError(SetupError):
+        pass
+
+    @staticmethod
+    def private_directory(path):
+        info = path.lstat()
+        if sys.platform == "win32":
+            if not stat.S_ISDIR(info.st_mode) or LocalHttps._windows_reparse(info):
+                raise LocalHttps.HttpsTrustError("HTTPS state must be an owned, nonsymlink private directory")
+            LocalHttps._windows_access(path, private=True)
+            return
+        if not stat.S_ISDIR(info.st_mode) or info.st_uid != os.getuid() or stat.S_IMODE(info.st_mode) != 448:
+            raise LocalHttps.HttpsTrustError("HTTPS state must be an owned, nonsymlink private directory (0700)")
+
+    @staticmethod
+    def read_file(path, *, key=False):
+        path = Path(path)
+        before = path.lstat()
+        if sys.platform == "win32" and (stat.S_ISLNK(before.st_mode) or LocalHttps._windows_reparse(before)):
+            raise LocalHttps.HttpsTrustError("HTTPS material must not be a symlink or reparse point")
+        if sys.platform == "win32":
+            LocalHttps._windows_access(path, private=key)
+        fd = os.open(path, os.O_RDONLY | getattr(os, "O_NOFOLLOW", 0))
+        with os.fdopen(fd, "rb") as source:
+            info = os.fstat(source.fileno())
+            if (
+                not stat.S_ISREG(info.st_mode)
+                or info.st_nlink != 1
+                or (info.st_dev, info.st_ino) != (before.st_dev, before.st_ino)
+            ):
+                raise LocalHttps.HttpsTrustError("HTTPS material must be owned, regular, single-link files")
+            if sys.platform != "win32" and info.st_uid != os.getuid():
+                raise LocalHttps.HttpsTrustError("HTTPS material must be owned by the current user")
+            if key and sys.platform != "win32" and (stat.S_IMODE(info.st_mode) != 384):
+                raise LocalHttps.HttpsTrustError("HTTPS private key must have mode 0600")
+            if sys.platform == "win32":
+                LocalHttps._windows_access(path, private=key)
+            data = source.read(131073)
+            if len(data) > 131072:
+                raise LocalHttps.HttpsTrustError("Unexpected HTTPS material size")
+            return data
+
+    @staticmethod
+    def _windows_reparse(info):
+        return bool(getattr(info, "st_file_attributes", 0) & getattr(stat, "FILE_ATTRIBUTE_REPARSE_POINT", 1024))
+
+    @staticmethod
+    def _windows_access(path, *, private):
+        """Require current-user ownership and a restrictive native Windows DACL.
+
+        Administrators and SYSTEM are permitted. Never infer security from POSIX
+        chmod bits on Windows, and never change the user's ACL or trust settings.
+        """
+        import json
+
+        env = LocalHttps.clean_environment()
+        env["SBOM_TLS_ACL_PATH"] = str(Path(path).absolute())
+        powershell = shutil.which("powershell.exe", path=env["PATH"])
+        if not powershell:
+            raise LocalHttps.HttpsTrustError(
+                "PowerShell is required to verify Windows private-file ACLs; install/restore Windows PowerShell."
+            )
+        script = "$ErrorActionPreference='Stop';$acl=Get-Acl -LiteralPath $env:SBOM_TLS_ACL_PATH;$rules=@($acl.GetAccessRules($true,$true,[System.Security.Principal.SecurityIdentifier]) | ForEach-Object { @{sid=$_.IdentityReference.Value;type=[int]$_.AccessControlType;rights=[int]$_.FileSystemRights} });@{owner=$acl.GetOwner([System.Security.Principal.SecurityIdentifier]).Value;current=[System.Security.Principal.WindowsIdentity]::GetCurrent().User.Value;protected=$acl.AreAccessRulesProtected;rules=$rules} | ConvertTo-Json -Compress -Depth 4"
+        try:
+            result = subprocess.run(
+                [powershell, "-NoProfile", "-NonInteractive", "-Command", script],
+                env=env,
+                capture_output=True,
+                text=True,
+                timeout=15,
+            )
+            if result.returncode:
+                raise ValueError()
+            acl = json.loads(result.stdout)
+            if not acl.get("current") or acl.get("owner") != acl["current"]:
+                raise ValueError()
+            allowed = {acl["current"], "S-1-5-18", "S-1-5-32-544"}
+            mutable_rights = 2 | 4 | 16 | 64 | 256 | 65536 | 262144 | 524288
+            rules = acl.get("rules")
+            if not isinstance(rules, list) or not rules:
+                raise ValueError()
+            for rule in rules:
+                if rule["type"] == 0 and rule["sid"] not in allowed:
+                    if private or int(rule["rights"]) & mutable_rights:
+                        raise ValueError()
+        except (OSError, ValueError, TypeError, KeyError, subprocess.TimeoutExpired):
+            raise LocalHttps.HttpsTrustError(
+                "Windows file ownership/private ACL verification failed. Restrict this path to your user, SYSTEM and Administrators using Windows Security/Advanced permissions, then rerun doctor; no ACL was changed."
+            ) from None
+
+    @staticmethod
+    def clean_environment():
+        if sys.platform == "win32":
+            names = (
+                "SYSTEMROOT",
+                "WINDIR",
+                "COMSPEC",
+                "PATHEXT",
+                "USERPROFILE",
+                "APPDATA",
+                "LOCALAPPDATA",
+                "TEMP",
+                "TMP",
+            )
+            env = {name: os.environ[name] for name in names if name in os.environ}
+            env.update(HOME=str(Path.home()), PATH=os.environ.get("PATH", os.defpath), LC_ALL="C")
+            return env
+        return {"HOME": str(Path.home()), "PATH": "/opt/homebrew/bin:/usr/local/bin:/usr/bin:/bin", "LC_ALL": "C"}
+
+    @staticmethod
+    def system_trusted(cert, *, hostname=None):
+        if sys.platform == "win32":
+            return LocalHttps._windows_system_trusted(cert, hostname=hostname)
+        if sys.platform == "darwin":
+            args = ["/usr/bin/security", "verify-cert", "-c", str(cert), "-p", "ssl" if hostname else "basic"]
+            if hostname:
+                args += ["-s", hostname]
+        elif sys.platform.startswith("linux"):
+            executable = shutil.which("openssl", path=LocalHttps.clean_environment()["PATH"])
+            if not executable:
+                raise LocalHttps.HttpsTrustError(
+                    "OpenSSL is required to verify Linux system certificate trust; install your distribution's openssl package."
+                )
+            args = [executable, "verify"]
+            if hostname:
+                args += ["-purpose", "sslserver", "-verify_hostname", hostname]
+            args += [str(Path(cert).absolute())]
+        else:
+            raise LocalHttps.HttpsTrustError("HTTPS system trust verification supports Windows, macOS and Linux only.")
+        try:
+            return (
+                subprocess.run(args, env=LocalHttps.clean_environment(), capture_output=True, timeout=15).returncode
+                == 0
+            )
+        except (OSError, subprocess.TimeoutExpired):
+            raise LocalHttps.HttpsTrustError(
+                "System certificate trust verification could not run; restore the native trust tools and rerun doctor."
+            ) from None
+
+    @staticmethod
+    def _windows_system_trusted(cert, *, hostname=None):
+        """Trust only roots in the Windows ROOT store, for direct local-CA leaves.
+
+        mkcert leaves are directly issued by their local root. The signature,
+        validity, SAN, key and exact expected CA are also checked by validate_pair.
+        An explicit Python CA bundle is never treated as Windows system trust.
+        """
+        from cryptography import x509
+        from cryptography.exceptions import InvalidSignature
+        from cryptography.hazmat.primitives import serialization
+
+        try:
+            candidate = x509.load_pem_x509_certificate(LocalHttps.read_file(cert))
+            native_roots = ssl.enum_certificates("ROOT")
+            now = datetime.now(UTC)
+            for raw, encoding, trust in native_roots:
+                if encoding != "x509_asn" or (trust is not True and "1.3.6.1.5.5.7.3.1" not in trust):
+                    continue
+                root = x509.load_der_x509_certificate(raw)
+                if not root.not_valid_before_utc <= now <= root.not_valid_after_utc:
+                    continue
+                if hostname is None:
+                    if candidate.public_bytes(serialization.Encoding.DER) == raw:
+                        return True
+                    continue
+                if not candidate.not_valid_before_utc <= now <= candidate.not_valid_after_utc:
+                    return False
+                try:
+                    usages = candidate.extensions.get_extension_for_class(x509.ExtendedKeyUsage).value
+                    if x509.oid.ExtendedKeyUsageOID.SERVER_AUTH not in usages:
+                        return False
+                except x509.ExtensionNotFound:
+                    pass
+                sans = candidate.extensions.get_extension_for_class(x509.SubjectAlternativeName).value
+                if hostname not in sans.get_values_for_type(x509.DNSName):
+                    return False
+                try:
+                    candidate.verify_directly_issued_by(root)
+                    if root.extensions.get_extension_for_class(x509.BasicConstraints).value.ca:
+                        return True
+                except (ValueError, TypeError, InvalidSignature, x509.ExtensionNotFound):
+                    continue
+            return False
+        except (AttributeError, OSError, ValueError, TypeError, x509.ExtensionNotFound):
+            raise LocalHttps.HttpsTrustError(
+                "Windows native ROOT store verification failed; review local CA trust and rerun doctor."
+            ) from None
+
+    @staticmethod
+    def local_ca():
+        executable = shutil.which("mkcert", path=LocalHttps.clean_environment()["PATH"])
+        if not executable:
+            raise LocalHttps.HttpsTrustError(
+                "mkcert is required. Install it, then independently approve local CA trust setup."
+            )
+        result = subprocess.run(
+            [executable, "-CAROOT"],
+            env=LocalHttps.clean_environment(),
+            capture_output=True,
+            text=True,
+            check=True,
+            timeout=10,
+        )
+        root = Path(result.stdout.strip()) / "rootCA.pem"
+        if not root.is_file() or root.is_symlink():
+            raise LocalHttps.HttpsTrustError(
+                "No existing mkcert CA. Operator confirmation is required before running mkcert -install."
+            )
+        LocalHttps.read_file(root)
+        if not LocalHttps.system_trusted(root):
+            raise LocalHttps.HttpsTrustError(
+                "Local mkcert CA is not trusted by the operating system. Operator confirmation is required before mkcert -install; no trust-store change was made."
+            )
+        return (executable, root)
+
+    @staticmethod
+    def validate_pair(cert_path, key_path, root_path):
+        from cryptography import x509
+        from cryptography.exceptions import InvalidSignature
+        from cryptography.hazmat.primitives import hashes, serialization
+
+        cert = x509.load_pem_x509_certificate(LocalHttps.read_file(cert_path))
+        root = x509.load_pem_x509_certificate(LocalHttps.read_file(root_path))
+        key = serialization.load_pem_private_key(LocalHttps.read_file(key_path, key=True), password=None)
+        now = datetime.now(UTC)
+        if cert.not_valid_before_utc > now or cert.not_valid_after_utc < now + timedelta(days=7):
+            raise LocalHttps.HttpsTrustError(
+                "Local HTTPS certificate is not valid or expires within seven days; prepare a renewed leaf"
+            )
+        try:
+            sans = {
+                str(item.value) for item in cert.extensions.get_extension_for_class(x509.SubjectAlternativeName).value
+            }
+            if sans != set(LocalHttps.HOSTS):
+                raise ValueError()
+            cert.verify_directly_issued_by(root)
+            public_format = (serialization.Encoding.DER, serialization.PublicFormat.SubjectPublicKeyInfo)
+            if cert.public_key().public_bytes(*public_format) != key.public_key().public_bytes(*public_format):
+                raise ValueError()
+        except (ValueError, TypeError, InvalidSignature, x509.ExtensionNotFound) as exc:
+            raise LocalHttps.HttpsTrustError(
+                "HTTPS leaf must match its key and the trusted local CA, covering exactly localhost/IPv4/IPv6"
+            ) from exc
+        if not LocalHttps.system_trusted(cert_path, hostname="localhost"):
+            raise LocalHttps.HttpsTrustError(
+                "HTTPS certificate is not trusted by the operating system for localhost; browser readiness is blocked"
+            )
+        return {
+            "certificate_sha256": cert.fingerprint(hashes.SHA256()).hex(),
+            "issuer_sha256": root.fingerprint(hashes.SHA256()).hex(),
+            "issuer": cert.issuer.rfc4514_string(),
+            "sans": sorted(sans),
+            "not_before": cert.not_valid_before_utc.isoformat(),
+            "not_after": cert.not_valid_after_utc.isoformat(),
+            "macos_trusted": sys.platform == "darwin",
+            "system_trusted": True,
+            "trust_platform": sys.platform,
+        }
+
+    @staticmethod
+    def ensure_certificate(state, *, prepare=False):
+        if prepare:
+            state.mkdir(mode=0o700, exist_ok=True)
+        LocalHttps.private_directory(state)
+        executable, root = LocalHttps.local_ca()
+        cert, key = (state / "cert.pem", state / "cert-key.pem")
+        for path, is_key in ((cert, False), (key, True)):
+            if path.exists() or path.is_symlink():
+                LocalHttps.read_file(path, key=is_key)
+        try:
+            metadata = LocalHttps.validate_pair(cert, key, root)
+            return (cert, key, root, metadata)
+        except (LocalHttps.HttpsTrustError, FileNotFoundError, ValueError) as exc:
+            if not prepare:
+                raise LocalHttps.HttpsTrustError(
+                    "HTTPS trust check failed. Run python scripts/dev.py start --profile greenfield after reviewing the existing trusted CA; no application passwords or trust settings were changed."
+                ) from exc
+        with tempfile.TemporaryDirectory(prefix="https-staging-", dir=state) as directory:
+            staging = Path(directory)
+            candidate_cert, candidate_key = (staging / "cert.pem", staging / "cert-key.pem")
+            old_mask = os.umask(0o077)
+            try:
+                subprocess.run(
+                    [executable, "-cert-file", str(candidate_cert), "-key-file", str(candidate_key), *LocalHttps.HOSTS],
+                    env=LocalHttps.clean_environment(),
+                    capture_output=True,
+                    check=True,
+                    timeout=30,
+                )
+            finally:
+                os.umask(old_mask)
+            candidate_key.chmod(384)
+            candidate_cert.chmod(384)
+            metadata = LocalHttps.validate_pair(candidate_cert, candidate_key, root)
+            archive = Path(tempfile.mkdtemp(prefix="https-previous-", dir=state))
+            for path in (cert, key):
+                if path.exists():
+                    path.rename(archive / path.name)
+            candidate_key.rename(key)
+            candidate_cert.rename(cert)
+        return (cert, key, root, metadata)
+
+    @staticmethod
+    def client_context(state):
+        _, _, root, _ = LocalHttps.ensure_certificate(state)
+        return ssl.create_default_context(cafile=str(root))
+
+    @staticmethod
+    def verify_endpoint():
+        env = LocalHttps.clean_environment()
+        executable = (
+            "/usr/bin/curl"
+            if sys.platform == "darwin"
+            else shutil.which("curl.exe" if sys.platform == "win32" else "curl", path=env["PATH"])
+        )
+        if not executable:
+            raise LocalHttps.HttpsTrustError(
+                "System curl is required to verify served HTTPS with native trust; install/restore curl and rerun doctor."
+            )
+        result = subprocess.run(
+            [
+                executable,
+                "--disable",
+                "--noproxy",
+                "*",
+                "--fail",
+                "--silent",
+                "--show-error",
+                "--connect-timeout",
+                "5",
+                "--max-time",
+                "10",
+                "--output",
+                os.devnull,
+                "https://localhost:13000/native-sign-in",
+            ],
+            env=env,
+            capture_output=True,
+            timeout=15,
+        )
+        if result.returncode:
+            raise LocalHttps.HttpsTrustError(
+                "Served HTTPS failed default system trust/HTTP verification. Check certificate selection and Chrome trust; no TLS bypass is permitted."
+            )
+
+
+class GreenfieldStack:
+    """Private profile settings and verified existing resources; no provisioning on start."""
+
+    ROOT = ROOT
+    STATE = Path.home() / ".sbom-greenfield-uuid"
+    DB = "sbom_greenfield_uuid"
+
+    class ServicePortError(SetupError):
+        pass
+
+    @staticmethod
+    def docker_command():
+        executable = shutil.which("docker")
+        if not executable:
+            raise SetupError(
+                "Docker is required for Greenfield. Install/start Docker Desktop (Windows/macOS) or Docker Engine with Compose (Linux)."
+            )
+        if sys.platform == "win32":
+            return [executable]
+        socket_path = Path.home() / ".docker/run/docker.sock"
+        if not socket_path.exists():
+            socket_path = Path("/var/run/docker.sock")
+        return [executable, "--host", "unix://" + str(socket_path)]
+
+    @staticmethod
+    def current_revision():
+        from scripts.greenfield_migration_graph import discover
+
+        return discover(GreenfieldStack.ROOT).head
+
+    @staticmethod
+    def read_private(name):
+        if Path(name).name != name:
+            raise SetupError("Invalid private Greenfield filename.")
+        LocalHttps.private_directory(GreenfieldStack.STATE)
+        return LocalHttps.read_file(GreenfieldStack.STATE / name, key=True).decode("utf-8")
+
+    @staticmethod
+    def private_file(name, content):
+        if Path(name).name != name:
+            raise SetupError("Invalid private Greenfield filename.")
+        GreenfieldStack.STATE.mkdir(mode=0o700, exist_ok=True)
+        LocalHttps.private_directory(GreenfieldStack.STATE)
+        path = GreenfieldStack.STATE / name
+        fd = os.open(path, os.O_WRONLY | os.O_CREAT | os.O_EXCL | getattr(os, "O_NOFOLLOW", 0), 0o600)
+        with os.fdopen(fd, "w") as stream:
+            stream.write(content)
+        LocalHttps.read_file(path, key=True)
+        return path
+
+    @staticmethod
+    def settings():
+        path = GreenfieldStack.STATE / "environment.json"
+        if not path.exists():
+            raise SetupError(
+                "Greenfield environment.json is missing. Restore the private installation; no credentials were regenerated."
+            )
+        env = {k: v for k, v in os.environ.items() if k in ("HOME", "PATH", "TMPDIR", "LANG", "TERM")}
+        if sys.platform == "win32":
+            for name in (
+                "SYSTEMROOT",
+                "WINDIR",
+                "COMSPEC",
+                "PATHEXT",
+                "USERPROFILE",
+                "APPDATA",
+                "LOCALAPPDATA",
+                "TEMP",
+                "TMP",
+            ):
+                if name in os.environ:
+                    env[name] = os.environ[name]
+        try:
+            saved = json.loads(GreenfieldStack.read_private("environment.json"))
+        except ValueError:
+            raise SetupError(
+                "Private Greenfield environment.json is malformed. Restore valid JSON; no credentials were replaced."
+            ) from None
+        if not isinstance(saved, dict) or any(
+            not isinstance(key, str) or not isinstance(value, str) for key, value in saved.items()
+        ):
+            raise SetupError(
+                'Private Greenfield environment.json must map environment names to strings (for example, "true"). Restore its existing values; no credentials were replaced.'
+            )
+        env.update(saved)
+        if "NATIVE_SECURITY_OUTBOX_KEY" not in env:
+            if not (GreenfieldStack.STATE / "security-mail-key").exists():
+                raise SetupError(
+                    "Existing security-mail key is missing. Restore the original private key; it was not regenerated."
+                )
+            env["NATIVE_SECURITY_OUTBOX_KEY"] = GreenfieldStack.read_private("security-mail-key")
+        if "AI_CONFIG_ENCRYPTION_KEY" not in env:
+            if not (GreenfieldStack.STATE / "provider-storage-key").exists():
+                raise SetupError(
+                    "Existing provider storage key is missing. Restore the original key; it was not regenerated."
+                )
+            env["AI_CONFIG_ENCRYPTION_KEY"] = base64.b64encode(
+                base64.urlsafe_b64decode(GreenfieldStack.read_private("provider-storage-key"))
+            ).decode()
+        env.update(
+            {
+                "PYTHON_DOTENV_DISABLED": "1",
+                "GREENFIELD_STATE": str(GreenfieldStack.STATE),
+                "PYTHONPATH": str(GreenfieldStack.ROOT),
+                "PYTHONDONTWRITEBYTECODE": "1",
+                "DATABASE_URL": GreenfieldStack.url("greenfield_app", "runtime-password"),
+                "AUTH_ENABLED": "true",
+                "HCL_AUTH_ENABLED": "false",
+                "NATIVE_AUTH_ENABLED": "true",
+                "ENTRA_ENABLED": "false",
+                "DEV_DEFAULT_TENANT": "false",
+                "NATIVE_IAM_PRODUCTION": "false",
+                "NATIVE_SECURITY_OUTBOX_ENABLED": "true",
+                "NATIVE_AUTH_RATE_LIMIT_STORAGE_URI": "redis://127.0.0.1:56381/3",
+                "API_AUTH_MODE": "none",
+                "NATIVE_USER_CREATION_ENABLED": "true",
+                "NATIVE_PASSWORD_RESET_FRONTEND_URL": "https://localhost:13000/reset-password",
+                "API_RATE_LIMIT_ENABLED": "true",
+                "NATIVE_JWT_ISSUER": "https://greenfield.local",
+                "NATIVE_JWT_AUDIENCE": "sbom-analyser-api",
+                "NATIVE_JWT_ACCESS_TOKEN_TTL_SECONDS": "3600",
+                "AUTHORIZATION_CATALOG_MODE": "DATABASE",
+                "AUTHORIZATION_CATALOG_FAIL_CLOSED": "true",
+                "TENANT_ROLE_ASSIGNMENT_MODE": "DATABASE",
+                "TENANT_ROLE_ASSIGNMENT_FAIL_CLOSED": "true",
+                "EMAIL_DELIVERY_ENABLED": "true",
+                "EMAIL_FROM_ADDRESS": "sbom-greenfield@example.test",
+                "EMAIL_VERIFICATION_FRONTEND_URL": "https://localhost:13000/verify-email",
+                "NATIVE_ACTIVATION_FRONTEND_URL": "https://localhost:13000/activate-account",
+                "REPORT_NOTIFICATIONS_ENABLED": "true",
+                "REPORT_NOTIFICATION_BASE_URL": "https://localhost:13000",
+                "REPORT_ARTIFACT_STORAGE_PATH": str(GreenfieldStack.STATE / "reports"),
+                "SMTP_HOST": "127.0.0.1",
+                "SMTP_PORT": "1026",
+                "SMTP_USE_STARTTLS": "false",
+                "NVD_ENABLED": "false",
+                "ANALYSIS_SOURCES": "OSV",
+                "SBOM_WORKSPACE_STORAGE_DIR": str(GreenfieldStack.STATE / "workspaces"),
+                "NEXT_PUBLIC_AUTH_ENABLED": "true",
+                "NEXT_PUBLIC_NATIVE_AUTH_ENABLED": "true",
+                "NEXT_PUBLIC_HCL_AUTH_ENABLED": "false",
+                "NEXT_PUBLIC_ENTRA_ENABLED": "false",
+                "NEXT_PUBLIC_API_URL": "http://127.0.0.1:18000",
+                "SBOM_API_URL": "http://127.0.0.1:18000",
+                "APP_ORIGIN": "https://localhost:13000",
+                "CORS_ORIGINS": "https://localhost:13000",
+                "AUTH_SESSION_STORE": "redis",
+                "AUTH_SESSION_REDIS_URL": "redis://127.0.0.1:56381/1",
+                "REDIS_URL": "redis://127.0.0.1:56381/0",
+                "CELERY_BROKER_URL": "redis://127.0.0.1:56381/0",
+                "CELERY_RESULT_BACKEND": "redis://127.0.0.1:56381/2",
+                "SBOM_AUTO_REPAIR_ENABLED": "true",
+                "NODE_ENV": "development",
+                "LOG_FILE": "",
+            }
+        )
+        return env
+
+    @staticmethod
+    def url(user, filename, database=DB):
+        from sqlalchemy.engine import URL
+
+        if database not in {
+            GreenfieldStack.DB,
+            "postgres",
+            GreenfieldStack.DB + "_repro_test",
+            GreenfieldStack.DB + "_integrity_test",
+            GreenfieldStack.DB + "_regression_test",
+        }:
+            raise RuntimeError("Database outside the greenfield task scope")
+        if (user, filename) not in {("greenfield_app", "runtime-password"), ("greenfield_setup", "setup-password")}:
+            raise RuntimeError("Unexpected greenfield credential selection")
+        return URL.create(
+            "postgresql+psycopg",
+            username=user,
+            password=GreenfieldStack.read_private(filename),
+            host="127.0.0.1",
+            port=56044,
+            database=database,
+        ).render_as_string(hide_password=False)
+
+    @staticmethod
+    def verify_resources():
+        identities = json.loads(GreenfieldStack.read_private("docker-identities.json"))
+        names = {"sbom-greenfield-uuid-dev-" + service + "-1" for service in ("postgres", "redis", "mailpit")}
+        if set(identities) != names:
+            raise RuntimeError("Unexpected greenfield resource inventory")
+        for name, expected in identities.items():
+            actual = json.loads(
+                subprocess.check_output(GreenfieldStack.docker_command() + ["inspect", name], text=True)
+            )[0]
+            labels = actual["Config"]["Labels"]
+            if actual["Id"] != expected or labels.get("com.docker.compose.project") != "sbom-greenfield-uuid-dev":
+                raise RuntimeError("Greenfield resource identity changed")
+            if set(actual["NetworkSettings"]["Networks"]) != {"sbom-greenfield-uuid-dev_access"}:
+                raise RuntimeError("Unexpected greenfield network attachment")
+            service = name.removeprefix("sbom-greenfield-uuid-dev-").removesuffix("-1")
+            publications = {
+                "postgres": {"5432/tcp": [{"HostIp": "127.0.0.1", "HostPort": "56044"}]},
+                "redis": {"6379/tcp": [{"HostIp": "127.0.0.1", "HostPort": "56381"}]},
+                "mailpit": {
+                    "1025/tcp": [{"HostIp": "127.0.0.1", "HostPort": "1026"}],
+                    "8025/tcp": [{"HostIp": "127.0.0.1", "HostPort": "8026"}],
+                },
+            }
+            if actual["HostConfig"]["PortBindings"] != publications[service]:
+                raise SetupError(
+                    f"Greenfield {service} publication changed. Restore its verified loopback ports; no container was changed."
+                )
+            if service == "redis" and [m["Name"] for m in actual["Mounts"] if m["Type"] == "volume"] != [
+                "sbom-greenfield-uuid-dev_redisdata"
+            ]:
+                raise SetupError("Greenfield Redis storage changed. Restore its existing volume; no data was changed.")
+            if name.endswith("-postgres-1"):
+                if actual["Image"] != "sha256:1a6ab3f5345eb6dbe04a1349529caabdb0ab09293a09590fad07b2246bfa4b54":
+                    raise RuntimeError("Unexpected PostgreSQL image")
+                if actual["HostConfig"]["PortBindings"] != {"5432/tcp": [{"HostIp": "127.0.0.1", "HostPort": "56044"}]}:
+                    raise RuntimeError("Unexpected PostgreSQL publication")
+                volumes = [m["Name"] for m in actual["Mounts"] if m["Type"] == "volume"]
+                if volumes != ["sbom-greenfield-uuid-dev_pgdata"]:
+                    raise RuntimeError("Unexpected PostgreSQL storage")
+
+    @staticmethod
+    def frontend_workspace(name):
+        if name not in {"frontend", "frontend-build"}:
+            raise RuntimeError("Unexpected frontend workspace")
+        ui = GreenfieldStack.STATE / name
+        if ui.is_symlink() or (ui.exists() and LocalHttps._windows_reparse(ui.lstat())):
+            raise SetupError("Greenfield frontend workspace must not be redirected. Restore its private directory.")
+        ui.mkdir(exist_ok=True)
+        for name in ("src", "public"):
+            if not (GreenfieldStack.ROOT / "frontend" / name).exists():
+                continue
+            destination = ui / name
+            if destination.exists():
+                shutil.rmtree(destination)
+            shutil.copytree(GreenfieldStack.ROOT / "frontend" / name, destination)
+        for path in (GreenfieldStack.ROOT / "frontend").iterdir():
+            if (
+                path.is_file()
+                and (not path.name.startswith(".env"))
+                and (path.suffix in (".json", ".js", ".ts", ".mjs", ".cjs"))
+            ):
+                shutil.copy2(path, ui / path.name)
+        modules = ui / "node_modules"
+        expected = GreenfieldStack.ROOT / "frontend/node_modules"
+        if modules.exists():
+            if not os.path.samefile(modules, expected):
+                raise SetupError(
+                    "Greenfield node_modules points to a different installation. Restore its project dependency link."
+                )
+        else:
+            try:
+                modules.symlink_to(expected, target_is_directory=True)
+            except OSError:
+                raise SetupError(
+                    "Cannot create the private frontend dependency link. On Windows, enable approved Developer Mode/symlink permission, "
+                    "then rerun; no permissions or system policies were changed."
+                ) from None
+        return ui
+
+    @staticmethod
+    def node_binary():
+        bundled = Path.home() / ".cache/codex-runtimes/codex-primary-runtime/dependencies/node/bin/node"
+        return bundled if bundled.exists() else Path(shutil.which("node") or "node")
+
+    @staticmethod
+    def check_service_ports(ports=(18000, 13000)):
+        for port in ports:
+            with socket.socket() as sock:
+                if sys.platform != "win32":
+                    sock.setsockopt(socket.SOL_SOCKET, socket.SO_REUSEADDR, 1)
+                try:
+                    sock.bind(("127.0.0.1", port))
+                except OSError as error:
+                    if error.errno in (errno.EADDRINUSE, 10048):
+                        raise GreenfieldStack.ServicePortError(
+                            f"Greenfield application port {port} on 127.0.0.1 is already in use. Inspect with: lsof -nP -iTCP:{port} -sTCP:LISTEN. Stop a separately launched instance using its own launcher. No process was stopped."
+                        ) from None
+                    raise GreenfieldStack.ServicePortError(
+                        f"Cannot bind Greenfield application port {port} on 127.0.0.1 (OS error {error.errno}). No service was started."
+                    ) from None
+
+    @staticmethod
+    def initialize_private_state():
+        files = ("environment.json", "runtime-password", "setup-password")
+        present = [name for name in files if (GreenfieldStack.STATE / name).exists()]
+        if present:
+            if len(present) != len(files):
+                raise SetupError(
+                    "Partial Greenfield private configuration; restore the existing files. No credentials were replaced."
+                )
+            for name in files:
+                GreenfieldStack.read_private(name)
+            return
+        from cryptography.hazmat.primitives import serialization
+        from cryptography.hazmat.primitives.asymmetric import rsa
+
+        key = rsa.generate_private_key(public_exponent=65537, key_size=2048)
+        values = {
+            "NATIVE_JWT_PRIVATE_KEY": key.private_bytes(
+                serialization.Encoding.PEM, serialization.PrivateFormat.PKCS8, serialization.NoEncryption()
+            ).decode(),
+            "NATIVE_JWT_PUBLIC_KEY": key.public_key()
+            .public_bytes(serialization.Encoding.PEM, serialization.PublicFormat.SubjectPublicKeyInfo)
+            .decode(),
+            **{
+                name: base64.b64encode(os.urandom(32)).decode()
+                for name in ("AUTH_SESSION_ENCRYPTION_KEY", "AI_CONFIG_ENCRYPTION_KEY", "NATIVE_SECURITY_OUTBOX_KEY")
+            },
+        }
+        GreenfieldStack.private_file("setup-password", secrets.token_urlsafe(36))
+        GreenfieldStack.private_file("runtime-password", secrets.token_urlsafe(36))
+        GreenfieldStack.private_file("environment.json", json.dumps(values))
+
+    @staticmethod
+    def provision():
+        projects = subprocess.check_output(
+            GreenfieldStack.docker_command() + ["ps", "-a", "--format", '{{.Label "com.docker.compose.project"}}'],
+            text=True,
+        ).splitlines()
+        existing = "sbom-greenfield-uuid-dev" in projects
+        if existing:
+            GreenfieldStack.verify_resources()
+        else:
+            for port in (56044, 56381, 1026, 8026):
+                with socket.socket() as sock:
+                    sock.bind(("127.0.0.1", port))
+            for kind, name in [
+                ("volume", "sbom-greenfield-uuid-dev_pgdata"),
+                ("volume", "sbom-greenfield-uuid-dev_redisdata"),
+                ("network", "sbom-greenfield-uuid-dev_access"),
+            ]:
+                if (
+                    subprocess.run(
+                        GreenfieldStack.docker_command() + [kind, "inspect", name],
+                        stdout=subprocess.DEVNULL,
+                        stderr=subprocess.DEVNULL,
+                    ).returncode
+                    == 0
+                ):
+                    raise RuntimeError("Unowned greenfield resource collision")
+        GreenfieldStack.initialize_private_state()
+        env = GreenfieldStack.settings()
+        subprocess.run(
+            GreenfieldStack.docker_command()
+            + [
+                "compose",
+                "-f",
+                str(GreenfieldStack.ROOT / "infra/greenfield-uuid/compose.yml"),
+                "up",
+                "-d",
+                "--pull",
+                "never",
+                "--no-build",
+                "--no-recreate",
+            ],
+            env=env,
+            check=True,
+        )
+        for _ in range(30):
+            result = subprocess.check_output(
+                GreenfieldStack.docker_command()
+                + ["inspect", "sbom-greenfield-uuid-dev-postgres-1", "--format", "{{.State.Health.Status}}"],
+                env=env,
+                text=True,
+            )
+            if result.strip() == "healthy":
+                if not existing:
+                    names = [
+                        "sbom-greenfield-uuid-dev-" + service + "-1" for service in ("postgres", "redis", "mailpit")
+                    ]
+                    observations = json.loads(
+                        subprocess.check_output(GreenfieldStack.docker_command() + ["inspect", *names], text=True)
+                    )
+                    GreenfieldStack.private_file(
+                        "docker-identities.json",
+                        json.dumps({x["Name"].lstrip("/"): x["Id"] for x in observations}, indent=2),
+                    )
+                return
+            time.sleep(2)
+        raise RuntimeError("Greenfield PostgreSQL did not become healthy")
+
+    @staticmethod
+    def bootstrap(database=DB):
+        if database not in {GreenfieldStack.DB, GreenfieldStack.DB + "_repro_test"}:
+            raise RuntimeError("Only this task's greenfield databases are permitted")
+        GreenfieldStack.verify_resources()
+        env = GreenfieldStack.settings()
+        os.environ.clear()
+        os.environ.update(env)
+        os.chdir(GreenfieldStack.STATE)
+        from app.greenfield_schema import application_metadata
+        from app.iam_schema import apply_user_uuid_revision
+        from app.resource_schema import apply_resource_uuid_revision, revision100_metadata
+
+        metadata = revision100_metadata(application_metadata())
+        from app.public_identity import TABLES, install_guards
+        from sqlalchemy import create_engine, inspect, text
+        from sqlalchemy.pool import NullPool
+
+        engine = create_engine(
+            GreenfieldStack.url("greenfield_setup", "setup-password", database),
+            hide_parameters=True,
+            poolclass=NullPool,
+        )
+        try:
+            with engine.begin() as connection:
+                if inspect(connection).has_table("alembic_version"):
+                    marker = connection.exec_driver_sql("SELECT version_num FROM alembic_version").scalar_one()
+                    if marker != GreenfieldStack.current_revision():
+                        raise RuntimeError("Unexpected existing greenfield revision")
+                    print("Existing marker observed; structural verification follows without schema repair")
+                else:
+                    if inspect(connection).get_table_names():
+                        raise RuntimeError("Refusing partially initialized database")
+                    password = GreenfieldStack.read_private("runtime-password")
+                    from psycopg import sql
+
+                    raw = connection.connection.driver_connection
+                    with raw.cursor() as cur:
+                        for role, login in (("greenfield_owner", False), ("greenfield_app", True)):
+                            cur.execute(
+                                "SELECT rolcanlogin,rolsuper,rolcreatedb,rolcreaterole,rolreplication,rolbypassrls FROM pg_roles WHERE rolname=%s",
+                                (role,),
+                            )
+                            existing = cur.fetchone()
+                            if existing is not None:
+                                if tuple(existing) != (login, False, False, False, False, False):
+                                    raise RuntimeError("Unexpected task-owned role privileges")
+                                continue
+                            query = sql.SQL(
+                                "CREATE ROLE {} {} NOINHERIT NOSUPERUSER NOCREATEDB NOCREATEROLE NOREPLICATION NOBYPASSRLS"
+                            ).format(sql.Identifier(role), sql.SQL("LOGIN" if login else "NOLOGIN"))
+                            if login:
+                                query += sql.SQL(" PASSWORD {}").format(sql.Literal(password))
+                            cur.execute(query)
+                    connection.exec_driver_sql("REVOKE CREATE ON SCHEMA public FROM PUBLIC")
+                    connection.exec_driver_sql("ALTER SCHEMA public OWNER TO greenfield_owner")
+                    connection.exec_driver_sql("SET LOCAL ROLE greenfield_owner")
+                    metadata.create_all(connection)
+                    install_guards(connection)
+                    actual = inspect(connection)
+                    if set(actual.get_table_names()) != set(metadata.tables):
+                        raise RuntimeError("Metadata/table parity failed")
+                    for table in metadata.tables.values():
+                        if set(c["name"] for c in actual.get_columns(table.name)) != set(table.columns.keys()):
+                            raise RuntimeError(f"Column parity failed: {table.name}")
+                    for name in TABLES:
+                        col = next(c for c in actual.get_columns(name) if c["name"] == "public_id")
+                        if col["nullable"] or str(col["type"]) != "UUID" or "gen_random_uuid" not in col["default"]:
+                            raise RuntimeError("Final UUID definition mismatch")
+                    from sqlalchemy.orm import Session
+
+                    from scripts.greenfield_references import seed_catalog
+
+                    with Session(bind=connection) as seed_session:
+                        seed_catalog(seed_session)
+                    connection.exec_driver_sql(
+                        "CREATE TABLE public.alembic_version(version_num varchar(128) PRIMARY KEY)"
+                    )
+                    connection.execute(
+                        text("INSERT INTO public.alembic_version(version_num) VALUES(:revision)"),
+                        {"revision": "100_greenfield_uuid_final"},
+                    )
+                    apply_user_uuid_revision(connection)
+                    apply_resource_uuid_revision(connection)
+                    from scripts.greenfield_auto_migrations import apply_fresh_tail
+
+                    apply_fresh_tail(connection)
+                    connection.exec_driver_sql("GRANT USAGE ON SCHEMA public TO greenfield_app")
+                    connection.exec_driver_sql(
+                        "GRANT SELECT, INSERT, UPDATE, DELETE ON ALL TABLES IN SCHEMA public TO greenfield_app"
+                    )
+                    connection.exec_driver_sql("REVOKE ALL ON public.alembic_version FROM greenfield_app")
+                    connection.exec_driver_sql("GRANT SELECT ON public.alembic_version TO greenfield_app")
+                    connection.exec_driver_sql(
+                        "GRANT USAGE, SELECT ON ALL SEQUENCES IN SCHEMA public TO greenfield_app"
+                    )
+                    connection.exec_driver_sql(
+                        "REVOKE ALL ON FUNCTION public.uuid_public_identity_guard_v1() FROM PUBLIC"
+                    )
+                    connection.exec_driver_sql(
+                        "GRANT EXECUTE ON FUNCTION public.uuid_public_identity_guard_v1() TO greenfield_app"
+                    )
+            with engine.connect() as reader:
+                reader.exec_driver_sql("SET TRANSACTION READ ONLY")
+                from scripts.greenfield_auto_migrations import validate_current_tail
+
+                validate_current_tail(reader)
+                print(
+                    "Committed revision:",
+                    reader.exec_driver_sql("SELECT version_num FROM alembic_version").scalar_one(),
+                )
+                print("Application tables:", len(metadata.tables))
+                reader.rollback()
+        finally:
+            engine.dispose()
+        from scripts.greenfield_schema_check import verify
+
+        verify(database)
+
+
+class GreenfieldProfile:
+    """Existing UUID profile lifecycle. Schema/provisioning remains explicitly guarded."""
+
+    @staticmethod
+    def inventory():
+        try:
+            GreenfieldStack.verify_resources()
+        except SetupError:
+            raise
+        except (RuntimeError, OSError, subprocess.SubprocessError, ValueError, KeyError) as error:
+            detail = str(error) if type(error) is RuntimeError else type(error).__name__
+            raise SetupError(
+                "Greenfield resource identity validation failed: "
+                + detail
+                + ". Check Docker and the private installation; no container was changed."
+            ) from None
+        identities = json.loads(GreenfieldStack.read_private("docker-identities.json"))
+        result = subprocess.run(
+            GreenfieldStack.docker_command() + ["inspect", *identities.values()],
+            capture_output=True,
+            text=True,
+            timeout=20,
+        )
+        if result.returncode:
+            raise SetupError("Greenfield Docker inventory failed. Start its Docker engine/context and retry doctor.")
+        return json.loads(result.stdout)
+
+    @staticmethod
+    def commands(node, cert, key, ui, env):
+        return {
+            **{name: (command, GreenfieldStack.STATE) for name, command in background_commands(env).items()},
+            "API": (
+                api_command(env, 18000),
+                GreenfieldStack.STATE,
+            ),
+            "Frontend": (
+                [
+                    str(node),
+                    str(ROOT / "frontend/node_modules/next/dist/bin/next"),
+                    "dev",
+                    "--webpack",
+                    "--hostname",
+                    "127.0.0.1",
+                    "--port",
+                    "13000",
+                    "--experimental-https",
+                    "--experimental-https-key",
+                    str(key),
+                    "--experimental-https-cert",
+                    str(cert),
+                ],
+                ui,
+            ),
+        }
+
+    @staticmethod
+    def start_services(runtime):
+        GreenfieldStack.check_service_ports()
+        cert, key, _, _ = LocalHttps.ensure_certificate(GreenfieldStack.STATE, prepare=True)
+        GreenfieldStack.verify_resources()
+        env = runtime_environment(GreenfieldStack.settings())
+        node = GreenfieldStack.node_binary()
+        env["PATH"] = str(node.parent) + os.pathsep + os.environ.get("PATH", "")
+        ui = GreenfieldStack.frontend_workspace("frontend")
+        frontend = GreenfieldProfile.commands(node, cert, key, ui, env)["Frontend"][0]
+        return launch_services(
+            env,
+            18000,
+            13000,
+            frontend,
+            cwd=GreenfieldStack.STATE,
+            frontend_cwd=ui,
+            tls_context=LocalHttps.client_context(GreenfieldStack.STATE),
+        )
+
+    @staticmethod
+    def start(args, runtime):
+        from scripts import greenfield_migrations as migrations
+
+        validate_greenfield_installation()
+        LocalHttps.ensure_certificate(GreenfieldStack.STATE, prepare=not args.check)
+        observed = GreenfieldProfile.inventory()
+        if args.check:
+            say(
+                "OK",
+                "Greenfield",
+                "private installation, container identity and HTTPS trust verified; no services started",
+            )
+            return
+        if runtime is None:
+            raise SetupError("Greenfield startup requires the unified launcher's ownership registry.")
+        runtime.check_stop()
+        stopped = [item["Id"] for item in observed if not item["State"]["Running"]]
+        if stopped:
+            result = subprocess.run(
+                GreenfieldStack.docker_command() + ["start", *stopped], capture_output=True, timeout=60
+            )
+            if result.returncode:
+                raise SetupError(
+                    "Could not resume verified Greenfield containers. Check Docker engine and container logs."
+                )
+        deadline = time.monotonic() + 60
+        while True:
+            runtime.check_stop()
+            observed = GreenfieldProfile.inventory()
+            healthy = all(item["State"]["Running"] for item in observed) and all(
+                item["State"].get("Health", {}).get("Status") == "healthy"
+                for item in observed
+                if item["Name"].endswith("-postgres-1")
+            )
+            if healthy:
+                break
+            if time.monotonic() >= deadline:
+                raise SetupError(
+                    "Greenfield data services are not healthy. Inspect their Docker logs; resources were retained."
+                )
+            time.sleep(0.5)
+        migrations.ensure_current(confirm=lambda: "")
+        processes, env = GreenfieldProfile.start_services(runtime)
+        print("Press Ctrl+C to stop application processes; data services remain running.", flush=True)
+        supervise_runtime(runtime, env, processes)
 
 
 def say(kind: str, name: str, value: str) -> None:
@@ -54,7 +2381,11 @@ def say(kind: str, name: str, value: str) -> None:
 def run(command: list[str], *, env: dict[str, str] | None = None, cwd: Path = ROOT) -> subprocess.CompletedProcess:
     if ACTIVE_RUNTIME:
         ACTIVE_RUNTIME.check_stop()
-    result = subprocess.run(command, cwd=cwd, env=env, text=True, capture_output=True, check=False)
+    execution_env = dict(os.environ if env is None else env)
+    execution_env["PATH"] = str(GreenfieldStack.node_binary().parent) + os.pathsep + execution_env.get("PATH", "")
+    result = subprocess.run(
+        normalize_command(command), cwd=cwd, env=execution_env, text=True, capture_output=True, check=False
+    )
     if ACTIVE_RUNTIME:
         ACTIVE_RUNTIME.check_stop()
     if VERBOSE:
@@ -79,7 +2410,35 @@ def redact(output: str | None, env: dict[str, str] | None) -> str:
                 password = None
             if password and len(password) >= 4:
                 text = text.replace(password, "[REDACTED]")
+    text = re.sub(
+        r"-----BEGIN [^-]*PRIVATE KEY-----.*?(?:-----END [^-]*PRIVATE KEY-----|$)",
+        "[REDACTED PRIVATE KEY]",
+        text,
+        flags=re.S,
+    )
+    text = re.sub(r"(?i)(bearer\s+)[A-Za-z0-9_.~+/=-]+", r"\1[REDACTED]", text)
+    text = re.sub(r"(?i)([a-z][a-z0-9+.-]*://[^\s/:]+:)[^\s@]+@", r"\1[REDACTED]@", text)
+    text = re.sub(
+        r"""(?i)((?:["']?(?:password|api[_-]?key(?:_encrypted)?|access[_-]?token|refresh[_-]?token|client[_-]?secret)["']?)\s*[=:]\s*)(?:"[^"\n]*"|'[^'\n]*'|[^\s,;}]+)""",
+        r"\1[REDACTED]",
+        text,
+    )
     return text
+
+
+def normalize_command(command: list[str]) -> list[str]:
+    """Use npm's JavaScript CLI on Windows, never a shell/batch interpreter."""
+    if sys.platform == "win32" and Path(command[0]).suffix.lower() in {".cmd", ".bat"}:
+        executable = Path(command[0])
+        if executable.stem.lower() != "npm":
+            raise SetupError("A native executable is required; the unified launcher does not execute batch wrappers.")
+        cli = executable.parent / "node_modules/npm/bin/npm-cli.js"
+        if not cli.is_file():
+            raise SetupError(
+                "Cannot locate npm-cli.js beside npm.cmd. Repair the Node.js LTS installation including npm."
+            )
+        return [str(GreenfieldStack.node_binary()), str(cli), *command[1:]]
+    return command
 
 
 def reachable(host: str, port: int) -> bool:
@@ -150,13 +2509,9 @@ def ensure_mailpit_ready(timeout: float = MAILPIT_READY_TIMEOUT) -> None:
     if reachable("127.0.0.1", MAILPIT_SMTP_PORT):
         detail = "Mailpit SMTP is reachable, but its HTTP API did not become ready"
     else:
-        detail = (
-            f"Mailpit did not become reachable on SMTP port {MAILPIT_SMTP_PORT} "
-            "or ready through its HTTP API"
-        )
+        detail = f"Mailpit did not become reachable on SMTP port {MAILPIT_SMTP_PORT} or ready through its HTTP API"
     raise SetupError(
-        f"{detail} on http://127.0.0.1:{MAILPIT_UI_PORT} within "
-        f"{timeout:g} seconds. Check the Mailpit container logs."
+        f"{detail} on http://127.0.0.1:{MAILPIT_UI_PORT} within {timeout:g} seconds. Check the Mailpit container logs."
     )
 
 
@@ -218,11 +2573,11 @@ def wait_for_service(service: str, port: int) -> bool:
 def select_service(
     service: str, docker_port: int, local_port: int, *, check: bool, env: dict[str, str], preferred: str | None = None
 ) -> tuple[str, int]:
-    """Reuse the saved provider; choose another only when it is unavailable."""
+    """Pin saved infrastructure; never switch an existing installation's database."""
     if preferred not in (None, "docker", "local"):
         raise SetupError(f"Saved {service} provider must be docker or local.")
     docker = docker_available()
-    order = ("local", "docker") if preferred == "local" else ("docker", "local")
+    order = (preferred,) if preferred else ("docker", "local")
     for provider in order:
         if provider == "local":
             if service_available(service, local_port):
@@ -239,7 +2594,7 @@ def select_service(
                 f"Project {service} is running but port {docker_port} is unreachable. Check its port mapping."
             )
         if reachable("127.0.0.1", docker_port):
-            if service_available(service, local_port) and local_port != docker_port:
+            if not preferred and service_available(service, local_port) and local_port != docker_port:
                 continue
             raise SetupError(
                 f"Port {docker_port} is occupied, so project {service} cannot start. Stop the owner of that port or use a local {service} service. No process was changed."
@@ -249,14 +2604,16 @@ def select_service(
         try:
             start_compose(service, env)
         except SetupError:
-            if service_available(service, local_port) and local_port != docker_port:
+            if not preferred and service_available(service, local_port) and local_port != docker_port:
                 continue
             raise
         if wait_for_service(service, docker_port):
             return "Docker", docker_port
         raise SetupError(f"Project {service} started but port {docker_port} is unreachable. Check Docker port mapping.")
     raise SetupError(
-        f"{service.title()} is unavailable. Install/start it locally or install/start Docker Desktop, then rerun python scripts/dev.py."
+        f"{service.title()} is unavailable"
+        + (f" on its saved {preferred} provider; no provider fallback occurred" if preferred else "")
+        + ". Start the configured service or Docker engine, then rerun python scripts/dev.py doctor."
     )
 
 
@@ -328,9 +2685,13 @@ def ensure_dependencies() -> None:
     if installed:
         return
     say("...", "Dependencies", "installing requirements.txt")
+    stamp.unlink(missing_ok=True)
     result = run([str(venv_python()), "-m", "pip", "install", "-r", "requirements.txt"])
     if result.returncode:
-        raise SetupError("Python dependency installation failed. Check pip output above.")
+        print(redact((result.stderr or result.stdout or "")[-6000:], None), file=sys.stderr)
+        raise SetupError(
+            "Python dependency installation failed. Check the pip diagnostic above and network/index access, then retry."
+        )
     stamp.write_text(digest)
 
 
@@ -453,10 +2814,7 @@ def default_database_url(provider: str, port: int) -> str:
 
 
 def local_database_url(user: str, password: str, port: int) -> str:
-    return (
-        f"postgresql+psycopg://{quote(user, safe='')}:{quote(password, safe='')}"
-        f"@127.0.0.1:{port}/{DB_NAME}"
-    )
+    return f"postgresql+psycopg://{quote(user, safe='')}:{quote(password, safe='')}@127.0.0.1:{port}/{DB_NAME}"
 
 
 def repository_database_candidate(path: Path, port: int) -> str | None:
@@ -575,7 +2933,10 @@ def read_password(prompt: str) -> str:
 
 
 def read_postgres_credentials(
-    default_user: str = "postgres", *, input_fn=input, password_fn=None,
+    default_user: str = "postgres",
+    *,
+    input_fn=input,
+    password_fn=None,
 ) -> tuple[str, str]:
     try:
         user = input_fn(f"PostgreSQL user [{default_user}]: ").strip() or default_user
@@ -628,7 +2989,9 @@ def resolve_local_database_url(
             return candidate
         except SetupError:
             if attempt < 2:
-                print("[ERROR] PostgreSQL credentials were not accepted or cannot create the development database. Try again.")
+                print(
+                    "[ERROR] PostgreSQL credentials were not accepted or cannot create the development database. Try again."
+                )
     raise SetupError("PostgreSQL credentials were not accepted after 3 attempts. Check the local login and rerun.")
 
 
@@ -816,10 +3179,10 @@ def run_migrations(env: dict[str, str]) -> str:
     return head
 
 
-def ensure_frontend() -> str:
+def ensure_frontend(*, certificate: bool = True) -> str:
     import hashlib
 
-    npm = shutil.which("npm")
+    npm = shutil.which("npm", path=str(GreenfieldStack.node_binary().parent) + os.pathsep + os.environ.get("PATH", ""))
     if not npm:
         raise SetupError("Node.js/npm is missing. Install Node.js, then rerun python scripts/dev.py.")
     frontend = ROOT / "frontend"
@@ -830,7 +3193,9 @@ def ensure_frontend() -> str:
             (frontend / "package.json").read_bytes() + b"\0" + (frontend / "package-lock.json").read_bytes()
         ).hexdigest()
     except OSError:
-        raise SetupError("Cannot read frontend package.json/package-lock.json. Restore the manifests and rerun.") from None
+        raise SetupError(
+            "Cannot read frontend package.json/package-lock.json. Restore the manifests and rerun."
+        ) from None
     try:
         installed = modules.is_dir() and stamp.read_text().strip() == digest
     except OSError:
@@ -841,13 +3206,25 @@ def ensure_frontend() -> str:
         stamp.unlink(missing_ok=True)
         result = run([npm, "ci", "--prefix", "frontend"])
         if result.returncode:
-            raise SetupError("Frontend npm ci failed. Check network access and package manifests; rerun with --verbose for details.")
+            print(redact((result.stderr or result.stdout or "")[-6000:], None), file=sys.stderr)
+            raise SetupError(
+                "Frontend npm ci failed. Check network access and package manifests; rerun with --verbose for details."
+            )
         stamp.write_text(digest)
     cert = ROOT / "frontend/certificates/localhost.pem"
     key = ROOT / "frontend/certificates/localhost-key.pem"
-    if not cert.exists() or not key.exists():
-        create_local_certificate(cert, key)
-        say("NOTE", "HTTPS", "self-signed local certificate; trust it in your browser")
+    if certificate:
+        if cert.exists() != key.exists() or cert.is_symlink() or key.is_symlink():
+            raise SetupError(
+                "Legacy HTTPS certificate pair is incomplete or redirected. Restore both existing files; no key was replaced."
+            )
+        if not cert.exists():
+            create_local_certificate(cert, key)
+            say(
+                "NOTE",
+                "HTTPS",
+                "local self-signed certificate prepared. Explicit browser trust approval is required; no trust store was changed",
+            )
     return npm
 
 
@@ -884,7 +3261,7 @@ def create_local_certificate(cert: Path, key: Path) -> None:
         .sign(private, hashes.SHA256())
     )
     cert.parent.mkdir(parents=True, exist_ok=True)
-    fd = os.open(key, os.O_WRONLY | os.O_CREAT | os.O_TRUNC, 0o600)
+    fd = os.open(key, os.O_WRONLY | os.O_CREAT | os.O_EXCL, 0o600)
     with os.fdopen(fd, "wb") as stream:
         stream.write(
             private.private_bytes(
@@ -910,6 +3287,8 @@ def acquire_beat_lock() -> None:
 
 
 def log_path(name: str) -> Path:
+    if ACTIVE_PROFILE == "greenfield":
+        return profile_log_paths("greenfield")[name]
     return ROOT / ".dev-logs" / (name.lower().replace(" ", "-") + ".log")
 
 
@@ -921,13 +3300,51 @@ def show_log(name: str, env: dict[str, str]) -> None:
 
 def http_ready(url: str, *, json_ready: bool = False) -> bool:
     try:
-        context = ssl._create_unverified_context() if url.startswith("https://localhost:") else None
+        context = legacy_https_context() if url.startswith("https://localhost:") else None
         with urlopen(url, timeout=1, context=context) as response:
             if not 200 <= response.status < 400:
                 return False
             return not json_ready or json.load(response).get("ready") is True
-    except (OSError, ValueError):
+    except (OSError, ValueError, SetupError):
         return False
+
+
+def legacy_https_context():
+    """Pin the preserved local cert and verify localhost; never bypass TLS checks."""
+    from cryptography import x509
+    from cryptography.hazmat.primitives import serialization
+
+    cert_path = ROOT / "frontend/certificates/localhost.pem"
+    key_path = ROOT / "frontend/certificates/localhost-key.pem"
+    if cert_path.is_symlink() or key_path.is_symlink():
+        raise SetupError("Legacy HTTPS material must be regular, nonredirected files.")
+    try:
+        cert = x509.load_pem_x509_certificate(cert_path.read_bytes())
+        key = serialization.load_pem_private_key(key_path.read_bytes(), password=None)
+        form = (serialization.Encoding.DER, serialization.PublicFormat.SubjectPublicKeyInfo)
+        now = datetime.now(UTC)
+        sans = cert.extensions.get_extension_for_class(x509.SubjectAlternativeName).value.get_values_for_type(
+            x509.DNSName
+        )
+        if (
+            "localhost" not in sans
+            or cert.not_valid_before_utc > now
+            or cert.not_valid_after_utc <= now
+            or cert.public_key().public_bytes(*form) != key.public_key().public_bytes(*form)
+        ):
+            raise ValueError()
+    except (OSError, ValueError, TypeError, x509.ExtensionNotFound):
+        raise SetupError(
+            "Legacy HTTPS certificate is expired, incomplete or mismatched. Restore a valid localhost certificate/key pair; "
+            "existing keys were retained. Browser trust requires explicit approval."
+        ) from None
+    context = ssl.create_default_context(cafile=str(cert_path))
+    # Existing Legacy material can be an mkcert leaf rather than self-signed.
+    # Explicitly trust that exact preserved leaf while retaining chain/hostname
+    # verification, rather than requiring/replacing its issuing root.
+    if hasattr(ssl, "VERIFY_X509_PARTIAL_CHAIN"):
+        context.verify_flags |= ssl.VERIFY_X509_PARTIAL_CHAIN
+    return context
 
 
 def port_diagnostic(port: int) -> str:
@@ -965,41 +3382,13 @@ def check_application_ports(api_port: int, frontend_port: int) -> None:
             continue
         record = (state or {}).get("services", {}).get(name)
         if record and record.get("port") == port and runtime.service_status(record) == "RUNNING":
-            conflicts.append(f"{name} port {port} belongs to the existing SBOM dev instance. Run python3 scripts/dev.py stop.")
+            conflicts.append(
+                f"{name} port {port} belongs to the existing SBOM dev instance. Run python3 scripts/dev.py stop."
+            )
         else:
             conflicts.append(f"{name} port {port} is already in use. {port_diagnostic(port)}. Nothing was killed.")
     if conflicts:
         raise SetupError("\n".join(conflicts))
-
-
-def wait_for_ready(
-    processes: list[subprocess.Popen],
-    env: dict[str, str],
-    api_port: int,
-    frontend_port: int,
-    timeout: int = 60,
-) -> None:
-    checks = (
-        ("API", f"http://127.0.0.1:{api_port}/health", False),
-        ("API", f"http://127.0.0.1:{api_port}/ready/iam", True),
-        ("Frontend", f"https://localhost:{frontend_port}", False),
-    )
-    names = ("API", "Celery worker", "Celery Beat", "Frontend")
-    deadline = time.monotonic() + timeout
-    while time.monotonic() < deadline:
-        if ACTIVE_RUNTIME:
-            ACTIVE_RUNTIME.refresh()
-        for name, process in zip(names, processes, strict=True):
-            if process.poll() is not None:
-                show_log(name, env)
-                raise SetupError(f"{name} exited during startup. See {log_path(name).relative_to(ROOT)}.")
-        if all(http_ready(url, json_ready=needs_ready) for _, url, needs_ready in checks):
-            return
-        time.sleep(0.5)
-    for name, url, needs_ready in checks:
-        if not http_ready(url, json_ready=needs_ready):
-            show_log(name, env)
-            raise SetupError(f"{url} did not become ready. See {log_path(name).relative_to(ROOT)}.")
 
 
 def start_process(name: str, command: list[str], env: dict[str, str], cwd: Path = ROOT) -> subprocess.Popen:
@@ -1008,19 +3397,25 @@ def start_process(name: str, command: list[str], env: dict[str, str], cwd: Path 
     path = log_path(name)
     path.parent.mkdir(exist_ok=True)
     fd = os.open(path, os.O_WRONLY | os.O_CREAT | os.O_TRUNC, 0o600)
-    kwargs = {"cwd": cwd, "env": env, "stdout": fd, "stderr": subprocess.STDOUT}
-    if os.name == "nt":
-        kwargs["creationflags"] = subprocess.CREATE_NEW_PROCESS_GROUP
-    else:
-        kwargs["start_new_session"] = True
+    process_env = dict(env)
+    process_env["PATH"] = str(GreenfieldStack.node_binary().parent) + os.pathsep + process_env.get("PATH", "")
+    kwargs = {"cwd": cwd, "env": process_env, "stdout": fd, "stderr": subprocess.STDOUT}
+    kwargs.update(platform_spawn_options())
     try:
-        process = subprocess.Popen(command, **kwargs)
+        process = subprocess.Popen(normalize_command(command), **kwargs)
     finally:
         os.close(fd)
     if ACTIVE_RUNTIME:
         try:
             ACTIVE_RUNTIME.processes[process.pid] = process
-            ACTIVE_RUNTIME.register(name, process.pid, {"API": DEV_API_PORT, "Frontend": DEV_FRONTEND_PORT}.get(name))
+            ACTIVE_RUNTIME.register(
+                name,
+                process.pid,
+                {
+                    "API": int(env.get("DEV_API_PORT", DEV_API_PORT)),
+                    "Frontend": int(env.get("DEV_FRONTEND_PORT", DEV_FRONTEND_PORT)),
+                }.get(name),
+            )
         except BaseException:
             # This handle was just spawned here, even if persistence failed.
             stop_processes([process])
@@ -1051,29 +3446,11 @@ def stop_processes(processes: list[subprocess.Popen]) -> None:
                     pass
 
 
-def start_application(args) -> None:
-    if getattr(args, "profile", "legacy") == "greenfield":
-        if not args.check:
-            check_application_ports(DEV_API_PORT, DEV_FRONTEND_PORT)
-        if __package__:
-            from . import dev_greenfield
-        else:
-            import dev_greenfield
-        try:
-            dev_greenfield.start(args, ACTIVE_RUNTIME)
-        except dev_greenfield.https.HttpsTrustError as error:
-            raise SetupError(str(error)) from error
-        except dev_greenfield.migrations.SchemaUpgradeError as error:
-            raise SetupError(str(error)) from None
-        except dev_greenfield.stack.ServicePortError as error:
-            raise SetupError(str(error)) from None
-        return
-    if not args.check:
-        ensure_dependencies()
+def prepare_managed_legacy(*, check=False):
     print("SBOM Analyzer Development Setup\n", flush=True)
     say("OK", "Python", platform.python_version())
     saved = read_config()
-    if args.check and any(
+    if check and any(
         key in saved
         for key in (
             "NATIVE_JWT_PRIVATE_KEY",
@@ -1088,7 +3465,7 @@ def start_application(args) -> None:
             raise SetupError(
                 "Cannot validate saved Native IAM keys without Python dependencies. Run python scripts/dev.py first."
             ) from None
-    if not args.check and CONFIG.exists() and os.name != "nt":
+    if not check and CONFIG.exists() and os.name != "nt":
         CONFIG.chmod(0o600)
     docker_env = os.environ.copy()
     docker_env.update(
@@ -1103,7 +3480,7 @@ def start_application(args) -> None:
         "postgres",
         POSTGRES_PORT,
         5432,
-        check=args.check,
+        check=check,
         env=docker_env,
         preferred=saved.get("DEV_POSTGRES_PROVIDER"),
     )
@@ -1111,12 +3488,12 @@ def start_application(args) -> None:
         "redis",
         REDIS_PORT,
         6379,
-        check=args.check,
+        check=check,
         env=docker_env,
         preferred=saved.get("DEV_REDIS_PROVIDER"),
     )
     # An older SBOM-specific Mailpit container is accepted, never an arbitrary SMTP server.
-    mailpit = select_mailpit(check=args.check, env=docker_env)
+    mailpit = select_mailpit(check=check, env=docker_env)
     values = resolve_config(
         saved,
         pg_port,
@@ -1125,7 +3502,7 @@ def start_application(args) -> None:
         pg_provider=provider_name(postgres),
         redis_provider=provider_name(redis),
     )
-    if not args.check:
+    if not check:
         generate_keys(values)
     env = os.environ.copy()
     env.update(values)
@@ -1137,7 +3514,7 @@ def start_application(args) -> None:
     say("OK", "Redis", f"{redis}, 127.0.0.1:{redis_port}")
     say("OK", "Database", DB_NAME)
     say("OK", "Mailpit", f"{mailpit}, http://127.0.0.1:{MAILPIT_UI_PORT}")
-    if args.check:
+    if check:
         say("OK", "Check", "no services or processes started")
         return
     check_application_ports(api_port, frontend_port)
@@ -1148,67 +3525,42 @@ def start_application(args) -> None:
         ensure_database(values["DATABASE_URL"])
         if values != saved:
             write_config(values)
-    validate_existing_schema(values["DATABASE_URL"])
-    head = run_migrations(env)
+    return env
+
+
+def start_application(args) -> None:
+    if getattr(args, "profile", "legacy") == "greenfield":
+        if not args.check:
+            check_application_ports(DEV_API_PORT, DEV_FRONTEND_PORT)
+            ensure_dependencies()
+            ensure_frontend(certificate=False)
+        GreenfieldProfile.start(args, ACTIVE_RUNTIME)
+        return
+    if not args.check:
+        ensure_dependencies()
+    if ACTIVE_LEGACY_CONFIG == "managed":
+        env = prepare_managed_legacy(check=args.check)
+    else:
+        env = existing_legacy_environment(ACTIVE_LEGACY_CONFIG)
+    if args.check:
+        return
+    verify_data_connectivity(env)
+    head = verify_existing_schema(env)
     say("OK", "Schema", head)
+    api_port, frontend_port = int(env["DEV_API_PORT"]), int(env["DEV_FRONTEND_PORT"])
     npm = ensure_frontend()
+    legacy_https_context()
     check_application_ports(api_port, frontend_port)
-    acquire_beat_lock()
-    processes = []
-    try:
-        processes.append(
-            start_process(
-                "API",
-                [
-                    str(venv_python()),
-                    "-m",
-                    "uvicorn",
-                    "app.main:app",
-                    "--host",
-                    "127.0.0.1",
-                    "--port",
-                    str(api_port),
-                    "--no-proxy-headers",
-                ],
-                env,
-            )
-        )
-        celery = [str(venv_python()), "-m", "celery", "-A", "app.workers.celery_app"]
-        worker_command = [*celery, "worker", "--loglevel=info"]
-        if sys.platform == "win32":
-            worker_command.append("--pool=solo")
-        processes.append(start_process("Celery worker", worker_command, env))
-        processes.append(start_process("Celery Beat", [*celery, "beat", "--loglevel=info"], env))
-        processes.append(
-            start_process(
-                "Frontend",
-                [npm, "run", "dev:https", "--", "--port", str(frontend_port)],
-                env,
-                ROOT / "frontend",
-            )
-        )
-        wait_for_ready(processes, env, api_port, frontend_port)
-        say("OK", "Native IAM", "enabled")
-        say("OK", "API", f"http://127.0.0.1:{api_port}")
-        say("OK", "Frontend", f"https://localhost:{frontend_port}")
-        print("\nSBOM Analyzer is ready. Logs: .dev-logs/. Press Ctrl+C to stop.\n", flush=True)
-        while all(process.poll() is None for process in processes):
-            if ACTIVE_RUNTIME:
-                ACTIVE_RUNTIME.refresh()
-            time.sleep(0.5)
-        for name, process in zip(("API", "Celery worker", "Celery Beat", "Frontend"), processes, strict=True):
-            if process.poll() is not None:
-                show_log(name, env)
-                raise SetupError(f"{name} exited. See {log_path(name).relative_to(ROOT)}.")
-    except KeyboardInterrupt:
-        print("\nStopping application processes...", flush=True)
-    finally:
-        if not ACTIVE_RUNTIME:
-            stop_processes(processes)
-        # The lifecycle owner performs registry-based cleanup, including children
-        # whose immediate parent exited. Never unlink another launcher's Beat lock.
-        if not ACTIVE_RUNTIME:
-            clean_beat_lock(os.getpid())
+    processes, env = launch_services(
+        env,
+        api_port,
+        frontend_port,
+        [npm, "run", "dev:https", "--", "--port", str(frontend_port)],
+        cwd=ROOT,
+        frontend_cwd=ROOT / "frontend",
+        tls_context=legacy_https_context(),
+    )
+    supervise_runtime(ACTIVE_RUNTIME, env, processes)
 
 
 def clean_beat_lock(owner: int | None = None) -> None:
@@ -1222,36 +3574,55 @@ def clean_beat_lock(owner: int | None = None) -> None:
         pass  # A live/uninspectable legacy lock is not evidence of ownership.
 
 
-def application_status() -> None:
-    print("SBOM Analyzer Development Status\n", flush=True)
+def application_status(profile=None):
+    global ACTIVE_PROFILE
+    profile = profile or ACTIVE_PROFILE
+    ACTIVE_PROFILE = profile
     runtime = Runtime(ROOT)
-    state = runtime.load()
-    print(f"{'Service':<18} {'Status':<12} {'PID':<10} Port")
-    running = False
-    unverified = False
-    for name, port in (("API", DEV_API_PORT), ("Frontend", DEV_FRONTEND_PORT), ("Celery worker", None), ("Celery Beat", None)):
-        record = (state or {}).get("services", {}).get(name)
+    state = runtime.load() or {}
+    names = ("API", "Frontend", "Celery worker", "Celery reports worker", "Celery Beat")
+    print(f"SBOM Analyzer {profile} runtime")
+    running = True
+    for name in names:
+        record = state.get("services", {}).get(name)
         status = runtime.service_status(record) if record else "STOPPED"
-        if not record and port and any(reachable(host, port) for host in ("127.0.0.1", "::1")):
-            status = "UNOWNED"
-        running |= status in {"RUNNING", "PARTIAL"}
-        unverified |= status in {"UNOWNED", "UNKNOWN"}
-        print(f"{name:<18} {status:<12} {str(record['pid']) if record else '-':<10} {port or '-'}")
-        if port and status == "UNOWNED":
-            print(f"  {port_diagnostic(port)}")
-    saved = read_config()
-    pg_port = urlsplit(saved.get("DATABASE_URL", f"postgresql://localhost:{POSTGRES_PORT}")).port or POSTGRES_PORT
-    redis_port = urlsplit(saved.get("REDIS_URL", f"redis://localhost:{REDIS_PORT}")).port or REDIS_PORT
-    for name, available, port in (("PostgreSQL", service_available("postgres", pg_port), pg_port),
-                                  ("Redis", service_available("redis", redis_port), redis_port),
-                                  ("Mailpit", mailpit_ready() and reachable("127.0.0.1", MAILPIT_SMTP_PORT), MAILPIT_UI_PORT)):
-        print(f"{name:<18} {'RUNNING' if available else 'UNAVAILABLE':<12} {'-':<10} {port}")
-    print(f"\nAPI: http://127.0.0.1:{DEV_API_PORT}\nFrontend: https://localhost:{DEV_FRONTEND_PORT}\nLogs: .dev-logs/")
-    if not running:
-        if unverified:
-            print("No verified launcher-owned services are running. Unowned/unknown processes were not changed.")
-        else:
-            print("SBOM Analyzer application is not running." + (" Stale state detected; run stop to reconcile it." if state else ""))
+        print(f"{name:<23} {status}")
+        running &= status == "RUNNING"
+    if not running or not state.get("ready"):
+        print("Application is not ready. Only verified owned processes can be managed; inspect logs or restart.")
+        return False
+    try:
+        env = profile_environment(profile)
+        env["SBOM_DEV_INSTANCE"] = state["instance"]
+        verify_data_connectivity(env)
+        background_health(runtime, env)
+        api_port = int(env.get("DEV_API_PORT", "18000"))
+        frontend_port = int(env.get("DEV_FRONTEND_PORT", "13000"))
+        context = (
+            LocalHttps.client_context(GreenfieldStack.STATE) if profile == "greenfield" else legacy_https_context()
+        )
+        with urlopen(f"http://127.0.0.1:{api_port}/health", timeout=3) as response:
+            if json.load(response).get("database", {}).get("available") is not True:
+                raise service_failure("API", "database readiness failed")
+        if env.get("NATIVE_AUTH_ENABLED", "false").lower() == "true":
+            with urlopen(f"http://127.0.0.1:{api_port}/ready/iam", timeout=3) as response:
+                if json.load(response).get("ready") is not True:
+                    raise service_failure("API", "IAM readiness failed")
+        with urlopen(f"https://localhost:{frontend_port}/", context=context, timeout=3) as response:
+            if not 200 <= response.status < 400:
+                raise service_failure("Frontend", "HTTPS readiness failed")
+    except Exception as error:
+        detail = (
+            redact(str(error), env if "env" in locals() else {})
+            if isinstance(error, SetupError)
+            else type(error).__name__
+        )
+        print("UNHEALTHY: " + detail)
+        return False
+    print(
+        f"HEALTHY: PostgreSQL, Redis, both queue consumers and scheduler progress verified; https://localhost:{frontend_port}"
+    )
+    return True
 
 
 def stop_application(timeout: float = 30) -> None:
@@ -1262,6 +3633,7 @@ def stop_application(timeout: float = 30) -> None:
         state = runtime.load()
         if not state:
             raise SetupError("Launcher is acquiring ownership; retry stop shortly.")
+        check_profile_ownership(runtime, ACTIVE_PROFILE)
         # Cooperative cancellation works on Windows too, without terminating a
         # console or guessing which process owns a reused launcher PID.
         requested = state
@@ -1272,11 +3644,16 @@ def stop_application(timeout: float = 30) -> None:
                 break
             time.sleep(0.2)
         else:
-            raise SetupError("Stop requested; launcher is still finishing setup/shutdown. Check status and retry stop. Nothing unverified was killed.")
+            raise SetupError(
+                "Stop requested; launcher is still finishing setup/shutdown. Check status and retry stop. Nothing unverified was killed."
+            )
     try:
         state = runtime.load()
+        check_profile_ownership(runtime, ACTIVE_PROFILE)
         if not runtime.stop_services(say):
-            raise SetupError("Some processes could not be safely stopped. Runtime records were retained; inspect status.")
+            raise SetupError(
+                "Some processes could not be safely stopped. Runtime records were retained; inspect status."
+            )
         if requested and not state:
             for name, record in reversed(list(requested["services"].items())):
                 if runtime.service_status(record) != "STOPPED":
@@ -1287,47 +3664,122 @@ def stop_application(timeout: float = 30) -> None:
         for port in (DEV_API_PORT, DEV_FRONTEND_PORT):
             if any(reachable(host, port) for host in ("127.0.0.1", "::1")):
                 say("WARN", f"Port {port}", port_diagnostic(port) + "; it was not stopped.")
-        say("OK", "SBOM Analyzer", "development environment stopped." if state or requested else "development environment is already stopped.")
+        say(
+            "OK",
+            "SBOM Analyzer",
+            "development environment stopped." if state or requested else "development environment is already stopped.",
+        )
     finally:
         runtime.release()
 
 
+def bounded_log_lines(value):
+    number = int(value)
+    if not 1 <= number <= 100000:
+        raise argparse.ArgumentTypeError("--lines must be between 1 and 100000")
+    return number
+
+
+def log_service(value):
+    aliases = {
+        "all": "all",
+        "api": "API",
+        "frontend": "Frontend",
+        "worker": "Celery worker",
+        "reports": "Celery reports worker",
+        "beat": "Celery Beat",
+        "postgres": "postgres",
+        "redis": "redis",
+        "mailpit": "mailpit",
+    }
+    aliases.update(
+        {name.lower(): name for name in ("API", "Frontend", "Celery worker", "Celery reports worker", "Celery Beat")}
+    )
+    try:
+        return aliases[value.lower()]
+    except KeyError:
+        raise argparse.ArgumentTypeError(
+            "Choose all, api, frontend, worker, reports, beat, postgres, redis or mailpit"
+        ) from None
+
+
 def parse_args(argv=None):
-    parser = argparse.ArgumentParser(description="Manage local SBOM Analyzer development",
-                                     epilog="No command defaults to start. Ctrl+C stops foreground application services; data services remain running.")
-    parser.add_argument("command", nargs="?", default="start", choices=("start", "stop", "restart", "status"),
-                        help="start services, stop owned services, restart, or show status")
-    parser.add_argument("--check", action="store_true", help="inspect prerequisites only; never start or stop processes")
-    parser.add_argument("--verbose", action="store_true", help="show redacted technical diagnostics")
-    parser.add_argument("--profile", choices=("auto", "greenfield", "legacy"), default="auto",
-                        help="auto selects an installed greenfield UUID stack; legacy uses .env.dev.local")
+    parser = argparse.ArgumentParser(
+        description="One local SBOM Analyzer launcher: Windows, macOS and Linux adapters",
+        epilog="Default: start. Ctrl+C stops owned application processes; data services remain running.",
+    )
+    parser.add_argument(
+        "command", nargs="?", default="start", choices=("setup", "start", "stop", "restart", "status", "doctor", "logs")
+    )
+    parser.add_argument("--check", action="store_true", help="alias for read-only doctor")
+    parser.add_argument("--verbose", action="store_true", help="redacted setup diagnostics")
+    parser.add_argument(
+        "--profile",
+        choices=("auto", "greenfield", "legacy"),
+        default="auto",
+        help="auto chooses an installed Greenfield; no fallback from an incomplete installation",
+    )
+    parser.add_argument(
+        "--legacy-config",
+        choices=("auto", "managed", "windows", "env"),
+        default="auto",
+        help="preserved Legacy configuration family; executable configuration is never run",
+    )
+    parser.add_argument(
+        "--provision-greenfield", action="store_true", help="setup only: create a new isolated Greenfield installation"
+    )
+    parser.add_argument(
+        "--initialize-database", action="store_true", help="setup only: bootstrap a confirmed empty database"
+    )
+    parser.add_argument(
+        "--migrate", action="store_true", help="setup only: explicitly review/perform a database upgrade"
+    )
+    parser.add_argument("--confirm-database", help="repeat the exact database name for controlled setup")
+    parser.add_argument(
+        "--frontend-build", action="store_true", help="setup only: build the isolated frontend workspace"
+    )
+    parser.add_argument("--lines", type=bounded_log_lines, default=80, help="bounded log tail (default 80)")
+    parser.add_argument(
+        "--service",
+        type=log_service,
+        default="all",
+        help="log service: all/api/frontend/worker/reports/beat/postgres/redis/mailpit",
+    )
     return parser.parse_args(argv)
 
 
 def main() -> None:
-    global VERBOSE, ACTIVE_RUNTIME
+    global VERBOSE, ACTIVE_RUNTIME, ACTIVE_PROFILE, ACTIVE_LEGACY_CONFIG
     args = parse_args()
     VERBOSE = args.verbose
-    if args.profile == "auto":
-        installed = (Path.home() / ".sbom-greenfield-uuid").exists()
-        args.profile = "greenfield" if installed and (ROOT / "scripts/greenfield_uuid.py").exists() else "legacy"
-    if args.check:
-        start_application(args)
+    if args.command != "setup" and any(
+        (args.provision_greenfield, args.initialize_database, args.migrate, args.frontend_build, args.confirm_database)
+    ):
+        raise SetupError("Provisioning and database changes are accepted only by the explicit setup command.")
+    ACTIVE_LEGACY_CONFIG = pin_legacy_configuration(args.legacy_config, Runtime(ROOT).load())
+    if args.command == "setup":
+        setup_application(args)
         return
+    if args.check or args.command == "doctor":
+        doctor(args)
+        return
+    args.profile = (
+        control_profile(args.profile) if args.command in {"stop", "status"} else resolve_profile(args.profile)
+    )
+    ACTIVE_PROFILE = args.profile
+    runtime = Runtime(ROOT)
+    check_profile_ownership(runtime, args.profile)
     if args.command == "status":
-        if args.profile == "greenfield":
-            if __package__:
-                from . import dev_greenfield
-            else:
-                import dev_greenfield
-            dev_greenfield.status(Runtime(ROOT))
-        else:
-            application_status()
+        return 0 if application_status(args.profile) else 3
+    if args.command == "logs":
+        display_logs(args)
         return
     if args.command in {"stop", "restart"}:
         stop_application()
         if args.command == "stop":
             return
+    validate_repository_layout()
+    validate_prerequisites()
     ensure_virtualenv()
     runtime = Runtime(ROOT)
     if not runtime.acquire():
@@ -1335,30 +3787,41 @@ def main() -> None:
         launcher = (state or {}).get("launcher_pid")
         suffix = f" (launcher PID {launcher})" if isinstance(launcher, int) else ""
         say("INFO", "SBOM Analyzer", f"development environment is already running or starting/stopping{suffix}.")
-        if args.profile == "greenfield":
-            say("INFO", "Greenfield UUID", "use python3 scripts/dev.py status")
-        else:
-            application_status()
-        print("Use python3 scripts/dev.py status or python3 scripts/dev.py stop.")
-        return
+        if not (state or {}).get("ready"):
+            raise SetupError(
+                "Existing instance is not ready. Inspect status/logs; startup or shutdown may still be in progress."
+            )
+        if not application_status(args.profile):
+            raise SetupError(
+                "Existing instance is unhealthy. Inspect the named logs and use restart after correcting the cause."
+            )
+        return 0
     previous = {}
     try:
-        # Reconcile surviving children of a crashed launcher before starting.
+        # Recheck under the lock: another profile may have started between the
+        # initial inspection and acquiring exclusive lifecycle ownership.
+        check_profile_ownership(runtime, args.profile)
         stale = runtime.load()
         if not runtime.stop_services(say):
             raise SetupError("Unverified processes remain in runtime state. Nothing else was started.")
         clean_beat_lock((stale or {}).get("launcher_pid"))
-        runtime.begin()
+        runtime.begin(args.profile)
+        runtime.state["legacy_config"] = ACTIVE_LEGACY_CONFIG if args.profile == "legacy" else None
+        atomic_json(runtime.path, runtime.state)
         ACTIVE_RUNTIME = runtime
+
         def cancelled(signum, frame):
             raise KeyboardInterrupt
-        for sig in (signal.SIGINT, signal.SIGTERM):
+
+        signals = [signal.SIGINT, signal.SIGTERM]
+        if sys.platform == "win32" and hasattr(signal, "SIGBREAK"):
+            signals.append(signal.SIGBREAK)
+        for sig in signals:
             previous[sig] = signal.signal(sig, cancelled)
         start_application(args)
     except KeyboardInterrupt:
         print("\nStopping application processes...", flush=True)
     finally:
-        # Ignore repeated signals until cleanup completes.
         for sig in previous:
             signal.signal(sig, signal.SIG_IGN)
         try:
@@ -1373,19 +3836,21 @@ def main() -> None:
                 signal.signal(sig, handler)
 
 
-if __name__ == "__main__":
+def cli() -> int:
     try:
-        main()
+        return main() or 0
     except KeyboardInterrupt:
         print("\n[INFO] Development setup cancelled.", file=sys.stderr)
-        sys.exit(130)
+        return 130
     except (SetupError, OwnershipError) as error:
-        if VERBOSE:
-            raise
-        print(f"[ERROR] {error}", file=sys.stderr)
-        sys.exit(1)
+        print("[ERROR] " + redact(str(error), None), file=sys.stderr)
+        return 1
     except Exception as error:
-        if "--verbose" in sys.argv:
-            raise
-        print(f"[ERROR] Setup failed: {type(error).__name__}. Rerun with --verbose for details.", file=sys.stderr)
-        sys.exit(1)
+        # Never print configuration objects, connection strings or a traceback
+        # that can include credential-bearing subprocess arguments.
+        print(f"[ERROR] Setup failed: {type(error).__name__}. Run doctor, then inspect redacted logs.", file=sys.stderr)
+        return 1
+
+
+if __name__ == "__main__":
+    raise SystemExit(cli())

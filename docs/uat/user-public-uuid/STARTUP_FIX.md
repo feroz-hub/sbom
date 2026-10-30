@@ -98,7 +98,7 @@ Commands:
 ```bash
 PYTHON_DOTENV_DISABLED=1 .venv/bin/python -B -m pytest --noconftest -q \
   tests/test_greenfield_startup_migrations.py tests/test_dev_greenfield.py \
-  tests/test_dev_lifecycle.py tests/test_dev_launcher.py tests/test_greenfield_https.py \
+  tests/test_dev_lifecycle.py tests/test_dev_launcher.py tests/test_dev_greenfield.py \
   -o addopts= --tb=short
 ```
 

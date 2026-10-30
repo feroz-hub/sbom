@@ -1,5 +1,15 @@
 # PROJECT LENS REPORT — SBOM Analyzer
 
+> **Local development update:** Use `python3 scripts/dev.py` from the repository
+> root. [scripts/dev.py](scripts/dev.py) is the sole local development manager for
+> setup, start, stop, restart, status, doctor and logs, including API, frontend,
+> data dependencies, both Celery workers and Beat. See the
+> [lifecycle guide](docs/dev-launcher-lifecycle.md) and
+> [platform matrix](docs/engineering/dev-launcher-platform-matrix.md).
+> The architecture analysis, findings, dependency versions, line citations and
+> router counts below are historical observations, not a current inventory or
+> fresh security/acceptance assessment.
+
 > ## 🚨 CRITICAL — Live secrets committed in `.env`
 >
 > While implementing Finding A's authentication work I discovered that
@@ -131,7 +141,7 @@
 
 ```
 sbom/
-├── run.py                         # uvicorn entry point; loads .env, sets up logging
+├── scripts/dev.py                 # current local manager; replaces the former API runner
 ├── requirements.txt               # 10 runtime deps; no version pins for dev/test/lint
 ├── .env / .env.example            # backend env vars (NVD_API_KEY, GITHUB_TOKEN, CORS, DB)
 ├── sbom_api.db                    # committed SQLite DB (dev fixture; should be gitignored)
@@ -244,7 +254,7 @@ graph TD
 |---|---|---|---|---|
 | Backend runtime | Python | unspecified | FastAPI host | No `.python-version` / `pyproject.toml` ([requirements.txt](requirements.txt)) |
 | Web framework | FastAPI | `>=0.100.0` | HTTP routing | Loose lower bound only |
-| ASGI server | uvicorn[standard] | `>=0.23.0` | App server | Started by [run.py:32](run.py#L32) |
+| ASGI server | uvicorn[standard] | `>=0.23.0` | App server | Local startup now managed by [scripts/dev.py](scripts/dev.py); version is historical |
 | ORM | SQLAlchemy | `>=2.0.0` | Persistence | declarative_base used ([app/db.py:24](app/db.py#L24)) |
 | DB | SQLite | bundled | Storage | File path defaults to repo root ([app/db.py:10-13](app/db.py#L10-L13)); committed as `sbom_api.db` |
 | Validation | Pydantic | `>=2.0.0` | Schemas / Settings | settings.py optionally uses `pydantic_settings` |
@@ -252,7 +262,7 @@ graph TD
 | Reports | ReportLab | `>=4.0.0` | PDF | Used in [app/pdf_report.py](app/pdf_report.py) |
 | Versioning | packaging | `>=23.0` | semver compare | |
 | Multipart | python-multipart | `>=0.0.6` | File upload | |
-| Env loading | python-dotenv | `>=1.0.0` | `.env` reader | Imported lazily ([run.py:11-15](run.py#L11-L15)) |
+| Env loading | python-dotenv | `>=1.0.0` | `.env` reader | Current local profile configuration is managed by [scripts/dev.py](scripts/dev.py); earlier runner reference retired |
 | Frontend framework | Next.js | `^16.2.2` | App router | Bleeding-edge major; Node 18+ implied |
 | UI runtime | React / React DOM | `^18.3.1` | UI | |
 | Data fetching | @tanstack/react-query | `^5.56.2` | Cache + mutations | Centralised in `providers.tsx` |
@@ -316,7 +326,7 @@ Severity legend: **L**=Large, **M**=Medium, **S**=Small.
 
 - Layers (post-SOLID refactor): **Routers → Services → Repositories → Models**, with [app/main.py](app/main.py) as the wiring layer ([app/main.py:209-236](app/main.py#L209-L236)).
 - Layering violation: routers still import directly from `app/analysis.py` (the legacy engine) instead of going through services — see imports referenced in `routers/sboms_crud.py` and `routers/analyze_endpoints.py`.
-- Entry points: `python run.py` ([run.py:32](run.py#L32)) → `app.main:app` → 11 registered routers ([app/main.py:213-236](app/main.py#L213-L236)).
+- Current local entry point: `python3 scripts/dev.py` ([launcher](scripts/dev.py)) manages the runtime and starts `app.main:app`. The original audit observed 11 registered routers ([app/main.py:213-236](app/main.py#L213-L236)); that historical count is preserved, not recomputed here.
 - Cross-layer cycle risk: `services/analysis_service` is imported by `app/main.py` for backfill ([app/main.py:41](app/main.py#L41)), and `services/sbom_service.now_iso` is re-exported from `main` for back-compat — minor smell.
 
 ### 2. Tech stack inventory

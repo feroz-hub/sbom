@@ -21,7 +21,7 @@ Known completeness gaps (tracked as OQ-009): `.env.example` omits `NVD_MIRROR_FE
 | Analysis-engine knobs | `app/analysis.py` — `get_analysis_settings()` `@lru_cache(maxsize=1)` (L586–616); VulnDB block (L1238–1245) | direct `os.getenv` via `_env_str/_env_int/_env_float/_env_bool_top` (L547–583). Cached per process. |
 | NVD mirror | `app/nvd_mirror/settings.py` (L96–118) | direct `os.getenv`, evaluated when settings are built (worker task path). |
 | Per-request env reads | `app/auth.py:28–32` (`API_AUTH_MODE`, `API_AUTH_TOKENS`), `app/sources/applicability.py:249` | `os.getenv` at call time — **no restart needed**. |
-| Module-import constants | `app/sources/epss.py:36–39`, `app/sources/kev.py:41–47`, `app/idempotency.py:22–26`, `app/http_client.py:37–48`, `app/rate_limit.py:20–29`, `app/logger.py:107–111`, `run.py:30–32`, `app/db.py:35–74` | read at import/startup ⇒ restart required. |
+| Module-import constants | `app/sources/epss.py:36–39`, `app/sources/kev.py:41–47`, `app/idempotency.py:22–26`, `app/http_client.py:37–48`, `app/rate_limit.py:20–29`, `app/logger.py:107–111`, `scripts/dev.py:30–32`, `app/db.py:35–74` | read at import/startup ⇒ restart required. |
 | Hard constants (not env) | `app/settings.py` L661–713: `NVD_API`, `GITHUB_GRAPHQL`, `OSV_API`, `VULNDB_API`, `OSV_MAX_BATCH=1000`, `MAX_UPLOAD_BYTES=50 MiB` (ADR-0007 §4.1), `MAX_DECOMPRESSED_BYTES=200 MiB`, `MAX_DECOMPRESSION_RATIO=100`, `SBOM_SYNC_VALIDATION_BYTES=5 MiB`, `SBOM_SIGNATURE_VERIFICATION=False`, `SBOM_WORKSPACE_STORAGE_DIR="./data/sbom-workspaces"`, `SBOM_*` editor/paste/patch limits, `DEFAULT_RESULTS_PER_PAGE=20`, `APP_VERSION="2.0.0"`. `app/services/sbom/workspace_storage.py:17–27` allows env override of the `SBOM_*` workspace constants by the same names. |
 | Frontend | `frontend/.env.local.example`; consumed in `frontend/src/**` | `NEXT_PUBLIC_*` inlined at **build time** (Next.js) — rebuild required. |
 | Alembic | `alembic/env.py:30` `get_url()` | `DATABASE_URL` env, falling back to `app.db.DATABASE_URL`; loads `.env` via `python-dotenv` (L8–12). |
@@ -50,7 +50,7 @@ Legend — Consumer: **A**=API, **W**=Celery worker, **B**=Celery beat, **F**=Fr
 
 | Variable | Purpose | Type | Mand.? | Default | Consumer | Restart | Class | Missing |
 |---|---|---|---|---|---|---|---|---|
-| `HOST` / `PORT` / `RELOAD` | uvicorn bind (`run.py:30–32`, `app/settings.py:71–73`) | str/int/bool | No | `127.0.0.1` / 8000 / false | A | R | C/P | local default; set `HOST=0.0.0.0` explicitly for containers or remote deployments |
+| `HOST` / `PORT` / `RELOAD` | uvicorn bind (`scripts/dev.py:30–32`, `app/settings.py:71–73`) | str/int/bool | No | `127.0.0.1` / 8000 / false | A | R | C/P | local default; set `HOST=0.0.0.0` explicitly for containers or remote deployments |
 | `CORS_ORIGINS` | comma list of allowed origins (`app/settings.py:68`, validator L581) | str | No | `*` | A | R | C | `*` (dev-open) |
 | `LOG_LEVEL` / `LOG_FORMAT` / `LOG_FILE` / `LOG_MAX_MB` / `LOG_BACKUPS` | logging setup (`app/logger.py:107–111`; also Settings L550–554) | str/int | No | INFO / text / "" / 10 / 5 | A,W,B | R | C | console text INFO |
 | Upload limits | **not env** — constants `MAX_UPLOAD_BYTES=50 MiB`, `MAX_DECOMPRESSED_BYTES`, `MAX_DECOMPRESSION_RATIO`, `SBOM_SYNC_VALIDATION_BYTES` (`app/settings.py:677–693`) | — | — | — | A | code change | C | — |
@@ -167,7 +167,7 @@ Legend — Consumer: **A**=API, **W**=Celery worker, **B**=Celery beat, **F**=Fr
 
 #### S3 (declared, no direct reader found)
 
-`.env.example` lists `AWS_ACCESS_KEY_ID`, `AWS_SECRET_ACCESS_KEY` (**S**), `AWS_REGION`, `AWS_S3_BUCKET`, `AWS_S3_ENDPOINT_URL`. No `os.getenv("AWS_…")` in `app/` — boto3 is a dependency (`pyproject.toml:31`) and reads the credential pair implicitly; `AWS_S3_BUCKET`/`AWS_S3_ENDPOINT_URL` have **no consumer found** (searched `os.getenv`/`environ` across `app/`, `alembic/`, `run.py`).
+`.env.example` lists `AWS_ACCESS_KEY_ID`, `AWS_SECRET_ACCESS_KEY` (**S**), `AWS_REGION`, `AWS_S3_BUCKET`, `AWS_S3_ENDPOINT_URL`. No `os.getenv("AWS_…")` in `app/` — boto3 is a dependency (`pyproject.toml:31`) and reads the credential pair implicitly; `AWS_S3_BUCKET`/`AWS_S3_ENDPOINT_URL` have **no consumer found** (searched `os.getenv`/`environ` across `app/`, `alembic/`, `scripts/dev.py`).
 
 #### Frontend (`frontend/.env.local.example`; build-time, class P — all NEXT_PUBLIC values ship in the JS bundle)
 

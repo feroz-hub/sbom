@@ -1,3 +1,5 @@
+> Local development uses `python scripts/dev.py`. Explicit Celery commands in this document are production/operator procedures.
+
 # Software Design Document For SBOM Analyzer
 
 | | |
@@ -282,7 +284,7 @@ flowchart TB
 
 ## 5.2 System Integration Architecture
 
-The deployable unit set is: **api** (uvicorn, ≥1 replica), **worker** (Celery, ≥1), **beat** (exactly 1 — duplicate beats double-fire schedules), **PostgreSQL**, **Redis**, and the **frontend** (Next.js, port 3000). All three Python processes are built from the same backend image (`Dockerfile`, non-root user, `EXPOSE 8000`) and differ only in command (`uvicorn app.main:app` vs `scripts/celery_worker.sh` vs `scripts/celery_beat.sh`). The browser talks to FastAPI directly over REST plus three SSE channels; there is no reverse proxy configuration in the repository.
+The deployable unit set is: **api** (uvicorn, ≥1 replica), **worker** (Celery, ≥1), **beat** (exactly 1 — duplicate beats double-fire schedules), **PostgreSQL**, **Redis**, and the **frontend** (Next.js, port 3000). All three Python processes are built from the same backend image (`Dockerfile`, non-root user, `EXPOSE 8000`) and differ only in command (`uvicorn app.main:app` vs `scripts/dev.py` vs `scripts/dev.py`). The browser talks to FastAPI directly over REST plus three SSE channels; there is no reverse proxy configuration in the repository.
 
 **Operational constraint (Current Implementation):** configuration, including feature flags, is read once per process via the cached `get_settings()` singleton (`app/settings.py:728-741`). **Flags must therefore be set in the environment of every process that consumes them — in particular the Celery worker — and the affected processes restarted after any flag change.** Exceptions that take effect without restart: `API_AUTH_MODE`/`API_AUTH_TOKENS` (read per request), NVD-mirror settings (DB-backed, rebuilt per task), and DB-backed AI credentials.
 
@@ -718,7 +720,7 @@ Not Applicable — no dedicated hardware. Minimum server sizing is not documente
 
 ## 7.2 Software
 
-Development environment (verified from `scripts/bootstrap.sh`/`bootstrap.ps1` and configs): Windows/PowerShell or Linux/macOS shells; **Python 3.11**; **Node 20** (bootstrap installs Node 20; no engine pin — OQ-007); **PostgreSQL 16** (compose, host port 55439); **Redis** (default `redis://localhost:6379/0`); package managers pip + npm (`npm ci`); quality tooling ruff ≥0.9, mypy ≥1.14, import-linter ≥2.0, pytest 9.1.1, Vitest 4.1.10. IDE is unconstrained.
+Development environment (verified from `scripts/dev.py`/`dev.py` and configs): Windows/PowerShell or Linux/macOS shells; **Python 3.11**; **Node 20** (bootstrap installs Node 20; no engine pin — OQ-007); **PostgreSQL 16** (compose, host port 55439); **Redis** (default `redis://localhost:6379/0`); package managers pip + npm (`npm ci`); quality tooling ruff ≥0.9, mypy ≥1.14, import-linter ≥2.0, pytest 9.1.1, Vitest 4.1.10. IDE is unconstrained.
 
 ## 7.3 Software Of Unknown Provenance (SOUP)
 
@@ -3220,7 +3222,7 @@ erDiagram
 
 - **SBOM formats (verified in code):** CycloneDX **1.4 / 1.5 / 1.6** (JSON and XML; vendored schemas/XSDs; Protobuf deferred) and SPDX **2.2 / 2.3** (JSON and Tag-Value; SPDX-Lite `elements[]` handled on extraction). SPDX 3.0 JSON-LD, RDF/XML and YAML are **rejected** with `E013`/HTTP 415 ("deferred in v1"). Format detection is content-based and never guesses (ambiguous → 415 `E011`). SPDX→CycloneDX conversion is built in (`POST /api/sboms/{id}/convert/cyclonedx`).
 - **Identifier schemes:** PURL (ECMA-427; packageurl-python with vendored fallback), CPE 2.2/2.3 normalization, distro PURL→CPE translation for deb/rpm/apk/conan with a curated ~60-entry soname table (flag `DISTRO_CPE_ENABLED`, default off; documented limitation: not backport-aware).
-- **Runtime:** Python ≥3.11 on Linux containers (dev also Windows via bootstrap.ps1); Node (unpinned; bootstrap installs Node 20) for the frontend.
+- **Runtime:** Python ≥3.11 on Linux containers (dev also Windows via dev.py); Node (unpinned; bootstrap installs Node 20) for the frontend.
 - **Databases supported:** PostgreSQL 16 (production/normal dev), SQLite (dev/test only, `ALLOW_SQLITE=true`); others refused at startup.
 - **Export formats:** FDA 510(k) five-tab Excel workbook (Instructions · SBOM Metadata · SBOM Components · Vulnerabilities & VEX · Lifecycle & Support Plan — sheet contract enforced at export), vulnerability XLSX (18 Snyk-style columns), CSV, SARIF, PDF (reportlab), JSON (runs export, VEX report), compare markdown/csv/json, SBOM document exports (native/JSON/XML/CycloneDX/SPDX × original/converted/enriched/normalized), lifecycle CSV/ZIP report pack.
 - **Interchange consumed:** NVD CVE API 2.0 JSON, OSV schema JSON, GHSA GraphQL, VulnDB API v3, CISA KEV JSON, FIRST EPSS API, endoflife.date API v1, deps.dev v3, package-registry metadata (npm/PyPI/NuGet/Maven/RubyGems), CSAF/CycloneDX-VEX/OpenVEX documents.

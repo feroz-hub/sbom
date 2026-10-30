@@ -23,7 +23,7 @@ Known precommit failure: rollback and physically close; independently establish 
 
 ## Fresh and disposable installation evidence
 
-New code constructs a separate metadata copy representing revision 100 (excluding only the new IAM column/unique constraint), creates the existing six UUID guards, establishes the verified 100 schema, and executes the actual 101 body and marker update transactionally. The historical migration body is not rewritten or replayed. `scripts/greenfield_uuid.py` now expects 101 for a new installation and refuses an existing 100 marker rather than upgrading it silently.
+New code constructs a separate metadata copy representing revision 100 (excluding only the new IAM column/unique constraint), creates the existing six UUID guards, establishes the verified 100 schema, and executes the actual 101 body and marker update transactionally. The historical migration body is not rewritten or replayed. `scripts/dev.py` now expects 101 for a new installation and refuses an existing 100 marker rather than upgrading it silently.
 
 Task-owned targets: `sbom_iam_public_uuid_test`, `sbom_iam_public_uuid_upgrade_test`, `sbom_iam_public_uuid_browser_test`. Only the upgrade-fixture database's public schema is reset by the migration tests. The browser runtime role is `iam_uuid_browser_app` (restricted), with separate `iam_uuid_browser_owner` NOLOGIN ownership and distinct private credentials/signing/session keys. No original Greenfield seeded account is used or modified.
 

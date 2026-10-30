@@ -161,93 +161,66 @@ KEV/                    Optional standalone KEV sync service
 docker-compose.yml      Local PostgreSQL 16 service
 ```
 
-## Prerequisites
+## Local development
 
-- Python 3.11 or newer
-- Node.js 20 or newer and npm
-- PostgreSQL 16
-- Redis when running Celery workers/Beat in the normal configuration. A PostgreSQL-backed Kombu broker is available for local development when Redis cannot be installed.
-- Docker Compose if using the provided local PostgreSQL service
+The public local development entrypoint is **`scripts/dev.py`**. Run it from a complete repository checkout:
 
-## Quick start: Windows, macOS, Linux
-
-```bash
-git clone <repository-url>
-cd sbom
-python3 scripts/dev.py start
+```sh
+python scripts/dev.py
 ```
 
-Greenfield HTTPS uses a leaf certificate signed by an existing **locally trusted mkcert CA**, with `localhost`, `127.0.0.1` and `::1` SANs. Setup/start checks macOS Keychain trust and never installs a root CA automatically. On a new Mac, install mkcert and independently approve its local CA trust setup first; a missing/untrusted CA stops setup with an actionable message. Valid leaf material is reused, with renewal only when needed. `make greenfield-https` verifies the running endpoint with system curl (no `-k` or custom trust bypass). See [local HTTPS trust and Chrome verification](docs/uuid-migration/GREENFIELD_HTTPS_CERTIFICATE_FIX.md). Production certificate management is separate.
+Use `python3` where that is the installed Python command. `start` is the default and stays in the foreground; keep that terminal open. The launcher prepares project dependencies when needed and checks the selected profile before launching application services. It does not install system software or trusted root certificates.
 
-When `~/.sbom-greenfield-uuid` is installed, this command selects the UUID environment automatically: database `sbom_greenfield_uuid` on localhost **56044**, Redis **56381**, and Mailpit **8026** (SMTP **1026**). It resumes only the recorded existing Docker containers and starts the API, Celery worker (including reports), and HTTPS frontend. It does not bootstrap, seed or replay migrations. Its worker embeds a restricted scheduler for local security-mail dispatch only; application-wide provider/mirror/analysis schedules stay disabled. Settings and logs remain private under `~/.sbom-greenfield-uuid`; the legacy `.env.dev.local` is not loaded. Open **https://localhost:13000**; API **http://127.0.0.1:18000**. `status`, `stop`, `restart`, `--check` and Ctrl+C use the same process ownership controls. Stop/Ctrl+C preserve running data services and all data. An incomplete greenfield installation fails rather than falling back to another database. For first installation, see [greenfield setup](docs/uuid-migration/GREENFIELD_UUID_ACCEPTANCE.md#reproduce-and-operate).
+Required system prerequisites are Python **3.11+**, Node.js **20.9+** with npm, and the data services selected by the profile. Docker with Compose is required for the installed Greenfield container topology; Legacy can use verified project Docker services or suitable local PostgreSQL/Redis/Mailpit. An independently approved local HTTPS trust setup is also required for browser authentication. Run the inspection command first on a new machine:
 
-Use `--profile greenfield` to require this environment explicitly. `--profile legacy` explicitly selects the older launcher behavior described below. Without a greenfield installation, automatic selection retains that legacy behavior.
-
-Legacy profile: The launcher creates `.venv` and the ignored `.env.dev.local`, installs dependencies when needed, and starts the Native IAM API, Celery worker, one Celery Beat, and HTTPS frontend. It uses this project's Docker PostgreSQL and Redis services when available, or local PostgreSQL and Redis if Docker is unavailable. Redis is required for the normal stack. It uses project Mailpit for local-only activation and reset email; open [Mailpit](http://127.0.0.1:8025) to receive test links. On first use, trust the generated `frontend/certificates/localhost.pem` certificate in your browser. The application is at [https://localhost:13000](https://localhost:13000), with API at [http://127.0.0.1:18000](http://127.0.0.1:18000). Process logs are in ignored `.dev-logs/`. Press Ctrl+C to stop the application processes; development data services remain running.
-
-The launcher saves its Docker/local PostgreSQL and Redis choices in `.env.dev.local` and reselects only if a saved provider is unavailable. It creates/reuses only the local `sbom_analyser_dev` database, checks an existing schema before migration, and runs `alembic upgrade head`. It never uses the database in `.env`, drops data, or sends mail to real recipients. It stores generated JWT, session, and outbox keys once in `.env.dev.local` (mode 600 where supported) and refuses invalid saved keys. Do not commit this file. It reports ready only after the API, IAM readiness, and HTTPS frontend respond. For the first Native Platform User, follow [the greenfield setup guide](docs/native-iam-greenfield-setup.md); set `NATIVE_PLATFORM_BOOTSTRAP_ENABLED=true` in `.env.dev.local` only during bootstrap, then set it back to `false`.
-
-Manage the same repository instance from another terminal:
-
-```bash
-python3 scripts/dev.py start       # foreground; no command also defaults to start
-python3 scripts/dev.py status
-python3 scripts/dev.py stop        # safe and idempotent; preserves data services/logs
-python3 scripts/dev.py restart
-python3 scripts/dev.py --check
-python3 scripts/dev.py start --verbose
+```sh
+python scripts/dev.py doctor
 ```
 
-On Windows, use `python` if `python3` is unavailable. Ctrl+C or SIGTERM still cleans up a foreground instance. The ignored, private `.dev-runtime.json` records process birth identities and groups, not secrets. An OS lock prevents duplicate launchers; `.dev-runtime.lock` intentionally remains on disk after exit, with its lock released. `.dev-runtime.stop` carries an instance-scoped stop request between terminals. Normal stop never stops PostgreSQL, Redis or Mailpit and never removes volumes.
+Missing or unsupported prerequisites produce corrective instructions. Native platform evidence and remaining limitations are tracked in the [Windows/macOS/Linux verification matrix](docs/engineering/dev-launcher-platform-matrix.md); intended platform adapters do not imply that a fresh clone or authentication has passed on every OS.
 
-Stale process records are reconciled by `stop` or the next `start`. Unknown/reused PIDs and unrelated port owners are never killed; status reports them. Older launchers started before the registry was introduced cannot be safely adopted: stop those with Ctrl+C in their original terminal. See [launcher lifecycle and safety](docs/dev-launcher-lifecycle.md) for recovery and platform details. Explicit `.env.dev.local` values such as `AI_FIXES_ENABLED=true` or `false` are preserved; lifecycle commands do not introduce a new AI default.
+Manage the same checkout from another terminal:
 
-Use `python3 scripts/dev.py --check` to inspect prerequisites without starting services or changing the database. Use `--verbose` for a technical error trace. A locally installed PostgreSQL may prompt once for a user/password with database-create access; these are saved only in `.env.dev.local`. Existing manual setup commands below remain available for advanced troubleshooting.
-
-## Manual quick start: macOS/Linux
-
-### 1. Start PostgreSQL
-
-```bash
-docker compose up -d postgres
-docker compose ps
+```sh
+python scripts/dev.py setup
+python scripts/dev.py start
+python scripts/dev.py status
+python scripts/dev.py logs --lines 80
+python scripts/dev.py logs --service api --lines 80
+python scripts/dev.py stop
+python scripts/dev.py restart
+python scripts/dev.py doctor --profile greenfield
+python scripts/dev.py --check
 ```
 
-The Compose service maps PostgreSQL to host port `55439` by default. Override it with `POSTGRES_PORT` if needed.
+`--check` is the inspection-only alias of `doctor`. Use `--verbose` for technical diagnostics. `logs` prints a bounded, redacted tail; review diagnostic output before sharing it.
 
-### 2. Configure and run the API
+### Profiles and persisted data
 
-```bash
-cp .env.example .env
+| Profile | Configuration | PostgreSQL | Redis | Mailpit web / SMTP |
+| --- | --- | --- | --- | --- |
+| Greenfield | Private `~/.sbom-greenfield-uuid` | `sbom_greenfield_uuid` on `56044` | `56381` | `8026` / `1026` |
+| Legacy | Ignored `.env.dev.local` | `sbom_analyser_dev` on Docker `55439` or saved local port | Docker `56379` or saved local port | `8025` / `1025` |
 
-python3.11 -m venv .venv
-source .venv/bin/activate
-python -m pip install --upgrade pip
-python -m pip install -r requirements.txt
+Both profiles serve the frontend at **https://localhost:13000** and API at **http://127.0.0.1:18000**. The selected profile is reported explicitly. `--profile auto` is the default: an installed Greenfield state directory selects Greenfield; otherwise Legacy is selected. Use `--profile greenfield` or `--profile legacy` when you require a specific target. An incomplete selected installation fails; it must not silently fall back to another database or profile.
 
-python -m alembic upgrade head
-python run.py
-```
+Greenfield resumes only containers matching its recorded identities and validates the existing schema. Both profiles start a default queue worker, a separate reports worker, and exactly one separate Beat using the application's full schedule and existing feature/security guards. Linux uses prefork; macOS and Windows use solo. Readiness requires worker responses, actual queues, matching owned PIDs, connected-consumer heartbeats and scheduler progress before FastAPI and HTTPS Next.js are declared ready.
 
-The checked-in `.env.example` is ready for local PostgreSQL on port `55439` and has `AUTH_ENABLED=false`. Change all example secrets and credentials before using a shared environment.
+Ordinary startup preserves data and does not initialize or implicitly upgrade a database. Review the [explicit setup controls](scripts/BOOTSTRAP.md) for provisioning, empty-database initialization or migrations. Windows pending Greenfield upgrades remain blocked until native backup/restore validation. First-user creation remains an explicit [Native IAM procedure](docs/native-iam-greenfield-setup.md).
 
-### 3. Configure and run the frontend
+Legacy preserves managed `.env.dev.local`. Existing `.windows/sbom.env.ps1` settings can be read as literal data using `--profile legacy --legacy-config windows`; root `.env` requires `--legacy-config env`. Saved databases, credentials, authentication settings and ports remain authoritative. Existing Windows configurations default to API/frontend ports 8000/3000 when absent. Configurations are never executed as PowerShell or silently replaced with another family.
 
-```bash
-cp frontend/.env.local.example frontend/.env.local
-cd frontend
-npm install
-npm run dev
-```
+### HTTPS and safe shutdown
 
-For unauthenticated local development, set these values in `frontend/.env.local`:
+Greenfield preserves its existing requirement for a leaf certificate issued by an independently trusted mkcert CA. Legacy retains its separate local-certificate policy and requires explicit browser trust approval where appropriate. The launcher never installs a root CA, silently trusts a certificate, or disables TLS verification. Trust/setup failures stop startup with corrective instructions. Existing complete keys/certificates are reused; incomplete or invalid material needs review. Production TLS is separate.
 
-```dotenv
-NEXT_PUBLIC_AUTH_ENABLED=false
-NEXT_PUBLIC_API_URL=http://localhost:8000
-```
+Ctrl+C and `stop` clean up only application processes with verified launcher ownership. PostgreSQL, Redis, Mailpit, volumes, credentials, and logs remain available. Repeated startup uses the checkout lock and reports an existing instance. Unknown or reused PIDs and unrelated port owners are reported rather than terminated. See [lifecycle, recovery, and logs](docs/dev-launcher-lifecycle.md).
 
-Open [http://localhost:3000](http://localhost:3000). The API is at [http://localhost:8000](http://localhost:8000), health is at [http://localhost:8000/health](http://localhost:8000/health), and OpenAPI is at [http://localhost:8000/docs](http://localhost:8000/docs).
+### Cleanup and operator procedures
+
+Redundant local launchers, setup scripts and distributed copies have been removed after migrating their consumers and testing the replacement. See the [exact deletion and essential-retention inventory](docs/engineering/dev-launcher-cleanup.md). Production Compose still invokes Uvicorn/Celery directly; application task modules and controlled migration/administration tools remain separate.
+
+Use the [bootstrap guide](scripts/BOOTSTRAP.md), [HCL.CS settings](docs/HCL_IAM_CONFIGURATION.md), [Windows instructions](docs/WINDOWS_NATIVE_SETUP.md) and [verification matrix](docs/engineering/dev-launcher-platform-matrix.md) for prerequisites and limitations. No Windows or full Linux application acceptance is claimed from mocked adapters.
 
 ## HCL.CS / HCL IAM mode
 
@@ -281,34 +254,17 @@ NEXT_PUBLIC_HCL_IAM_SCOPES="openid profile email offline_access sbom-analyser-ap
 SBOM_API_URL=http://localhost:8000
 ```
 
-OIDC mode requires HTTPS for the issuer and frontend. Generate the local frontend certificate and start Next.js with HTTPS:
-
-```bash
-cd frontend
-npm run setup:https
-npm run dev:https
-```
-
-Use `npm run setup:https:windows` on Windows. `HCL_IAM_CA_BUNDLE` can point the backend or Next.js server to a private/local CA certificate.
+OIDC mode requires HTTPS for the issuer and frontend. For an existing operator-managed HCL.CS installation, retain its registered redirect URIs, CA bundle, database and configuration. `HCL_IAM_CA_BUNDLE` can point the backend or Next.js server to its approved private/local CA certificate. Certificate trust must be reviewed and approved explicitly. Root trust changes require explicit operator approval outside the launcher.
 
 Tenant identity is derived from validated claims and local membership. An optional `X-Tenant-ID` selects one of the authenticated user's memberships; it cannot grant access to an unrelated tenant. Backend RBAC and tenant scoping are authoritative.
 
 Defined roles are `PLATFORM_ADMIN`, `TENANT_ADMIN`, `SECURITY_ANALYST`, `DEVELOPER`, and `VIEWER`.
 
-## Native Windows setup
+## Existing native Windows/HCL.CS installations
 
-For a complete Windows installation with local PostgreSQL, HCL.CS, trusted HTTPS certificates, and the SBOM application, use [docs/WINDOWS_NATIVE_SETUP.md](docs/WINDOWS_NATIVE_SETUP.md).
+[Windows/HCL.CS instructions](docs/WINDOWS_NATIVE_SETUP.md) describe using the canonical launcher with preserved literal `.windows/` settings. External identity-service installation, trusted roots, registered redirects and administrator bootstrap remain explicit operator prerequisites.
 
-The repository provides:
-
-```text
-scripts/windows/Initialize-SbomLocal.ps1
-scripts/windows/Start-SbomApi.ps1
-scripts/windows/Start-SbomFrontend.ps1
-scripts/windows/Stop-SbomLocal.ps1
-```
-
-The initializer creates the database and virtual environment, installs backend/frontend dependencies, applies Alembic migrations, configures local certificates, and writes ignored local settings under `.windows/` without overwriting a real `.env` file.
+Use `python scripts/dev.py` for managed local development. Review the [verification matrix](docs/engineering/dev-launcher-platform-matrix.md) before treating Windows execution or migration of an existing HCL.CS installation as validated.
 
 ## Configuration
 
@@ -410,9 +366,9 @@ This table highlights selected revisions, not every migration. Run `python -m al
 
 ## Background workers
 
-Redis must normally be available before starting workers. For local development
-or smoke tests on a machine where Redis cannot be installed, the existing
-PostgreSQL database can provide Kombu's polling SQLAlchemy broker transport:
+Managed local development starts its required workers through `python scripts/dev.py` with the selected profile's broker and schedule. Do not add a second Beat instance beside that launcher.
+
+The following commands are for explicit operator-managed deployments or isolated smoke tests, not alternative managed development startup. Redis must normally be available before starting workers. Where an operator intentionally uses the existing SQLAlchemy transport for an isolated verification environment, PostgreSQL can provide Kombu's polling broker:
 
 ```bash
 export CELERY_USE_DATABASE_BROKER=true

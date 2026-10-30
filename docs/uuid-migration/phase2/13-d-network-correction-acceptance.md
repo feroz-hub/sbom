@@ -128,7 +128,7 @@ All selected container IDs/image/start/state/restart/mount/network/requested and
 | Launcher/API/worker/Beat/frontend launcher | PIDs 23095/23229/23230/23231/23232; exact OS birth/executable/UID/PPID/PGID/SID tuples unchanged, matching prior reports |
 | .env / .env.dev.local | Exact safe inode/size/owner/mode/mtime_ns/ctime_ns/symlink metadata unchanged T1/T2 and matches W1.4b historical values. No file contents or semantic-equivalence claim |
 
-Process evidence uses only the statically inspected process_info function from scripts/dev_runtime.py with libproc; no Runtime methods, process arguments/environments or application endpoints were read. API/worker/Beat births are 1792137714:732547 / :736336 / :738942; launcher birth 1792137702:755614; frontend launcher birth 1792137714:742176. Roles are retained historical attribution, not a new inspection of each process's engine/credentials. No application service was stopped/restarted/signaled/reconfigured. No A/B connection or business-data equivalence claim.
+Process evidence uses only the statically inspected process_info function from scripts/dev.py with libproc; no Runtime methods, process arguments/environments or application endpoints were read. API/worker/Beat births are 1792137714:732547 / :736336 / :738942; launcher birth 1792137702:755614; frontend launcher birth 1792137714:742176. Roles are retained historical attribution, not a new inspection of each process's engine/credentials. No application service was stopped/restarted/signaled/reconfigured. No A/B connection or business-data equivalence claim.
 
 ## Acceptance checklist — not executed beyond preflight
 

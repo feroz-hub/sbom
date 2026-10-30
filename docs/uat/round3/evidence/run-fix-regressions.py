@@ -8,7 +8,12 @@ import signal
 import subprocess
 import sys
 
-from scripts.greenfield_uuid import ROOT, STATE, settings, url as greenfield_url, verify_resources
+from scripts.dev import GreenfieldStack
+ROOT = GreenfieldStack.ROOT
+STATE = GreenfieldStack.STATE
+settings = GreenfieldStack.settings
+greenfield_url = GreenfieldStack.url
+verify_resources = GreenfieldStack.verify_resources
 
 DB = "sbom_greenfield_uuid_round3_fix_test_20261020"
 

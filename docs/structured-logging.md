@@ -107,7 +107,7 @@ dc exec beat tail -f /var/lib/sbom/logs/beat.log
 dc exec backend sh -c 'ls -lh /var/lib/sbom/logs/backend.log* /var/lib/sbom/logs/worker.log* /var/lib/sbom/logs/beat.log*'
 
 # Local execution (use the project's installed environment)
-.venv/bin/python run.py
+.venv/bin/python scripts/dev.py
 tail -f logs/sbom.log
 ls -lh logs/sbom.log*
 ```

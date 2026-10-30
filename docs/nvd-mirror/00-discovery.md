@@ -1,3 +1,5 @@
+> Local development uses `python scripts/dev.py`. Explicit Celery commands in this document are production/operator procedures.
+
 # Phase 0 — Repository Discovery
 
 > **Scope:** Read-only audit performed before any code is written for the
@@ -284,7 +286,7 @@ In `AnalysisSettings` (`app/analysis.py:215-253`), driven by env vars:
 
 * App: `celery_app = Celery("sbom_analyzer", ...)` at [app/workers/celery_app.py:16](app/workers/celery_app.py#L16). Broker and backend both come from `Settings.celery_broker_url or Settings.redis_url`.
 * Existing tasks (one): `sbom_analyzer.run_sbom_analysis` at [app/workers/tasks.py:14](app/workers/tasks.py#L14). It runs `run_multi_source_analysis_async` inside `asyncio.run`.
-* Worker launch script: [scripts/celery_worker.sh](scripts/celery_worker.sh).
+* Worker launch script: [scripts/dev.py](../../scripts/dev.py).
 * `pyproject.toml` declares `celery[redis]>=5.6.3`.
 * **No `celery beat` is configured.** No periodic task table, no `celery_app.conf.beat_schedule`. Phase 4.1 must introduce beat (and a separate Railway process for it — see §F).
 

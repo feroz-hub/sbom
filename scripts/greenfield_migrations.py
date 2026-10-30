@@ -17,7 +17,7 @@ import tempfile
 import uuid
 from datetime import UTC, datetime
 
-from . import greenfield_uuid as stack
+from .dev import GreenfieldStack as stack
 
 PREVIOUS = "100_greenfield_uuid_final"
 CURRENT = "101_iam_user_public_uuid"
@@ -64,7 +64,7 @@ def engine(database=None, *, control=False):
         connect_args={
             "connect_timeout": 5,
             "hostaddr": "127.0.0.1",
-            "passfile": "/dev/null",
+            "passfile": os.devnull,
             "sslmode": "disable",
             "gssencmode": "disable",
             "application_name": "sbom-greenfield-schema-preflight",
@@ -271,7 +271,7 @@ def backup_and_rehearse(e, before, observed_identity, *, predecessor=PREVIOUS, s
     folder = parent / (datetime.now(UTC).strftime("%Y%m%dT%H%M%SZ-") + uuid.uuid4().hex[:12])
     folder.mkdir(mode=0o700)
     container = json.loads(stack.read_private("docker-identities.json"))["sbom-greenfield-uuid-dev-postgres-1"]
-    base = [*stack.DOCKER, "exec", "-i", container]
+    base = [*stack.docker_command(), "exec", "-i", container]
     next_number = successor.split("_", 1)[0]
     target = "sbom_greenfield_uuid_pre" + next_number + "_" + uuid.uuid4().hex[:12]
     with tempfile.TemporaryFile(dir=folder) as temporary:
@@ -493,6 +493,12 @@ def _ensure_unit(unit, *, confirm=None):
         if marker == unit.CURRENT:
             print("[OK] Schema             " + unit.CURRENT, flush=True)
             return
+        if sys.platform == "win32":
+            raise SchemaUpgradeError(
+                "The selected Greenfield schema needs an upgrade. Native Windows backup/restore verification "
+                "has not been validated; startup is blocked before changes. Complete the existing reviewed "
+                "upgrade procedure on a verified host, then retry. No database data was changed."
+            )
         before = unit.before_upgrade(e)
         print(
             f"[REVIEW] {stack.DB} at 127.0.0.1:56044, cluster {observed_identity[3]}: "

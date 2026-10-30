@@ -57,7 +57,7 @@ WHERE f.analysis_run_id IN (
 
 ## C. State coherence
 
-- [ ] Stop the API (`pkill -f run.py`); refresh dashboard. Within 30s, hero pill flips from green to amber, headline changes to "Posture unavailable", reason mentions "API". Sidebar `Degraded` indicator agrees.
+- [ ] API-only outage requires an approved, isolated fault-test fixture. The public local manager is `python3 scripts/dev.py`; its `stop` command stops the frontend too, so it cannot reproduce this API-only scenario. Do not kill processes by name or port. Once a suitable fixture is available, refresh the dashboard and evaluate the original expectation: within 30s, hero pill flips from green to amber, headline changes to "Posture unavailable", reason mentions "API". Sidebar `Degraded` indicator agrees. Timing and UI labels require revalidation; this case is not a passed test.
 - [ ] Restore API. Within 30s, hero recovers to its severity-derived band.
 - [ ] Disable NVD mirror via env. Hero reflects `degraded` band, reason mentions "NVD mirror".
 - [ ] Touch a successful run's `completed_on` to be 25h ago in the DB (`UPDATE analysis_run SET completed_on = ... WHERE id = X`). Hero must flip to `degraded` with reason "Data is older than 24h".

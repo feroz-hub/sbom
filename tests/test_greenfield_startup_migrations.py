@@ -14,7 +14,7 @@ IDENTITY = ("sbom_greenfield_uuid", "greenfield_setup", "160015", "synthetic-clu
 
 @pytest.fixture
 def flow(monkeypatch, tmp_path):
-    monkeypatch.setattr(migration.stack, "REVISION", migration.CURRENT)
+    monkeypatch.setattr(migration.stack, "current_revision", lambda: migration.CURRENT)
     monkeypatch.setattr(migration.stack, "STATE", tmp_path)
     monkeypatch.setattr(migration.stack, "verify_resources", Mock())
     monkeypatch.setattr(migration, "verify_sources", Mock())

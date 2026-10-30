@@ -3,7 +3,8 @@ import json,os
 from pathlib import Path
 from sqlalchemy import create_engine,text
 from sqlalchemy.engine import make_url
-from scripts.greenfield_uuid import settings
+from scripts.dev import GreenfieldStack
+settings = GreenfieldStack.settings
 configuration=settings();u=make_url(configuration['DATABASE_URL']);assert (u.host,u.port,u.database)==('127.0.0.1',56044,'sbom_greenfield_uuid')
 engine=create_engine(configuration['DATABASE_URL'],hide_parameters=True)
 with engine.connect() as c:

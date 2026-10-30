@@ -15,7 +15,9 @@ def verify():
     from sqlalchemy import CheckConstraint, UniqueConstraint, create_engine, inspect
     from sqlalchemy.engine import make_url
 
-    from scripts.greenfield_uuid import url
+    from scripts.dev import GreenfieldStack
+
+    url = GreenfieldStack.url
     from scripts.iam_uuid_browser_environment import DATABASE, OWNER, ROLE, environment
 
     env = environment()

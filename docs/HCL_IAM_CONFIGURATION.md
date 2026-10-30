@@ -146,7 +146,7 @@ Create the frontend certificate:
 
 ```bash
 cd /Users/ferozebasha/sbom/frontend
-npm run setup:https
+python ../scripts/dev.py setup
 ```
 
 `mkcert` is preferred and installs a trusted local CA. The fallback creates a self-signed certificate which must be imported into the workstation trust store. Export the current HCL.CS public development certificate for Node/FastAPI trust:
@@ -209,7 +209,7 @@ uvicorn app.main:app --host 0.0.0.0 --port 8000 --reload
 
 cd /Users/ferozebasha/sbom/frontend
 npm install
-npm run setup:https
+python ../scripts/dev.py setup
 npm run dev:https
 ```
 

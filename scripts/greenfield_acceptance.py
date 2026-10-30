@@ -10,7 +10,9 @@ from datetime import UTC, datetime
 
 import httpx
 
-from scripts.greenfield_uuid import STATE
+from scripts.dev import GreenfieldStack
+
+STATE = GreenfieldStack.STATE
 
 
 def public(value):

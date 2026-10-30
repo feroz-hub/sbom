@@ -9,7 +9,7 @@ from unittest.mock import MagicMock
 
 import pytest
 from scripts import dev
-from scripts import dev_runtime as lifecycle
+from scripts import dev as lifecycle
 
 process_info_adapter = lifecycle.process_info
 
@@ -24,6 +24,9 @@ def isolated(monkeypatch, tmp_path):
     monkeypatch.setattr(dev, "service_available", lambda *args: False)
     monkeypatch.setattr(dev, "mailpit_ready", lambda: False)
     monkeypatch.setattr(dev, "ensure_virtualenv", lambda: None)
+    monkeypatch.setattr(dev, "validate_repository_layout", lambda *args, **kwargs: None, raising=False)
+    monkeypatch.setattr(dev, "validate_prerequisites", lambda *args, **kwargs: None, raising=False)
+    monkeypatch.setattr(dev, "resolve_profile", lambda requested="auto": "legacy" if requested == "auto" else requested, raising=False)
     monkeypatch.setattr(lifecycle, "process_info", lambda pid: None)
     monkeypatch.setattr(lifecycle, "group_members", lambda pid: [])
     monkeypatch.setattr(dev, "process_info", lambda pid: None)
@@ -36,13 +39,13 @@ def identity(pid=100, birth="boot:100", **extra):
 
 
 def state(runtime, services=None):
-    value = {"version": 1, "root": str(runtime.root), "instance": "test-instance", "launcher_pid": 99,
+    value = {"version": 1, "root": str(runtime.root), "profile": "legacy", "instance": "test-instance", "launcher_pid": 99,
              "launcher": identity(99), "services": services or {}}
     lifecycle.atomic_json(runtime.path, value)
     return value
 
 
-@pytest.mark.parametrize("command", ["start", "stop", "restart", "status"])
+@pytest.mark.parametrize("command", ["start", "stop", "restart", "status", "doctor", "logs"])
 def test_parse_commands(command):
     assert dev.parse_args([command, "--verbose"]).command == command
     assert dev.parse_args(["--verbose", command]).verbose
@@ -283,8 +286,8 @@ def test_status_partial_service_failure(monkeypatch, tmp_path, capsys):
     monkeypatch.setattr(lifecycle, "process_info", lambda pid: identity() if pid == 100 else None)
     dev.application_status()
     output = capsys.readouterr().out
-    assert "API                RUNNING" in output
-    assert "Frontend           STOPPED" in output
+    assert "API" in output and "RUNNING" in output
+    assert "Frontend" in output and "STOPPED" in output
 
 
 def test_stale_beat_lock_recovery(monkeypatch):
@@ -319,7 +322,8 @@ def test_second_start_does_not_start_processes(monkeypatch, tmp_path):
     monkeypatch.setattr(dev.sys, "argv", ["dev.py", "start"])
     monkeypatch.setattr(dev, "start_application", lambda *args: pytest.fail("duplicate startup"))
     try:
-        dev.main()
+        with pytest.raises(dev.SetupError, match="Existing instance is not ready"):
+            dev.main()
     finally:
         runtime.release()
 
@@ -338,7 +342,8 @@ def test_check_overrides_lifecycle_without_mutation(monkeypatch):
     monkeypatch.setattr(dev.sys, "argv", ["dev.py", "restart", "--check"])
     monkeypatch.setattr(dev, "stop_application", lambda: pytest.fail("stop during check"))
     checked = []
-    monkeypatch.setattr(dev, "start_application", lambda args: checked.append(args.check))
+    monkeypatch.setattr(dev, "start_application", lambda args: pytest.fail("startup during check"))
+    monkeypatch.setattr(dev, "doctor", lambda args: checked.append(args.check), raising=False)
     dev.main()
     assert checked == [True]
 

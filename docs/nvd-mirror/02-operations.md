@@ -1,3 +1,5 @@
+> Local development uses `python scripts/dev.py`. Explicit Celery commands in this document are production/operator procedures.
+
 # Phase 6 — NVD Mirror Operations Runbook
 
 > **Audience:** operators deploying or running the SBOM Analyzer with the
@@ -234,8 +236,8 @@ Three separate Railway services share the same Docker image and env vars:
 | Service         | Start command                          | Replicas |
 |-----------------|----------------------------------------|----------|
 | **api**         | `uvicorn app.main:app --host 0.0.0.0 --port 8000` | ≥ 1 (autoscale)  |
-| **worker**      | `./scripts/celery_worker.sh`           | ≥ 1 (autoscale)  |
-| **beat**        | `./scripts/celery_beat.sh`             | **exactly 1**    |
+| **worker**      | `celery -A app.workers.celery_app worker --queues=celery --loglevel=info`           | ≥ 1 (autoscale)  |
+| **beat**        | `celery -A app.workers.celery_app beat --loglevel=info`             | **exactly 1**    |
 
 > ⚠ **Beat must be a single instance.** Two beat processes would each
 > fire the hourly schedule, doubling NVD API calls and risking 429s.

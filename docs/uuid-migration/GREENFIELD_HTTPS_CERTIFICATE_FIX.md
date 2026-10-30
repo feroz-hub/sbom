@@ -36,11 +36,11 @@ mkcert's documented workflow separates local CA trust from server certificate co
 
 ## Implementation and recurrence prevention
 
-- Added `scripts/greenfield_https.py`: private-file/symlink/hardlink/ownership checks; exact three-name SAN coverage; key matching; CA signature verification; seven-day renewal threshold; native macOS trust verification; a clean subprocess environment; and system curl endpoint verification. It reuses valid material and preserves prior material when replacement is necessary. It never installs a CA or changes trust automatically. Missing/untrusted mkcert CA produces an explicit operator-confirmation diagnostic before issuance or application readiness.
-- Updated `scripts/greenfield_uuid.py`: removed the ad-hoc self-signed OpenSSL fallback. Fresh setup checks HTTPS prerequisites before Docker provisioning. Start uses the validated leaf/key. Python's readiness client trusts the issuing CA only after native trust verification, and system curl must independently verify the served endpoint before readiness is reported. Python loading that approved public CA is separate from, and does not replace, macOS/Chrome trust verification.
-- Updated `scripts/dev_greenfield.py` and the Greenfield branch of `scripts/dev.py`: trust validation runs before starting stopped data services; `--check` verifies trust without leaf generation, application password access or service startup. Safe actionable TLS diagnostics reach the developer.
+- Added `scripts/dev.py`: private-file/symlink/hardlink/ownership checks; exact three-name SAN coverage; key matching; CA signature verification; seven-day renewal threshold; native macOS trust verification; a clean subprocess environment; and system curl endpoint verification. It reuses valid material and preserves prior material when replacement is necessary. It never installs a CA or changes trust automatically. Missing/untrusted mkcert CA produces an explicit operator-confirmation diagnostic before issuance or application readiness.
+- Updated `scripts/dev.py`: removed the ad-hoc self-signed OpenSSL fallback. Fresh setup checks HTTPS prerequisites before Docker provisioning. Start uses the validated leaf/key. Python's readiness client trusts the issuing CA only after native trust verification, and system curl must independently verify the served endpoint before readiness is reported. Python loading that approved public CA is separate from, and does not replace, macOS/Chrome trust verification.
+- Updated `scripts/dev.py` and the Greenfield branch of `scripts/dev.py`: trust validation runs before starting stopped data services; `--check` verifies trust without leaf generation, application password access or service startup. Safe actionable TLS diagnostics reach the developer.
 - Updated both Greenfield Playwright configurations: installed Google Chrome (`channel: chrome`) with `ignoreHTTPSErrors: false`. No certificate-bypass flags are added.
-- Added `tests/test_greenfield_https.py`, adjusted mocked launcher coverage, added `make greenfield-https`, and updated README and Greenfield acceptance documentation. The legacy launcher and production certificate management remain separate.
+- Added `tests/test_dev_greenfield.py`, adjusted mocked launcher coverage, added `python scripts/dev.py doctor --profile greenfield`, and updated README and Greenfield acceptance documentation. The legacy launcher and production certificate management remain separate.
 
 Subsequent `python3 scripts/dev.py start` uses the same stable private certificate paths. A live reuse check confirmed unchanged leaf bytes and key/cert inodes when preparing the already-valid certificate again. Renewal occurs only when needed, with system trust required again. “Permanent” here means persistent trusted local configuration and controlled renewal, not an immortal certificate.
 
@@ -65,7 +65,7 @@ API PID34900, Celery worker PID34899 and frontend supervisor PID34901 were retai
 | Browser page errors | None in the successful headed journey |
 | Offline certificate/launcher/lifecycle/setup regressions | **186 PASS, 0 FAIL, 0 SKIP**, final source; 6.33seconds |
 | Ruff lint/format, AST, focused frontend-config lint, whitespace | PASS |
-| Standard launcher `--check`; `make greenfield-https` | PASS with system trust enforced |
+| Standard launcher `--check`; `python scripts/dev.py doctor --profile greenfield` | PASS with system trust enforced |
 
 The in-app browser backend was unavailable, so verification used the actual installed Google Chrome application via Playwright, in a separate temporary profile. It did not reuse an unsafe exception, disable verification, change the operator's existing Chrome profile or restart unrelated Chrome windows. The strict installed-Chrome Native Login suite initially completed **12 PASS / 1 FAIL**. All role logins, tenant selection/refresh, denial, logout and initial-access cases passed. The expiry test collided with the application's automatic redirect (`page.reload: net::ERR_ABORTED`). Waiting only for navigation commit still reproduced the race in a focused run. The test now waits for the actual reauthentication screen before refreshing it, and additionally asserts that the session endpoint reports authenticated=false. It catches no network/TLS errors, changes no application behavior and retains the signed-out UI/session requirements. That focused rerun passed **1/1** in19.2seconds. Thus all13 distinct strict-Chrome scenarios have passing evidence across the suite/focused rerun; this is not represented as a single clean13-case run. Both initial failures remain in the evidence logs.
 
@@ -76,12 +76,12 @@ One initial offline test run produced182PASS/1FAIL: a bad-signature test raised 
 ```sh
 # Existing installed Greenfield stack:
 python3 scripts/dev.py --check
-make greenfield-https
+python scripts/dev.py doctor --profile greenfield
 python3 scripts/dev.py start  # only if the instance is stopped
 
 # Explicit certificate preparation: leaf only, trusted CA must already exist.
-.venv/bin/python -B -m scripts.greenfield_https prepare
-.venv/bin/python -B -m scripts.greenfield_https verify-served
+.venv/bin/python scripts/dev.py doctor --profile greenfield
+.venv/bin/python scripts/dev.py doctor --profile greenfield
 
 # Strict Chrome regression (requires installed Google Chrome):
 cd frontend/e2e

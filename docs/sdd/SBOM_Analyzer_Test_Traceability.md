@@ -1,3 +1,5 @@
+> Local development uses `python scripts/dev.py`. Explicit Celery commands in this document are production/operator procedures.
+
 # SBOM Analyzer — Test Traceability
 
 | | |
@@ -66,7 +68,7 @@ Mapping of design features to existing tests and verification gaps. Test types: 
 
 ## 4. CI vs local execution
 
-**No CI pipeline in repo — no `.github/`, no GitLab/Jenkins files found.** Evidence of intended flow: `pytest -m metric_consistency` "on every PR" (`tests/test_metric_consistency.py:7`), `pytest -m bench` for benchmarks (`tests/validation/test_perf.py:1–3`, "stats table in the CI log"), `postgres` marker gated on `TEST_POSTGRES_DATABASE_URL`. Local helpers: `scripts/bootstrap.sh|.ps1`, `scripts/celery_worker.sh`, `scripts/celery_beat.sh`, `scripts/check_database.py`, `scripts/migrate_sqlite_to_postgres.py`, `scripts/migrate_env_to_db.py`, `scripts/generate_encryption_key.py`. `backend-test-final.txt` is a 3-line truncated capture of a pytest run against Postgres (`alembic … PostgresqlImpl`, dot-progress to ~4% with one `F`) — no summary line, so it evidences *how* tests run (Postgres + alembic head) but not a full pass.
+**No CI pipeline in repo — no `.github/`, no GitLab/Jenkins files found.** Evidence of intended flow: `pytest -m metric_consistency` "on every PR" (`tests/test_metric_consistency.py:7`), `pytest -m bench` for benchmarks (`tests/validation/test_perf.py:1–3`, "stats table in the CI log"), `postgres` marker gated on `TEST_POSTGRES_DATABASE_URL`. Local helpers: `scripts/dev.py|.ps1`, `scripts/dev.py`, `scripts/dev.py`, `scripts/check_database.py`, `scripts/migrate_sqlite_to_postgres.py`, `scripts/migrate_env_to_db.py`, `scripts/generate_encryption_key.py`. `backend-test-final.txt` is a 3-line truncated capture of a pytest run against Postgres (`alembic … PostgresqlImpl`, dot-progress to ~4% with one `F`) — no summary line, so it evidences *how* tests run (Postgres + alembic head) but not a full pass.
 
 ---
 

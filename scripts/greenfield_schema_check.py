@@ -7,7 +7,15 @@ import os
 
 from sqlalchemy import create_engine, inspect, text
 
-from scripts.greenfield_uuid import REVISION, STATE, settings, url
+from scripts.dev import GreenfieldStack
+
+REVISION = GreenfieldStack.current_revision()
+
+STATE = GreenfieldStack.STATE
+
+settings = GreenfieldStack.settings
+
+url = GreenfieldStack.url
 
 
 def verify(database="sbom_greenfield_uuid"):

@@ -34,7 +34,7 @@ Existing active clients block the upgrade. Close database GUI sessions and stop 
 
 - `scripts/greenfield_migrations.py`: shares the existing owned transaction/backup/read-back lifecycle between explicitly selected next-only units; preserves the original 100→101 unit. Snapshot exclusion is unit-specific, includes default ACLs, and supports only the two reviewed rehearsal name patterns.
 - `scripts/greenfield_resource_migrations.py`: new source-pinned 101→102 unit, exact confirmation, full preflight snapshot, three-table catalog delta and independent acceptance.
-- `scripts/dev_greenfield.py`: updates the lifecycle description; service launch ordering is unchanged.
+- `scripts/dev.py`: updates the lifecycle description; service launch ordering is unchanged.
 - `tests/test_greenfield_startup_migrations.py`: retains the legacy controls and replaces the superseded unconditional-102-denial assertion with explicit dispatch/unknown-revision coverage.
 - `tests/test_greenfield_resource_startup.py`: confirmation, source, read-only, marker, backup, locking, data/catalog/security, rollback, closure and uncertain-COMMIT regressions.
 - `scripts/test_greenfield_resource_startup.py`: opt-in real acceptance using newly created `sbom_startup102_<random>_test` databases only. It never connects to `sbom_greenfield_uuid`, never starts services, and retains its test/rehearsal databases for review.

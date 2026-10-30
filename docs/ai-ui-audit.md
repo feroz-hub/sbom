@@ -18,7 +18,7 @@ We are **ready for Phase 2** with a revised, smaller scope: finish the gaps abov
 
 ### A.1 Live probe summary
 
-Backend server: `python3 run.py` on `localhost:8000`, running since 2026-05-04 01:11:25.
+Backend server: `python3 scripts/dev.py` on `localhost:8000`, running since 2026-05-04 01:11:25.
 **Important caveat:** the server process predates several uncommitted backend files (`app/routers/ai_credentials.py` last modified 01:50, `app/ai/registry.py` 01:47). Live 404s on credentials/settings/`providers/available` reflect server staleness, not missing code. After a restart, all routes register correctly per the source.
 
 | Endpoint | Live result | Source registered? | Notes |
@@ -32,7 +32,7 @@ Backend server: `python3 run.py` on `localhost:8000`, running since 2026-05-04 0
 | `GET /api/v1/runs/1/ai-fixes/progress` | **200 OK** | yes — [ai_fixes.py:312](app/routers/ai_fixes.py#L312) | Full `BatchProgress` shape |
 | `GET /api/v1/runs/1/ai-fixes/estimate` | 404 (stale) | yes — [ai_fixes.py:230](app/routers/ai_fixes.py#L230) | Will register on restart |
 
-**Action required before Phase 2:** restart `run.py` so the credential / settings / estimate / provider-catalog endpoints become live.
+**Action required before Phase 2:** restart `scripts/dev.py` so the credential / settings / estimate / provider-catalog endpoints become live.
 
 ### A.2 Spec-vs-reality matrix
 
@@ -326,7 +326,7 @@ The old read-only `AiSettings` component is referenced only by [its own test](fr
 
 ### G6 — Backend server staleness (operational, not a code gap)
 
-The running uvicorn process predates several uncommitted backend file edits. Live probes 404'd on credentials/settings/`providers/available`/`estimate`. **Resolution:** restart `python3 run.py` before Phase 2 verification.
+The running uvicorn process predates several uncommitted backend file edits. Live probes 404'd on credentials/settings/`providers/available`/`estimate`. **Resolution:** restart `python3 scripts/dev.py` before Phase 2 verification.
 
 ---
 
@@ -344,7 +344,7 @@ The five-phase plan should be re-scoped to:
 **Open questions for owner before Phase 2 starts:**
 1. **D1** — accept the existing inline section pattern in the CVE modal, or refactor to tabs?
 2. **G5** — confirm OK to delete `components/ai-fixes/Settings/AiSettings.tsx` (orphan)?
-3. **Server restart** — please restart `run.py` so the credential / settings / estimate endpoints are live before the Phase 2 walkthrough.
+3. **Server restart** — please restart `scripts/dev.py` so the credential / settings / estimate endpoints are live before the Phase 2 walkthrough.
 4. **Commit cadence** — the existing uncommitted work is large. Bundle into one feature commit before Phase 2 changes start, or land Phase 2 cleanup as part of the same commit?
 
 Once those are answered, Phase 2 is ~1 short session of work, not the originally-scoped multi-session build.

@@ -3,7 +3,11 @@ import importlib.util,json,uuid,os,subprocess,time,signal,hashlib,io,zipfile
 from datetime import datetime,timezone,timedelta
 from pathlib import Path
 spec=importlib.util.spec_from_file_location('m',Path(__file__).with_name('live-common.py'));m=importlib.util.module_from_spec(spec);spec.loader.exec_module(m)
-from scripts.greenfield_uuid import ROOT,STATE,settings,verify_resources
+from scripts.dev import GreenfieldStack
+ROOT = GreenfieldStack.ROOT
+STATE = GreenfieldStack.STATE
+settings = GreenfieldStack.settings
+verify_resources = GreenfieldStack.verify_resources
 from sqlalchemy import create_engine,text
 verify_resources();f=m.create_tenant();tid=f['tenant_id'];token=f['token'];sub=None;process=None;file='scheduled-report.json'
 def call(path,method='GET',body=None,**kw):return m.call(path,method,body,token=token,tenant=tid,role='platform',**kw)

@@ -27,7 +27,7 @@ fi
 
 SEMGREP_TARGETS=(
     "$PROJECT_ROOT/app"
-    "$PROJECT_ROOT/run.py"
+    "$PROJECT_ROOT/scripts/dev.py"
     "$FRONTEND_TARGET"
 )
 
@@ -81,7 +81,7 @@ echo "[3/4] Running Bandit backend scan..."
 
 bandit -r \
     "$PROJECT_ROOT/app" \
-    "$PROJECT_ROOT/run.py" \
+    "$PROJECT_ROOT/scripts/dev.py" \
     -x "$PROJECT_ROOT/app/tests,$PROJECT_ROOT/app/__pycache__" \
     -f html \
     -o "$REPORT_DIR/bandit-backend.html" \
@@ -89,7 +89,7 @@ bandit -r \
 
 bandit -r \
     "$PROJECT_ROOT/app" \
-    "$PROJECT_ROOT/run.py" \
+    "$PROJECT_ROOT/scripts/dev.py" \
     -x "$PROJECT_ROOT/app/tests,$PROJECT_ROOT/app/__pycache__" \
     -f json \
     -o "$REPORT_DIR/bandit-backend.json" \
@@ -97,7 +97,7 @@ bandit -r \
 
 bandit -r \
     "$PROJECT_ROOT/app" \
-    "$PROJECT_ROOT/run.py" \
+    "$PROJECT_ROOT/scripts/dev.py" \
     -x "$PROJECT_ROOT/app/tests,$PROJECT_ROOT/app/__pycache__" \
     -f sarif \
     -o "$REPORT_DIR/bandit-backend.sarif" \
@@ -105,7 +105,7 @@ bandit -r \
 
 bandit -r \
     "$PROJECT_ROOT/app" \
-    "$PROJECT_ROOT/run.py" \
+    "$PROJECT_ROOT/scripts/dev.py" \
     -x "$PROJECT_ROOT/app/tests,$PROJECT_ROOT/app/__pycache__" \
     -f txt \
     -o "$REPORT_DIR/bandit-console.txt" \
@@ -154,7 +154,7 @@ Source code scanned
 -------------------
 Backend:
 - app/
-- run.py
+- scripts/dev.py
 
 Frontend:
 - $FRONTEND_TARGET
