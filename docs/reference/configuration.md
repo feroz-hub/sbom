@@ -384,7 +384,7 @@ reinterpretation.
 `--use-system-ca`, `--use-openssl-ca`, `--use-bundled-ca`, `--tls-min-v1.2`,
 `--tls-min-v1.3`, `--enable-source-maps`, `--no-warnings`, `--trace-warnings` and
 `--max-old-space-size=N` for 100–99999. Their availability still depends on the
-selected Node version. Unsupported options, preload/import hooks and
+selected Node version. Unsupported user options, preload/import hooks and
 `NODE_TLS_REJECT_UNAUTHORIZED=0` in resolved runtime configuration fail before
 Node/log creation; stronger TLS
 settings are not silently discarded. Obtain explicit configuration review
@@ -404,10 +404,26 @@ blocks retry and reports the owned probe PID. It never targets a saved PID or an
 unrelated process. Strictly read-only `diagnose` does not execute this compiler
 probe.
 
+The launcher also appends its own reviewed `scripts/dev_next_guard.cjs` preload
+after validating user options. It denies the pinned Next CommonJS native/WASM
+compiler downloader without evaluating it, including in inherited child and
+worker processes. This closes the interval between the readiness probe and
+frontend creation if dependencies change. A missing/unverifiable guard or pinned
+downloader fails closed; ordinary startup never repairs the installation. The
+guard changes no TLS, trust or package files. It depends on the tested Next
+loader contract and preload inheritance; it is not an OS/network sandbox for
+trusted project JavaScript. Review its regression tests on dependency upgrades.
+Read-only diagnostics inspect the guard file without executing Node.
+
+HCL CA paths keep the BFF's existing ECMAScript trimming behavior before absolute
+path conversion; Node CA files and transaction-key paths retain their own existing
+semantics.
+
 Focused Windows fixtures have exercised role boundaries, workspace links and the
 installed `@next/env` loader's forced reload using synthetic source environment
-files. Real Next/HTTPS/Webpack HMR and compiled-browser-asset integration is
-pending execution/review; do not treat the existence of that fixture as a passed
+files. Native Windows real Next attempts exceeded the bounded disposable package
+copy deadline before any server started. HTTPS/Webpack HMR and compiled asset
+acceptance remain unverified there; do not treat fixture existence as a passed
 acceptance test. Complete SBOM startup, provider login and native acceptance on
 every platform remain separate work. No production or live database operation is
 implied.

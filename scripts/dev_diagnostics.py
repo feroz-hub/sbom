@@ -1128,6 +1128,13 @@ def _workspace_check(profile, launcher, environment=None):
         )
     except launcher.SetupError as error:
         code = str(error).partition(":")[0]
+        if code == "FRONTEND_GUARD_REQUIRED":
+            return _result(
+                "Frontend configuration",
+                "BLOCKED",
+                code,
+                "Restore the reviewed launcher guard source before startup; no Node helper was executed.",
+            )
         if code in {
             "FRONTEND_SOURCE_CONFIGURATION_UNVERIFIED",
             "FRONTEND_SOURCE_CONFIGURATION_REVIEW_REQUIRED",

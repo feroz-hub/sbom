@@ -36,6 +36,8 @@ def compiler_workspace(tmp_path):
         "tsconfig.json": "{}",
     }.items():
         (source / name).write_text(content, encoding="utf-8")
+    (root / "scripts").mkdir()
+    (root / "scripts/dev_next_guard.cjs").write_text("// synthetic compiler guard\n", encoding="utf-8")
     state = tmp_path / "synthetic-greenfield"
     state.mkdir(mode=0o700)
     launcher = SimpleNamespace(
@@ -122,9 +124,10 @@ def test_probe_loads_only_existing_native_package_with_transport_environment(com
 
     command = popen.call_args.args[0]
     options = popen.call_args.kwargs
-    assert command[0] == str(launcher.GreenfieldStack.node_binary()) and command[1] == "-e"
+    assert command[0] == str(launcher.GreenfieldStack.node_binary())
+    assert command[1:4] == ["--require", str(launcher.ROOT / "scripts/dev_next_guard.cjs"), "-e"]
     assert command[-1] == str(launcher.ROOT / "frontend/node_modules")
-    script = command[2]
+    script = command[4]
     assert "@next" in script and "process.platform" in script and "process.arch" in script
     assert "require(p.join(root,'@next/swc-'+t.platformArchABI))" in script
     assert "next/dist/compiled/@napi-rs/triples" in script
@@ -184,6 +187,18 @@ def test_nonzero_probe_exit_does_not_claim_native_binding_readiness(compiler_wor
     monkeypatch.setattr(subprocess, "Popen", Mock(return_value=child))
     with pytest.raises(ProbeError, match="FRONTEND_NATIVE_BINDING_REQUIRED"):
         dev_components.verify_compiler(launcher, probe_environment(), workspace, profile="legacy")
+    child.kill.assert_not_called()
+
+
+def test_missing_guard_target_returns_specific_fixed_diagnostic(compiler_workspace, monkeypatch):
+    launcher = compiler_workspace
+    workspace = dev_frontend.prepare_workspace(launcher, "legacy")
+    child = child_process(returncode=1)
+    child.communicate.return_value = ("", "FRONTEND_GUARD_REQUIRED: " + SECRET)
+    monkeypatch.setattr(subprocess, "Popen", Mock(return_value=child))
+    with pytest.raises(ProbeError, match="FRONTEND_GUARD_REQUIRED") as caught:
+        dev_components.verify_compiler(launcher, probe_environment(), workspace, profile="legacy")
+    assert SECRET not in str(caught.value)
     child.kill.assert_not_called()
 
 

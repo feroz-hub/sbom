@@ -39,7 +39,7 @@ from urllib.request import urlopen
 MIN_PYTHON = (3, 11)
 MIN_NODE = (20, 9, 0)
 WINDOWS_SHUTDOWN_GRACE = 30.0
-REQUIRED_FILES = ("requirements.txt", "alembic.ini", "frontend/package.json", "frontend/package-lock.json")
+REQUIRED_FILES = ("requirements.txt", "alembic.ini", "frontend/package.json", "frontend/package-lock.json", "scripts/dev_next_guard.cjs")
 GREENFIELD_UUID_BASELINE = "100_greenfield_uuid_final"
 PUBLIC_IDENTITY_TABLES = ("tenants", "projects", "products", "logical_sbom", "sbom_source", "sbom_component")
 
@@ -1663,9 +1663,9 @@ def _prepare_authorized_setup(args, profile):
             env = GreenfieldStack.settings()
             env["NODE_ENV"] = "production"
             ui = _development_library("dev_frontend").require_workspace(sys.modules[__name__], "greenfield")
+            _development_library("dev_components").verify_compiler(sys.modules[__name__], env, ui, profile="greenfield")
             env = _development_library("dev_components").process_environment(
                 sys.modules[__name__], "Frontend", env, ui, profile="greenfield")
-            _development_library("dev_components").verify_compiler(sys.modules[__name__], env, ui, profile="greenfield")
             result = run(
                 [str(GreenfieldStack.node_binary()), str(ROOT / "frontend/node_modules/next/dist/bin/next"),
                  "build", "--webpack"], env=env, cwd=ui,

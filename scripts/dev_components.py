@@ -16,11 +16,28 @@ else:
     import dev_frontend
     import dev_private
 
+# ECMAScript String.trim(), matching the existing BFF CA-path resolver.
+_BFF_WHITESPACE = "\t\n\v\f\r \u00a0\u1680\u2000\u2001\u2002\u2003\u2004\u2005\u2006\u2007\u2008\u2009\u200a\u2028\u2029\u202f\u205f\u3000\ufeff"
+
 
 def _absolute(value, base):
     if Path(value).is_absolute() or ntpath.isabs(value):
         return value
     return str((Path(base) / value).absolute())
+
+
+def compiler_guard(launcher):
+    """Return the reviewed internal preload; inspecting it never executes Node."""
+    path = launcher.ROOT / "scripts/dev_next_guard.cjs"
+    try:
+        dev_private.validate_parent(path, launcher.ROOT)
+        if not dev_environment.bounded_read_bytes(path, limit=32768):
+            raise ValueError()
+    except (OSError, ValueError, dev_private.PrivateFileError):
+        raise launcher.SetupError(
+            "FRONTEND_GUARD_REQUIRED: restore the reviewed launcher compiler-download guard before starting."
+        ) from None
+    return path
 
 
 def review_source_environment(launcher, environment, profile):
@@ -107,7 +124,10 @@ def process_environment(launcher, name, environment, cwd, *, profile=None):
     projected["AUTH_TRANSACTION_KEY_FILE"] = _absolute(
         projected.get("AUTH_TRANSACTION_KEY_FILE") or str(default_key), original
     )
-    for key in ("HCL_IAM_CA_BUNDLE", "NODE_EXTRA_CA_CERTS", "SSL_CERT_FILE"):
+    if "HCL_IAM_CA_BUNDLE" in projected:
+        value = projected["HCL_IAM_CA_BUNDLE"].strip(_BFF_WHITESPACE)
+        projected["HCL_IAM_CA_BUNDLE"] = _absolute(value, original) if value else ""
+    for key in ("NODE_EXTRA_CA_CERTS", "SSL_CERT_FILE"):
         if projected.get(key):
             projected[key] = _absolute(projected[key], original)
     if "SSL_CERT_DIR" in projected:
@@ -117,6 +137,12 @@ def process_environment(launcher, name, environment, cwd, *, profile=None):
                 "TLS_CA_PATH_REVIEW_REQUIRED: review ambiguous OpenSSL CA directory entries; no trust setting was discarded."
             )
         projected["SSL_CERT_DIR"] = os.pathsep.join(_absolute(value, original) for value in directories)
+    guard = compiler_guard(launcher)
+    # User NODE_OPTIONS passed the pure allowlist before this trusted internal
+    # preload is appended. Next's forked children inherit the same denial.
+    projected["NODE_OPTIONS"] = (
+        projected.get("NODE_OPTIONS", "").strip() + " --require " + json.dumps(guard.as_posix())
+    ).strip()
     return projected
 
 
@@ -148,14 +174,25 @@ def verify_compiler(launcher, environment, workspace, *, profile):
     child = None
     try:
         child = subprocess.Popen(
-            [str(launcher.GreenfieldStack.node_binary()), "-e", script, str(launcher.ROOT / "frontend/node_modules")],
+            [
+                str(launcher.GreenfieldStack.node_binary()),
+                "--require",
+                str(compiler_guard(launcher)),
+                "-e",
+                script,
+                str(launcher.ROOT / "frontend/node_modules"),
+            ],
             cwd=workspace,
             env=probe_env,
             stdout=subprocess.PIPE,
             stderr=subprocess.PIPE,
             text=True,
         )
-        output, _ = child.communicate(timeout=8)
+        output, error_output = child.communicate(timeout=8)
+        if child.returncode and isinstance(error_output, str) and error_output.startswith("FRONTEND_GUARD_REQUIRED"):
+            raise launcher.SetupError(
+                "FRONTEND_GUARD_REQUIRED: restore the reviewed launcher and pinned Next installation before starting; no dependency download was allowed."
+            )
         payload = json.loads(output) if len(output) <= 128 else None
         if (
             child.returncode != 0

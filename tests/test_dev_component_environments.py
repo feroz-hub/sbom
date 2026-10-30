@@ -20,6 +20,8 @@ SESSION_MARKER = "fixture-legitimate-bff-session-secret"
 @pytest.fixture
 def checkout(tmp_path, monkeypatch):
     root = tmp_path / "checkout"
+    (root / "scripts").mkdir(parents=True)
+    (root / "scripts/dev_next_guard.cjs").write_text("// synthetic preload for boundary tests\n", encoding="utf-8")
     source = root / "frontend"
     source.mkdir(parents=True)
     for name in ("src", "public", "node_modules"):
@@ -390,6 +392,38 @@ def test_next_only_tls_bypass_fails_closed_without_modification(checkout):
     assert path.read_bytes() == before
 
 
+@pytest.mark.parametrize(
+    "value,trimmed",
+    [
+        (" certificates/ca.pem ", "certificates/ca.pem"),
+        ("  ", ""),
+        ("certificates/ca.pem", "certificates/ca.pem"),
+        ("\ufeffcertificates/ca.pem\ufeff", "certificates/ca.pem"),
+        ("\u0085ca.pem", "\u0085ca.pem"),
+    ],
+)
+def test_hcl_ca_bundle_preserves_existing_bff_trim_semantics(checkout, value, trimmed):
+    workspace = dev_frontend.prepare_workspace(dev, "legacy")
+    projected = dev_components.process_environment(
+        dev, "Frontend", full_environment(HCL_IAM_CA_BUNDLE=value), workspace
+    )
+    expected = str(checkout / "frontend" / trimmed) if trimmed else ""
+    assert projected["HCL_IAM_CA_BUNDLE"] == expected
+
+
+def test_missing_launcher_guard_blocks_before_logging_or_spawn_and_diagnosis_is_readonly(checkout, monkeypatch):
+    workspace = dev_frontend.prepare_workspace(dev, "legacy")
+    (checkout / "scripts/dev_next_guard.cjs").unlink()  # This test's own synthetic source only.
+    forbidden = Mock(side_effect=AssertionError("unguarded frontend reached logging or a process"))
+    monkeypatch.setattr(dev, "log_path", forbidden)
+    monkeypatch.setattr(subprocess, "Popen", forbidden)
+    with pytest.raises(dev.SetupError, match="FRONTEND_GUARD_REQUIRED"):
+        dev_components.process_environment(dev, "Frontend", full_environment(), workspace)
+    result = dev_diagnostics._workspace_check("legacy", dev, full_environment())
+    assert (result.status, result.code) == ("BLOCKED", "FRONTEND_GUARD_REQUIRED")
+    forbidden.assert_not_called()
+
+
 def test_diagnosis_reports_ambiguous_ca_directory_without_probe(checkout, monkeypatch):
     dev_frontend.prepare_workspace(dev, "legacy")
     forbidden = Mock(side_effect=AssertionError("diagnosis attempted a probe"))
@@ -489,7 +523,8 @@ def test_provider_flags_and_existing_relative_transaction_ca_paths_preserve_orig
     for key in ("AUTH_TRANSACTION_KEY_FILE", "HCL_IAM_CA_BUNDLE", "NODE_EXTRA_CA_CERTS"):
         assert os.path.normpath(projected[key]) == os.path.normpath(str(original / environment[key]))
         assert Path(projected[key]).is_absolute()
-    assert projected["NODE_OPTIONS"] == environment["NODE_OPTIONS"]
+    assert projected["NODE_OPTIONS"].startswith(environment["NODE_OPTIONS"] + " --require ")
+    assert "dev_next_guard.cjs" in projected["NODE_OPTIONS"]
     assert projected["ENTRA_FRONTEND_CLIENT_ID"] == "fixture-client"
     assert environment == before
 

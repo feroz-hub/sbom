@@ -8,6 +8,7 @@ on:
     paths:
       - "scripts/dev.py"
       - "scripts/dev_*.py"
+      - "scripts/dev_next_guard.cjs"
       - "scripts/greenfield*migration*.py"
       - "tests/test_dev*.py"
       - "tests/test_greenfield*.py"
@@ -26,6 +27,7 @@ on:
     paths:
       - "scripts/dev.py"
       - "scripts/dev_*.py"
+      - "scripts/dev_next_guard.cjs"
       - "scripts/greenfield*migration*.py"
       - "tests/test_dev*.py"
       - "tests/test_greenfield*.py"
@@ -77,6 +79,7 @@ jobs:
           scripts/dev_components.py scripts/dev_frontend.py
           tests/test_dev_component_environments.py tests/test_dev_frontend_workspace.py
           tests/test_dev_compiler_probe.py tests/test_dev_frontend_next_integration.py
+          tests/test_dev_next_guard.py tests/test_dev_native_compiler.py
           tests/test_dev_main_merge.py tests/test_dev_config.py tests/test_dev_diagnose.py
           tests/test_dev_prepared.py tests/test_dev_private_files.py tests/test_dev_setup.py
       - name: Compile without starting the launcher
@@ -93,6 +96,7 @@ jobs:
           tests/test_dev_windows_acl.py
           tests/test_dev_component_environments.py tests/test_dev_frontend_workspace.py
           tests/test_dev_compiler_probe.py
+          tests/test_dev_next_guard.py tests/test_dev_native_compiler.py
           tests/test_dev_launcher.py tests/test_dev_lifecycle.py
           tests/test_dev_windows_lifecycle.py tests/test_dev_windows_shutdown.py
           tests/test_dev_background.py tests/test_dev_main_merge.py
@@ -141,10 +145,11 @@ jobs:
           cache-dependency-path: frontend/package-lock.json
       - name: Install disposable fixture prerequisites
         run: |
+          node --check scripts/dev_next_guard.cjs
           python -m pip install pytest pytest-timeout cryptography websockets python-dotenv
           npm ci --ignore-scripts --prefix frontend
       - name: Real frontend TLS, HMR, environment and owned-cleanup acceptance
         run: >-
           python -m pytest -p pytest_timeout -p no:cacheprovider --noconftest
           --basetemp "${{ runner.temp }}/sbom-next-fixture" -q
-          tests/test_dev_frontend_next_integration.py
+          tests/test_dev_native_compiler.py tests/test_dev_frontend_next_integration.py
