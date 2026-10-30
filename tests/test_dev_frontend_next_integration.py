@@ -540,6 +540,20 @@ def _wait_probe(opener, origin, runtime, identities):
     )
 
 
+def _wait_page(opener, origin, runtime, identities, marker, *, absent=None):
+    deadline = time.monotonic() + 60
+    while time.monotonic() < deadline:
+        _refresh(runtime, identities)
+        try:
+            html = _get(opener, origin, "/", timeout=min(5, max(0.1, deadline - time.monotonic())))
+            if marker in html and (absent is None or absent not in html):
+                return html
+        except (HTTPError, URLError, OSError):
+            pass  # Initial page compilation may exceed one bounded request.
+        time.sleep(min(0.2, max(0, deadline - time.monotonic())))
+    pytest.fail("Owned Next fixture did not render the expected page within its bounded compilation deadline")
+
+
 def _hmr_message(connection, wanted, deadline):
     while time.monotonic() < deadline:
         try:
@@ -710,9 +724,7 @@ def test_real_next_verified_https_websocket_hmr_assets_and_verified_owned_cleanu
             workspace,
         )
         _wait_probe(opener, origin, runtime, identities)
-        html = _get(opener, origin, "/")
-        if BEFORE not in html:
-            pytest.fail("The synthetic client page was not compiled/rendered")
+        html = _wait_page(opener, origin, runtime, identities, BEFORE)
         with _HMRSocket(
             f"wss://localhost:{port}/_next/webpack-hmr",
             ssl=context,
@@ -735,9 +747,7 @@ def test_real_next_verified_https_websocket_hmr_assets_and_verified_owned_cleanu
                 elif saw_building and update.get("hash") != initial.get("hash"):
                     break
         _refresh(runtime, identities)
-        html = _get(opener, origin, "/")
-        if AFTER not in html or BEFORE in html:
-            pytest.fail("Atomic source replacement was not visible after real Webpack HMR")
+        html = _wait_page(opener, origin, runtime, identities, AFTER, absent=BEFORE)
         added = source / "src/app/api/fixture-added/route.ts"
         added.parent.mkdir()
         added.write_text("export async function GET() { return new Response('fixture-added'); }\n", encoding="utf-8")
