@@ -5,6 +5,7 @@
 const Module = require('node:module');
 const path = require('node:path');
 const fs = require('node:fs');
+const os = require('node:os');
 
 const CODE = 'FRONTEND_DEPENDENCY_DOWNLOAD_BLOCKED';
 const MESSAGE = `${CODE}: Frontend compiler downloads are disabled. Review python scripts/dev.py setup --repair-dependencies.`;
@@ -16,6 +17,7 @@ const DOWNLOADER_WITHOUT_EXTENSION = '/next/dist/lib/download-swc';
 const CANDIDATE_SUFFIX = '/dist/lib/download-swc.js';
 const CANDIDATE_WITHOUT_EXTENSION = '/dist/lib/download-swc';
 const MAX_MANIFEST_BYTES = 64 * 1024;
+const ROUTE_POLL_INTERVAL = 1000;
 
 function normalize(filename) {
   return process.platform === 'win32' ? filename.replace(/\\/g, '/').toLowerCase() : filename;
@@ -107,6 +109,28 @@ function adaptRouteWatcher(Watchpack) {
   // Only the route-discovery importer receives this class. The cached original
   // export/prototype and Webpack's independent watcher are never modified.
   return class WorkspaceRouteWatchpack extends Watchpack {
+    constructor(options, ...rest) {
+      if (os.platform() !== 'darwin') {
+        super(options, ...rest);
+        return;
+      }
+      if (rest.length !== 0 || !verifiedWatcherPaths()) throw watcherContractError();
+      let routeOptions;
+      try {
+        if (options !== undefined && (!options || Object.getPrototypeOf(options) !== Object.prototype)) {
+          throw watcherContractError();
+        }
+        // Only this importer on Darwin polls once per second. Keep Next's
+        // ignored predicate, limiting metadata scans to its route roots; the
+        // separate compiler watcher retains native events and its own options.
+        // Polling avoids relying on native events crossing the src link alias.
+        routeOptions = { ...options, poll: ROUTE_POLL_INTERVAL };
+      } catch {
+        throw watcherContractError();
+      }
+      super(routeOptions);
+    }
+
     watch(...args) {
       const verified = verifiedWatcherPaths();
       const options = args[0];

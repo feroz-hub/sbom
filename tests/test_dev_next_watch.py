@@ -221,6 +221,61 @@ def test_other_watchpack_consumer_is_unchanged_even_without_workspace_metadata(n
     }
 
 
+@pytest.mark.parametrize("platform", ("darwin", "win32", "linux"))
+def test_only_darwin_route_constructor_polls_without_changing_caller_or_other_consumers(
+    node_executable, checkout, platform
+):
+    script = (
+        "require('node:os').platform=()=>"
+        + json.dumps(platform)
+        + ";const Original=require("
+        + json.dumps(str(checkout["compiled"] / "watchpack.js"))
+        + ");const before=Original.prototype.watch;const Adapted=require("
+        + json.dumps(str(checkout["parent"]))
+        + ");const Other=require("
+        + json.dumps(str(checkout["other"]))
+        + ");const ignored=()=>false;const options=Object.freeze({aggregateTimeout:5,ignored});"
+        "const watcher=new Adapted(options);const ordinary=new Other(options);"
+        "watcher.watch({directories:[process.env.SBOM_DEV_FRONTEND_WORKSPACE],startTime:0});"
+        "process.stdout.write(JSON.stringify({routePoll:watcher.options.poll??null,"
+        "callerKeys:Object.keys(options).sort(),routeCopied:watcher.options!==options,"
+        "ignoredPreserved:watcher.options.ignored===ignored,aggregate:watcher.options.aggregateTimeout,"
+        "otherUnchanged:Other===Original&&ordinary.options===options&&ordinary.options.poll===undefined,"
+        "prototypeUnchanged:Original.prototype.watch===before,"
+        "directories:watcher.calls[0].directories}));"
+    )
+    result = _run_node(node_executable, checkout, script)
+    assert result.returncode == 0, result.stderr
+    assert result.stderr == ""
+    assert json.loads(result.stdout) == {
+        "routePoll": 1000 if platform == "darwin" else None,
+        "callerKeys": ["aggregateTimeout", "ignored"],
+        "routeCopied": platform == "darwin",
+        "ignoredPreserved": True,
+        "aggregate": 5,
+        "otherUnchanged": True,
+        "prototypeUnchanged": True,
+        "directories": [str(checkout["workspace"]), str(checkout["workspace"] / "src")],
+    }
+
+
+def test_darwin_polling_requires_verified_metadata_before_constructing_route_watcher(node_executable, checkout):
+    script = "require('node:os').platform=()=> 'darwin';" + _watch_script(checkout)
+    result = _run_node(node_executable, checkout, script, overrides={"SBOM_DEV_FRONTEND_SOURCE": None})
+    _assert_refused(result, checkout)
+
+
+def test_darwin_unknown_constructor_options_receive_only_safe_contract_error(node_executable, checkout):
+    script = (
+        "require('node:os').platform=()=> 'darwin';try {const Watchpack=require("
+        + json.dumps(str(checkout["parent"]))
+        + ");new Watchpack(new Proxy({}, {getPrototypeOf(){throw new Error('fixture-private-error')}}));"
+        "process.stdout.write(JSON.stringify({unguarded:true}));}catch(error){"
+        "process.stdout.write(JSON.stringify({code:error.code,message:error.message,stack:error.stack}));}"
+    )
+    _assert_refused(_run_node(node_executable, checkout, script), checkout)
+
+
 @pytest.mark.parametrize(
     "call",
     (

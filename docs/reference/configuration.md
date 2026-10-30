@@ -425,15 +425,22 @@ identity, caller and exact watcher shape; unsupported contracts fail with
 filesystem behavior are unchanged. Real route discovery, HMR and route
 addition/removal must pass the dedicated acceptance job after dependency upgrades.
 
+On macOS, this one route-discovery watcher uses Watchpack's one-second polling.
+Native CI found existing routes and atomic edits but missed newly added route
+directories through the linked source. Polling rechecks directory contents
+independently of native event delivery. It adds read-only scans of the selected
+route tree; compiler watchers and unrelated Watchpack consumers keep their
+original behavior.
+
 HCL CA paths keep the BFF's existing ECMAScript trimming behavior before absolute
 path conversion; Node CA files and transaction-key paths retain their own existing
 semantics.
 
 Focused Windows fixtures have exercised role boundaries, workspace links and the
 installed `@next/env` loader's forced reload using synthetic source environment
-files. Native Windows real Next attempts exceeded the bounded disposable package
+files. Office Windows real Next attempts exceeded the bounded disposable package
 copy deadline before any server started. HTTPS/Webpack HMR and compiled asset
-acceptance remain unverified there; do not treat fixture existence as a passed
+acceptance remain unverified on that host; do not treat fixture existence as a passed
 acceptance test. Complete SBOM startup, provider login and native acceptance on
 every platform remain separate work. No production or live database operation is
 implied.
