@@ -138,6 +138,8 @@ def process_environment(launcher, name, environment, cwd, *, profile=None):
             )
         projected["SSL_CERT_DIR"] = os.pathsep.join(_absolute(value, original) for value in directories)
     guard = compiler_guard(launcher)
+    projected["SBOM_DEV_FRONTEND_WORKSPACE"] = str(workspace.absolute())
+    projected["SBOM_DEV_FRONTEND_SOURCE"] = str((launcher.ROOT / "frontend/src").absolute())
     # User NODE_OPTIONS passed the pure allowlist before this trusted internal
     # preload is appended. Next's forked children inherit the same denial.
     projected["NODE_OPTIONS"] = (

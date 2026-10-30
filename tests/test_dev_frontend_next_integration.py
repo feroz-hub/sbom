@@ -358,6 +358,23 @@ def _hmr_message(connection, wanted, deadline):
     pytest.fail("Owned Next fixture did not publish the expected bounded Webpack HMR event")
 
 
+def _wait_fixture_resource(opener, origin, runtime, identities, path, *, body=None, removed=False):
+    deadline = time.monotonic() + 20
+    while time.monotonic() < deadline:
+        _refresh(runtime, identities)
+        try:
+            observed = _get(opener, origin, path, timeout=2)
+            if not removed and observed == body:
+                return
+        except HTTPError as error:
+            if removed and error.code == 404:
+                return
+        except (URLError, OSError):
+            pass
+        time.sleep(0.2)
+    pytest.fail("Owned Next did not reflect the fixture resource change within its bounded deadline")
+
+
 def _page(marker):
     return (
         "'use client';\n"
@@ -369,6 +386,7 @@ def _page(marker):
     )
 
 
+@pytest.mark.timeout(600)  # Every phase has its own bound; leave time for verified cleanup.
 def test_real_next_verified_https_websocket_hmr_assets_and_verified_owned_cleanup(tmp_path_factory, monkeypatch):
     # Keep native Windows fixture paths below the host's configured path limit.
     tmp_path = tmp_path_factory.mktemp("next")
@@ -525,6 +543,18 @@ def test_real_next_verified_https_websocket_hmr_assets_and_verified_owned_cleanu
         html = _get(opener, origin, "/")
         if AFTER not in html or BEFORE in html:
             pytest.fail("Atomic source replacement was not visible after real Webpack HMR")
+        added = source / "src/app/api/fixture-added/route.ts"
+        added.parent.mkdir()
+        added.write_text("export async function GET() { return new Response('fixture-added'); }\n", encoding="utf-8")
+        _wait_fixture_resource(opener, origin, runtime, identities, "/api/fixture-added", body="fixture-added")
+        added.unlink()  # Fixture-owned regular source, never the installed checkout.
+        added.parent.rmdir()
+        _wait_fixture_resource(opener, origin, runtime, identities, "/api/fixture-added", removed=True)
+        asset = source / "public/fixture-added.txt"
+        asset.write_text("fixture-public-added", encoding="utf-8")
+        _wait_fixture_resource(opener, origin, runtime, identities, "/fixture-added.txt", body="fixture-public-added")
+        asset.unlink()
+        _wait_fixture_resource(opener, origin, runtime, identities, "/fixture-added.txt", removed=True)
         # Editing source dotenv must not reload backend secrets into isolated Node.
         (source / ".env.local").write_text(
             f"DATABASE_URL={BACKEND}\nNATIVE_JWT_PRIVATE_KEY={BACKEND}\nNEXT_PUBLIC_UNREVIEWED_SECRET={UNAPPROVED}\n",
