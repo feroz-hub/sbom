@@ -258,7 +258,7 @@ def test_native_windows_cooperative_task_completion_and_scheduler_close(tmp_path
     log = tmp_path / "fixture.log"
     record = None
     try:
-        unrelated = subprocess.Popen([sys.executable, "-c", "import time; time.sleep(40)"], stdout=subprocess.DEVNULL, stderr=subprocess.DEVNULL)
+        unrelated = subprocess.Popen([getattr(sys, "_base_executable", sys.executable), "-c", "import time; time.sleep(40)"], stdout=subprocess.DEVNULL, stderr=subprocess.DEVNULL)
         with log.open("wb") as output:
             child = subprocess.Popen([sys.executable, "-u", "-c", NATIVE_PROGRAM, str(tmp_path), mode], env=env,
                                      stdout=output, stderr=subprocess.STDOUT, **dev.platform_spawn_options())

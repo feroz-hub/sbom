@@ -7,6 +7,164 @@ See also [the lifecycle guide](../dev-launcher-lifecycle.md) and
 [historical platform matrix](dev-launcher-platform-matrix.md). Passing mocked
 Windows checks or macOS acceptance does not establish native Windows readiness.
 
+## PR #44 review follow-up: Windows shutdown and direct-checkout acceptance
+
+This section records the follow-up to review of commit `7b9084e`. Earlier
+results below remain historical evidence for that commit, including the
+explicitly identified temporary module overlay. The final follow-up executes `python scripts/dev.py` directly from a clean,
+detached Git checkout of pushed source commit
+`e3772fd1adef7a658a253d62c940dfda0d2cc438` at `C:\sbom\.windows\accept44`.
+Parent/child `scripts/dev.py` / `scripts.dev`, application working directories
+and runtime ownership ROOT use that actual checkout. There is no module overlay,
+ROOT override, runtime-root rewrite or additional implementation branch.
+
+### Shutdown findings and chosen behavior
+
+The review was correct: the earlier `_windows_terminate(..., force=False)`
+called `TerminateProcess` immediately. That API stops every thread and requests
+pending-I/O cancellation, rather than allowing Python/Celery cleanup. It could
+interrupt an active solo task, report rendering, a database call, artifact
+persistence or Beat's scheduler close. The launcher could not call that behavior
+a graceful phase. [Microsoft's TerminateProcess contract](https://learn.microsoft.com/en-us/windows/win32/api/processthreadsapi/nf-processthreadsapi-terminateprocess)
+
+A database transaction does not make a multi-step application workflow atomic.
+For example, `report_notifications.generate` commits its delivery claim before
+rendering, then later commits artifact IDs (`app/workers/report_notifications.py`,
+claim near line 114 and artifacts near line 172). Interruption can preserve an
+earlier committed phase while leaving subsequent work unfinished. That task's
+`acks_late=True` does not by itself guarantee recovery or exactly-once effects;
+default tasks can acknowledge before execution, and shutdown/re-delivery behavior
+also depends on pool, broker and acknowledgement settings. No task acknowledgement,
+production Celery or database configuration is changed here.
+[Celery's acknowledgement limitations](https://docs.celeryq.dev/en/stable/userguide/tasks.html#acks-late)
+
+A safe application-level request is available for the managed Celery processes:
+
+- The runtime records cooperative capability only for workers/Beat it launched.
+  The parent pins each saved process, verifies creation time and executable on
+  that handle, and atomically writes `shutdown-{instance}-{pid}.json` into the
+  runtime's own state directory. The non-force path requests query/synchronize
+  access only and never calls `TerminateProcess`.
+- The child independently validates the runtime instance and its own current
+  PID/creation/executable proof. Missing, stale, malformed, redirected or
+  unverifiable requests do nothing. A reused PID cannot consume an old request
+  successfully. Old records without capability metadata are not upgraded by
+  assumption.
+- A worker's existing health thread sets Celery's normal `should_stop=0` warm
+  exit flag. It does not asynchronously interrupt the solo main thread or close
+  the task's consumer from another thread. The active task can return before
+  the main Celery loop takes its normal warm shutdown path. Heartbeats continue
+  while draining. This uses Celery warm-exit semantics; it does not promise that
+  a queued task can never enter the last consumer drain cycle.
+- Beat's `beat_init` watcher calls `Service.stop(wait=False)`, which only sets
+  the service exit event. Beat's main loop reaches its own `finally: sync()` and
+  `LocalScheduler.close`, allowing schedule persistence and normal lease release.
+  The watcher does not close the scheduler concurrently with a tick.
+
+All eligible process trees are captured before any request is published. The
+batch remembers each full PID/creation/executable identity and does not enumerate
+its tree again after asking it to exit. A later query failure for a closing,
+recorded member remains UNKNOWN until exit/absence can be proved; it does not
+invent a new incomplete-tree flag. Genuine pre-request discovery failures and
+existing historical tree uncertainty remain sticky and protected. Prepared
+identities and the shared deadline are cleared in `finally`; neither is authority
+to terminate a process.
+
+Celery's normal worker warm exit waits for active work; an unresponsive or
+long-running task still requires a deadline. All managed Celery requests are
+published before waits, and share one **30-second** grace deadline in a cleanup
+batch. After the deadline the launcher warns that active work may be interrupted
+and escalates through `force=True`, reopening and revalidating each exact handle
+before termination. Denied/unknown/reused identities remain protected and their
+runtime records are retained. The Windows stop caller allows **50 seconds** for
+cooperative launcher-lock handoff (30 seconds plus verification margin), then
+reports a retryable timeout rather than guessing ownership. POSIX signal/group
+behavior and its timeouts remain unchanged.
+[Celery worker shutdown](https://docs.celeryq.dev/en/stable/userguide/workers.html#worker-shutdown)
+
+API/frontend processes and pre-hook runtime records do not have this Celery
+application protocol. Their non-force call is a no-op; the runtime explicitly
+warns that no cooperative hook was recorded, then uses the verified forced path.
+This can interrupt in-flight requests or file writes. Registration-failure
+cleanup also remains an emergency original-Popen-handle stop because a reliable
+cooperative identity may not yet exist. These are documented forced fallbacks,
+not claims of graceful shutdown for every component. No console-wide signals,
+`AttachConsole`, `CTRL_C_EVENT` or `CTRL_BREAK_EVENT` are introduced: console
+group delivery is not a per-process identity-pinned protocol and can affect
+other sharing descendants/default handlers.
+[Microsoft console-event semantics](https://learn.microsoft.com/en-us/windows/console/generateconsolectrlevent)
+
+### Actual candidate checkout and follow-up verification
+
+The final acceptance root is the detached checkout `C:\sbom\.windows\accept44`
+of the exact pushed source commit above. The existing venv
+and frontend dependencies are reused through junctions with matching dependency
+stamps; no dependency reinstall is needed for the acceptance run. The saved
+Legacy configuration and certificate/key pair are regular, byte-identical copies
+with their private ACLs preserved. The original files are retained and checked
+by hash before/after. This uses the direct checked-out `scripts/dev.py`; it does
+not use the earlier ignored module overlay or rewrite a runtime record's root.
+
+The required acceptance observations are: full startup/READY, both worker
+control/queue responses and Beat progress, API database health, IAM readiness,
+certificate-verified HTTPS, repeated start preserving one instance and the same
+owned identities, restart into a new instance with old proofs absent, and final
+verified stop with no owned or unknown survivors. Existing infrastructure, schema,
+credentials, certificate trust and old PID safeguards must be preserved. Browser
+trust remains a separate check; a certificate warning must not be bypassed.
+
+| Follow-up check | Actual result |
+| --- | --- |
+| Targeted shutdown and launcher regressions | Python 3.14: **323 passed, 16 skipped**, six Alembic warnings, 49.42s; actual Python 3.12 subset: **174 passed, 16 skipped**, two plugin-config warnings, 35.68s. Ruff and Python 3.11 grammar passed. The 35 new shutdown cases include phase ordering and exit races. |
+| Real Windows solo task and Beat sync fixtures | Real disposable Celery solo task finished before worker shutdown; actual Beat Service reached scheduler close; no forced phase and unrelated process survived, on both Python 3.14 and 3.12. After the one-line leaf-fixture cleanup improvement, both native cases passed again on each interpreter. |
+| Direct-checkout startup, readiness and HTTPS | Direct `scripts/dev.py` from pushed commit e3772fd reached READY with both queues/control replies and Beat progress; API database=true, IAM=true and certificate-verified HTTPS `/native-sign-in`=200. LF-normalized source SHA-256: `cf49640cf726869a044a28dd7ffb5fd5d597a20e2c01d181e9907919081a4b35`. |
+| Repeated start / restart / ownership | Repeated start preserved the instance and all owned identities; restart reached a new READY instance. All 14 prior distinct service-tree identities were absent, with no UNKNOWN results; prior Beat PID file was released. |
+| Final verified stop / original-file preservation | Canonical stop and repeated stop passed. All 15 distinct final service/launcher identities absent; `still_owned=[]`, `unknown=[]`; runtime JSON absent, lock retained, IPv4/IPv6 application ports closed. Normal shutdown hooks observed for both workers and Beat, no Celery forced-escalation warning; Beat lease and own PID file released. Original private/runtime/PID hashes and earlier protected candidate record unchanged; schema=103; infrastructure 5432/6379/8025 available. |
+| Updated PR commit / GitHub Actions | Source fix e3772fd: [PR run](https://github.com/feroz-hub/sbom/actions/runs/41033837731) and [push run](https://github.com/feroz-hub/sbom/actions/runs/41033830085) passed all four jobs each (Windows/macOS 3.12, Ubuntu 3.11/3.12). Latest report/fixture commit is checked separately on PR #44; draft and no merge/auto-merge. |
+
+An earlier direct run in the implementation worktree exposed the phase-ordering
+race while a diagnostic probe retained read-only process handles. A closing
+worker returned `QueryFullProcessImageNameW` error 5 after cooperative requests
+had begun, and a second discovery pass recorded tree uncertainty. Its recorded
+PIDs 26680/15596 were subsequently confirmed absent (`OpenProcess` error 87), but
+that cannot retroactively recover missing tree proof. Its UNKNOWN runtime record
+at `C:\sbom\.windows\worktrees\windows-launcher-lifecycle\.dev-runtime.json`
+remains untouched and requires independent investigation; no start/stop guard
+was bypassed and no uncertain PID was killed. The phase-order regression tests
+and e3772fd fix address future runs. The successful clean-checkout run does not
+clear or validate that older protected record.
+
+Local evidence for the final exact-commit run is in
+`C:\sbom\.windows\accept44\.dev-logs`: `ready-proof.json`,
+`restart-proof.json`, `final-proof.json`, and the start/restart stdout/stderr
+logs. The original/private-file and protected-record preservation comparison is
+in `original-preservation.json`. Raw credentials and logs were not uploaded.
+The implementation checkout retains the focused test logs
+`graceful-final-targeted.log`, `graceful-python312.log`,
+`graceful-native-final.log` and `graceful-native-python312-final.log`.
+
+Run from the final acceptance checkout, using its interpreter and checked-out source:
+
+```powershell
+Set-Location C:\sbom\.windows\accept44
+& .\.venv\Scripts\python.exe .\scripts\dev.py start --profile legacy --legacy-config managed
+# In a second terminal at the same checkout:
+& .\.venv\Scripts\python.exe .\scripts\dev.py status --profile legacy --legacy-config managed
+& .\.venv\Scripts\python.exe .\scripts\dev.py start --profile legacy --legacy-config managed
+# Restart remains foreground-supervised; inspect status from the second terminal.
+& .\.venv\Scripts\python.exe .\scripts\dev.py restart --profile legacy --legacy-config managed
+& .\.venv\Scripts\python.exe .\scripts\dev.py stop --profile legacy --legacy-config managed
+```
+
+The new regression file is `tests/test_dev_windows_shutdown.py`. It exercises
+non-force/force separation, identity-bound requests, deadline/escalation,
+uncertain identity, shared grace and the actual managed Celery worker/Beat hooks.
+The complete focused command is:
+
+```powershell
+& .\.venv\Scripts\python.exe -m pytest -p no:cacheprovider --noconftest -q tests/test_dev_launcher.py tests/test_dev_lifecycle.py tests/test_dev_windows_lifecycle.py tests/test_dev_windows_shutdown.py tests/test_dev_background.py tests/test_dev_main_merge.py tests/test_greenfield_windows_compat.py tests/test_dev_native_process.py
+```
+
 ## Supplied evidence and reproduced causes
 
 The developer's host is native Windows PowerShell at `C:\sbom`, with Python
@@ -54,9 +212,10 @@ These observations do not recover the error code or Beat shutdown cause from
 the developer's earlier historical run. Error 31 is an inspection/cleanup defect;
 Beat's pidlock exit 73 and heartbeat write error 5 are separate observed causes.
 
-The first candidate harness loaded candidate parent code but original child
-`scripts.dev`; its initial READY was partial validation. Final native acceptance
-uses the candidate module in both parent and Celery children through an ignored
+The original investigation's first candidate harness loaded candidate parent code
+but original child `scripts.dev`; its initial READY was partial validation. The
+subsequent overlay acceptance for commit `7b9084e` used the candidate module in
+both parent and Celery children through an ignored
 `C:\sbom\.dev-logs\native-code` overlay, preserving ownership ROOT `C:\sbom` and
 leaving main's tracked files unchanged. The harness sets child PYTHONPATH to the
 overlay followed by the original repository, while preserving managed settings.
@@ -73,7 +232,7 @@ Set-Location C:\sbom
 
 ## Fix and ownership safeguards
 
-Current source references are in [`scripts/dev.py`](../../scripts/dev.py):
+Historical 7b9084e source references are in [`scripts/dev.py`](../../scripts/dev.py):
 Windows helpers/process inspection at lines 47/90/108, tree enumeration at 271,
 atomic writes at 352, registration/status/cleanup at 466/514/527/558/614/646,
 background readiness at 886/932/947/992/1010, process launch at 3721/3776 and main
@@ -122,12 +281,13 @@ explain why signal 0 is not a safe Windows liveness probe.
 | --- | --- |
 | [`scripts/dev.py`](../../scripts/dev.py) | Windows inspection/tree/termination safety, isolated cleanup diagnostics, Beat pidfile/redirector readiness and bounded atomic-write retry |
 | [`tests/test_dev_windows_lifecycle.py`](../../tests/test_dev_windows_lifecycle.py) | **47 new cases** covering Windows races, ownership, cleanup, readiness, persistence and native process/file fixtures |
+| [`tests/test_dev_windows_shutdown.py`](../../tests/test_dev_windows_shutdown.py) | Review regressions for cooperative worker/Beat shutdown, deadline and verified escalation, including native Celery fixtures |
 | [`tests/test_dev_lifecycle.py`](../../tests/test_dev_lifecycle.py) | Adapt existing identity/termination tests to same-handle Windows behavior |
 | [`tests/test_dev_background.py`](../../tests/test_dev_background.py) | Give synthetic readiness fixtures complete process identities |
 | [`.github/workflows/dev-launcher.yml`](../../.github/workflows/dev-launcher.yml) | Run new Windows regressions and native process fixtures on Windows CI |
 | [This report](dev-launcher-windows-lifecycle.md) | Evidence, findings, actual validation results and exact guarded procedure |
 
-## Actual validation results
+## Initial validation results at `7b9084e` (historical)
 
 | Check | Result |
 | --- | --- |
@@ -206,7 +366,7 @@ Greenfield Windows upgrade refusal. No introduced failure was identified by
 this comparison. These existing failures still prevent claiming that the entire
 extended suite passes on Windows.
 
-## Exact native Windows validation procedure
+## Original investigation procedure (historical)
 
 After review, use a checkout containing candidate code and its existing managed
 configuration. The following examples use `C:\sbom`; during isolated investigation
