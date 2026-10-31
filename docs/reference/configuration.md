@@ -688,6 +688,77 @@ HCL.CS privileged provisioning remains unimplemented pending Engineering Lead an
 identity-provider-owner approval. No database preparation, migration, enrollment,
 trust change, merge or deployment was performed by these staged adapters.
 
+## Workspace instance contract (SBO-101 foundation)
+
+SBO-101 begins from the verified SBO-98 candidate
+`73d29949b31fa3564a56043128bde7118e804ede`, as a dependent draft increment. It
+does not rewrite or merge the six SBO-98 drafts. The current main additionally
+contains the unrelated CVSS UI change; source integration remains review-gated.
+The Engineering Lead confirmed the existing public remote and no active NEXUS
+work before implementation. These confirmations are repository/coordination
+decisions, not permission for data-service or privileged operations.
+
+```mermaid
+flowchart LR
+    CLI[dev.py workspace] --> Git[Read-only authoritative Git discovery]
+    Git --> Identity[Canonical repository and worktree identities]
+    Identity --> Plan[Immutable public instance proposal]
+    Plan --> Consent[Scoped consent and fresh revalidation]
+    Consent --> Registry[Protected public metadata registry]
+    Plan -. separate approval .-> Resources[Provider, database, TLS and administrator gates]
+```
+
+Directory names such as `.codex`, `.claude` or `.windows` convey no ownership.
+Repository/worktree identifiers bind canonical filesystem identities observed
+through Git's common directory and worktree list. Branches, HEAD, dirty status,
+locked/prunable records and unavailable paths remain explicit. These observations
+are not an atomic lease or proof of agent inactivity. Operations must obtain a
+fresh observation rather than adopting an old snapshot.
+
+Instance descriptors are immutable, strictly allowlisted public proposals. They
+contain a generated deterministic UUID, worktree/repository identifiers, commit
+and configuration generation, selected mode/provider, proposed ports/hostname and
+resource namespaces, plus hashes of public dependency manifests and controller
+source. They never contain an environment map, connection string, password,
+private key, approval token or enrollment capability. Identifiers/hashes do not
+authorize resources. The current descriptor flags explicitly retain
+`proposal_only=true`, `ownership_verified=false`, and
+`live_operations_authorized=false`.
+
+The repository registry lives under the user-owned home anchor at
+`~/.sbom-dev/repositories/<repository-id>/instances`, bound to Git's verified
+common-directory identity. This avoids changing existing/shared Git directory
+permissions. Reads never create it or its lock. Authorized initialization
+creates only missing private descendants: POSIX `0700` ownership or a native
+Windows protected current-user/SYSTEM/Administrators DACL. Existing permissions,
+redirected paths and unknown material are not repaired. Record writes use a
+permanent OS-locked inode, validated public schemas, revision checks and known
+filesystem identities. Publication does not authorize an application operation.
+Unknown/corrupt/incomplete records remain protected and require explicit review.
+Registry operation codes and plan fingerprints are public preparation bookkeeping,
+not an independent security authority.
+
+| Mode | Current proposal | Required before real execution |
+| --- | --- | --- |
+| isolated | Separate API/frontend/provider ports, database/role/volume/network names, broker queues, Beat/session/rate-limit domains and artifact identities | Approved engine and resource ownership, restricted credentials/networking, explicit database/schema actions, trusted hostname/callbacks, full lifecycle acceptance |
+| mock | Frontend-only resource/port proposal, no database/Redis/workers/Beat | Explicit mock data transport and verified frontend-only acceptance; no authenticated full-stack claim |
+| shared-backend | Frontend/BFF session namespace proposal only | Explicit approved backend/tenant registration, TLS/callback/session separation and warning that actions may change shared development data |
+
+Dependency proposals do not require private configuration. All provider,
+database, configuration/secret, certificate/trust, shared-backend and administrator
+actions remain separately approval-gated. The foundation prepares registry
+metadata only. Port allocation is a deterministic proposal against recorded
+claims, not an OS reservation; later resource adapters must recheck and handle
+the actual bind race. Different localhost ports are not a cookie boundary.
+Per-instance hostnames, trusted SANs, secure browser contexts and approved IdP
+callbacks must be validated before authentication acceptance.
+
+No controller record is a substitute for PostgreSQL permissions, separate broker
+resources, provider labels/identities, network isolation or verified process
+creation/executable identity. The SBO-98 Native mutation guard remains closed.
+Live disposable integration, administrator activation and production/staging
+operations remain separately unexecuted and unapproved.
+
 ## Sources and precedence
 
 | Execution path | Effective sources |

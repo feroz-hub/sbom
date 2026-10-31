@@ -6,7 +6,7 @@ import sys
 
 # The public read-only entry points must not create import caches on a fresh
 # checkout, including before argument parsing or optional dependency imports.
-if __name__ == "__main__" and any(value in {"setup", "diagnose", "doctor", "--check"} for value in sys.argv[1:]):
+if __name__ == "__main__" and (len(sys.argv) == 1 or any(value in {"workspace", "setup", "diagnose", "doctor", "--check"} for value in sys.argv[1:])):
     sys.dont_write_bytecode = True
 
 import argparse
@@ -1662,6 +1662,16 @@ def _development_library(name):
         if error.name != "scripts":
             raise
         return importlib.import_module(name)
+
+
+def _workspace_library():
+    try:
+        library = _development_library("dev_workspace_cli")
+        if Path(library.__file__).resolve() != Path(__file__).resolve().with_name("dev_workspace_cli.py"):
+            raise ImportError()
+        return library
+    except (ImportError, SyntaxError, AttributeError):
+        raise SetupError("WORKSPACE_FRAMEWORK_UNVERIFIED: use the complete intended checkout and interpreter; no workspace action ran.") from None
 
 
 def _setup_requires(args, category):
@@ -4524,7 +4534,7 @@ def log_service(value):
 def parse_args(argv=None):
     parser = argparse.ArgumentParser(
         description="One local SBOM Analyzer launcher: Windows, macOS and Linux adapters",
-        epilog="Default: start. During start, Ctrl+C stops owned application processes; data services remain running. During diagnose, Ctrl+C cancels checks only. Native create/resend remain BLOCKED pending a reviewed runtime readiness attestation contract.",
+        epilog="Default: prepared startup or fresh-checkout inventory. Multi-worktree commands: python scripts/dev.py workspace --help. During start, Ctrl+C stops owned application processes; data services remain running. During diagnose, Ctrl+C cancels checks only. Native create/resend remain BLOCKED pending a reviewed runtime readiness attestation contract.",
     )
     parser.add_argument(
         "command", nargs="?", default="start",
@@ -4588,6 +4598,12 @@ def parse_args(argv=None):
 
 def main() -> None:
     global VERBOSE, ACTIVE_RUNTIME, ACTIVE_PROFILE, ACTIVE_LEGACY_CONFIG
+    if len(sys.argv) > 1 and sys.argv[1] == "workspace":
+        return _workspace_library().run_cli(sys.argv[2:], ROOT)
+    if len(sys.argv) == 1:
+        workspace_cli = _workspace_library()
+        if workspace_cli.fresh_checkout(ROOT):
+            return workspace_cli.initial_inventory(ROOT)
     args = parse_args()
     VERBOSE = args.verbose
     if args.check or args.command in {"diagnose", "doctor"}:

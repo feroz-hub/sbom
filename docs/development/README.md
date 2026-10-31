@@ -5,6 +5,65 @@ Use only `python scripts/dev.py` from a complete checkout. Read the
 TLS and recovery, and the [bootstrap guide](../../scripts/BOOTSTRAP.md) for
 controlled setup. Production deployment uses its own Compose/runtime commands.
 
+## Multiple worktrees: SBO-101 foundation
+
+The first SBO-101 increment adds authoritative Git discovery, public instance
+proposals and protected registry metadata. It does **not** provision or start an
+isolated application stack. An unprepared checkout invoked without arguments now
+shows a read-only inventory instead of attempting application startup. Existing
+installations and explicit legacy commands retain their existing dispatch.
+
+```sh
+python scripts/dev.py workspace list
+python scripts/dev.py workspace status --json
+python scripts/dev.py workspace diagnose
+python scripts/dev.py workspace plan --mode isolated --auth native
+python scripts/dev.py workspace plan --worktree <git-worktree-path> --mode mock --auth native
+python scripts/dev.py workspace prepare --scope registry --mode isolated --auth native
+```
+
+`list`, `status`, `diagnose` and `plan` do not create directories, locks or registry
+records, read private environment files, connect to services or install packages.
+Git discovery uses bounded local helpers with index writes, fsmonitor, filters,
+hooks, submodule recursion and network transports disabled or refused. Unknown
+Git/filesystem identity stays BLOCKED. A clean checkout never proves its agent is
+idle; `agent_owner` remains UNKNOWN until coordination outside Git establishes it.
+
+`prepare --scope registry` requires a verifiable user-owned home anchor and an
+interactive exact-instance confirmation. Its private metadata lives under
+`~/.sbom-dev/repositories/<repository-id>/instances`; it does not repair or require
+private ACLs on existing Git directories. It rechecks commit,
+filesystem identities, public dependency manifests, controller source and the
+plan before recording public metadata. It creates no credentials, certificates,
+database, container or application process. Changed inputs invalidate that
+consent. Unknown artifacts or unsafe permissions stop the operation without
+repair or deletion. On a noninteractive shell the command reports approval is
+required. Keep partial metadata for explicit recovery.
+
+The plan separates dependency preparation from configuration, providers,
+database operations, TLS material/trust and administrator enrollment. Missing
+`.env.dev.local` does not block a **dependency-only proposal**. Executing that
+dependency category and the remaining lifecycle operations is delivered in later
+increments; `workspace start/stop/restart/logs/test/compare` currently return a
+specific BLOCKED result. Do not treat a proposal or a registry state as readiness.
+
+For ATLAS/NEXUS work, first confirm each agent's branch and reserved files. Use
+Git-listed canonical paths explicitly in the plan. Every instance has a distinct
+proposed UUID, service/volume/queue/Beat namespace and HTTPS hostname; those names
+grant no ownership. Plans propose ports from configurable development ranges;
+they do not bind or reserve operating-system ports. Later startup must verify the
+actual bind and provider identity. Dedicated hostnames and browser contexts are
+required because cookies are not isolated by port. Approved TLS and IdP callback
+registration remain separate prerequisites.
+
+The initial isolated mode requires a separately approved container-engine and
+data-resource plan. It never adopts the protected checkout's PostgreSQL, Redis,
+Mailpit, credentials or scheduler. Docker/Podman installation, real provisioning,
+database operations and full two-stack acceptance have not been executed by this
+foundation. Native create/resend remains unconditionally closed under SBO-98.
+See the [instance contract](../reference/configuration.md#workspace-instance-contract-sbo-101-foundation)
+for metadata, locking and approval boundaries.
+
 ## Profiles and platforms
 
 Greenfield uses private ~/.sbom-greenfield-uuid and verified fixed Docker
