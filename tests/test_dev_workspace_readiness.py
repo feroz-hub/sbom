@@ -27,6 +27,11 @@ SECRET = "synthetic-readiness-secret-never-expose"
 
 
 def prepared_context(tmp_path, monkeypatch, *, auth="native"):
+    # Positive fake transports must not depend on the hosted runner's libpq
+    # configuration. Security cases explicitly reintroduce ambient inputs later.
+    for name in tuple(os.environ):
+        if name.startswith("PG") or name == "SSLKEYLOGFILE":
+            monkeypatch.delenv(name, raising=False)
     fixture_spec = importlib.util.spec_from_file_location("readiness_pure_lifecycle_fixture",
                                                         Path(__file__).with_name("test_dev_workspace_lifecycle.py"))
     fixture = importlib.util.module_from_spec(fixture_spec)
@@ -331,6 +336,18 @@ def test_fixture_relocation_updates_encoded_ca_paths_as_well_as_plain_environmen
     query = dict(parse_qsl(urlsplit(candidate.context.environment[key]).query))
     assert query["sslrootcert" if key == "DATABASE_URL" else "ssl_ca_certs"] == candidate.context.environment["SSL_CERT_FILE"]
     assert Path(candidate.context.environment["SSL_CERT_FILE"]) == candidate.context.tls.ca_bundle
+
+
+def test_fake_context_isolates_inherited_libpq_and_keylog_configuration(tmp_path, monkeypatch):
+    for name in ("PGSERVICE", "PGPASSWORD", "SSLKEYLOGFILE"):
+        monkeypatch.setenv(name, SECRET)
+    monkeypatch.setenv("SBOM_TEST_PUBLIC_TRANSPORT", "fixture-public-marker")
+    candidate = prepared_context(tmp_path, monkeypatch)
+    assert not any(name.startswith("PG") or name == "SSLKEYLOGFILE" for name in os.environ)
+    assert os.environ["SBOM_TEST_PUBLIC_TRANSPORT"] == "fixture-public-marker"
+    calls = database(candidate)
+    assert candidate.probe.database(3) and calls[-2:] == ["ROLLBACK", "CLOSE"]
+    candidate.forbidden.assert_not_called()
 
 
 @pytest.mark.parametrize("name", ["PGSERVICE", "PGSERVICEFILE", "PGOPTIONS", "PGPASSWORD", "PGPASSFILE", "PGSSLCERT", "SSLKEYLOGFILE"])

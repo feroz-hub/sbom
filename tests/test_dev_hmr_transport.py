@@ -116,7 +116,9 @@ def owned_connection(monkeypatch):
     return create
 
 
-def test_handshake_pins_loopback_sni_verifies_headers_and_retains_first_frame(owned_connection):
+def test_handshake_pins_loopback_sni_verifies_headers_and_retains_first_frame(owned_connection, monkeypatch):
+    # Keep deadline addition/subtraction exact, independent of host uptime.
+    monkeypatch.setattr(_FIXTURE.time, "monotonic", lambda: 0.0)
     transport, context, connector, wrapper = owned_connection(
         response=lambda request: handshake(request, suffix=frame(b'{"action":"built"}'))
     )
