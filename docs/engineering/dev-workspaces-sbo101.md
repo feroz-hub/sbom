@@ -273,6 +273,53 @@ then returned **TEST_ROOT_ACCESS_REVIEW_REQUIRED**, exit 1,
 `3295afa7e519d4f62292b1cc3abfeabc0eb43065` each had 20 successful CI checks
 (push and PR runs) when inspected; no failures were returned.
 
+## PR E: guided Native/HCL overview and closed enrollment state machine
+
+Adds `dev_workspace_onboarding`, focused pure/CLI tests, static administrator
+guidance in the existing launcher, the separate authority security proposal and
+updates to the existing development/configuration/Native guides. Fresh Native
+guidance is explicitly UNKNOWN/uninspected, with no invented target/status/
+generation/readiness. HCL has its separate approval code, not a Native-password
+route. Mock/shared previews cannot offer enrollment. No identity/password input
+or status connection is requested by this guidance.
+
+The pure observation planner covers existing, absent, pending, completed,
+conflicting and unknown aggregate states with exact context/schema/status drift
+checks. Source review confirmed `dev_operator.py` counts all IAM users and the
+bootstrap user FK is nonnull/restricted, so a pending reservation with zero users
+now produces CONFLICT and recovery review. All actions remain non-executable;
+no public marker, readiness flag or valid plan can authorize creation or resend.
+The existing managed guard, standalone bootstrap and bootstrap service have no
+diff against `73d29949b31fa3564a56043128bde7118e804ede`.
+
+The [authority proposal](dev-workspaces-security-sbo101.md) distinguishes a
+developer-controlled launcher from an independent privileged boundary and leaves
+principal deployment, token consumption/revocation/commit atomicity, readiness
+attestation and activation-time DB privilege design for explicit security/DBA/
+Engineering Lead review. It is not an implemented/enabled authority protocol.
+
+Native Windows Python 3.14.6, same safe harness:
+
+```powershell
+& C:\sbom\.venv\Scripts\python.exe -B `
+  C:\sbom\.windows\worktrees\SBO-98-component-env\.dev-logs\safe_pytest.py `
+  tests/test_dev_workspace_onboarding.py tests/test_dev_workspace_onboarding_cli.py `
+  tests/test_dev_native_enrollment.py tests/test_dev_native_enrollment_cli.py `
+  tests/test_dev_operator.py --timeout=60
+```
+
+Result: **356 passed in 37.04s**. Python 3.12.10, same harness with the two new
+onboarding files: **128 passed in 6.04s**. Ruff passed. Aggregate observations,
+services and contexts were synthetic; direct-invocation/drift/redaction/mutation
+tripwires passed. No protected administrator availability was inspected and no
+live creation, resend, email, activation, grant or database operation occurred.
+Actual candidate `workspace plan --scope administrator --mode isolated --auth
+native --json` returned UNKNOWN/ONBOARDING_INSPECTION_REQUIRED; the `--auth hcl`
+form returned HCL_APPROVAL_REQUIRED/HCL_OPERATOR_IDP_APPROVAL_REQUIRED. Both
+returned exit 1, `inspection_performed=false`,
+`live_enrollment_authorized=false`, empty identity-field lists and empty stderr.
+These are static guidance results, not database status or authenticated authority.
+
 ## Disposable acceptance procedure (not yet authorized or executed)
 
 1. Review the candidate diff and CI on Windows/macOS/Linux, preserving SBO-98.

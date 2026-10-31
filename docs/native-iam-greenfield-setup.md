@@ -203,3 +203,27 @@ SBOM_RUN_HTTP_ACCEPTANCE=1 SBOM_RUN_BACKUP_ACCEPTANCE=1 \
 The greenfield test needs the existing approved loopback Mailpit and an explicitly disposable test PostgreSQL URL. It creates a second completely empty DB, runs ordinary Alembic (without fixture seeding there), starts an isolated Redis/Celery worker, races two real bootstrap CLI processes and consumes captured emails. It uses the minimum 30-second activation-resend cooldown and the unchanged 60-second reset cooldown. Do not run it against production infrastructure. The HTTP test needs a Native-only production frontend build and launches two actual BFF processes. The container override selects matching PostgreSQL backup tools, not a production backup target.
 
 Build the Native-only frontend with `NEXT_PUBLIC_AUTH_ENABLED=true`, `NEXT_PUBLIC_HCL_AUTH_ENABLED=false` and empty HCL issuer/client settings. The Dockerfile exposes the new HCL switch as a build argument. The server Compose backfill issuer and OIDC transaction-key file are optional for Native-only mode; HCL deployments must still supply their real backfill identity configuration and mounted transaction key. `NATIVE_IAM_PRODUCTION` defaults true in server Compose; a local Mailpit-only override must be explicitly false and must not be used to claim production validation.
+
+## SBO-101 workspace guidance: live enrollment remains closed
+
+Use `python scripts/dev.py workspace plan --scope administrator --mode isolated
+--auth native` for read-only first-run guidance. With a registered mode,
+`workspace prepare --scope administrator` also only presents guidance. Native
+status is UNKNOWN until an approved exact-installation inspection exists; the
+command does not query a database, gather identities/passwords or create/resend.
+Existing valid administrators should sign in normally; pending/completed
+reservations must be preserved. Mock/shared previews cannot enroll users.
+
+The service's email, first/last name, phone and operator-reference requirements
+remain unchanged. A future authorized flow must use its audited singleton and
+encrypted activation outbox. The human sets a password only on the verified HTTPS
+activation page. The existing managed enrollment child is unconditionally closed
+pending the [independent-authority design](engineering/dev-workspaces-security-sbo101.md),
+security/DBA/Engineering Lead approval and separately approved disposable tests.
+HCL/Entra needs its separate IdP-owned procedure and has no Native-password fallback.
+
+The older acceptance commands and transport approvals above refer to their
+original scope. They do not authorize SBO-101 to adopt the protected checkout's
+PostgreSQL, Redis or Mailpit, initialize a schema, run destructive fixtures,
+generate private material or change trust. Approve exact isolated resources and
+operations first; do not use those commands to bypass workspace blockers.
