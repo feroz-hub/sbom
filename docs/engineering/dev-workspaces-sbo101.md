@@ -3,8 +3,8 @@
 Delivery state: planning, controlled dependencies, private configuration/TLS,
 provider/data preparation contracts, Runtime execution, read-only inspection,
 restricted tests and closed onboarding guidance have implemented source and
-synthetic evidence in incremental drafts. Public guided/mock integration is
-being connected separately. Real isolated/shared application execution and live
+synthetic evidence in incremental drafts. Public guided/mock integration has
+separate source and synthetic evidence. Real isolated/shared application execution and live
 administrator onboarding remain **BLOCKED** by the specific authority, policy,
 transport and acceptance gates below. No independent review, merge, deployment
 or full native acceptance is claimed by unit/CI results.
@@ -864,6 +864,76 @@ Generators/installers/engine/SQL and readiness evidence were synthetic. Scoped
 Ruff and Python3.11 grammar passed. No key generation, trust change, provider,
 database, application or administrator action ran. Real frontend TLS generation,
 trust and startup still need separate exact authorization and acceptance.
+
+## Increment O — guided setup and public command integration
+
+`dev_workspace_setup.py` separates observation, immutable twelve-category plans,
+category consent, independent authority checks and preparation. One session can
+select registry, independent dependencies, certificates and preview files. Mock
+skips unused data/auth stages; its certificates do not need container policy.
+Shared/isolated provider, session, schema and onboarding gates remain enforced.
+Preview preparation has its own consent and source/compiler guards. Explicit
+source-only registry refresh preserves configuration generation/history and is
+refused for active or uncertain states. A completed bootstrap reservation yields
+WARN and approved effective-admin/recovery guidance; only an observed effective
+`EXISTING_ADMIN` yields Native administrator READY. The closed live child is unchanged.
+
+`dev_workspace_control.py` connects the public launcher to that plan, protected
+TLS bindings, actual compiler/Runtime/readiness adapters and foreground mock
+supervision. Compiler probing belongs to explicit start, never diagnose/status.
+Startup checks exclusive loopback port availability without contacting or killing
+the existing listener, and rechecks before spawn. The bind-to-spawn interval is
+still a race; later ownership/readiness failure triggers verified cleanup.
+Restart checks after stop. Repeated start preserves an existing instance and
+reports a collision/busy diagnosis; saved READY is not trusted. Scoped signal
+handlers restore after cleanup. Source/config-loss recovery accepts a known UUID
+only through protected registration and a surviving verified repository/controller.
+
+`scripts/dev.py` retains explicit Legacy/Greenfield selection and resolves known
+new registrations before source configuration/freshness or maintenance flags.
+New files or incompatible flags cannot silently fall through to Legacy setup.
+Old Python still receives prerequisite diagnostics before loading new modules.
+`setup --plan`/check forms normalize before mutable dispatch; JSON/non-TTY setup
+is read-only and emits one result object. `diagnose` is primary, with a deprecated
+`doctor` alias. Status/log imports suppress bytecode writes. Known instance runtime
+inventory uses fresh canonical inspection, never the original worktree's runtime
+file or a registry READY marker. Logs can show bounded metadata for all fixed
+components; messages remain private. Isolated/shared public start is explicitly
+blocked until approved live bindings exist, even though their adapters are source-implemented.
+
+Executed Windows/Python3.14.6 safe commands from this dedicated worktree:
+
+```powershell
+& C:\sbom\.venv\Scripts\python.exe -B C:\sbom\.windows\worktrees\SBO-98-component-env\.dev-logs\safe_pytest.py tests/test_dev_workspace_setup.py tests/test_dev_workspace_control.py tests/test_dev_workspace_dispatch.py tests/test_dev_workspace_cli.py tests/test_dev_workspace_lifecycle_cli.py tests/test_dev_workspace_observe_cli.py tests/test_dev_workspace_preview_cli.py tests/test_dev_main_merge.py tests/test_dev_diagnose.py tests/test_dev_setup.py --timeout=60
+```
+
+Result: **501 passed, 6 existing Alembic warnings in 105.10s**. Later final setup/
+control/dispatch/inspector-inventory selection passed **171 tests in 107.04s**;
+the dispatch/observer/legacy diagnostic selection passed **226 in 12.57s**.
+Initial wiring uncovered duplicate inventory discovery and legacy-only fixture
+dispatch expectations (17 failed/445 passed); discovery was consolidated and
+legacy fixtures now explicitly select Legacy. New default-dispatch, old-host,
+corrupt-registry, no-conversion, readonly cache and lifecycle negatives passed.
+Ruff and Python3.11 grammar checks passed. Material/installers/process/readiness
+were synthetic except new native private metadata and cache-only Python fixtures.
+
+The actual candidate command (no temporary module overlay) was executed read-only:
+
+```powershell
+python -B scripts/dev.py workspace setup --mode mock --auth native --check --json
+```
+
+It returned exit **1**, one valid JSON object with
+`CONTROL_HOME_ACCESS_UNVERIFIED`, component `private-home`, native category
+`OWNER_MISMATCH`, operation `EqualSid`, `winerror=null`, `plan=null` and a structured
+outcome/guidance. This is a confirmed owner-policy refusal, not PostgreSQL failure
+or an API error code. Observed candidate runtime/configuration/home-state and
+original credential/certificate metadata stayed unchanged. An earlier generic
+refusal led to this actionable, redacted correction; no permission was repaired.
+An IT-approved state location/ownership decision is needed before real preparation.
+No real key generation, dependency installation, Node/app/provider/database start,
+trust change or administrator action occurred. Current mock is a synthetic
+theme/layout fixture, not arbitrary authenticated application-page coverage.
 
 ## Disposable acceptance procedure (not yet authorized or executed)
 

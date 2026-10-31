@@ -1062,6 +1062,59 @@ OS trust, initialize a database or enable Native administrator creation. Its
 PostgreSQL, Python/Node Redis and SMTP transport settings are validated separately.
 Stable provider resource receipts survive source updates; operation approvals
 remain bound to the current source and configuration generation.
+
+### Guided worktree preparation (SBO-101 candidate)
+
+From a fresh complete candidate checkout, `python scripts/dev.py setup` opens one
+consolidated preparation session. Check forms and noninteractive/JSON sessions
+are read-only:
+
+```powershell
+python scripts/dev.py setup --plan
+python scripts/dev.py workspace setup --mode mock --auth native --check --json
+python scripts/dev.py workspace setup --mode isolated --auth native --check --json
+```
+
+The plan distinguishes registry, dependencies, provider policy, private material,
+certificates, preview files, provider resources, database/schema, trust and
+onboarding. Developers explicitly select write categories. Certificates and
+preview files have separate consent; dependency preparation can proceed without
+private application configuration. Mock mode skips unused data/authentication
+stages and requires no container policy. Shared/isolated modes keep their real
+backend, session, provider, schema and authorization gates. Missing company policy
+is never permission to adopt the original application's services.
+
+Existing Legacy/Greenfield configuration and explicit `--profile` selection retain
+their approved flow. Protected Greenfield home presence also prevents implicit
+conversion. Registered new instances retain their mode, auth and resource
+generation; source-only registry refresh requires review and preserves private
+material/history. Unknown or active/uncertain state is not reset.
+
+After approved mock dependency, certificate and preview preparation, normal
+`python scripts/dev.py` dispatches to the owned foreground mock runtime. Its
+compiler, source, TLS and listener identities must verify before readiness; this
+is frontend-only readiness, with API/login/functional acceptance explicitly false.
+Real mock material generation/startup has not been executed in this handoff.
+Isolated/shared public startup remains blocked pending independent live bindings
+and real disposable acceptance; implemented adapters are not approvals.
+
+```powershell
+python scripts/dev.py diagnose
+python scripts/dev.py status
+python scripts/dev.py logs --service frontend
+python scripts/dev.py stop
+python scripts/dev.py workspace stop --instance-id <known-instance-uuid>
+```
+
+The explicit UUID recovery form works without the selected source/configuration,
+provided the verified repository common-directory/controller and protected
+registration survive. Stop still uses canonical process identity checks and
+preserves uncertain records. `diagnose` is read-only; `doctor` temporarily aliases
+it with a deprecation message. Passive worker diagnostics read heartbeats only;
+Celery control messages belong exclusively to separately named active startup
+acceptance. Logs expose bounded component metadata and verified local log paths;
+message bodies stay private. No ordinary startup initializes or migrates a
+database, installs dependencies, changes trust or creates an administrator.
 Do not run generated manifests manually to bypass the adapter's identity,
 nonroot, database and exact-target approval checks.
 
