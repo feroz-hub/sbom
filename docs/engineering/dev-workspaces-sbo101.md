@@ -1,11 +1,13 @@
 # SBO-101: implementation evidence and approval boundaries
 
-Delivery state: safe planning, controlled dependency preparation, restricted test
-orchestration, closed onboarding guidance and read-only observations are
-implemented in incremental drafts. Full isolated application execution, mock/
-shared runtime previews, real private configuration/TLS/provider adapters and
-live administrator onboarding remain **incomplete / BLOCKED**. No independent
-review, merge, deployment or full native acceptance is claimed by unit/CI results.
+Delivery state: planning, controlled dependencies, private configuration/TLS,
+provider/data preparation contracts, Runtime execution, read-only inspection,
+restricted tests and closed onboarding guidance have implemented source and
+synthetic evidence in incremental drafts. Public guided/mock integration is
+being connected separately. Real isolated/shared application execution and live
+administrator onboarding remain **BLOCKED** by the specific authority, policy,
+transport and acceptance gates below. No independent review, merge, deployment
+or full native acceptance is claimed by unit/CI results.
 
 ## Baseline and coordination
 
@@ -404,13 +406,13 @@ authority exists for them on this host. No protected services were adopted.
 | Area | Files / dependencies | Risk or gate | Current protection |
 | --- | --- | --- | --- |
 | Source integration | SBO-98 #49–#54 → SBO-101 #55 onward | Draft stack dependency; no independent sign-off claimed | Old branches unchanged; issue-only worktree/branches; no merge |
-| Legacy lifecycle | `scripts/dev.py`, existing Runtime | Native process regression / unknown PID | Lifecycle AST unchanged; native regression list; no new termination path |
-| New runtime | `dev_workspace_lifecycle`, `app/dev_instance` | Execution/consumer/config/TLS adapters unimplemented | Unconditional live block; no fabricated READY |
-| Data services | `dev_workspace_provider` | Company engine/images/UID policy and exact disposable resource approval absent | Pure proposals/consistency only; no daemon/DB executor |
+| Legacy lifecycle | `scripts/dev.py`, existing Runtime | Native process regression / unknown PID | Ownership/termination checks preserved; optional private IO for new instances; native regressions and limitations recorded |
+| New runtime | `dev_workspace_lifecycle`, `app/dev_instance`, Runtime/readiness adapters | Missing independent provider/transport authority and real acceptance | Concrete source with fail-closed callback gates; no fabricated READY |
+| Data services | Provider/engine/database adapters and journal | Company engine/images/UID policy and exact disposable resource approval absent | Concrete adapters synthetically tested; no live daemon/DB action; absent actual-session peer attestor blocks SQL |
 | Dependencies | `dev_workspace_dependencies`, CLI | Untrusted root grant; binary-only/public-index policy; interrupted state | Specific native refusal; exact consent/revalidation; retained journals; no repair/adoption |
 | Privileged Native | `dev_workspace_onboarding`, unchanged SBO-98 guard | Independent principal/authority/readiness/commit design not approved | All live actions closed; exact context drift tests; separate security proposal |
 | HCL.CS | Existing provider services / approved registration | IdP-owner first-user and per-origin callback/trust decisions | No invented identity, password fallback or privileged provisioning |
-| Shared contracts | Application/DTO/schema/migrations | Other-agent or deployment conflict | No NEXUS active work confirmed; these consumers/schemas/deployment files unchanged |
+| Shared contracts | Application/DTO/schema/migrations | Other-agent or deployment conflict | No NEXUS active work confirmed; optional development namespace consumers changed in H; DTO/schema/migrations/deployment unchanged |
 | Observations | `dev_workspace_observe`, CLI | Metadata/consistency cannot prove live health; unknown private source | No service contact, raw message content or state mutation; ACL/identity checks |
 | Tests | Fixed source closure / explicit workflow lists | Application fixtures can migrate/truncate; fake execution is not E2E | No application conftest; sanitized SQLite sentinels; real data suites blocked |
 
@@ -754,7 +756,8 @@ local service it requires the expected host PID/birth/executable and rechecks
 afterward. Docker guest PIDs cannot substitute for Windows host-forwarder proofs.
 API probes use inert `/` and Native `/ready/iam`, avoiding `/health`, whose NVD
 initialization side effect makes it unsuitable for strict read-only diagnostics.
-Workers/Beat require current instance-specific health records and progress.
+Workers/Beat passive diagnosis requires current instance-specific health records
+and progress. Explicit startup acceptance is a separate active operation.
 
 PostgreSQL requires exact schema/target and verified TLS, a read-only transaction,
 rollback/close and CA/listener revalidation. Redis probes use TLS, AUTH, SELECT,
@@ -815,6 +818,17 @@ CI checks successful**, including hosted Windows/macOS/Linux and Python3.11/3.12
 The original elevated-token Windows default-owner explanation remains an
 inference: the private writer repair passed hosted CI, but the runner token's
 actual default-owner SID was not captured.
+
+Independent review then identified that Celery control ping/queue/stat inspection
+publishes broker messages. `background()` now performs only bounded protected
+heartbeat/progress reads and fresh PID/birth/executable checks. Its result is
+`BACKGROUND_HEARTBEAT_OBSERVED`, explicitly partial and with
+`active_control_verified=false`. Only the separately named
+`background_startup()` can invoke active control after its broker/process proofs;
+it must never be called from read-only status/diagnose. Tests tripwire app/Celery/
+Kombu/Redis imports and socket/process construction on the passive path.
+The inspected readiness/lifecycle selection passed **206 tests in 52.88s**;
+Ruff and Python3.11/3.12 grammar checks passed. No live broker was contacted.
 
 ## Disposable acceptance procedure (not yet authorized or executed)
 

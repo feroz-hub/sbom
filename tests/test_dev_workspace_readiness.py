@@ -50,8 +50,16 @@ def prepared_context(tmp_path, monkeypatch, *, auth="native"):
     env["SBOM_DEV_STATE_DIR"] = str(root / ".dev-logs")
     env["SBOM_DEV_PROFILE"] = "isolated"
     dev_instance_storage.initialize_private_directory(root / ".dev-logs", anchor=anchor)
-    for role in ("default", "reports", "beat"):
-        dev_private.create_private_file(root / ".dev-logs" / (role + "-health.json"), b"{}")
+    def worker_node(role, instance, profile):
+        return f"sbom-{profile}-{instance[:12]}-{role}@fixture-host"
+    for index, role in enumerate(("default", "reports", "beat")):
+        heartbeat = {"instance": env["SBOM_DEV_INSTANCE"], "pid": 10 + index, "time": readiness.time.time()}
+        if role == "beat":
+            heartbeat["scheduled_tasks"] = 3
+        else:
+            heartbeat.update(node=worker_node(role, env["SBOM_DEV_INSTANCE"], "isolated"), connected=True,
+                queues=[descriptor.resources["queue_default" if role == "default" else "queue_reports"]])
+        dev_private.create_private_file(root / ".dev-logs" / (role + "-health.json"), json.dumps(heartbeat).encode())
     if auth == "hcl":
         env["HCL_IAM_CLIENT_ID"] = "fixture-client"
     def identity(pid):
@@ -64,7 +72,7 @@ def prepared_context(tmp_path, monkeypatch, *, auth="native"):
     runtime = SimpleNamespace(root=root, state=state, service_status=Mock(return_value="RUNNING"))
     launcher = SimpleNamespace(process_info=Mock(side_effect=identity), matches=lambda saved, current:
         all(saved.get(key) == current.get(key) for key in ("pid", "birth", "exe")),
-        background_health=Mock(), validate_secrets=Mock())
+        background_health=Mock(), validate_secrets=Mock(), worker_node=worker_node)
     providers = {name: (identity(index + 30),) for index, name in enumerate(("postgres", "redis", "mailpit"))}
     origins = ("https://identity.example.test",) if auth == "hcl" else ()
     context = readiness.ReadinessContext(descriptor, env, root, source, tls, "103_tenant_admin_governance", providers, origins)
@@ -174,15 +182,15 @@ def test_runtime_token_and_environment_target_drift_cannot_unlock_probe(candidat
     assert candidate.requests == []
 
 
-def test_background_uses_existing_helper_only_after_all_process_and_broker_proofs(candidate):
-    assert candidate.probe.background(spec(candidate, "Celery worker"), 3)
+def test_explicit_background_startup_uses_control_only_after_all_process_and_broker_proofs(candidate):
+    assert candidate.probe.background_startup(spec(candidate, "Celery worker"), 3)
     candidate.launcher.background_health.assert_called_once_with(candidate.runtime, dict(candidate.context.environment), require_control=True)
     assert candidate.listener.call_count == 2
 
 
-def test_background_heartbeat_or_control_warmup_is_pending_and_ownership_still_rechecked(candidate):
+def test_explicit_background_startup_control_warmup_is_pending_and_ownership_still_rechecked(candidate):
     candidate.launcher.background_health.side_effect = RuntimeError(SECRET)
-    assert candidate.probe.background(spec(candidate, "Celery worker"), 3) is False
+    assert candidate.probe.background_startup(spec(candidate, "Celery worker"), 3) is False
     assert candidate.probe.results["Celery worker"].code == "BACKGROUND_NOT_READY"
     assert candidate.listener.call_count == 2 and SECRET not in repr(candidate.probe.results)
 
@@ -194,6 +202,85 @@ def test_background_cannot_substitute_a_different_broker_after_proving_local_lis
         candidate.probe.background(changed, 3)
     candidate.launcher.background_health.assert_not_called()
     candidate.listener.assert_not_called()
+
+
+@pytest.mark.parametrize("component", readiness.dev_workspace_lifecycle.COMPONENTS[:3])
+def test_default_background_is_passive_without_app_import_broker_control_or_network(candidate, monkeypatch, component):
+    import builtins
+    before = json.dumps(candidate.runtime.state, sort_keys=True)
+    original_import = builtins.__import__
+    def guarded(name, *args, **kwargs):
+        assert name.split(".", 1)[0] not in {"app", "celery", "kombu", "redis"}
+        return original_import(name, *args, **kwargs)
+    monkeypatch.setattr(builtins, "__import__", guarded)
+    forbidden = Mock(side_effect=AssertionError("Passive background constructed broker control"))
+    candidate.launcher.background_health = forbidden
+    candidate.launcher.celery_control = forbidden
+    assert candidate.probe.background(spec(candidate, component), 3)
+    result = candidate.probe.results[component]
+    assert result.code == "BACKGROUND_HEARTBEAT_OBSERVED" and not result.to_dict()["active_control_verified"]
+    assert result.to_dict()["observation_scope"] == "passive-owned-heartbeat"
+    assert json.dumps(candidate.runtime.state, sort_keys=True) == before
+    assert candidate.requests == []
+    candidate.listener.assert_not_called()
+    candidate.connect.assert_not_called()
+    forbidden.assert_not_called()
+
+
+@pytest.mark.parametrize("change", ["stale", "future", "pid", "instance", "queues", "connected", "node", "nan", "beat"])
+def test_passive_background_rejects_unverified_or_stale_heartbeat_without_control(candidate, change):
+    path = candidate.root / ".dev-logs" / ("beat-health.json" if change == "beat" else "default-health.json")
+    value = json.loads(path.read_bytes())
+    if change == "stale":
+        value["time"] -= 30
+    elif change == "future":
+        value["time"] += 30
+    elif change == "pid":
+        value["pid"] = 999
+    elif change == "instance":
+        value["instance"] = SECRET
+    elif change == "queues":
+        value["queues"] = ["celery"]
+    elif change == "connected":
+        value["connected"] = 1
+    elif change == "node":
+        value["node"] = SECRET
+    elif change == "nan":
+        value["time"] = float("nan")
+    else:
+        value["scheduled_tasks"] = False
+    path.write_bytes(json.dumps(value).encode())
+    assert candidate.probe.background(spec(candidate, "Celery worker"), 3) is False
+    assert candidate.probe.results["Celery worker"].code == "BACKGROUND_NOT_READY"
+    assert SECRET not in repr(candidate.probe.results)
+    candidate.launcher.background_health.assert_not_called()
+    candidate.listener.assert_not_called()
+
+
+def test_passive_background_missing_heartbeat_does_not_create_or_repair_it(candidate):
+    path = candidate.root / ".dev-logs" / "default-health.json"
+    path.unlink()  # Brand-new synthetic fixture only.
+    assert candidate.probe.background(spec(candidate, "Celery worker"), 3) is False
+    assert not path.exists()
+    candidate.launcher.background_health.assert_not_called()
+
+
+def test_passive_background_rechecks_process_birth_after_reading_heartbeats(candidate):
+    original = candidate.probe._background_heartbeats
+    def heartbeat(*args):
+        original(*args)
+        candidate.launcher.process_info.side_effect = lambda pid: {**candidate.identity(pid), "birth": "reused"}
+    candidate.probe._background_heartbeats = heartbeat
+    with pytest.raises(readiness.ReadinessError, match="^PROCESS_IDENTITY_UNVERIFIED$"):
+        candidate.probe.background(spec(candidate, "Celery worker"), 3)
+    candidate.launcher.background_health.assert_not_called()
+
+
+def test_passive_background_rejects_duplicate_heartbeat_fields(candidate):
+    path = candidate.root / ".dev-logs" / "default-health.json"
+    path.write_bytes(b'{"time":1,"time":2}')
+    assert candidate.probe.background(spec(candidate, "Celery worker"), 3) is False
+    candidate.launcher.background_health.assert_not_called()
 
 
 def test_missing_host_forwarder_receipt_blocks_database_before_connect(candidate):

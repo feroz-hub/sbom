@@ -6,6 +6,9 @@ the executor; container guest PIDs cannot stand in for Windows host proxies.
 No application/provider process is stopped, private setting changed, or
 privileged identity created. Owned lsof probe cleanup alone may signal its
 original child after fresh native creation-time/executable verification.
+background() is passive; background_startup() is a separate explicit active
+acceptance check that publishes Celery control messages and is excluded from
+strictly read-only diagnose/status callers.
 Enumeration and connect are not atomic: pre/post checks detect ordinary bind
 races, but absolute exclusion of an intervening rebind requires parent-owned
 listener handoff or independent server attestation. No such guarantee is minted.
@@ -18,6 +21,7 @@ import ctypes
 import http.client
 import ipaddress
 import json
+import math
 import os
 import re
 import socket
@@ -59,7 +63,7 @@ _CODES = frozenset({"READINESS_CONTEXT_INVALID", "READINESS_RESULT_INVALID", "RE
     "DATABASE_TARGET_UNVERIFIED", "DATABASE_NOT_READONLY", "DATABASE_SCHEMA_NOT_READY", "DATABASE_INSPECTION_FAILED",
     "DATABASE_CLEANUP_UNCONFIRMED", "AUTHENTICATION_CONFIGURATION_REQUIRED", "NATIVE_PREREQUISITES_UNVERIFIED",
     "HCL_REGISTRATION_REQUIRED", "HCL_DISCOVERY_UNVERIFIED", "HCL_JWKS_UNVERIFIED", "BACKGROUND_NOT_READY",
-    "API_READY", "FRONTEND_READY", "BACKGROUND_READY", "DATABASE_READY", "TLS_READY", "AUTHENTICATION_READY",
+    "API_READY", "FRONTEND_READY", "BACKGROUND_READY", "BACKGROUND_HEARTBEAT_OBSERVED", "DATABASE_READY", "TLS_READY", "AUTHENTICATION_READY",
     "REDIS_TARGET_UNVERIFIED", "REDIS_NOT_READY", "REDIS_AUTHENTICATION_FAILED", "REDIS_RESPONSE_UNVERIFIED",
     "REDIS_SESSION_ACL_UNVERIFIED", "REDIS_CLEANUP_UNCONFIRMED", "REDIS_READY", "SESSION_READY",
     "MAIL_TARGET_UNVERIFIED", "MAIL_NOT_READY", "MAIL_TLS_REQUIRED", "MAIL_AUTHENTICATION_FAILED",
@@ -423,6 +427,9 @@ class ReadinessResult:
         if self.component in {"TLS", "Frontend"}:
             result.update(trust_scope="explicit_client_ca_and_hostname", browser_trust_verified=False,
                           login_acceptance_verified=False)
+        if self.code in {"BACKGROUND_HEARTBEAT_OBSERVED", "BACKGROUND_READY"}:
+            result.update(active_control_verified=self.code == "BACKGROUND_READY",
+                          observation_scope="active-startup-control" if self.code == "BACKGROUND_READY" else "passive-owned-heartbeat")
         return result
 
 
@@ -996,7 +1003,49 @@ class WorkspaceReadiness:
             return "FRONTEND_READY"
         return self._run("Frontend", check)
 
-    def background(self, spec, timeout):
+    def _background_heartbeats(self, spec, runtime, identities):
+        directory = self.context.runtime_root / ".dev-logs"
+        dev_instance_registry._private(directory, directory=True)
+        def unique(pairs):
+            value = {}
+            for key, item in pairs:
+                if key in value:
+                    _fail("BACKGROUND_NOT_READY")
+                value[key] = item
+            return value
+        def invalid_constant(_value):
+            _fail("BACKGROUND_NOT_READY")
+        for component, role, queue in (
+            ("Celery worker", "default", self.context.descriptor.resources["queue_default"]),
+            ("Celery reports worker", "reports", self.context.descriptor.resources["queue_reports"]),
+            ("Celery Beat", "beat", None),
+        ):
+            try:
+                path = directory / (role + "-health.json")
+                dev_private.validate_parent(path, self.context.runtime_root)
+                dev_instance_registry._private(path)
+                raw, _ = dev_frontend._regular(path, 65536)
+                value = json.loads(raw, object_pairs_hook=unique, parse_constant=invalid_constant)
+                timestamp = value.get("time") if type(value) is dict else None
+                if (type(value) is not dict or type(value.get("pid")) is not int
+                        or value["pid"] not in identities[component] or value.get("instance") != runtime.state["instance"]
+                        or type(timestamp) not in {int, float} or not math.isfinite(timestamp)
+                        or not 0 <= time.time() - timestamp <= 20):
+                    _fail("BACKGROUND_NOT_READY")
+                if queue is not None:
+                    node = self.launcher.worker_node(role, runtime.state["instance"], spec.environment["SBOM_DEV_PROFILE"])
+                    if (value.get("connected") is not True or value.get("node") != node
+                            or type(value.get("queues")) is not list or value["queues"] != [queue]):
+                        _fail("BACKGROUND_NOT_READY")
+                elif type(value.get("scheduled_tasks")) is not int or not 0 <= value["scheduled_tasks"] <= 1000000:
+                    _fail("BACKGROUND_NOT_READY")
+                dev_instance_registry._private(path)
+            except ReadinessError:
+                raise
+            except Exception:
+                _fail("BACKGROUND_NOT_READY")
+
+    def _background(self, spec, timeout, *, active):
         def check():
             deadline = self._deadline(timeout)
             runtime = self._runtime()
@@ -1007,14 +1056,13 @@ class WorkspaceReadiness:
             directory = self.context.runtime_root / ".dev-logs"
             if spec.environment.get("SBOM_DEV_STATE_DIR") != str(directory):
                 _fail("RUNTIME_BINDING_UNVERIFIED")
-            dev_instance_registry._private(directory, directory=True)
-            for role in ("default", "reports", "beat"):
-                try:
-                    if dev_instance_registry._private(directory / (role + "-health.json")).st_size > 65536:
-                        _fail("PROCESS_IDENTITY_UNVERIFIED")
-                except FileNotFoundError:
-                    _fail("BACKGROUND_NOT_READY")
             identities = {name: self._identities(name) for name in dev_workspace_lifecycle.COMPONENTS[:3]}
+            self._background_heartbeats(spec, runtime, identities)
+            if not active:
+                if any(self._identities(name) != saved for name, saved in identities.items()):
+                    _fail("PROCESS_IDENTITY_UNVERIFIED")
+                self._background_heartbeats(spec, runtime, identities)
+                return "BACKGROUND_HEARTBEAT_OBSERVED"
             port = self.context.descriptor.ports["redis"]
             proof = self._owned("redis", port, deadline)
             problem = None
@@ -1026,12 +1074,29 @@ class WorkspaceReadiness:
                 self._recheck("redis", port, proof, max(deadline, self.clock() + 0.25))
                 if any(self._identities(name) != saved for name, saved in identities.items()):
                     _fail("PROCESS_IDENTITY_UNVERIFIED")
+                self._background_heartbeats(spec, runtime, identities)
             if problem is not None:
                 if type(problem).__name__ == "OwnershipError":
                     _fail("PROCESS_IDENTITY_UNVERIFIED", _windows_code(problem))
                 _fail("BACKGROUND_NOT_READY")
             return "BACKGROUND_READY"
         return self._run(spec.name, check)
+
+    def background(self, spec, timeout):
+        """Passive diagnostics only: owned recent heartbeat, no broker messages.
+
+        This is not active worker/queue/broker readiness. No app/Celery import,
+        control construction, Runtime refresh or file write is performed.
+        """
+        return self._background(spec, timeout, active=False)
+
+    def background_startup(self, spec, timeout):
+        """Explicit startup acceptance: publishes Celery control requests.
+
+        This active path must never be used by strictly read-only diagnose/status.
+        It retains provider/worker identity checks before and after control.
+        """
+        return self._background(spec, timeout, active=True)
 
     def database(self, timeout=5):
         def check():
