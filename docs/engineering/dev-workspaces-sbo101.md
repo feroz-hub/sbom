@@ -830,6 +830,41 @@ Kombu/Redis imports and socket/process construction on the passive path.
 The inspected readiness/lifecycle selection passed **206 tests in 52.88s**;
 Ruff and Python3.11/3.12 grammar checks passed. No live broker was contacted.
 
+## Increment N — standalone TLS and protected prepared bindings
+
+Mock/shared frontend TLS has a separate source adapter,
+`dev_workspace_certificates.py`, independent of container/image/database policy.
+New material needs exact typed certificate consent, source/private-parent pins,
+new-generation protected files, strict PKI/SAN/key/expiry validation and a receipt
+published last. Known receipts support later reuse without rotation. Unknown or
+partial material stays blocked. Generating a local issuer does not install OS or
+browser trust and does not authorize service start. The real generator was not
+executed here; tests use synthetic positive material and real invalid-PEM negatives.
+
+`dev_workspace_bindings.py` persists private continuity across CLI invocations.
+Typed completed plan/outcome pairs are required to add bundle, TLS, engine or
+database receipts; a standalone on-disk receipt is never adopted. Append-only
+CAS history, private native files, root/lock identities and atomic no-replace
+publication preserve uncertainty. Later source/public-manifest changes can reuse
+unchanged protected material/resource identities. Database preparation must
+follow initdb/database/migrate predecessor and OID continuity. Binding records
+contain metadata and private file references, no raw environment, passwords or
+keys; their public summary omits private paths/hashes and grants no live authority.
+
+Executed Windows/Python 3.14.6 safe command:
+
+```powershell
+& C:\sbom\.venv\Scripts\python.exe -B C:\sbom\.windows\worktrees\SBO-98-component-env\.dev-logs\safe_pytest.py tests/test_dev_workspace_certificates.py tests/test_dev_workspace_bindings.py --timeout=60
+```
+
+Result: **113 passed, 2 skipped in 112.22s**. Skips: this Windows account cannot
+create a symlink fixture; POSIX-only 0755 home semantics. Native Windows ACL,
+locking, file identity and atomic publication ran against new test files.
+Generators/installers/engine/SQL and readiness evidence were synthetic. Scoped
+Ruff and Python3.11 grammar passed. No key generation, trust change, provider,
+database, application or administrator action ran. Real frontend TLS generation,
+trust and startup still need separate exact authorization and acceptance.
+
 ## Disposable acceptance procedure (not yet authorized or executed)
 
 1. Review the candidate diff and CI on Windows/macOS/Linux, preserving SBO-98.
