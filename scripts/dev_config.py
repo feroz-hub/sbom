@@ -65,6 +65,15 @@ _FRONTEND = (
             "APP_ORIGIN",
             "SBOM_API_URL",
             "NODE_ENV",
+            "NODE_EXTRA_CA_CERTS",
+            "NODE_USE_SYSTEM_CA",
+            "NODE_OPTIONS",
+            "NODE_NO_WARNINGS",
+            "NEXT_TELEMETRY_DISABLED",
+            "CI",
+            "NEXT_DISABLE_SWC_WASM",
+            "SSL_CERT_FILE",
+            "SSL_CERT_DIR",
             "NATIVE_AUTH_ENABLED",
             "ENTRA_ENABLED",
             "ENTRA_TENANT_ID",
@@ -84,6 +93,15 @@ _PRIVATE = _TRANSPORT | frozenset(
         "APP_ORIGIN",
         "SBOM_API_URL",
         "NODE_ENV",
+        "NODE_EXTRA_CA_CERTS",
+        "NODE_USE_SYSTEM_CA",
+        "NODE_OPTIONS",
+        "NODE_NO_WARNINGS",
+        "NEXT_TELEMETRY_DISABLED",
+        "CI",
+        "NEXT_DISABLE_SWC_WASM",
+        "SSL_CERT_FILE",
+        "SSL_CERT_DIR",
         "AUTH_ENABLED",
         "HCL_AUTH_ENABLED",
         "NATIVE_AUTH_ENABLED",
@@ -105,6 +123,7 @@ _PRIVATE = _TRANSPORT | frozenset(
         "AUTH_TRANSACTION_KEY_FILE",
     }
 )
+APPROVED_FRONTEND_SETTINGS = _FRONTEND
 
 
 class ConfigurationError(ValueError):
@@ -164,6 +183,65 @@ def _snapshot(values: Mapping[str, str | None]) -> dict[str, str]:
             raise ConfigurationError("INVALID_ENVIRONMENT", "Environment values must be strings without NUL bytes.")
         result[key] = value
     return result
+
+
+def component_environment(environment: Mapping[str, str], component: str) -> Mapping[str, str]:
+    """Pure role projection; server roles retain shared Settings/task inputs."""
+    env = _snapshot(environment)
+    if len({key.casefold() for key in env}) != len(env):
+        raise ConfigurationError("ENVIRONMENT_NAME_CONFLICT", "Resolve case-variant environment names explicitly.")
+    if component in {"api", "worker", "beat"}:
+        return MappingProxyType(env)
+    if component not in {"frontend", "public"}:
+        raise ConfigurationError("INVALID_COMPONENT", "Select a declared development component.")
+    known = _FRONTEND | {"NODE_TLS_REJECT_UNAUTHORIZED"}
+    if any(key.upper() in known and key not in known for key in env):
+        raise ConfigurationError(
+            "FRONTEND_SETTING_NAME_REVIEW_REQUIRED",
+            "Use canonical unambiguous frontend setting names; no setting was silently renamed or discarded.",
+        )
+    for key in (
+        "NEXT_PUBLIC_API_URL",
+        "NEXT_PUBLIC_HCL_IAM_ISSUER",
+        "NEXT_PUBLIC_HCL_IAM_REDIRECT_URI",
+        "NEXT_PUBLIC_HCL_IAM_POST_LOGOUT_REDIRECT_URI",
+        "NEXT_PUBLIC_HCL_IAM_POST_LOGOUT_URI",
+    ):
+        try:
+            parsed = urlsplit(env.get(key, ""))
+            if parsed.username is not None or parsed.password is not None:
+                raise ValueError()
+        except ValueError:
+            raise ConfigurationError(
+                "INVALID_PUBLIC_URL", "Review public endpoint configuration; embedded credentials cannot be projected."
+            ) from None
+    if env.get("NODE_TLS_REJECT_UNAUTHORIZED") == "0":
+        raise ConfigurationError(
+            "TLS_VERIFICATION_REQUIRED", "Remove insecure Node TLS overrides through an explicit configuration review."
+        )
+    for option in env.get("NODE_OPTIONS", "").split():
+        if option not in {
+            "--use-system-ca",
+            "--use-openssl-ca",
+            "--use-bundled-ca",
+            "--tls-min-v1.2",
+            "--tls-min-v1.3",
+            "--enable-source-maps",
+            "--no-warnings",
+            "--trace-warnings",
+        } and not re.fullmatch(r"--max-old-space-size=[1-9][0-9]{2,4}", option):
+            raise ConfigurationError(
+                "NODE_OPTIONS_REVIEW_REQUIRED",
+                "Review unsupported Node options explicitly; no TLS or preload option was silently discarded.",
+            )
+    projected = {key: value for key, value in env.items() if key in (_FRONTEND if component == "frontend" else _PUBLIC)}
+    if component == "frontend":
+        # Next must fail on missing dependencies instead of repairing installs or
+        # rewriting lockfiles during ordinary startup. Runtime code is pinned by
+        # package-lock; native-compiler preflight runs before Next can start.
+        projected.update(CI="1", NEXT_DISABLE_SWC_WASM="1")
+        projected.setdefault("NEXT_TELEMETRY_DISABLED", "1")
+    return MappingProxyType(projected)
 
 
 def parse_managed(text: str) -> dict[str, str]:
@@ -482,26 +560,9 @@ def resolve_configuration(
     if len({key.casefold() for key in env}) != len(env):
         raise ConfigurationError("ENVIRONMENT_NAME_CONFLICT", "Resolve case-variant environment names explicitly.")
     target = _database(env["DATABASE_URL"], profile, family)
-    for key in (
-        "NEXT_PUBLIC_API_URL",
-        "NEXT_PUBLIC_HCL_IAM_ISSUER",
-        "NEXT_PUBLIC_HCL_IAM_REDIRECT_URI",
-        "NEXT_PUBLIC_HCL_IAM_POST_LOGOUT_REDIRECT_URI",
-        "NEXT_PUBLIC_HCL_IAM_POST_LOGOUT_URI",
-    ):
-        try:
-            public_url = urlsplit(env.get(key, ""))
-            if public_url.username is not None or public_url.password is not None:
-                raise ValueError()
-        except ValueError:
-            raise ConfigurationError(
-                "INVALID_PUBLIC_URL", "Review public endpoint configuration; embedded credentials cannot be projected."
-            ) from None
     classification = {key: "public" if key in _PUBLIC else "private" if key in _PRIVATE else "secret" for key in env}
     freeze = lambda values: MappingProxyType(dict(values))  # noqa: E731
-    components = {role: freeze(env) for role in ("api", "worker", "beat")}
-    components["frontend"] = freeze({key: value for key, value in env.items() if key in _FRONTEND})
-    components["public"] = freeze({key: value for key, value in env.items() if key in _PUBLIC})
+    components = {role: component_environment(env, role) for role in ("api", "worker", "beat", "frontend", "public")}
     # These are explicit observations, not component defaults. In particular,
     # absent flags in an existing snapshot do not prove authentication is off.
     truthy = {"true", "1", "yes", "on"}

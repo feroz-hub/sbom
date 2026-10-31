@@ -12,7 +12,7 @@ from types import SimpleNamespace
 from unittest.mock import Mock
 
 import pytest
-from scripts import dev, dev_config, dev_environment, dev_prepared
+from scripts import dev, dev_components, dev_config, dev_environment, dev_frontend, dev_prepared
 
 SECRET = "fixture-prepared-secret-never-log"
 DATABASE_URL = f"postgresql+psycopg://postgres:{SECRET}@127.0.0.1:5432/sbom_analyser_dev"
@@ -645,6 +645,11 @@ def test_normal_start_uses_prepared_gates_without_install_generation_or_database
     monkeypatch.setattr(dev, "ensure_mailpit_ready", Mock())
     monkeypatch.setattr(dev, "legacy_https_context", Mock(return_value=object()))
     monkeypatch.setattr(dev, "check_application_ports", Mock())
+    workspace = checkout / "fixture-prepared-workspace"
+    monkeypatch.setattr(dev_frontend, "require_workspace", Mock(return_value=workspace))
+    monkeypatch.setattr(dev_components, "process_environment", Mock(return_value=dict(env)))
+    monkeypatch.setattr(dev_components, "verify_compiler", Mock())
+    monkeypatch.setattr(dev.GreenfieldStack, "node_binary", Mock(return_value=checkout / "fixture-node"))
     launch = Mock(return_value=([], env))
     supervise = Mock()
     monkeypatch.setattr(dev, "launch_services", launch)
@@ -657,6 +662,8 @@ def test_normal_start_uses_prepared_gates_without_install_generation_or_database
     dev.verify_data_connectivity.assert_called_once_with(env)
     dev.verify_existing_schema.assert_called_once_with(env)
     dev.ensure_mailpit_ready.assert_called_once_with()
+    dev_frontend.require_workspace.assert_called_once_with(dev, "legacy")
+    dev_components.verify_compiler.assert_called_once_with(dev, env, workspace, profile="legacy")
     launch.assert_called_once()
     supervise.assert_called_once_with(None, env, [])
     assert snapshot(checkout) == before

@@ -39,7 +39,7 @@ from urllib.request import urlopen
 MIN_PYTHON = (3, 11)
 MIN_NODE = (20, 9, 0)
 WINDOWS_SHUTDOWN_GRACE = 30.0
-REQUIRED_FILES = ("requirements.txt", "alembic.ini", "frontend/package.json", "frontend/package-lock.json")
+REQUIRED_FILES = ("requirements.txt", "alembic.ini", "frontend/package.json", "frontend/package-lock.json", "scripts/dev_next_guard.cjs")
 GREENFIELD_UUID_BASELINE = "100_greenfield_uuid_final"
 PUBLIC_IDENTITY_TABLES = ("tenants", "projects", "products", "logical_sbom", "sbom_source", "sbom_component")
 
@@ -1617,7 +1617,10 @@ def _apply_setup_application(args):
         if runtime.load():
             raise SetupError("SETUP_RUNTIME_PRESENT: runtime records appeared; retain them and use verified-ownership stop before preparation.")
         if "project-dependencies" in args._setup_authorized_categories:
-            ensure_dependencies()
+            if getattr(args, "repair_dependencies", False):
+                ensure_dependencies(force=True)
+            else:
+                ensure_dependencies()
         else:
             _development_library("dev_prepared").require_project(sys.modules[__name__])
         return _prepare_authorized_setup(args, profile)
@@ -1639,8 +1642,10 @@ def _prepare_authorized_setup(args, profile):
             resolve_profile("greenfield")
             LocalHttps.ensure_certificate(GreenfieldStack.STATE, prepare=False)
         if "project-dependencies" in args._setup_authorized_categories:
-            ensure_frontend(certificate=False)
+            ensure_frontend(certificate=False, force=getattr(args, "repair_dependencies", False))
         validate_secrets(GreenfieldStack.settings())
+        if "frontend-workspace" in args._setup_authorized_categories:
+            _development_library("dev_frontend").prepare_workspace(sys.modules[__name__], "greenfield")
         if args.initialize_database:
             previous, directory = dict(os.environ), Path.cwd()
             try:
@@ -1657,9 +1662,13 @@ def _prepare_authorized_setup(args, profile):
             _setup_requires(args, "frontend-build")
             env = GreenfieldStack.settings()
             env["NODE_ENV"] = "production"
+            ui = _development_library("dev_frontend").require_workspace(sys.modules[__name__], "greenfield")
+            _development_library("dev_components").verify_compiler(sys.modules[__name__], env, ui, profile="greenfield")
+            env = _development_library("dev_components").process_environment(
+                sys.modules[__name__], "Frontend", env, ui, profile="greenfield")
             result = run(
                 [str(GreenfieldStack.node_binary()), str(ROOT / "frontend/node_modules/next/dist/bin/next"),
-                 "build", "--webpack"], env=env, cwd=GreenfieldStack.frontend_workspace("frontend-build"),
+                 "build", "--webpack"], env=env, cwd=ui,
             )
             if result.returncode:
                 raise SetupError("Local frontend build failed. Review the redacted setup diagnostic.")
@@ -1667,7 +1676,7 @@ def _prepare_authorized_setup(args, profile):
         if args.frontend_build or args.provision_greenfield:
             raise SetupError("Greenfield provisioning/build flags cannot prepare Legacy.")
         if "project-dependencies" in args._setup_authorized_categories:
-            ensure_frontend(certificate=False)
+            ensure_frontend(certificate=False, force=getattr(args, "repair_dependencies", False))
         if ACTIVE_LEGACY_CONFIG == "managed":
             env = prepare_managed_legacy(setup_args=args)
         else:
@@ -1687,6 +1696,8 @@ def _prepare_authorized_setup(args, profile):
                 raise SetupError("Existing localhost material appeared; review a new plan instead of replacing either file.")
             create_local_certificate(certificate, key)
         legacy_https_context()
+        if "frontend-workspace" in args._setup_authorized_categories:
+            _development_library("dev_frontend").prepare_workspace(sys.modules[__name__], "legacy")
         if args.initialize_database:
             from scripts.bootstrap_fresh_database import bootstrap
 
@@ -2780,7 +2791,9 @@ class GreenfieldProfile:
         env = runtime_environment(GreenfieldStack.settings())
         node = GreenfieldStack.node_binary()
         env["PATH"] = str(node.parent) + os.pathsep + os.environ.get("PATH", "")
-        ui = GreenfieldStack.frontend_workspace("frontend")
+        ui = _development_library("dev_frontend").require_workspace(sys.modules[__name__], "greenfield")
+        _development_library("dev_components").process_environment(sys.modules[__name__], "Frontend", env, ui, profile="greenfield")
+        _development_library("dev_components").verify_compiler(sys.modules[__name__], env, ui, profile="greenfield")
         frontend = GreenfieldProfile.commands(node, cert, key, ui, env)["Frontend"][0]
         return launch_services(
             env,
@@ -3158,7 +3171,7 @@ def _virtualenv(*, prepare: bool) -> None:
         os.execv(command[0], command)
 
 
-def ensure_dependencies() -> None:
+def ensure_dependencies(*, force=False) -> None:
     """Install only when the requirements file changes or core imports are missing."""
     import hashlib
 
@@ -3173,7 +3186,7 @@ def ensure_dependencies() -> None:
         import redis  # noqa: F401
         import uvicorn  # noqa: F401
 
-        installed = stamp.exists() and stamp.read_text().strip() == digest
+        installed = not force and stamp.exists() and stamp.read_text().strip() == digest
     except ImportError:
         installed = False
     if installed:
@@ -3798,7 +3811,7 @@ def run_migrations(env: dict[str, str]) -> str:
     return head
 
 
-def ensure_frontend(*, certificate: bool = True) -> str:
+def ensure_frontend(*, certificate: bool = True, force=False) -> str:
     import hashlib
 
     cert = ROOT / "frontend/certificates/localhost.pem"
@@ -3826,7 +3839,7 @@ def ensure_frontend(*, certificate: bool = True) -> str:
             "Cannot read frontend package.json/package-lock.json. Restore the manifests and rerun."
         ) from None
     try:
-        installed = modules.is_dir() and (modules / "next/dist/bin/next").is_file() and stamp.read_text().strip() == digest
+        installed = not force and modules.is_dir() and (modules / "next/dist/bin/next").is_file() and stamp.read_text().strip() == digest
     except OSError:
         installed = False
     if not installed:
@@ -4052,11 +4065,11 @@ def check_application_ports(api_port: int, frontend_port: int) -> None:
 def start_process(name: str, command: list[str], env: dict[str, str], cwd: Path = ROOT) -> subprocess.Popen:
     if ACTIVE_RUNTIME:
         ACTIVE_RUNTIME.check_stop()
+    process_env = _development_library("dev_components").process_environment(sys.modules[__name__], name, env, cwd)
+    process_env["PATH"] = str(GreenfieldStack.node_binary().parent) + os.pathsep + process_env.get("PATH", "")
     path = log_path(name)
     path.parent.mkdir(exist_ok=True)
     fd = os.open(path, os.O_WRONLY | os.O_CREAT | os.O_TRUNC, 0o600)
-    process_env = dict(env)
-    process_env["PATH"] = str(GreenfieldStack.node_binary().parent) + os.pathsep + process_env.get("PATH", "")
     kwargs = {"cwd": cwd, "env": process_env, "stdout": fd, "stderr": subprocess.STDOUT}
     kwargs.update(platform_spawn_options())
     try:
@@ -4237,13 +4250,19 @@ def start_application(args) -> None:
     api_port, frontend_port = int(env["DEV_API_PORT"]), int(env["DEV_FRONTEND_PORT"])
     legacy_https_context()
     check_application_ports(api_port, frontend_port)
+    ui = _development_library("dev_frontend").require_workspace(sys.modules[__name__], "legacy")
+    certificate, key = ROOT / "frontend/certificates/localhost.pem", ROOT / "frontend/certificates/localhost-key.pem"
+    _development_library("dev_components").process_environment(sys.modules[__name__], "Frontend", env, ui, profile="legacy")
+    _development_library("dev_components").verify_compiler(sys.modules[__name__], env, ui, profile="legacy")
     processes, env = launch_services(
         env,
         api_port,
         frontend_port,
-        [npm, "run", "dev:https", "--", "--port", str(frontend_port)],
+        [str(GreenfieldStack.node_binary()), str(ROOT / "frontend/node_modules/next/dist/bin/next"),
+         "dev", "--webpack", "--experimental-https", "--experimental-https-key", str(key),
+         "--experimental-https-cert", str(certificate), "--port", str(frontend_port)],
         cwd=ROOT,
-        frontend_cwd=ROOT / "frontend",
+        frontend_cwd=ui,
         tls_context=legacy_https_context(),
     )
     supervise_runtime(ACTIVE_RUNTIME, env, processes)
@@ -4409,6 +4428,8 @@ def parse_args(argv=None):
     )
     parser.add_argument("--check", action="store_true", help="compatibility alias for read-only diagnose")
     parser.add_argument("--plan", action="store_true", help="setup only: show a read-only preparation plan without applying it")
+    parser.add_argument("--repair-dependencies", action="store_true",
+                        help="setup only: explicitly plan a pinned dependency repair; category consent is still required")
     for service in ("postgres", "redis", "mailpit"):
         parser.add_argument(f"--{service}-provider", choices=("local", "docker"),
                             help=f"setup only: explicitly select the {service} provider; saved providers stay pinned")
@@ -4455,7 +4476,7 @@ def main() -> None:
     if args.check or args.command in {"diagnose", "doctor"}:
         if any((args.provision_greenfield, args.initialize_database, args.migrate,
                 args.frontend_build, args.confirm_database, args.plan,
-                args.postgres_provider, args.redis_provider, args.mailpit_provider)):
+                args.postgres_provider, args.redis_provider, args.mailpit_provider, args.repair_dependencies)):
             print("[FAIL] CLI: DIAGNOSTIC_OPTIONS; diagnose cannot be combined with preparation or database flags.",
                   file=sys.stderr)
             return 2
@@ -4470,7 +4491,7 @@ def main() -> None:
             require_virtualenv()  # Existing supported environment performs its own checks.
     if args.command != "setup" and any(
         (args.provision_greenfield, args.initialize_database, args.migrate, args.frontend_build, args.confirm_database,
-         args.plan, args.postgres_provider, args.redis_provider, args.mailpit_provider)
+         args.plan, args.postgres_provider, args.redis_provider, args.mailpit_provider, args.repair_dependencies)
     ):
         raise SetupError("Provisioning and database changes are accepted only by the explicit setup command.")
     ACTIVE_LEGACY_CONFIG = pin_legacy_configuration(args.legacy_config, Runtime(ROOT).load())

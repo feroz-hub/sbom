@@ -26,11 +26,13 @@ from urllib.parse import unquote, urlsplit
 from urllib.request import HTTPRedirectHandler, HTTPSHandler, ProxyHandler, build_opener
 
 if __package__:
-    from . import dev_config, dev_environment
+    from . import dev_components, dev_config, dev_environment, dev_frontend
     from .greenfield_migration_graph import discover
 else:
+    import dev_components
     import dev_config
     import dev_environment
+    import dev_frontend
     from greenfield_migration_graph import discover
 
 
@@ -1108,6 +1110,58 @@ def _runtime_checks(plan, state, launcher, context=None):
     return tuple(results)
 
 
+def _workspace_check(profile, launcher, environment=None):
+    try:
+        if environment is not None:
+            dev_components.review_source_environment(launcher, environment, profile)
+        if not dev_frontend.inspect_workspace(launcher, profile):
+            raise launcher.SetupError("FRONTEND_WORKSPACE_SETUP_REQUIRED")
+        if environment is not None:
+            dev_components.process_environment(
+                launcher, "Frontend", environment, dev_frontend.workspace_path(launcher, profile), profile=profile
+            )
+        return _result(
+            "Frontend configuration",
+            "PASS",
+            "FRONTEND_WORKSPACE_VERIFIED",
+            "The prepared environment-free workspace and source/dependency links validate; no files were changed.",
+        )
+    except launcher.SetupError as error:
+        code = str(error).partition(":")[0]
+        if code == "FRONTEND_GUARD_REQUIRED":
+            return _result(
+                "Frontend configuration",
+                "BLOCKED",
+                code,
+                "Restore the reviewed launcher guard source before startup; no Node helper was executed.",
+            )
+        if code in {
+            "FRONTEND_SOURCE_CONFIGURATION_UNVERIFIED",
+            "FRONTEND_SOURCE_CONFIGURATION_REVIEW_REQUIRED",
+            "TLS_CA_PATH_REVIEW_REQUIRED",
+            "TLS_VERIFICATION_REQUIRED",
+        }:
+            return _result(
+                "Frontend configuration",
+                "BLOCKED",
+                code,
+                "Review approved profile settings and Next-only fallback files; no private file was changed or implicitly adopted.",
+            )
+        return _result(
+            "Frontend configuration",
+            "BLOCKED",
+            "FRONTEND_WORKSPACE_REVIEW_REQUIRED",
+            "Review the setup plan for missing/stale workspace preparation or unknown files/links; preserve existing environment files.",
+        )
+    except Exception:
+        return _result(
+            "Frontend configuration",
+            "BLOCKED",
+            "FRONTEND_WORKSPACE_REVIEW_REQUIRED",
+            "Review the setup plan for missing/stale workspace preparation or unknown files/links; preserve existing environment files.",
+        )
+
+
 def run_checks(args, launcher):
     """Aggregate inspections without printing configuration or preparing anything."""
     try:
@@ -1216,6 +1270,9 @@ def run_checks(args, launcher):
             "UNSUPPORTED_BROKER",
             "ENVIRONMENT_NAME_CONFLICT",
             "INVALID_PUBLIC_URL",
+            "TLS_VERIFICATION_REQUIRED",
+            "NODE_OPTIONS_REVIEW_REQUIRED",
+            "FRONTEND_SETTING_NAME_REVIEW_REQUIRED",
         }
         code = (
             error.code
@@ -1241,6 +1298,17 @@ def run_checks(args, launcher):
         )
         results.extend(_runtime_checks(None, state, launcher))
         return DiagnosticReport(tuple(results))
+    try:
+        results.append(_bounded(lambda: _workspace_check(profile, launcher, plan.environment), timeout=6))
+    except DiagnosticError:
+        results.append(
+            _result(
+                "Frontend configuration",
+                "BLOCKED",
+                "PROBE_TIMEOUT",
+                "Read-only workspace inspection exceeded its reporting deadline; no files were changed.",
+            )
+        )
     try:
         results.extend(_bounded(lambda: _authentication_checks(plan, launcher), timeout=10))
     except Exception:

@@ -20,9 +20,10 @@ from pathlib import Path
 from urllib.parse import urlsplit
 
 if __package__:
-    from . import dev_config, dev_prepared, dev_private
+    from . import dev_config, dev_frontend, dev_prepared, dev_private
 else:
     import dev_config
+    import dev_frontend
     import dev_prepared
     import dev_private
 
@@ -38,6 +39,7 @@ _CATEGORIES = frozenset(
         "database-initialize",
         "database-migrate",
         "frontend-build",
+        "frontend-workspace",
     }
 )
 SETUP_CATEGORIES = _CATEGORIES
@@ -388,6 +390,7 @@ def inspect_setup(args, launcher):
             "postgres_provider",
             "redis_provider",
             "mailpit_provider",
+            "repair_dependencies",
         )
     }
     values, fresh = {}, False
@@ -401,6 +404,10 @@ def inspect_setup(args, launcher):
         )
         _scope_check([os.environ], blockers)
         _dependencies(snapshot, launcher, actions, blockers)
+        if getattr(args, "repair_dependencies", False):
+            actions["project-dependencies"] = (
+                "Repair project Python/npm dependencies from the pinned manifests after explicit consent; preserve private configuration and data."
+            )
         _runtime(snapshot, launcher, blockers)
         if not any(item.startswith("RUNTIME_") for item in blockers):
             if profile == "legacy":
@@ -472,6 +479,25 @@ def inspect_setup(args, launcher):
                         "GREENFIELD_ALREADY_PREPARED: preserve the existing installation; provisioning is not required."
                     )
 
+        if not any(item.startswith("RUNTIME_") for item in blockers):
+            try:
+                current_workspace = dev_frontend.inspect_workspace(launcher, profile)
+            except launcher.SetupError as error:
+                if str(error).startswith("FRONTEND_WORKSPACE_SETUP_REQUIRED:"):
+                    current_workspace = False
+                else:
+                    blockers.append(
+                        "FRONTEND_WORKSPACE_REVIEW_REQUIRED: retain unknown frontend files/links and review their ownership before setup."
+                    )
+                    current_workspace = True
+            for path in dev_frontend.configuration_inputs(launcher, profile):
+                # An absent Greenfield parent is expected only for explicitly
+                # authorized provisioning; no directory is created by inspection.
+                snapshot.read(path)
+            if not current_workspace or getattr(args, "repair_dependencies", False):
+                actions["frontend-workspace"] = (
+                    "Prepare an environment-free Next workspace with verified live source/dependency links and owned public configuration copies."
+                )
         target_name = launcher.GreenfieldStack.DB if profile == "greenfield" else launcher.DB_NAME
         if profile == "legacy" and values.get("DATABASE_URL"):
             target_name = urlsplit(values["DATABASE_URL"]).path[1:]
