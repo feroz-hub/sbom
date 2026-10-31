@@ -52,7 +52,7 @@ def test_native_partial_startup_cleans_only_verified_fixture_processes(tmp_path)
     snapshot = replace(snapshot, source_root=str(source), state_root=str(root), environment=environment)
     plan = lifecycle.plan_lifecycle(descriptor, snapshot)
     location = adapter.RuntimeLocation(descriptor, root, home)
-    launches = adapter.isolated_launches(location, plan, python_executable=Path(sys.executable), frontend=None)
+    launches = adapter.isolated_launches(location, plan, python_executable=Path(sys.executable).resolve(strict=True), frontend=None)
     children = []
     runtimes = []
 
