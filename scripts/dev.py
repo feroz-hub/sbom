@@ -72,7 +72,12 @@ def _windows_kernel():
 
 
 def _windows_error(pid, operation, code):
-    return OwnershipError(f"PID {pid}: {operation} failed (winerror={code}; status=UNKNOWN; ownership unverified).")
+    safe_code = code if type(code) is int and 0 <= code <= 0xFFFFFFFF else None
+    error = OwnershipError(f"PID {pid}: {operation} failed (winerror={safe_code}; status=UNKNOWN; ownership unverified).")
+    error.winerror = safe_code
+    error.operation = operation
+    error.process_status = "UNKNOWN"
+    return error
 
 
 def _windows_exited(kernel, handle, pid):
@@ -90,7 +95,11 @@ def _windows_query_failed(kernel, handle, pid, operation, code):
         if _windows_exited(kernel, handle, pid):
             return None
     except OwnershipError as wait_error:
-        raise OwnershipError(f"{error} {wait_error}") from None
+        combined = OwnershipError(f"{error} {wait_error}")
+        combined.winerror = error.winerror
+        combined.secondary_winerror = getattr(wait_error, "winerror", None)
+        combined.operation, combined.process_status = operation, "UNKNOWN"
+        raise combined from None
     raise error
 
 

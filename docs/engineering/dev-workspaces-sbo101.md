@@ -738,6 +738,62 @@ helper/image policy and exact disposable operations receive review/approval.
 Absolute wall-clock libpq cancellation also needs native acceptance; the native
 connection/server limits alone do not establish that guarantee.
 
+## Increment M — read-only inspection and process-bound readiness
+
+`dev_workspace_inspect.py` loads canonical Runtime state without acquiring a
+runtime lock, refreshing/saving state, starting services or inspecting application
+configuration. It verifies pinned root, launcher and component identities and
+keeps exited, reused and access-denied processes distinct. Saved READY flags
+cannot establish readiness. Known private/provider receipts remain observations,
+not ownership or operator authority. Deleted source/configuration does not permit
+discarding a record or prevent independent identity-based diagnosis.
+
+`dev_workspace_readiness.py` implements bounded native listener inspection on
+Windows/Linux and a verified owned lsof helper on macOS. Before contacting a
+local service it requires the expected host PID/birth/executable and rechecks
+afterward. Docker guest PIDs cannot substitute for Windows host-forwarder proofs.
+API probes use inert `/` and Native `/ready/iam`, avoiding `/health`, whose NVD
+initialization side effect makes it unsuitable for strict read-only diagnostics.
+Workers/Beat require current instance-specific health records and progress.
+
+PostgreSQL requires exact schema/target and verified TLS, a read-only transaction,
+rollback/close and CA/listener revalidation. Redis probes use TLS, AUTH, SELECT,
+PING and GET only; the frontend user must refuse an out-of-namespace GET. SMTP
+uses EHLO, mandatory verified STARTTLS, AUTH and QUIT; no message is sent. TLS
+checks validate PKI/SAN/key matching and bounded trust roots. No trust store,
+database, cache value, mail outbox, application audit record or configuration is
+modified by those checks. Native access-denied diagnostics now carry structured
+numeric Windows errors; arbitrary exception strings remain suppressed. The
+Runtime bridge preserves only typed safe categories, error codes and owned-probe
+IDs through verified startup cleanup.
+
+Limitations: listener enumeration/connect is not atomic; stronger exclusion of
+an intervening rebind requires listener handoff or independent server attestation.
+Synchronous libpq has native connection/server limits but no proven absolute
+wall-clock cancellation. A bounded caller can return while its read-only thread
+finishes rollback/close. Browser/OS trust, authentication acceptance and provider
+host-forwarder proof remain separate; no supplied JSON READY marker grants them.
+Actual network/provider/database acceptance has **not run**.
+
+Windows/Python 3.14.6 safe-harness validation:
+
+```powershell
+& C:\sbom\.venv\Scripts\python.exe -B C:\sbom\.windows\worktrees\SBO-98-component-env\.dev-logs\safe_pytest.py tests/test_dev_workspace_readiness.py tests/test_dev_workspace_inspect.py tests/test_dev_workspace_diagnostics_bridge.py tests/test_dev_workspace_runtime.py tests/test_dev_windows_lifecycle.py tests/test_dev_windows_shutdown.py -k 'not test_native_windows_cooperative_task_completion_and_scheduler_close' --timeout=60
+```
+
+Result: **267 passed, 2 deselected in 58.51s**. The preceding run included those
+two existing native cooperative fixtures: **268 passed, 1 failed in 73.10s**.
+Windows denied `QueryFullProcessImageNameW` with error 5 for a fixture child during
+refresh and verified cleanup. Ownership stayed unknown/refused; a subsequent
+read-only CIM lookup found neither reported PID. This transient native failure
+is retained as a limitation, not recast as synthetic success. The standalone
+readiness/lifecycle selection earlier passed **191 tests in 33.24s**. New listener,
+HTTP/SQL/Redis/SMTP and PKI-positive observations were injected synthetic adapters;
+mutation tripwires and real new private files verify the read-only boundaries.
+The first integration run also identified three inspector tests expecting the
+old absent Windows metadata; those now assert the structured numeric error and a
+separate message-only negative test preserves redaction. Scoped Ruff passed.
+
 ## Disposable acceptance procedure (not yet authorized or executed)
 
 1. Review the candidate diff and CI on Windows/macOS/Linux, preserving SBO-98.

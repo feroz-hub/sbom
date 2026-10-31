@@ -33,6 +33,7 @@ if __package__:
         dev_workspace_dependencies,
         dev_workspace_lifecycle,
         dev_workspace_preview,
+        dev_workspace_readiness,
     )
 else:
     import dev_config
@@ -43,6 +44,7 @@ else:
     import dev_workspace_dependencies
     import dev_workspace_lifecycle
     import dev_workspace_preview
+    import dev_workspace_readiness
 
 _LOGS = {
     "Celery worker": "celery-worker.log",
@@ -134,8 +136,14 @@ _ERRORS = frozenset(
 
 
 class RuntimeAdapterError(ValueError):
-    def __init__(self, code):
-        self.code = code if type(code) is str and code in _ERRORS else "INSTANCE_RUNTIME_ADAPTER_INVALID"
+    def __init__(self, code, *, winerror=None, probe_pid=None):
+        self.code = (
+            code
+            if type(code) is str and code in _ERRORS | dev_workspace_readiness._CODES
+            else "INSTANCE_RUNTIME_ADAPTER_INVALID"
+        )
+        self.winerror = winerror if type(winerror) is int and 0 <= winerror <= 0xFFFFFFFF else None
+        self.probe_pid = probe_pid if type(probe_pid) is int and 0 < probe_pid <= 0xFFFFFFFF else None
         super().__init__(self.code)
 
 
@@ -354,6 +362,8 @@ class RuntimeOutcome:
     records_retained: bool = False
     ready: bool = False
     component: str | None = None
+    winerror: int | None = None
+    probe_pid: int | None = None
 
     def to_dict(self):
         return {
@@ -362,6 +372,8 @@ class RuntimeOutcome:
             "records_retained": self.records_retained,
             "ready": self.ready,
             "component": self.component,
+            "winerror": self.winerror if type(self.winerror) is int and 0 <= self.winerror <= 0xFFFFFFFF else None,
+            "probe_pid": self.probe_pid if type(self.probe_pid) is int and 0 < self.probe_pid <= 0xFFFFFFFF else None,
             "services": [
                 {
                     "component": item.component,
@@ -380,10 +392,14 @@ def _bounded(callback, timeout):
     def call():
         try:
             result.put((True, callback()))
-        except RuntimeAdapterError as error:
-            result.put((False, error.code))
+        except (RuntimeAdapterError, dev_workspace_readiness.ReadinessError) as error:
+            # Only our exact typed, enumerated diagnostics cross this boundary.
+            # Arbitrary exceptions cannot supply categories, paths or credentials.
+            if type(error) not in {RuntimeAdapterError, dev_workspace_readiness.ReadinessError}:
+                error = RuntimeAdapterError("INSTANCE_READINESS_PROBE_FAILED")
+            result.put((False, RuntimeAdapterError(error.code, winerror=error.winerror, probe_pid=error.probe_pid)))
         except BaseException:
-            result.put((False, "INSTANCE_READINESS_PROBE_FAILED"))
+            result.put((False, RuntimeAdapterError("INSTANCE_READINESS_PROBE_FAILED")))
 
     threading.Thread(target=call, daemon=True, name="sbom-instance-readonly-probe").start()
     try:
@@ -391,7 +407,7 @@ def _bounded(callback, timeout):
     except queue.Empty:
         _fail("INSTANCE_READINESS_TIMEOUT")
     if not success:
-        _fail(value)
+        raise value from None
     return value
 
 
@@ -759,6 +775,8 @@ class WorkspaceRuntime:
                 diagnostics,
                 (runtime is not None and not complete) or os.path.lexists(self.location.root / ".dev-runtime.json"),
                 component=self.current_component,
+                winerror=error.winerror if type(error) is RuntimeAdapterError else None,
+                probe_pid=error.probe_pid if type(error) is RuntimeAdapterError else None,
             )
 
     def stop(self, *, timeout=45):
