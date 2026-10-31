@@ -33,9 +33,9 @@ stderr deprecation notice. See [diagnostic results and exit codes](../docs/refer
 
 See [controlled setup and recovery](../docs/reference/configuration.md#controlled-setup-and-prepared-startup-sbo-98-phase-3)
 for category consent, source/configuration drift, guarded dependency repair,
-Windows private-file safeguards and retained partial artifacts. Shared operator
-configuration and privileged enrollment remain separately reviewed work. Setup
-does not authorize administrator creation or HCL.CS first-user provisioning.
+Windows private-file safeguards and retained partial artifacts. Native aggregate
+status can opt into shared configuration; privileged enrollment remains separately
+reviewed work. Setup does not authorize administrator creation or HCL.CS first-user provisioning.
 Existing installations also need a reviewed `frontend-workspace` action before
 the new frontend boundary can start. It creates `.dev-frontend` for Legacy or
 `frontend-isolated` in Greenfield state, without reusing/removing old frontend
@@ -80,6 +80,39 @@ precede initial key generation. Existing managed files are not overwritten.
 Missing/incomplete original security material must be restored, not regenerated.
 Native pending-account creation and email activation remain an explicit approved
 operator procedure after normal authentication/mail readiness is established.
+
+## Inspect Native administrator enrollment
+
+For an existing prepared Native installation, use the exact selected profile,
+configuration family and database name. No database URL export is needed:
+
+```sh
+python scripts/dev.py setup --native-admin-status --profile legacy --legacy-config managed --confirm-database sbom_analyser_dev
+python scripts/dev.py setup --native-admin-status --profile greenfield --confirm-database sbom_greenfield_uuid
+```
+
+The existing Native operator CLI has an equivalent opt-in status route:
+
+```sh
+python scripts/bootstrap_native_platform_user.py --profile legacy --legacy-config managed --confirm-database sbom_analyser_dev status
+```
+
+Windows/env Native installations must explicitly select their saved family and
+confirm its actual local database name. These routes never enable Native mode,
+prepare a database or enroll a user. They resolve the selected configuration
+before driver imports, use a pinned read-only database transaction and report
+only aggregate state/booleans. Unselected `.env` files are not read or applied.
+Successful observation exits 0 even for `ENROLLMENT_REQUIRED`; it proves neither
+live readiness nor permission to create an administrator. Errors exit 1 and
+invalid flag combinations exit 2. The application may remain stopped.
+
+Profile-based create/resend is deliberately refused; the controlled privileged
+runner is not wired. The older no-profile CLI remains compatible but imports
+application settings, commits even for its status branch and returns account
+ID/email fields; it does not meet the strict status contract above. See the
+[status semantics, root cause and remaining approval gates](../docs/reference/configuration.md#native-enrollment-inspection-sbo-98-phase-5-status-increment)
+before choosing an operator action. Do not export credentials as a workaround,
+create grants through SQL or delete an enrollment reservation.
 
 ## Greenfield
 

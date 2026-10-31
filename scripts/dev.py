@@ -1545,6 +1545,26 @@ def setup_application(args):
         sys.dont_write_bytecode = previous
 
 
+def native_admin_status(args):
+    """Inspect selected Native enrollment without application imports or writes."""
+    from dataclasses import asdict
+
+    previous = sys.dont_write_bytecode
+    sys.dont_write_bytecode = True
+    try:
+        operator = _development_library("dev_operator")
+        try:
+            context = operator.resolve_native_context(args, sys.modules[__name__])
+            result = operator.inspect_native_enrollment(context, confirm_database=args.confirm_database)
+        except operator.OperatorError as error:
+            say("BLOCKED", "Native enrollment", str(error))
+            return 1
+        print(json.dumps(asdict(result), sort_keys=True))
+        return 0
+    finally:
+        sys.dont_write_bytecode = previous
+
+
 def _development_library(name):
     """Import a private launcher library from a checkout or a direct script."""
     import importlib
@@ -4430,6 +4450,8 @@ def parse_args(argv=None):
     parser.add_argument("--plan", action="store_true", help="setup only: show a read-only preparation plan without applying it")
     parser.add_argument("--repair-dependencies", action="store_true",
                         help="setup only: explicitly plan a pinned dependency repair; category consent is still required")
+    parser.add_argument("--native-admin-status", action="store_true",
+                        help="setup only: read-only aggregate Native enrollment status; requires exact --confirm-database")
     for service in ("postgres", "redis", "mailpit"):
         parser.add_argument(f"--{service}-provider", choices=("local", "docker"),
                             help=f"setup only: explicitly select the {service} provider; saved providers stay pinned")
@@ -4476,11 +4498,17 @@ def main() -> None:
     if args.check or args.command in {"diagnose", "doctor"}:
         if any((args.provision_greenfield, args.initialize_database, args.migrate,
                 args.frontend_build, args.confirm_database, args.plan,
-                args.postgres_provider, args.redis_provider, args.mailpit_provider, args.repair_dependencies)):
+                args.postgres_provider, args.redis_provider, args.mailpit_provider, args.repair_dependencies, args.native_admin_status)):
             print("[FAIL] CLI: DIAGNOSTIC_OPTIONS; diagnose cannot be combined with preparation or database flags.",
                   file=sys.stderr)
             return 2
         return doctor(args) if args.command == "doctor" else diagnose(args)
+    if args.native_admin_status:
+        if args.command != "setup" or any((args.plan, args.provision_greenfield, args.initialize_database, args.migrate,
+                                          args.frontend_build, args.postgres_provider, args.redis_provider, args.mailpit_provider, args.repair_dependencies)):
+            print("[FAIL] CLI: NATIVE_STATUS_OPTIONS; Native status cannot be combined with preparation or lifecycle actions.", file=sys.stderr)
+            return 2
+        return native_admin_status(args)
     if args.command == "setup":
         return setup_application(args)
     if args.command in {"start", "restart"}:
