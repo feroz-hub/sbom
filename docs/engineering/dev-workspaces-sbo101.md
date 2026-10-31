@@ -794,6 +794,28 @@ The first integration run also identified three inspector tests expecting the
 old absent Windows metadata; those now assert the structured numeric error and a
 separate message-only negative test preserves redaction. Scoped Ruff passed.
 
+After integrating the private Runtime IO repair, the combined closure had
+**282 passed, one failed in 107.60s**: the other existing native cooperative
+fixture encountered the same error-5 query while a Windows venv descendant was
+initializing. The native warm-shutdown fixtures now wait for their actual
+task/scheduler workload before registering ownership, matching the other native
+smoke fixtures. This changes test synchronization only; production still refuses
+unverifiable descendants. Recheck:
+
+```powershell
+& C:\sbom\.venv\Scripts\python.exe -B C:\sbom\.windows\worktrees\SBO-98-component-env\.dev-logs\safe_pytest.py tests/test_dev_windows_shutdown.py -k test_native_windows_cooperative_task_completion_and_scheduler_close --timeout=60
+```
+
+Result: **2 passed, 33 deselected in 11.15s**. The subsequent read-only CIM lookup
+also found neither earlier reported PID. Python 3.12.10 readiness/inspection/
+runtime/bridge selection passed **194 tests in 66.49s**. This is real fixture-only
+Celery memory-transport shutdown evidence, not provider/application acceptance.
+Upstream PR I at `84519cbb2730777162a779a2fdbf07feadd92657` now has **20/20 reported
+CI checks successful**, including hosted Windows/macOS/Linux and Python3.11/3.12.
+The original elevated-token Windows default-owner explanation remains an
+inference: the private writer repair passed hosted CI, but the runner token's
+actual default-owner SID was not captured.
+
 ## Disposable acceptance procedure (not yet authorized or executed)
 
 1. Review the candidate diff and CI on Windows/macOS/Linux, preserving SBO-98.
