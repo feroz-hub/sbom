@@ -1,0 +1,1279 @@
+# SBO-101: implementation evidence and approval boundaries
+
+Delivery state: planning, controlled dependencies, private configuration/TLS,
+provider/data preparation contracts, Runtime execution, read-only inspection,
+restricted tests and closed onboarding guidance have implemented source and
+synthetic evidence in incremental drafts. Public guided/mock integration has
+separate source and synthetic evidence. Real isolated/shared application execution and live
+administrator onboarding remain **BLOCKED** by the specific authority, policy,
+transport and acceptance gates below. No independent review, merge, deployment
+or full native acceptance is claimed by unit/CI results.
+
+## Baseline and coordination
+
+The Engineering Lead authorized `https://github.com/feroz-hub/sbom.git`, including
+publication there, and confirmed NEXUS had no active work. The integration
+dependency is the unchanged SBO-98 top branch `feature/SBO-98-native-enrollment`,
+commit `73d29949b31fa3564a56043128bde7118e804ede`. Its six draft PRs (#49–#54)
+remain separate. Remote `main` was
+`fc59432a4eec46f009b3809bd751e510d3b2887c` during preflight; its additional CVSS
+UI change does not supply the SBO-98 helpers. No old `fcc8731` baseline is used.
+
+The original checkout and ten pre-existing worktrees were clean at preflight.
+Implementation uses `.windows/worktrees/SBO-101-workspace-plan`, with the
+incremental issue branches listed below, and a dedicated CI-repair worktree.
+Git cleanliness does not establish agent
+availability. No database, provider, certificate, credential or historical
+runtime record was changed. The Linear connector is unavailable; progress text
+must be posted to the real SBO-101 issue by the Engineering Lead.
+
+## Existing versus required capability
+
+The incremental review stack is listed below. All remain Draft; the first depends
+on unchanged SBO-98 #54, and each subsequent PR targets its predecessor. R adds
+the interpreter synchronization and this consolidated evidence after #71.
+
+| Increment | Draft PR | Published head before R |
+| --- | --- | --- |
+| A registry/planning | [55](https://github.com/feroz-hub/sbom/pull/55) | `6571e0e85e639a8040098c226176d54479c4905a` |
+| B dependencies | [56](https://github.com/feroz-hub/sbom/pull/56) | `7de355e583d21234ea68237674ce8f88dad2a37a` |
+| C launch contracts | [57](https://github.com/feroz-hub/sbom/pull/57) | `3295afa7e519d4f62292b1cc3abfeabc0eb43065` |
+| D restricted tests | [58](https://github.com/feroz-hub/sbom/pull/58) | `e5f103988b31e08fa87e64463a67889de31e2aad` |
+| E onboarding guidance | [59](https://github.com/feroz-hub/sbom/pull/59) | `35aacd4084874648ce68e8890d950554182f6662` |
+| F observations | [60](https://github.com/feroz-hub/sbom/pull/60) | `32d2f23b31cde61fcedd6c41a36a0e79dad18a1d` |
+| G Compose adapter | [61](https://github.com/feroz-hub/sbom/pull/61) | `4446e2f5f9f2bc38ddace8bf4023fa62a33f8aa8` |
+| H resource namespaces | [62](https://github.com/feroz-hub/sbom/pull/62) | `a913cb3343e94aaa29d0940639562ee78ee1236d` |
+| I preview/Runtime | [63](https://github.com/feroz-hub/sbom/pull/63) | `84519cbb2730777162a779a2fdbf07feadd92657` |
+| J private preparation | [64](https://github.com/feroz-hub/sbom/pull/64) | `402bf0ae1bac33eb5f6f44f14148038d70c3a3f5` |
+| K data operation journal | [65](https://github.com/feroz-hub/sbom/pull/65) | `bf51a921a61aa7dc46f3361ccc9133bf260c2220` |
+| L data adapters | [66](https://github.com/feroz-hub/sbom/pull/66) | `f99ca24f3670dae05e7df90b60af83d604a1052d` |
+| M readiness inspection | [67](https://github.com/feroz-hub/sbom/pull/67) | `6ea5345040f3dd4afe0525ffc4cc783271b40f27` |
+| N prepared bindings | [68](https://github.com/feroz-hub/sbom/pull/68) | `542c9b966564b9889f2e21f6daf8adce07b400bb` |
+| O guided control | [69](https://github.com/feroz-hub/sbom/pull/69) | `2598f70abead52074860a0740af05755eddf6134` |
+| P visual artifacts | [70](https://github.com/feroz-hub/sbom/pull/70) | `6ec5664834f5ffc16b6c44ba3725fcbee6277b0b` |
+| Q HCL consumer parity | [71](https://github.com/feroz-hub/sbom/pull/71) | `b967b4ed3e14869086505b213b442f608b2331ab` |
+
+Fresh GitHub audit confirmed A–Q each had 20 successful check-runs (ten unique
+matrix job names; push and PR runs), zero failures/pending. O–Q results are for
+the repaired heads listed above. R's publication-time CI remains separate;
+consult its exact-head checks and validation description for subsequent outcomes.
+Green checks are fixture regression evidence,
+not full-stack or independent security acceptance.
+
+| Capability | Existing integration baseline | Implemented candidate | Remaining acceptance / gates |
+| --- | --- | --- | --- |
+| Configuration | Immutable SBO-98 resolver; profile and component projections | Protected per-instance bundles, provenance/continuity bindings and component projections | Approved private generation and real application parity |
+| Diagnostics | Read-only `diagnose`; deprecated `doctor` alias | Fresh process inspection, bounded service adapters, passive background checks and redacted guidance | Real provider forwarding/transport attestations and complete application matrix |
+| Process safety | Birth/executable/tree verification; cooperative Windows worker shutdown | Canonical Runtime bridge, private IO, verified partial-start cleanup and interpreter synchronization | Real workers/Beat/jobs on each platform |
+| Worktrees | Git worktrees do not imply application isolation | Authoritative discovery, source comparison, known-instance recovery and explicit drift refusal | Active rebase/deletion and parallel application acceptance |
+| Ownership | Per-launcher runtime records | Protected registry, engine identity/receipt checks and fresh canonical process inspection | Approved provider/host forwarding; a descriptor is never authority |
+| Dependencies | Existing controlled setup also needs private configuration | Independent consented installation adapters, stamps, compiler guards and limited test closure | Real approved installation/recovery on fresh machines |
+| Data services | Greenfield fixed resources; Legacy fixed saved providers | Compose-compatible plans, Docker adapter, restricted DB/schema preparation journal | Engine/image/nonroot policy, actual-session TLS attestation and exact-target approval |
+| Auth/browser | Native/HCL prerequisites and fail-closed enrollment | Unique origins/namespaces, TLS adapter, inert mock and private CDP visual adapter | Real PKI/browser trust, registered HCL callbacks and two-stack acceptance |
+| Privileged onboarding | Native create/resend adapter closed | Guided existing/pending/completed state and prerequisites; live gate preserved | Independent authority/security/DBA approval before live enrollment |
+
+## PR A: architecture, registry and safe planning
+
+The new modules are `dev_workspace` (bounded local Git discovery),
+`dev_instance_plan` (pure immutable proposals), `dev_instance_storage` (explicit
+private-directory creation), `dev_instance_registry` (read-only inspection and
+consented metadata publication), and `dev_workspace_cli` (the existing launcher's
+additive `workspace` hierarchy). Each has a focused test module.
+
+The registry defaults to
+`~/.sbom-dev/repositories/<repository-id>/instances`, outside shared Git ACLs.
+Repository and worktree IDs bind canonical filesystem identities, not directory
+names or branches. Discovery refuses configured Git filters, ambiguous roots,
+redirected manifests and incomplete inventory. Reads do not create directories,
+locks or records. The writer requires exact interactive consent, rechecks the
+plan and controller inputs, preserves unknown artifacts, and uses compare-and-
+swap revisions. Creation never replaces a raced destination. Publication
+uncertainty is reported and retained for review.
+
+The descriptor contains public identities and proposed resources only. It
+cannot claim verified ownership, live-operation authorization or readiness.
+Resource permissions, container/network identity and database grants must
+independently enforce isolation; a user-controlled launcher is not a security
+boundary against the same OS user.
+
+### Executed local evidence
+
+Environment: native Windows, Python 3.14.6; existing Python 3.12.10 also tested.
+Only explicit source/unit lists ran. The established issue-local harness starts
+pytest with sanitized environment, SQLite in-memory sentinels, disabled dotenv,
+disabled plugin autoload and `--noconftest`; fixtures use unique temporary roots.
+`tests/conftest.py` was excluded because it can migrate/truncate PostgreSQL.
+
+From this implementation worktree:
+
+```powershell
+& C:\sbom\.venv\Scripts\python.exe -B `
+  C:\sbom\.windows\worktrees\SBO-98-component-env\.dev-logs\safe_pytest.py `
+  tests/test_dev_workspace.py tests/test_dev_instance_plan.py `
+  tests/test_dev_instance_registry.py tests/test_dev_instance_storage.py `
+  tests/test_dev_workspace_cli.py tests/test_dev_launcher.py `
+  tests/test_dev_main_merge.py tests/test_dev_diagnose.py --timeout=60
+```
+
+Result: **441 passed, 13 skipped, 6 existing Alembic deprecation warnings**.
+Windows skips cover POSIX permission/rename semantics and newline filenames.
+An earlier mistyped test filename caused collection refusal and ran zero tests;
+the corrected command above passed. This is not application/DB acceptance.
+
+The five new test modules also passed on Python 3.12.10: **211 passed,
+13 skipped**. The entire inspected Windows-applicable unit list from
+`.github/workflows/dev-launcher.yml`, plus `tests/test_dev_native_process.py`,
+passed on Python 3.14.6: **1,564 passed, 41 skipped, 6 warnings**. That run
+preceded the discovery-concurrency refinement below; the affected tests were
+rerun afterward. No unreviewed application-wide pytest collection ran.
+
+Real disposable Git fixtures created two linked worktrees and separately
+registered public proposals. Their IDs, proposed ports and namespaces differed.
+They checked native ACL/locking/publication paths, Git-filter refusal and index
+bytes/mtime preservation. Application/provider/socket mutation tripwires stayed
+untouched. OS-specific tests are distinguished from simulated failure tests.
+
+Ruff and `git diff --check` passed. Python 3.11 grammar parsing passed; this is
+syntax compatibility, not execution on a Python 3.11 runtime. AST comparisons
+verify that `Runtime`, process inspection and existing startup helpers remain
+identical to the integration dependency. No macOS/Linux native test was run on
+this Windows host. PR A is draft [#55](https://github.com/feroz-hub/sbom/pull/55),
+commit `6571e0e85e639a8040098c226176d54479c4905a`. Its
+[pull-request CI](https://github.com/feroz-hub/sbom/actions/runs/41176063817)
+and push CI completed successfully: four launcher OS/Python jobs and six real
+frontend-fixture OS/Node jobs per run, including Python 3.11 and Node 26.1.0.
+Independent native full-stack acceptance is still required.
+
+### Exact read-only checks
+
+```powershell
+python -B scripts/dev.py workspace list --json
+python -B scripts/dev.py workspace status --json
+python -B scripts/dev.py workspace plan --mode isolated --auth native --json
+```
+
+Run with transport-only environment and no application imports, these inspect
+Git and public source metadata. A blocked plan is expected until configuration,
+provider and operational approvals exist. A plan never reserves an OS port.
+No `prepare` command has been run against the actual user's registry.
+
+An initial serial discovery under concurrent test load reached its 30-second
+budget and safely reported `GIT_DISCOVERY_TIMEOUT`. Native per-worktree probes
+now run with at most four concurrent helpers, retaining that shared deadline,
+per-command limits and final inventory recheck. A regression verifies the bound
+and Git result order. The affected Git/CLI tests passed afterward: **46 passed,
+2 skipped**. Repeated actual inventory returned PASS for 11 worktrees in 18.42s;
+planning completed in 16.34s and returned its explicit missing-configuration and
+approval blockers. All stderr was empty. Slow/unresponsive filesystems can still
+produce a bounded BLOCKED result; the launcher does not silently omit worktrees.
+
+## PR B: dependency preparation and provider abstraction
+
+Adds `dev_workspace_dependencies` and `dev_workspace_provider`, their focused
+tests, CLI category consent and ignored same-volume npm attempt directories.
+Existing setup/start commands retain their previous configuration/security gates.
+Dependency preparation is independent of `.env.dev.local`: its read-only plan
+uses public source/tool identity, and its user-level writer requires exact
+interactive consent plus repeated input verification. Unknown or partial targets
+are retained, not adopted, repaired or deleted. Successful dependency outcomes
+explicitly leave compiler/application readiness unverified.
+
+The provider library supplies immutable, image-digest/nonroot-policy proposals
+and strict normalized inventory comparisons. It executes no engine command,
+generates no credentials and never treats supplied JSON/labels as independent
+ownership. An engine-specific ownership adapter is still required in a subsequent
+source increment; its development does not wait for installed engines or policy
+approval. PostgreSQL's first container boot itself can
+initialize data, so provisioning cannot precede target-specific database approval.
+
+Actual native read-only `workspace plan --scope dependencies --json` returned
+exit 1 with `private_configuration_required=false`, both dependency actions and
+the precise blocker `DEPENDENCY_ROOT_ACCESS_REVIEW_REQUIRED`. A safe native ACL
+inspection identified `GetAce / UNTRUSTED_GRANT` (no OS error code). The worktree
+has a write grant outside the adapter's trusted principals. No permissions were
+changed and no installer ran. Use an approved safe-permission checkout or IT
+review; do not repair the protected root automatically.
+
+One pre-final combined test run produced 402 passed and one policy failure:
+the approved npm lock has 154 entries without both `resolved` and `integrity`.
+The adapter was corrected to preserve exact version pins for those entries while
+forcing the registry and strict TLS; partial or unsafe explicit metadata remains
+refused. This is not complete artifact-hash attestation. Package manifests and
+lockfiles were unchanged. Tests and read-only evidence never used real
+pip/npm installation, container creation or database access.
+
+Final Python 3.14.6 command (same safe harness/worktree as PR A):
+
+```powershell
+& C:\sbom\.venv\Scripts\python.exe -B `
+  C:\sbom\.windows\worktrees\SBO-98-component-env\.dev-logs\safe_pytest.py `
+  tests/test_dev_workspace_dependencies.py tests/test_dev_workspace_provider.py `
+  tests/test_dev_workspace_cli.py tests/test_dev_setup.py `
+  tests/test_dev_diagnose.py tests/test_dev_launcher.py --timeout=60
+```
+
+Result: **406 passed in 65.15s**. Python 3.12.10, using its existing interpreter
+with the same harness and the dependency/provider test files: **95 passed in
+19.14s**. Ruff passed for the six Phase B source/test files; all installers and
+engine inventories in tests were synthetic. Native temporary filesystem and
+ownership paths were exercised. This is not package/network/provider acceptance.
+
+A subsequent read-only source review found npm's built-in config can override
+scoped registries despite isolated user/global config. A focused follow-up binds
+that tool-local input and rejects unsupported directives before installer
+execution, without exposing values or hashing raw comments into public plans.
+This review correction changes only the dependency adapter/tests and evidence;
+it does not alter package manifests or install packages.
+After that correction, the same safe harness ran dependency/provider/CLI tests:
+**146 passed in 74.10s** on Python 3.14.6. The changed dependency tests on
+Python 3.12.10: **48 passed in 51.39s**. Ruff passed. All installers remained
+synthetic. PR B is draft [#56](https://github.com/feroz-hub/sbom/pull/56).
+
+## PR C: isolated launch contracts, live execution BLOCKED
+
+Adds `dev_workspace_lifecycle`, pure `app/dev_instance` names, matching tests and
+actionable CLI refusal for registered-instance start/stop/restart. Immutable
+snapshots check exact dedicated targets, roles, Redis databases, paths, origins,
+auth flags, key separation and readiness prerequisites. Public serialization
+excludes private values and secret hashes. Commands are placeholders; cleanup
+only requests the existing Runtime to independently revalidate recorded
+identities. Unknown/reused/unregistered identities remain protected, including
+partial-start and lost-configuration cases.
+
+This increment **does not implement a full-stack executor**. Required engine,
+credential-provenance, Settings-child, Runtime/path and hostname/TLS adapters are
+explicit blockers. The pure namespace helper is not yet wired to every API/task/
+session/heartbeat consumer. It cannot establish isolation by itself. Concrete
+provider selection depends on company engine/image policy and exact approved
+disposable targets; no existing protected service may substitute for that work.
+Source contracts are reviewable now; full Phase 3 acceptance remains incomplete.
+Existing application/lifecycle/shutdown and production consumers are unchanged.
+
+Native Windows Python 3.14.6, same safe harness:
+
+```powershell
+& C:\sbom\.venv\Scripts\python.exe -B `
+  C:\sbom\.windows\worktrees\SBO-98-component-env\.dev-logs\safe_pytest.py `
+  tests/test_dev_workspace_lifecycle.py tests/test_dev_instance_namespaces.py `
+  tests/test_dev_windows_lifecycle.py tests/test_dev_windows_shutdown.py --timeout=60
+```
+
+Result: **185 passed in 23.16s**. Python 3.12.10 lifecycle/namespace tests:
+**103 passed in 0.68s**. Ruff passed. These are pure/synthetic adapter contracts
+and existing Windows regressions; no isolated stack, provider, database, TLS or
+administrator operation was executed.
+Workspace and lifecycle CLI tests on Python 3.14.6, using the same harness and
+`tests/test_dev_workspace_cli.py tests/test_dev_workspace_lifecycle_cli.py
+--timeout=60`: **64 passed in 21.89s**. Runtime/process/socket/file-write/private-
+read tripwires verified that reported READY or caller markers cannot enable live
+execution. A changed HEAD blocks start/restart while stop retains its independent
+Runtime-adapter diagnosis and preserves records.
+
+## PR D: restricted test command, data suites BLOCKED
+
+Adds `dev_workspace_tests`, its source/CLI tests, explicit `workspace test --suite
+unit [--plan]`, workflow and existing guide/reference updates. The suite contains
+only the reviewed pure instance-plan/namespace/provider contracts. It binds exact
+source/HEAD/filesystem/local-interpreter proofs, uses a newly created private
+copied import closure and excludes application conftest, dotenv, pytest config,
+external plugins, arbitrary tests/arguments and old temp cleanup. It is trusted
+user-level execution, not a sandbox. Only validated counts/codes escape child
+output. All data suites unconditionally require a future exact-target adapter
+and separate authorization.
+
+Read-only review found a repeated-Ctrl+C cleanup corner: a second cancellation
+could lose the original child metadata. The correction reports
+`TEST_CHILD_CLEANUP_UNCONFIRMED` with the original PID and false cleanup status
+without PID/tree escalation. Root access uncertainty now has its own
+`TEST_ROOT_ACCESS_REVIEW_REQUIRED` diagnosis and never repairs permissions.
+
+Native Windows Python 3.14.6, same safe harness:
+
+```powershell
+& C:\sbom\.venv\Scripts\python.exe -B `
+  C:\sbom\.windows\worktrees\SBO-98-component-env\.dev-logs\safe_pytest.py `
+  tests/test_dev_workspace_tests.py tests/test_dev_workspace_tests_cli.py `
+  tests/test_dev_workspace_cli.py --timeout=60
+```
+
+Final result: **185 passed in 50.99s**. Python 3.12.10, same harness and the two
+new test files: **157 passed in 31.10s**. Ruff passed. All delegated suite children
+were synthetic. An early combined command before the CLI test file landed
+collected zero tests; the completed lists above passed. No real delegated suite
+has run because a genuinely SBO-101-prepared interpreter is unavailable.
+
+Actual `workspace test --suite database --plan --json` returned exit 1,
+`DISPOSABLE_TARGET_AUTHORIZATION_REQUIRED`, `database_authorized=false` and empty
+stderr. A pre-correction actual unit-plan check refused the native root ACL as
+generic unverified-worktree; its now-specific diagnosis is covered by the final
+negative tests. No data resource, installer, runtime, trust or privileged service
+was touched.
+The final actual candidate command `workspace test --suite unit --plan --json`
+then returned **TEST_ROOT_ACCESS_REVIEW_REQUIRED**, exit 1,
+`database_authorized=false`, empty stderr. No real suite child ran. PR B at
+`7de355e583d21234ea68237674ce8f88dad2a37a` and PR C (#57) at
+`3295afa7e519d4f62292b1cc3abfeabc0eb43065` each had 20 successful CI checks
+(push and PR runs) when inspected; no failures were returned.
+
+## PR E: guided Native/HCL overview and closed enrollment state machine
+
+Adds `dev_workspace_onboarding`, focused pure/CLI tests, static administrator
+guidance in the existing launcher, the separate authority security proposal and
+updates to the existing development/configuration/Native guides. Fresh Native
+guidance is explicitly UNKNOWN/uninspected, with no invented target/status/
+generation/readiness. HCL has its separate approval code, not a Native-password
+route. Mock/shared previews cannot offer enrollment. No identity/password input
+or status connection is requested by this guidance.
+
+The pure observation planner covers existing, absent, pending, completed,
+conflicting and unknown aggregate states with exact context/schema/status drift
+checks. Source review confirmed `dev_operator.py` counts all IAM users and the
+bootstrap user FK is nonnull/restricted, so a pending reservation with zero users
+now produces CONFLICT and recovery review. All actions remain non-executable;
+no public marker, readiness flag or valid plan can authorize creation or resend.
+The existing managed guard, standalone bootstrap and bootstrap service have no
+diff against `73d29949b31fa3564a56043128bde7118e804ede`.
+
+The [authority proposal](dev-workspaces-security-sbo101.md) distinguishes a
+developer-controlled launcher from an independent privileged boundary and leaves
+principal deployment, token consumption/revocation/commit atomicity, readiness
+attestation and activation-time DB privilege design for explicit security/DBA/
+Engineering Lead review. It is not an implemented/enabled authority protocol.
+
+Native Windows Python 3.14.6, same safe harness:
+
+```powershell
+& C:\sbom\.venv\Scripts\python.exe -B `
+  C:\sbom\.windows\worktrees\SBO-98-component-env\.dev-logs\safe_pytest.py `
+  tests/test_dev_workspace_onboarding.py tests/test_dev_workspace_onboarding_cli.py `
+  tests/test_dev_native_enrollment.py tests/test_dev_native_enrollment_cli.py `
+  tests/test_dev_operator.py --timeout=60
+```
+
+Result: **356 passed in 37.04s**. Python 3.12.10, same harness with the two new
+onboarding files: **128 passed in 6.04s**. Ruff passed. Aggregate observations,
+services and contexts were synthetic; direct-invocation/drift/redaction/mutation
+tripwires passed. No protected administrator availability was inspected and no
+live creation, resend, email, activation, grant or database operation occurred.
+Actual candidate `workspace plan --scope administrator --mode isolated --auth
+native --json` returned UNKNOWN/ONBOARDING_INSPECTION_REQUIRED; the `--auth hcl`
+form returned HCL_APPROVAL_REQUIRED/HCL_OPERATOR_IDP_APPROVAL_REQUIRED. Both
+returned exit 1, `inspection_performed=false`,
+`live_enrollment_authorized=false`, empty identity-field lists and empty stderr.
+These are static guidance results, not database status or authenticated authority.
+
+## PR F: source comparison, redacted observations and acceptance ledger
+
+Adds `dev_workspace_observe`, focused native-file/CLI tests and the existing
+launcher's compare/log/status/diagnose integration. Git inventory remains distinct
+from application readiness: status/diagnose explicitly return BLOCKED/exit 1
+while the concrete readiness adapters are missing, even for caller-reported READY.
+Fresh/unregistered diagnostics do not fabricate descriptors. Optional CPU/home-
+disk observations are separate from service or memory/capacity acceptance.
+Diagnose reuses only public dependency inspection, with bounded owned helper
+objects, no installer, private environment, package-readiness or compiler claim.
+
+Comparison exposes observed sources and proposed origins/resources; runtime,
+API, screenshot/trace, visual and authenticated acceptance flags stay false.
+Local logs use fixed files under the private per-instance `.dev-logs` root and
+never fall back to historical checkout logs. Only allowlisted metadata escapes;
+raw messages/identity/credentials remain withheld. Provider logs are blocked.
+Follow is bounded to 30 seconds, records to 200 and reads to a fixed tail.
+
+Real Windows temporary-file testing found that `lstat` and `fstat` expose different
+creation/change-time values on this host. Cross-open comparison uses stable
+identity/size/mtime, while full stamps remain checked within each API. ACL,
+owner, regular-file, single-link and path pinning are retained. This is confirmed
+native file behavior, separate from Runtime PID birth/executable verification.
+
+Focused observer tests exercised native private ACL/file reads plus synthetic
+identity drift/redaction; CLI tests exercised the actual boundary with synthetic
+Git/registry observations. An early test fixture forbade every public read and
+produced three teardown errors when software inspection was connected; it was
+corrected to allow only exact public manifest/controller paths while keeping
+private/mutable/network/app tripwires. No protected resource operation occurred.
+
+Python 3.12.10, same safe harness with
+`tests/test_dev_workspace_observe.py tests/test_dev_workspace_observe_cli.py
+tests/test_dev_workspace_cli.py --timeout=60`: **116 passed, 2 skipped in 45.86s**.
+The skips are POSIX mode semantics and unavailable Windows symlink privilege;
+native private ACL reads passed. Ruff passed for all new source/tests. The final
+complete inspected Windows-applicable workflow list plus native fixture-owned
+process smoke passed on Python 3.14.6: **2,202 passed, 43 skipped, 6 existing
+Alembic warnings in 296.70s**. No test failure remained. This selected 41 reviewed
+launcher/workspace files; it was not application-wide pytest.
+
+Exact final selection/command, from the implementation worktree:
+
+```powershell
+@'
+import re, subprocess, sys
+from pathlib import Path
+text = Path('.github/workflows/dev-launcher.yml').read_text(encoding='utf-8')
+block = text.split('- name: Cross-platform unit and mocked adapter regressions', 1)[1].split('\n      - name:', 1)[0]
+tests = list(dict.fromkeys(re.findall(r'tests/[a-z0-9_]+\.py', block) + ['tests/test_dev_native_process.py']))
+assert tests and all(Path(p).is_file() and p.startswith(('tests/test_dev_', 'tests/test_greenfield_windows_compat')) for p in tests)
+raise SystemExit(subprocess.run([sys.executable, '-B',
+    'C:/sbom/.windows/worktrees/SBO-98-component-env/.dev-logs/safe_pytest.py',
+    *tests, '--timeout=60']).returncode)
+'@ | & C:\sbom\.venv\Scripts\python.exe -B -
+```
+
+The command used the existing issue-local sanitized harness; its transport-only
+environment, SQLite sentinels, disabled dotenv/plugin autoload/cache/bytecode,
+unique temporary root and `--noconftest` policy remain as described above.
+AST checks confirm Runtime/process/start helpers are still unchanged from the
+integration baseline. All 12 new modules parse with Python 3.11 grammar; actual
+cross-platform Python 3.11 execution is covered by the CI matrix, not this host.
+The managed enrollment guard/bootstrap/service still have an empty baseline diff.
+
+The [T01–T36 / A01–A15 ledger](dev-workspaces-acceptance-sbo101.md) marks each
+limited contract separately from unexecuted real acceptance and gives the
+approval-dependent native procedure. Real two-stack/background/browser/tenant/
+activation tests are not run; no approved provider, private material or privileged
+authority exists for them on this host. No protected services were adopted.
+
+## Risks, conflicts and required decisions
+
+| Area | Files / dependencies | Risk or gate | Current protection |
+| --- | --- | --- | --- |
+| Source integration | SBO-98 #49–#54 → SBO-101 #55 onward | Draft stack dependency; no independent sign-off claimed | Old branches unchanged; issue-only worktree/branches; no merge |
+| Legacy lifecycle | `scripts/dev.py`, existing Runtime | Native process regression / unknown PID | Ownership/termination checks preserved; optional private IO for new instances; native regressions and limitations recorded |
+| New runtime | `dev_workspace_lifecycle`, `app/dev_instance`, Runtime/readiness adapters | Missing independent provider/transport authority and real acceptance | Concrete source with fail-closed callback gates; no fabricated READY |
+| Data services | Provider/engine/database adapters and journal | Company engine/images/UID policy and exact disposable resource approval absent | Concrete adapters synthetically tested; no live daemon/DB action; absent actual-session peer attestor blocks SQL |
+| Dependencies | `dev_workspace_dependencies`, CLI | Untrusted root grant; binary-only/public-index policy; interrupted state | Specific native refusal; exact consent/revalidation; retained journals; no repair/adoption |
+| Privileged Native | `dev_workspace_onboarding`, unchanged SBO-98 guard | Independent principal/authority/readiness/commit design not approved | All live actions closed; exact context drift tests; separate security proposal |
+| HCL.CS | Existing provider services / approved registration | IdP-owner first-user and per-origin callback/trust decisions | No invented identity, password fallback or privileged provisioning |
+| Shared contracts | Application/DTO/schema/migrations | Other-agent or deployment conflict | No NEXUS active work confirmed; optional development namespace consumers changed in H; DTO/schema/migrations/deployment unchanged |
+| Observations | `dev_workspace_observe`, CLI | Metadata/consistency cannot prove live health; unknown private source | No service contact, raw message content or state mutation; ACL/identity checks |
+| Tests | Fixed source closure / explicit workflow lists | Application fixtures can migrate/truncate; fake execution is not E2E | No application conftest; sanitized SQLite sentinels; real data suites blocked |
+
+Engineering Lead/IT must provide the approved Docker/Podman policy and image/data/
+port/user contracts before a concrete provider is used for real resources. Source
+development and synthetic validation of provider-agnostic Compose-compatible
+adapters continue without them. Exact provider/database/
+credential/schema/TLS operations then need separate target-specific approval.
+The Native authority proposal requires security/DBA/Engineering Lead review and
+disposable acceptance before enablement; HCL provisioning additionally needs its
+IdP owner. Original service health/database contents have not been re-inspected:
+no command targeted them or wrote their configuration, certificates or runtime.
+
+Linear updates cannot be sent in this session; provide the actual draft/commit/
+test/blocker summary for the Engineering Lead to post to SBO-101. Do not mark the
+issue complete while these implementation and acceptance gates remain.
+
+### Subsequent Engineering Lead direction
+
+After this foundation, the Engineering Lead explicitly directed continued source
+implementation of concrete provider interfaces, capability discovery, manifest
+generation, lifecycle/ownership/approval boundaries, limits/health, previews and
+remaining setup/runtime phases. Missing Docker/Podman and unconfirmed company
+policy are **real-execution limits only**, not reasons to stop independent coding.
+The pinned references in `infra/greenfield-uuid/compose.yml` are source references,
+not approved images/policy. Architecture/provenance/scanning/registry/nonroot/
+platform checks and exact resource/database approval are required before use.
+No engine install, image pull, container/volume/database creation, virtualization
+change or protected-service substitution is authorized. Follow-on drafts will
+distinguish implemented synthetic paths from pending real-provider acceptance.
+
+## Increment G — Compose-compatible provider adapter
+
+Implemented source: `dev_workspace_compose.py`, `dev_workspace_engine.py` and
+`dev_workspace_provider_input.py`, with provider planning in the existing public
+launcher. No reference digest is silently selected. A proposed policy explicitly
+supplies the engine identity, policy reference, pinned images, numeric nonroot
+UID/GID, platform, limits, data ownership/population contract, health budgets and
+fourteen private file references. File contents and paths are absent from public
+output. Duplicate/unknown JSON fields, credentials-as-fields and mutable image
+tags are refused. A policy file is a proposal, not an authorization source.
+
+```powershell
+python scripts/dev.py workspace plan --scope provider --mode isolated --auth native --json
+python scripts/dev.py workspace plan --scope provider --mode isolated --auth native --provider-policy <reviewed-proposal.json> --json
+```
+
+These commands do not invoke an engine or read the referenced secret files.
+Without a policy they report `PROVIDER_POLICY_SELECTION_REQUIRED`; with a valid
+proposal they return the redacted contract and review gates. `prepare --scope
+provider` requires separate exact-target authorization and performs no mutation.
+The Python adapter can execute approved operations through an injected trusted
+policy authority and durable creation journal; the CLI does not turn JSON review
+markers into that authority.
+
+The generator emits Compose JSON (a YAML subset). The concrete Docker adapter
+consumes that same specification but deliberately avoids `compose up`: resource
+creation records returned immutable network/container IDs, and fresh anonymous
+data volumes are obtained from those new container receipts. Logical names and
+labels alone never authorize adoption or shutdown. Start/stop re-inspect engine,
+image, process/container and resource identities immediately before operations.
+Partial or uncertain results retain receipts and report unconfirmed operations;
+there is no remove-volume, pull, build, automatic database initialization or
+destructive recovery path. Podman is a separate explicitly unsupported adapter
+until implemented and validated, rather than assumed Docker equivalence.
+
+PostgreSQL runtime invokes `postgres` directly, not its auto-initializing image
+entrypoint. Fresh `initdb`, restricted-role/schema preparation and nonroot volume
+ownership need separately approved preparation. Host TLS/auth health adapters
+are explicit prerequisites; an image health status is not verified readiness.
+Mailpit's internal readyz behavior is insufficient to establish certificate
+verification. File-backed Compose secrets do not remap host UID/GID/mode: the
+approved image/host must demonstrate actual nonroot readability and protected
+permissions. Rootless engines alone do not prove this contract.
+
+Synthetic generation, policy parsing and fake Docker runner tests exercise real
+command construction, denial paths, drift and partial outcomes. Real engine
+discovery/provisioning, image provenance/architecture/scanning/registry checks,
+nonroot integration and service/database readiness remain **NOT RUN**. Missing
+runtime/policy blocks those real operations only. Runtime wiring, guided private
+preparation and previews continue as independent source increments.
+
+Executed G validation on Windows / Python 3.14.6:
+
+```powershell
+& C:\sbom\.venv\Scripts\python.exe -B C:\sbom\.windows\worktrees\SBO-98-component-env\.dev-logs\safe_pytest.py tests/test_dev_workspace_engine.py tests/test_dev_workspace_compose.py tests/test_dev_workspace_provider_input.py tests/test_dev_workspace_provider.py tests/test_dev_workspace_cli.py --timeout=60
+```
+
+Result: **240 passed in 325.96s**, including all 64 engine tests on the final
+mutation-boundary source. The harness disables application conftest/plugin
+autoload, uses in-memory SQLite sentinels and a new private temporary directory.
+Compose/parser compatibility on the existing Python 3.12.10 validation
+interpreter: **78 passed in 1.23s**. Scoped Ruff checks passed. Existing PRs
+#58, #59 and #60 each reported 20 completed successful checks at their exact
+heads when rechecked; each remains Draft. These are source/fixture results, not
+real provider or complete application acceptance.
+
+## Increment H — Application resource and settings isolation
+
+The persistent `SBOM_DEV_RESOURCE_ID` now reaches actual Celery default/report
+routes and task decorators, both report publishers, Native mail-worker heartbeat
+writer/reader, Native IP/account limit buckets and the BFF Redis session store.
+The launcher consumes those same queues for worker commands/readiness and the
+same persistent namespace for Beat leases. Its independent `SBOM_DEV_INSTANCE`
+still identifies each process launch. No UUID means the exact legacy names.
+Malformed or ambiguous UUIDs fail closed. The UUID is server metadata, never a
+`NEXT_PUBLIC_*` value or ownership/authorization proof.
+
+Isolated application `get_settings()` now requires explicit development mode,
+python-dotenv disabled, authentication enabled and default-tenant bypass disabled.
+It creates real `Settings(_env_file=None)` and binds the cached instance to the
+resource UUID. This closes the separate Pydantic dotenv source; setting
+`PYTHON_DOTENV_DISABLED` alone does not close it. Ordinary source selection is
+unchanged without the explicit UUID. No temporary settings/module overlay is
+used. Private bundle resolution remains a separate explicit launcher adapter.
+
+Changed source: five queue/Native service consumers, `app/settings.py`,
+`scripts/dev.py`, the pure component projector, and the server session namespace
+helper/store. Three focused regression files and the existing workflow are
+updated. No schema, migration, production manifest or enrollment source changed.
+
+Executed through the existing inspected safe harness on Windows/Python 3.14.6:
+
+```powershell
+& C:\sbom\.venv\Scripts\python.exe -B C:\sbom\.windows\worktrees\SBO-98-component-env\.dev-logs\safe_pytest.py tests/test_dev_workspace_namespace_wiring.py tests/test_dev_workspace_settings_isolation.py tests/test_dev_workspace_launcher_namespace.py tests/test_dev_instance_namespaces.py tests/test_settings_paths.py tests/test_dev_config.py tests/test_dev_component_environments.py tests/test_dev_lifecycle.py --timeout=60
+```
+
+Result: **356 passed, 17 skipped in 31.25s**. Skips are POSIX-only primitives and
+unapproved Windows fixture-symlink privilege. This includes three real Celery
+memory-only routing checks, actual Pydantic dotenv-source behavior and the pure
+TypeScript namespace executed by Node; no worker, application server, broker or
+database connected. Ruff passed. The initial two positive Settings fixtures
+omitted explicit `DEV_DEFAULT_TENANT=false`; they were corrected and this full
+selection passed. A Python 3.12 run failed collection because its existing minimal
+validation venv lacks Celery/Pydantic; no packages were installed. Runtime
+compatibility is therefore delegated to the existing full-dependency CI matrix,
+not reported as a local 3.12 pass.
+
+AST comparison against `73d29949b31fa3564a56043128bde7118e804ede` confirms
+`Runtime`, `process_info`, `windows_children`, `start_process`,
+`start_background` and `wait_for_background` unchanged. Protected Native
+bootstrap/enrollment service sources also have no diff. Actual simultaneous
+queues/sessions/Beat/rate-limit and full-stack acceptance remain **NOT RUN**.
+
+## Increment I — Preview preparation and canonical Runtime adapter
+
+Implemented `dev_workspace_preview.py`, `dev_workspace_preview_cli.py` and
+`dev_workspace_runtime.py`, exposed through the existing public launcher:
+
+```powershell
+python scripts/dev.py workspace plan --scope preview --mode mock --auth native --preview-settings <existing-preview-settings.json> --json
+python scripts/dev.py workspace prepare --scope preview --mode mock --auth native --preview-settings <existing-preview-settings.json>
+```
+
+The strict version-1 settings object contains `node` (an absolute executable),
+`tls` (`certificate`, `private_key`, `ca_bundle` existing absolute paths), and
+`shared_backend` (`null` for mock, otherwise the explicit registration object).
+It never contains passwords, key contents or readiness/authorization markers.
+Planning reads metadata; preparation requires a current, expiring, exact-plan
+TTY confirmation, creates only private files/links, and reuses verified existing
+preparation without another write prompt. Unknown state is retained/refused.
+These are source review interfaces; guided bundle selection remains subsequent
+integration, so the final onboarding UX need not ask users to discover these paths.
+
+Mock uses a separate synthetic Next app with selected inert design tokens, no
+real application layout/auth/API routes, no remote font dependency and no data
+services. It is a theme/layout fixture, not arbitrary application-page coverage.
+Source style changes require re-preparation; shared/isolated real source is linked
+for HMR. Shared mode requires explicit non-production origin, permitted tenant,
+auth/callback/session verification and a warning that browser actions can mutate
+that backend. No extra worker/Beat is launched. Isolated frontend binding instead
+requires the exact own API port and persistent UUID. It cannot adopt a shared
+backend registration.
+
+TLS, backend and native compiler verification are trusted runtime integrations,
+not caller JSON flags. The existing compiler guard remains unchanged. The
+Runtime adapter uses the canonical launcher's Runtime via injection, private
+per-instance state/logs, original process handles, process creation/executable
+checks, and canonical verified cleanup. Backend children use an isolated Python
+runpy entry with explicit source and an environment-free private CWD; real
+Settings source control comes from H, with no monkeypatch/module overlay.
+Ambient application settings/preloads and TLS key logging are refused/projected
+away. The deferred frontend factory runs only after backend/API probes, then
+requires frontend verification and all five owned records before service readiness.
+Its bounded callbacks perform read-only verification/construction, never spawning
+or preparation. Stop/restart remain independent of private configuration/source
+loss; uncertain process/tree records are retained. Public CLI start remains
+blocked until approved target/provider/private-bundle/readiness bindings are
+connected, rather than accepting a supplied READY marker.
+
+Executed Windows/Python 3.14.6 safe-harness command:
+
+```powershell
+& C:\sbom\.venv\Scripts\python.exe -B C:\sbom\.windows\worktrees\SBO-98-component-env\.dev-logs\safe_pytest.py tests/test_dev_workspace_runtime_native.py tests/test_dev_workspace_runtime.py tests/test_dev_workspace_preview.py tests/test_dev_workspace_preview_cli.py tests/test_dev_workspace_cli.py tests/test_dev_windows_acl.py tests/test_dev_native_process.py --timeout=60
+```
+
+Result: **170 passed in 65.36s**. A later added real-public-theme extraction test
+passed separately (**1 passed, 0.32s**). The native fixture recheck after adding
+its private recovery sentinel also passed (**1 passed, 3.05s**). Existing Python
+3.12.10, preview/runtime/native-fixture selection: **68 passed in 55.02s**. Ruff
+and Python 3.11 grammar checks passed. The initial native fixture exposed safe
+callback error categories being replaced by a generic error; only enumerated
+redacted categories are now preserved, with unknown exception text suppressed.
+
+The native fixture starts four real disposable Python helpers through this
+candidate Runtime adapter. Their workload/readiness is synthetic, and they honor
+the existing Windows shutdown protocol; deliberate frontend refusal cleans all
+four, preserves specific diagnostics and leaves no runtime record or live child.
+It never overlays candidate app modules or runs a database, provider, real worker,
+API, Node server or privileged enrollment. Existing API shutdown can force a
+freshly revalidated handle where no cooperative hook exists, with an explicit
+active-work warning; that baseline trade-off is preserved. These results do not
+establish application startup, authenticated readiness, browser trust/login,
+general mock-page coverage, real Next HTTPS/HMR or simultaneous full-stack
+acceptance. Those real scenarios remain **NOT RUN**, with explicit approval and
+integration prerequisites. No existing configuration, certificate, database or
+historical runtime record was altered.
+
+## Increment J — protected private preparation and transport contracts
+
+`dev_workspace_bundle.py` implements an explicitly authorized, new-generation
+private configuration/credential/certificate bundle. Planning is pure. Preparation
+requires both credential and certificate consent, pinned source/parent identities,
+private files, a pending journal and a completion receipt published last. Existing
+unknown or interrupted generations are retained. A known receipt permits reuse
+after a source commit without regenerating secrets. The real material generator
+has **not run** during this task; positive crypto fixtures are synthetic and the
+real validator has negative invalid-PEM tests.
+
+The generated configuration uses independent backend and frontend Redis users,
+namespace-restricted frontend ACLs, encrypted security-mail and the existing
+canonical `AI_CONFIG_ENCRYPTION_KEY` consumer. Backend secrets are excluded from
+the frontend projection. PostgreSQL requires hostname/chain verification plus
+`gssencmode=disable` and `sslcertmode=disable`, avoiding ambient GSS/client-cert
+selection. Python Redis, Node Redis and SMTP have separate validated transport
+contracts. Unknown query parameters, conflicting key aliases and mismatched CA
+paths fail closed. No schema, application startup or trust-store operation occurs.
+
+The shared trust bundle allows bounded public roots plus the new local authority;
+other private files retain smaller bounds. Existing credential and certificate
+files are neither imported nor replaced. Company image/nonroot policy, actual
+certificate generation and real provider readiness remain separately gated.
+
+A pure-plan regression confirmed provider fingerprints changed with a source
+commit despite identical resources. Stable resource fingerprints now exclude
+source/preparation metadata, while every engine operation's consent still binds
+the full current descriptor. Existing resource receipts remain reusable;
+old source-bound operation consent is refused. Synthetic renewed-consent tests
+exercise that distinction without a container engine.
+
+Executed on Windows/Python 3.14.6:
+
+```powershell
+& C:\sbom\.venv\Scripts\python.exe -B C:\sbom\.windows\worktrees\SBO-98-component-env\.dev-logs\safe_pytest.py tests/test_dev_workspace_provider.py tests/test_dev_workspace_engine.py tests/test_dev_workspace_compose.py tests/test_dev_workspace_provider_input.py tests/test_dev_workspace_cli.py tests/test_dev_workspace_bundle.py tests/test_dev_workspace_tls_contract.py --timeout=90
+```
+
+Result: **338 passed in 441.65s**. Lifecycle/runtime/native fixture and bundle
+cross-contract selection earlier passed **197 tests in 58.57s**. Scoped Ruff
+passed. Actual PKI generation, provider provisioning and database acceptance are
+**NOT RUN**. PR I's first CI run independently exposed hosted executable/default
+file validation failures in its native fixture; the Windows default-owner cause
+remains a hypothesis pending hosted confirmation. That repair is isolated
+on its existing branch and is not represented by these J synthetic results.
+
+## Increment K — explicit data preparation and durable operation recovery
+
+`dev_workspace_database_prepare.py` separates `initdb`, database/role/schema
+preparation and reviewed migration into distinct exact-target consented actions.
+It binds engine, image, container, volume birth, nonroot contract, cluster identity,
+database, roles, OIDs, source and schema selections. Every critical mutation and
+commit revalidates authority and target. Ordinary engine/application startup cannot
+initialize a cluster or invoke Alembic. Runtime roles remain restricted, schema
+ownership uses a separate NOLOGIN role, and no Native bootstrap grant is added.
+
+`dev_workspace_operation_journal.py` persists an append-only private sequence of
+operation reservation, intents, returned resource IDs and outcomes. OS locks,
+CAS, file identities, chained records and no-replace publication reject concurrent
+or uncertain history. Readers never create a lock, claim or recovery operation.
+Failed cleanup retains validated helper IDs and a cleanup-uncertain result across
+invocations. Those IDs are diagnostic evidence, never permission to terminate a
+resource. A pre-claim failure cannot overwrite another operation's reservation;
+its caller must report retained IDs, and the helper adapter journals its own
+authorized creation independently. Failed journal writes cannot promise durability.
+
+The inspected Windows/Python 3.14.6 safe-harness command was:
+
+```powershell
+& C:\sbom\.venv\Scripts\python.exe -B C:\sbom\.windows\worktrees\SBO-98-component-env\.dev-logs\safe_pytest.py tests/test_dev_workspace_operation_journal.py tests/test_dev_workspace_database_prepare.py tests/test_dev_workspace_database_adapters.py --timeout=60
+```
+
+Result: **169 passed in 28.27s** after correcting two new test fixtures to use
+the actual `DB_HELPER_UNCONFIRMED` enum (initial run: 167 passed, two fixture
+failures). The adapter source in that combined selection is delivered separately
+in L. Scoped Ruff passed. Real native private file/lock/atomic operations were
+exercised only on newly created test directories; all engine, SQL, migration,
+authorization and resource observations were synthetic. No provider or database
+operation ran. Real image policy, helper execution, restricted-role and migration
+acceptance require exact disposable-target approval.
+
+## Increment L — concrete provider and SQL preparation adapters
+
+`dev_workspace_database_adapters.py` connects the K contracts to bounded,
+explicit-local-engine Docker commands and Psycopg sessions. Nonroot utility
+helpers have fixed commands, image/security/mount contracts, separate authority
+and durable returned-ID receipts before start. Observation helpers also require
+their own creation approval; they are never called by read-only diagnostics.
+No root entrypoint, chown, image pull, resource removal or default-daemon adoption
+is introduced.
+
+SQL sessions enforce exact role/database/cluster/loopback and explicit verified
+TLS settings, reject ambient libpq overrides and use bounded connection/statement/
+lock limits. Credential changes require the supported libpq password API/SCRAM
+and a reviewed credential-audit policy; there is no plaintext SQL fallback or
+audit-setting bypass. Reviewed migrations use a supplied attested migration
+adapter and transaction, never implicit app/Alembic startup. Writers are closed
+before independent read-only post-commit evidence.
+
+The combined K/L test command above passed **169 tests in 28.27s** with fake
+engine and SQL transports. Scoped Ruff and Python 3.11 grammar passed. Real
+provider/SQL operations remain **NOT RUN**. A required actual-session TLS peer
+attestor is deliberately absent by default: libpq does not expose the certificate
+fingerprint through this adapter. A CA hash is not a peer attestation. Real
+execution stays BLOCKED until that transport integration, credential-audit policy,
+helper/image policy and exact disposable operations receive review/approval.
+Absolute wall-clock libpq cancellation also needs native acceptance; the native
+connection/server limits alone do not establish that guarantee.
+
+## Increment M — read-only inspection and process-bound readiness
+
+`dev_workspace_inspect.py` loads canonical Runtime state without acquiring a
+runtime lock, refreshing/saving state, starting services or inspecting application
+configuration. It verifies pinned root, launcher and component identities and
+keeps exited, reused and access-denied processes distinct. Saved READY flags
+cannot establish readiness. Known private/provider receipts remain observations,
+not ownership or operator authority. Deleted source/configuration does not permit
+discarding a record or prevent independent identity-based diagnosis.
+
+`dev_workspace_readiness.py` implements bounded native listener inspection on
+Windows/Linux and a verified owned lsof helper on macOS. Before contacting a
+local service it requires the expected host PID/birth/executable and rechecks
+afterward. Docker guest PIDs cannot substitute for Windows host-forwarder proofs.
+API probes use inert `/` and Native `/ready/iam`, avoiding `/health`, whose NVD
+initialization side effect makes it unsuitable for strict read-only diagnostics.
+Workers/Beat passive diagnosis requires current instance-specific health records
+and progress. Explicit startup acceptance is a separate active operation.
+
+PostgreSQL requires exact schema/target and verified TLS, a read-only transaction,
+rollback/close and CA/listener revalidation. Redis probes use TLS, AUTH, SELECT,
+PING and GET only; the frontend user must refuse an out-of-namespace GET. SMTP
+uses EHLO, mandatory verified STARTTLS, AUTH and QUIT; no message is sent. TLS
+checks validate PKI/SAN/key matching and bounded trust roots. No trust store,
+database, cache value, mail outbox, application audit record or configuration is
+modified by those checks. Native access-denied diagnostics now carry structured
+numeric Windows errors; arbitrary exception strings remain suppressed. The
+Runtime bridge preserves only typed safe categories, error codes and owned-probe
+IDs through verified startup cleanup.
+
+Limitations: listener enumeration/connect is not atomic; stronger exclusion of
+an intervening rebind requires listener handoff or independent server attestation.
+Synchronous libpq has native connection/server limits but no proven absolute
+wall-clock cancellation. A bounded caller can return while its read-only thread
+finishes rollback/close. Browser/OS trust, authentication acceptance and provider
+host-forwarder proof remain separate; no supplied JSON READY marker grants them.
+Actual network/provider/database acceptance has **not run**.
+
+Windows/Python 3.14.6 safe-harness validation:
+
+```powershell
+& C:\sbom\.venv\Scripts\python.exe -B C:\sbom\.windows\worktrees\SBO-98-component-env\.dev-logs\safe_pytest.py tests/test_dev_workspace_readiness.py tests/test_dev_workspace_inspect.py tests/test_dev_workspace_diagnostics_bridge.py tests/test_dev_workspace_runtime.py tests/test_dev_windows_lifecycle.py tests/test_dev_windows_shutdown.py -k 'not test_native_windows_cooperative_task_completion_and_scheduler_close' --timeout=60
+```
+
+Result: **267 passed, 2 deselected in 58.51s**. The preceding run included those
+two existing native cooperative fixtures: **268 passed, 1 failed in 73.10s**.
+Windows denied `QueryFullProcessImageNameW` with error 5 for a fixture child during
+refresh and verified cleanup. Ownership stayed unknown/refused; a subsequent
+read-only CIM lookup found neither reported PID. This transient native failure
+is retained as a limitation, not recast as synthetic success. The standalone
+readiness/lifecycle selection earlier passed **191 tests in 33.24s**. New listener,
+HTTP/SQL/Redis/SMTP and PKI-positive observations were injected synthetic adapters;
+mutation tripwires and real new private files verify the read-only boundaries.
+The first integration run also identified three inspector tests expecting the
+old absent Windows metadata; those now assert the structured numeric error and a
+separate message-only negative test preserves redaction. Scoped Ruff passed.
+
+After integrating the private Runtime IO repair, the combined closure had
+**282 passed, one failed in 107.60s**: the other existing native cooperative
+fixture encountered the same error-5 query while a Windows venv descendant was
+initializing. The native warm-shutdown fixtures now wait for their actual
+task/scheduler workload before registering ownership, matching the other native
+smoke fixtures. This changes test synchronization only; production still refuses
+unverifiable descendants. Recheck:
+
+```powershell
+& C:\sbom\.venv\Scripts\python.exe -B C:\sbom\.windows\worktrees\SBO-98-component-env\.dev-logs\safe_pytest.py tests/test_dev_windows_shutdown.py -k test_native_windows_cooperative_task_completion_and_scheduler_close --timeout=60
+```
+
+Result: **2 passed, 33 deselected in 11.15s**. The subsequent read-only CIM lookup
+also found neither earlier reported PID. Python 3.12.10 readiness/inspection/
+runtime/bridge selection passed **194 tests in 66.49s**. This is real fixture-only
+Celery memory-transport shutdown evidence, not provider/application acceptance.
+Upstream PR I at `84519cbb2730777162a779a2fdbf07feadd92657` now has **20/20 reported
+CI checks successful**, including hosted Windows/macOS/Linux and Python3.11/3.12.
+The original elevated-token Windows default-owner explanation remains an
+inference: the private writer repair passed hosted CI, but the runner token's
+actual default-owner SID was not captured.
+
+Independent review then identified that Celery control ping/queue/stat inspection
+publishes broker messages. `background()` now performs only bounded protected
+heartbeat/progress reads and fresh PID/birth/executable checks. Its result is
+`BACKGROUND_HEARTBEAT_OBSERVED`, explicitly partial and with
+`active_control_verified=false`. Only the separately named
+`background_startup()` can invoke active control after its broker/process proofs;
+it must never be called from read-only status/diagnose. Tests tripwire app/Celery/
+Kombu/Redis imports and socket/process construction on the passive path.
+The inspected readiness/lifecycle selection passed **206 tests in 52.88s**;
+Ruff and Python3.11/3.12 grammar checks passed. No live broker was contacted.
+
+## Increment N — standalone TLS and protected prepared bindings
+
+Mock/shared frontend TLS has a separate source adapter,
+`dev_workspace_certificates.py`, independent of container/image/database policy.
+New material needs exact typed certificate consent, source/private-parent pins,
+new-generation protected files, strict PKI/SAN/key/expiry validation and a receipt
+published last. Known receipts support later reuse without rotation. Unknown or
+partial material stays blocked. Generating a local issuer does not install OS or
+browser trust and does not authorize service start. The real generator was not
+executed here; tests use synthetic positive material and real invalid-PEM negatives.
+
+`dev_workspace_bindings.py` persists private continuity across CLI invocations.
+Typed completed plan/outcome pairs are required to add bundle, TLS, engine or
+database receipts; a standalone on-disk receipt is never adopted. Append-only
+CAS history, private native files, root/lock identities and atomic no-replace
+publication preserve uncertainty. Later source/public-manifest changes can reuse
+unchanged protected material/resource identities. Database preparation must
+follow initdb/database/migrate predecessor and OID continuity. Binding records
+contain metadata and private file references, no raw environment, passwords or
+keys; their public summary omits private paths/hashes and grants no live authority.
+
+Executed Windows/Python 3.14.6 safe command:
+
+```powershell
+& C:\sbom\.venv\Scripts\python.exe -B C:\sbom\.windows\worktrees\SBO-98-component-env\.dev-logs\safe_pytest.py tests/test_dev_workspace_certificates.py tests/test_dev_workspace_bindings.py --timeout=60
+```
+
+Result: **113 passed, 2 skipped in 112.22s**. Skips: this Windows account cannot
+create a symlink fixture; POSIX-only 0755 home semantics. Native Windows ACL,
+locking, file identity and atomic publication ran against new test files.
+Generators/installers/engine/SQL and readiness evidence were synthetic. Scoped
+Ruff and Python3.11 grammar passed. No key generation, trust change, provider,
+database, application or administrator action ran. Real frontend TLS generation,
+trust and startup still need separate exact authorization and acceptance.
+
+## Increment O — guided setup and public command integration
+
+`dev_workspace_setup.py` separates observation, immutable twelve-category plans,
+category consent, independent authority checks and preparation. One session can
+select registry, independent dependencies, certificates and preview files. Mock
+skips unused data/auth stages; its certificates do not need container policy.
+Shared/isolated provider, session, schema and onboarding gates remain enforced.
+Preview preparation has its own consent and source/compiler guards. Explicit
+source-only registry refresh preserves configuration generation/history and is
+refused for active or uncertain states. A completed bootstrap reservation yields
+WARN and approved effective-admin/recovery guidance; only an observed effective
+`EXISTING_ADMIN` yields Native administrator READY. The closed live child is unchanged.
+
+`dev_workspace_control.py` connects the public launcher to that plan, protected
+TLS bindings, actual compiler/Runtime/readiness adapters and foreground mock
+supervision. Compiler probing belongs to explicit start, never diagnose/status.
+Startup checks exclusive loopback port availability without contacting or killing
+the existing listener, and rechecks before spawn. The bind-to-spawn interval is
+still a race; later ownership/readiness failure triggers verified cleanup.
+Restart checks after stop. Repeated start preserves an existing instance and
+reports a collision/busy diagnosis; saved READY is not trusted. Scoped signal
+handlers restore after cleanup. Source/config-loss recovery accepts a known UUID
+only through protected registration and a surviving verified repository/controller.
+
+`scripts/dev.py` retains explicit Legacy/Greenfield selection and resolves known
+new registrations before source configuration/freshness or maintenance flags.
+New files or incompatible flags cannot silently fall through to Legacy setup.
+Old Python still receives prerequisite diagnostics before loading new modules.
+`setup --plan`/check forms normalize before mutable dispatch; JSON/non-TTY setup
+is read-only and emits one result object. `diagnose` is primary, with a deprecated
+`doctor` alias. Status/log imports suppress bytecode writes. Known instance runtime
+inventory uses fresh canonical inspection, never the original worktree's runtime
+file or a registry READY marker. Logs can show bounded metadata for all fixed
+components; messages remain private. Isolated/shared public start is explicitly
+blocked until approved live bindings exist, even though their adapters are source-implemented.
+
+Executed Windows/Python3.14.6 safe commands from this dedicated worktree:
+
+```powershell
+& C:\sbom\.venv\Scripts\python.exe -B C:\sbom\.windows\worktrees\SBO-98-component-env\.dev-logs\safe_pytest.py tests/test_dev_workspace_setup.py tests/test_dev_workspace_control.py tests/test_dev_workspace_dispatch.py tests/test_dev_workspace_cli.py tests/test_dev_workspace_lifecycle_cli.py tests/test_dev_workspace_observe_cli.py tests/test_dev_workspace_preview_cli.py tests/test_dev_main_merge.py tests/test_dev_diagnose.py tests/test_dev_setup.py --timeout=60
+```
+
+Result: **501 passed, 6 existing Alembic warnings in 105.10s**. Later final setup/
+control/dispatch/inspector-inventory selection passed **171 tests in 107.04s**;
+the dispatch/observer/legacy diagnostic selection passed **226 in 12.57s**.
+Initial wiring uncovered duplicate inventory discovery and legacy-only fixture
+dispatch expectations (17 failed/445 passed); discovery was consolidated and
+legacy fixtures now explicitly select Legacy. New default-dispatch, old-host,
+corrupt-registry, no-conversion, readonly cache and lifecycle negatives passed.
+Ruff and Python3.11 grammar checks passed. Material/installers/process/readiness
+were synthetic except new native private metadata and cache-only Python fixtures.
+
+The actual candidate command (no temporary module overlay) was executed read-only:
+
+```powershell
+python -B scripts/dev.py workspace setup --mode mock --auth native --check --json
+```
+
+It returned exit **1**, one valid JSON object with
+`CONTROL_HOME_ACCESS_UNVERIFIED`, component `private-home`, native category
+`OWNER_MISMATCH`, operation `EqualSid`, `winerror=null`, `plan=null` and a structured
+outcome/guidance. This is a confirmed owner-policy refusal, not PostgreSQL failure
+or an API error code. Observed candidate runtime/configuration/home-state and
+original credential/certificate metadata stayed unchanged. An earlier generic
+refusal led to this actionable, redacted correction; no permission was repaired.
+An IT-approved state location/ownership decision is needed before real preparation.
+No real key generation, dependency installation, Node/app/provider/database start,
+trust change or administrator action occurred. Current mock is a synthetic
+theme/layout fixture, not arbitrary authenticated application-page coverage.
+
+## Increment P — private visual artifacts and real safe-closure smoke
+
+`dev_workspace_visual.py` supplies a concrete Chromium CDP adapter using the
+already pinned websockets/Pillow dependencies. It creates a new private profile
+and process ledger, pins browser/controller identity, restricts navigation to
+the exact mock origin, preserves TLS verification, and requires fresh separate
+browser/OS trust evidence plus process-bound frontend readiness. It can retain
+private PNGs/traces/pixel differences and a completion manifest; public outcomes
+contain safe IDs/hashes/dimensions, not artifact contents or private paths.
+Capture uses explicit artifact consent and canonical cleanup; unknown browser
+records stay retained. No browser download, original browser profile, TLS/CORS/
+authentication bypass or real shared/isolated data capture is enabled. Source
+comparison remains available through `workspace compare`; live visual execution
+is an internal adapter pending reviewed trust integration, not a new public
+caller-JSON authorization route.
+
+Executed visual adapter suite: **48 passed in 236.16s** with fake Chromium/CDP,
+readiness and trust observations. Actual private Runtime IO paths ran without a
+browser. Ruff and Python3.11 grammar passed. No real browser, network capture,
+OS trust change or full visual acceptance ran. Renderer churn and CDP event
+polling still require real approved browser acceptance; screenshots never prove
+API/login/functional acceptance.
+
+The limited public unit runner now stages exactly four reviewed pure tests and
+twelve source files, adding the lifecycle/configuration transport contracts.
+An actual child using the existing pinned test interpreter ran that copied
+closure with poisoned outside conftest/config files excluded. No venv/package
+installation, unstamped product-venv adoption or database fixture permission was
+introduced. Data/integration/migration suites remain separately gated.
+
+The explicit rerun (superseding an earlier retained count without its full command) was:
+
+```powershell
+& C:\sbom\.venv\Scripts\python.exe -B C:\sbom\.windows\worktrees\SBO-98-component-env\.dev-logs\safe_pytest.py tests/test_dev_workspace_tests.py tests/test_dev_workspace_tests_cli.py tests/test_dev_instance_plan.py tests/test_dev_instance_namespaces.py tests/test_dev_workspace_provider.py tests/test_dev_workspace_lifecycle.py --timeout=60
+```
+
+Result: **435 passed in 40.34s** on Windows/Python3.14.6, including the real
+copied-closure child. The lifecycle fixture here includes the subsequently
+delivered HCL-origin contract fix. Scoped Ruff passed. Full inspected launcher
+and cross-platform CI evidence is recorded separately after the final source
+freeze; this test is not real provider/application/enrollment acceptance.
+
+## Increment Q — HCL origin consumer parity
+
+Source audit of the real frontend `server-config.ts` and logout route found that
+an omitted post-logout URI defaults to `https://localhost:3000/logged-out`. The
+new HCL bundle omitted that setting. Backend email-verification services similarly
+default to `https://localhost:3000/verify-email`, while the bundle set an
+instance-specific value only for Native mode. These are confirmed consumer/
+configuration mismatches; no live HCL login or email delivery was attempted.
+
+`HclRegistration` now accepts an explicit operator-provided
+`post_logout_redirect_uri`, after the existing positional CA field. HCL bundle
+planning refuses missing/foreign logout origins, requires the exact instance
+`/logged-out` URL and binds it into material/operation/private context. It never
+invents an approved IdP registration. Frontend projection supplies the actual
+consumer variable. The app-owned verification URL is common to both modes and
+enforced by lifecycle validation. Native material identity remains unchanged.
+Existing incomplete HCL bundles are preserved/refused, not rewritten or rotated.
+
+Windows/Python3.14.6 safe bundle/lifecycle/TLS-contract selection:
+
+```powershell
+& C:\sbom\.venv\Scripts\python.exe -B C:\sbom\.windows\worktrees\SBO-98-component-env\.dev-logs\safe_pytest.py tests/test_dev_workspace_bundle.py tests/test_dev_workspace_lifecycle.py tests/test_dev_workspace_tls_contract.py --timeout=60
+```
+
+Result: **191 passed in 19.73s**. Downstream synthetic readiness/runtime/bindings
+selection passed **227 tests, 1 POSIX-mode skip in 68.58s**. Tests exercise real
+consumer names/default resolution, approved-target projection, missing/foreign/
+unsafe logout, consent drift, both-mode mail URL refusal and positional CA
+compatibility. Ruff and Python3.11/3.12 grammar passed; unrelated existing
+formatting was preserved. No real crypto, network, IdP, email, application,
+provider, database or trust operation ran. Live HCL registration and its allowed
+logout URI still require the identity-provider owner's independent approval.
+
+## Disposable acceptance procedure (not yet authorized or executed)
+
+1. Review the candidate diff and CI on Windows/macOS/Linux, preserving SBO-98.
+   Confirm exact worktrees, agent reservations and current commits.
+2. Use `workspace list` and `workspace plan` for two fresh disposable worktrees;
+   retain the public instance IDs, fingerprints, hostnames and resource names.
+3. Obtain separate approval for the company-managed container engine and exact
+   provider resources, database roles/targets/schema operations, private material
+   creation, and any OS certificate trust changes. Existing protected services
+   are never substitutes. Docker/Podman are currently absent from this host's PATH.
+4. Once the missing transport/authority integrations are reviewed and those
+   approvals exist, use the implemented adapters to prepare independent dependencies,
+   providers and configurations; verify labels, loopback bindings, restricted
+   roles and negative cross-instance access before schema actions.
+5. Verify each candidate's actual API/IAM readiness, TLS hostname/chain, workers,
+   Beat, broker, sessions and separate Mailpit. Run both simultaneously, perform
+   separately approved disposable jobs, stop one and verify the other and the
+   original checkout remain healthy. Preserve volumes and uncertain records.
+6. Native enrollment remains BLOCKED until independent, target-bound,
+   short-lived, single-use operator authority is approved and enforced at the
+   private child and mutation boundaries. Only then may separately authorized
+   disposable activation acceptance run. Human passwords belong on the verified
+   HTTPS activation page. HCL onboarding additionally needs the IdP owner's
+   approved procedure.
+
+T01–T36 and A01–A15 in the master specification remain the acceptance checklist.
+The unit/synthetic evidence above covers selected contracts only; none of those
+scenarios is claimed as full end-to-end acceptance. Actual provider/database,
+two-stack, browser/tenant and privileged-enrollment scenarios are **NOT RUN /
+BLOCKED** pending the missing integrations and their specific approvals. No merge or
+deployment is authorized by a draft PR or green CI.
+
+## CI follow-up — Native option validation and source routing
+
+O–Q initially failed their cross-platform unit steps. The confirmed regression
+was workspace discovery running before invalid Native CLI combinations were
+rejected; the existing security tests correctly caught the premature boundary
+crossing. Pure usage validation now precedes discovery. Valid Native actions
+still select known instance registrations before any Legacy operation.
+
+Non-Git, unprepared source retains existing diagnostic compatibility without
+loading the new framework or probing Git. A surviving workspace dependency stamp
+or attempt marker with missing Git metadata instead gives
+`WORKSPACE_SOURCE_UNVERIFIED`; records are not read, changed or adopted. Present
+but invalid Git metadata and blocked discovery give
+`WORKSPACE_REPOSITORY_UNVERIFIED`, including before a missing registry can be
+interpreted as an unregistered checkout. No-argument dispatch uses the same gate;
+fresh valid Git checkouts retain read-only inventory. Marker presence only
+selects verification and never grants ownership or operation permission.
+
+Repair commit `7247a7de81e819117bb4eb43d1d6bc2f306a31c3` updates only
+`scripts/dev.py`, `scripts/dev_workspace_cli.py` and their two dispatch test
+modules. The existing Native/operator mutation tripwires were not weakened.
+Final affected selections on Windows/Python3.14.6:
+
+```powershell
+python -B <safe_pytest.py> tests/test_dev_workspace_dispatch.py tests/test_dev_workspace_cli.py tests/test_dev_operator_cli.py tests/test_dev_native_enrollment_cli.py --timeout=60
+python -B <safe_pytest.py> tests/test_dev_main_merge.py tests/test_dev_diagnose.py tests/test_dev_launcher.py tests/test_dev_lifecycle.py --timeout=60
+```
+
+The interpreter and harness paths are those in the exact commands above.
+Results: **194 passed in 39.82s**, then **307 passed, 16 platform skips,
+6 existing Alembic warnings in 21.95s**. Scoped Ruff, diff checks and Python3.11/
+3.12 grammar passed. The fix was pushed to draft #69, merged forward only into
+our draft #70 (`c54fea17a51003543cf0bd898052c016bf061c0c`) and #71
+(`53b97edc25d7782675e0e0062ea2d09080f097c4`), and included in R without
+rewriting history or changing SBO-98. Exact-head CI is recorded in the final
+validation section. No live resources or privileged action ran.
+
+A subsequent exact-head native smoke failed because its deliberate empty PATH
+now makes automatic selection refuse unverifiable Git before inspecting an
+incomplete Greenfield profile. The source guard was retained. The old smoke now
+explicitly selects Greenfield, and a separate real-CLI automatic-mode negative
+requires the safe refusal plus unchanged synthetic private records. Only
+`tests/test_dev_native_process.py` changed in follow-up commit
+`2598f70abead52074860a0740af05755eddf6134`; **7 passed in 3.91s** on Windows,
+with Ruff/diff checks passing. Current O/P/Q heads are respectively that commit,
+`6ec5664834f5ffc16b6c44ba3725fcbee6277b0b` and
+`b967b4ed3e14869086505b213b442f608b2331ab`.
+
+## Increment R — actual interpreter-start synchronization
+
+Cross-platform CI exposed a real adapter risk: macOS framework Python can exec
+from its initial launcher into a different interpreter executable after Popen.
+Immediate canonical registration can pin the transient executable. Waiting only
+inside a test fixture concealed that production race. The candidate now waits
+for bounded, private interpreter-start synchronization in its actual `-I -B`
+bootstrap, then registers the original Popen with the existing canonical Runtime.
+The native fixture's extra workload timing wait has been removed.
+
+The signal contains one constant line, with no PID or credentials. Before
+executing the private writer, the child verifies bounded controller helper bytes,
+filesystem identity, metadata and SHA-256; it does not cache a controller scripts
+package into the selected application. Reserved helper environment names are
+rejected case-insensitively, including on Windows. The marker cannot establish
+process ownership, service readiness or privileged operator authority. Missing,
+forged or denied signals still lead to canonical registration/verified cleanup
+where possible; uncertain records remain protected. Registration cancellation
+retains its cancellation result after the same cleanup.
+
+Native Windows testing confirmed two additional platform details: path and open
+handle creation timestamps can differ, and the CRT can return errno13 without a
+Win32 error while the explicit-owner writer still holds its exclusive handle.
+The loader binds the open handle's device/inode/size/mtime and contents while
+retaining full before/after path metadata checks. Only a signal read following a
+successful private ACL check can retry that narrow sharing symptom, within the
+original deadline and an independent elapsed-time bound. Persistent denial
+fails closed with `INSTANCE_INTERPRETER_HANDSHAKE_UNVERIFIED`; explicit Win32
+access-denied code 5 is not converted into absence or ownership permission.
+
+Executed safe Windows regression commands:
+
+```powershell
+& C:\sbom\.venv\Scripts\python.exe -B C:\sbom\.windows\worktrees\SBO-98-component-env\.dev-logs\safe_pytest.py tests/test_dev_workspace_runtime.py tests/test_dev_workspace_runtime_native.py tests/test_dev_native_process.py --timeout=60
+& C:\sbom\.windows\worktrees\SBO-98-dev-config-onboarding\.venv\py312-validation\Scripts\python.exe -B C:\sbom\.windows\worktrees\SBO-98-component-env\.dev-logs\safe_pytest.py tests/test_dev_workspace_runtime.py tests/test_dev_workspace_runtime_native.py tests/test_dev_native_process.py --timeout=60
+```
+
+Before the final two review hardenings, both interpreters passed **70 tests**
+(Python3.14.6: 23.12s; Python3.12.10: 38.15s). The case-insensitive negative
+extension passed **76 tests in 33.25s** on Python3.14.6. The two additional
+registration-cancellation cases plus all reserved-name cases passed **11 tests,
+60 deselected in 3.08s**. Final closure results below supersede intermediate
+counts. These runs include four real disposable stdlib Python helpers, actual
+canonical ownership and verified cleanup. They do not start Celery, the API,
+Next.js, containers or a database. macOS/Linux framework behavior requires the
+exact candidate CI run, and real application readiness remains unexecuted.
+
+## Final local closure and handoff
+
+The Windows-applicable workflow selection was executed from the candidate with
+the sanitized harness described above. The exact selection command was:
+
+```powershell
+$validationWorkflow = Get-Content .github/workflows/dev-launcher.yml -Raw
+$validationBlock = [regex]::Match($validationWorkflow, '(?ms)^      - name: Cross-platform unit and mocked adapter regressions\r?\n.*?(?=^      - name:)').Value
+$validationFiles = @([regex]::Matches($validationBlock, 'tests/test_[A-Za-z0-9_]+\.py') | ForEach-Object { $_.Value } | Select-Object -Unique)
+if ($validationFiles.Count -ne 64) { throw 'Review changed selection' }
+& C:\sbom\.venv\Scripts\python.exe -B C:\sbom\.windows\worktrees\SBO-98-component-env\.dev-logs\safe_pytest.py @validationFiles --timeout=90
+```
+
+Actual result: **3,331 passed, 45 skipped, one failed, six existing Alembic
+warnings in 1,216.28s**. The sole failure was the synthetic bindings-directory
+rename returning Windows error 5 before replacement. Its underlying cause is
+unconfirmed: sharing/AV interference and an open handle are possibilities, not
+established facts. No production code was changed to make this operation succeed.
+The test now records a Windows-only skip only after verifying unchanged directory
+identity, record bytes, original snapshot and independent reopen, with no retired
+directory. If rename succeeds, all original replacement-refusal assertions run.
+
+Final affected closure:
+
+```powershell
+& C:\sbom\.venv\Scripts\python.exe -B C:\sbom\.windows\worktrees\SBO-98-component-env\.dev-logs\safe_pytest.py tests/test_dev_workspace_bindings.py tests/test_dev_workspace_runtime.py tests/test_dev_native_process.py tests/test_dev_workspace_runtime_native.py --timeout=60
+```
+
+Result: **134 passed, one POSIX-mode skip in 70.94s**. Directory replacement
+actually succeeded in this rerun, exercising the original refusal assertions;
+the Windows preservation-only skip was not taken. The first affected rerun had
+133 passed, one skipped and one synthetic startup timeout: its four-role success
+fixture allowed two seconds for real private-file checks. The success-fixture
+budget is now ten seconds; explicit short-deadline regressions and production
+startup/cleanup budgets are unchanged. Verified cleanup occurred on that timeout.
+This is test setup headroom, not a relaxed product readiness requirement.
+
+The existing Python3.12.10 environment also ran:
+
+```powershell
+& C:\sbom\.windows\worktrees\SBO-98-dev-config-onboarding\.venv\py312-validation\Scripts\python.exe -B C:\sbom\.windows\worktrees\SBO-98-component-env\.dev-logs\safe_pytest.py tests/test_dev_workspace_runtime.py tests/test_dev_workspace_runtime_native.py tests/test_dev_native_process.py tests/test_dev_workspace_dispatch.py tests/test_dev_workspace_cli.py --timeout=60
+```
+
+Result: **167 passed in 85.97s**, against final production code (before only the
+success-fixture budget edit). All **81 changed Python files** and the embedded
+bootstrap passed in-memory Python3.11/3.12 grammar/current compile checks. The
+workflow's scoped Ruff selection and final affected lint/diff checks passed.
+Python3.11 execution is provided by CI, not by this Windows host. Earlier broader
+Python3.12 application-consumer selection lacked Celery/Pydantic; nothing was installed.
+
+The optional preinstalled frontend fixture was attempted alongside native tests.
+It exceeded its bounded public Next package-copy deadline before server startup
+or temporary TLS generation. That combined attempt returned two failures/six
+passes: the obsolete automatic-profile smoke assertion (subsequently corrected)
+and the copy timeout. The separate Python3.12 attempt similarly had one obsolete
+smoke failure/165 passes before the correction; the final 167-pass run supersedes
+it. Local frontend acceptance remains **NOT COMPLETED**. A retry that generates
+temporary TLS material needs its separately approved scope. Existing hosted
+disposable frontend CI is separate evidence, not protected-app acceptance. No
+Python3.14 or Node26 compatibility defect was established by the copy deadline.
+
+The actual candidate's read-only `workspace setup --mode mock --auth native
+--check --json` was repeated with no module overlay and sanitized SQLite sentinel
+URLs. It returned exit1, one JSON object, empty stderr and
+`CONTROL_HOME_ACCESS_UNVERIFIED / OWNER_MISMATCH / EqualSid / winerror=null`.
+Observed protected original/candidate configuration, runtime and state metadata
+stayed unchanged. This execution context cannot approve its own home ownership;
+use the intended approved account or obtain IT review without automatic ACL repair.
+
+Final remote fetch confirmed `origin/main` remained
+`fc59432a4eec46f009b3809bd751e510d3b2887c`. Every pre-existing worktree was still
+clean at the audit; only the two dedicated SBO-101 worktrees had authorized edits.
+SBO-98 branch SHAs were unchanged. The diff from #54 was empty for the private
+enrollment guard, bootstrap entry points, bootstrap/platform services, migrations,
+Dockerfile, production Compose and infrastructure. The intentional H development
+namespace consumers listed above remain the application changes; no DTO/schema
+or authentication policy change is implied. Original service health/database
+contents were not inspected or mutated. No merge or deployment occurred.
+
+Current limitations remain explicit: missing company engine/image/platform/
+nonroot policy; no local runtime; unimplemented approved Windows provider-port
+forwarding and actual-session SQL peer attestation integration; unproven absolute
+libpq wall-clock bounds; browser/OS trust integration and real CDP renderer churn;
+non-atomic enumeration/connect and bind/spawn intervals; and missing independent
+privileged authority. Public isolated/shared start remains blocked. Mock is an
+inert theme/layout fixture. Logs expose bounded redacted metadata rather than
+arbitrary private messages. Full application tests, two-stack acceptance, live
+tenant/auth workflows, schema operations and Native creation/resend were **NOT
+RUN**. The application conftest can mutate databases and was never collected.
+
+### SBO-101 update text for the Engineering Lead to post
+
+Implemented the safe source scope in stacked Draft PRs #55–#71 plus the final
+interpreter-synchronization draft. The authorized remote/main and unchanged
+SBO-98 dependency/worktrees were rechecked. Includes worktree/instance planning,
+independent preparation, Compose/provider/data adapters, protected configuration/
+TLS bindings, resource namespaces, Runtime/readiness, guided setup, read-only
+diagnostics, bounded logs, mock/visual/test adapters and closed Native onboarding
+guidance. Published A–Q heads each have 20 successful checks; final R exact-head
+CI is tracked in its PR. Windows broad selection: 3,331 passed/45 skipped/one
+synthetic rename refusal; corrected affected closure: 134 passed/one POSIX skip;
+Python3.12 runtime/dispatch: 167 passed. Report and T01–T36/A01–A15 ledger retain
+all failed attempts and unexecuted acceptance. No protected resource or security
+setting changed. BLOCKED for real use pending IT state ownership, provider/image/
+nonroot policy, exact disposable resource/DB/private-material approvals and missing
+live transport/trust integrations. Native create/resend remains closed pending
+independent authority/security/DBA approval; HCL onboarding also requires IdP owner
+approval. No merge/deploy. Do not mark SBO-101 complete from fixture CI.

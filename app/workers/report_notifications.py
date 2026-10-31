@@ -13,6 +13,7 @@ from app.logger import log_context, log_event
 
 from ..core.context import minimal_background_context, tenant_scope
 from ..db import SessionLocal
+from ..dev_instance import get_instance_namespace
 from ..models import ReportArtifact, ReportDelivery, ReportSubscription, Tenant
 from ..schemas_reports import preferences_for
 from ..services.audit_service import write_audit_log
@@ -24,6 +25,7 @@ from ..services.report_rendering import render_attachments, render_email
 from ..services.report_storage import artifact_path, configuration_errors, purge_orphaned_artifacts, store_artifact
 from ..settings import get_settings
 
+_INSTANCE_NAMESPACE = get_instance_namespace()
 log = logging.getLogger(__name__)
 RETRYABLE = {"SMTP_TIMEOUT", "SMTP_UNAVAILABLE", "SMTP_TEMPORARY_REJECTION", "REPORT_RENDER_FAILED"}
 
@@ -65,7 +67,9 @@ def _finish(db, row, status, code, context=None):
     return {"status": row.status, "error_code": code}
 
 
-@shared_task(name="report_notifications.generate", queue="reports", ignore_result=True, acks_late=True)
+@shared_task(
+    name="report_notifications.generate", queue=_INSTANCE_NAMESPACE.queue_reports, ignore_result=True, acks_late=True
+)
 def generate(delivery_id, tenant_id):
     settings = get_settings()
     with tenant_scope(minimal_background_context(tenant_id)), log_context(tenant_id=tenant_id):
@@ -275,7 +279,7 @@ def generate(delivery_id, tenant_id):
             return _finish(db, row, str(result.status), result.error_code, context)
 
 
-@shared_task(name="report_notifications.tick", queue="reports", ignore_result=True)
+@shared_task(name="report_notifications.tick", queue=_INSTANCE_NAMESPACE.queue_reports, ignore_result=True)
 def tick():
     if not get_settings().report_notifications_enabled:
         return {"status": "DISABLED"}
@@ -303,7 +307,7 @@ def _tick_for_tenant():
         db.commit()
 
 
-@shared_task(name="report_notifications.dispatch_pending", queue="reports", ignore_result=True)
+@shared_task(name="report_notifications.dispatch_pending", queue=_INSTANCE_NAMESPACE.queue_reports, ignore_result=True)
 def dispatch_pending():
     if not get_settings().report_notifications_enabled:
         return {"status": "DISABLED"}
@@ -339,14 +343,16 @@ def _dispatch_for_tenant():
                 continue
         try:
             generate.apply_async(
-                args=[identifier, tid], queue="reports", time_limit=get_settings().report_generation_timeout_seconds
+                args=[identifier, tid],
+                queue=_INSTANCE_NAMESPACE.queue_reports,
+                time_limit=get_settings().report_generation_timeout_seconds,
             )
         except Exception:
             log.warning("report.enqueue_deferred delivery_id=%s", identifier)
     return {"pending": len(targets)}
 
 
-@shared_task(name="report_notifications.purge", queue="reports", ignore_result=True)
+@shared_task(name="report_notifications.purge", queue=_INSTANCE_NAMESPACE.queue_reports, ignore_result=True)
 def purge():
     if configuration_errors():
         return {"status": "NOT_CONFIGURED"}

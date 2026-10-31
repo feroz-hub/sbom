@@ -11,7 +11,6 @@ import os
 import socket
 import subprocess
 import sys
-import tempfile
 import time
 from pathlib import Path
 from unittest.mock import Mock
@@ -39,36 +38,38 @@ def owned_runtime(tmp_path):
                 child.wait(timeout=10)
 
 
-def sleeping_child(children):
+def sleeping_child(children, directory):
     # Framework Python can exec its final interpreter after Popen returns.
     # Record ownership only after this fixture has reached its stable workload.
-    with tempfile.TemporaryDirectory(prefix="sbom-owned-fixture-") as directory:
-        ready = Path(directory) / "ready"
-        process = subprocess.Popen(
-            [
-                sys.executable, "-c",
-                "import sys,time; from pathlib import Path; Path(sys.argv[1]).touch(); time.sleep(60)",
-                str(ready),
-            ],
-            stdout=subprocess.DEVNULL,
-            stderr=subprocess.DEVNULL,
-            **dev.platform_spawn_options(),
-        )
-        children.append(process)
-        deadline = time.monotonic() + 5
-        while not ready.exists():
-            if process.poll() is not None:
-                pytest.fail("Disposable Python fixture exited before readiness")
-            if time.monotonic() >= deadline:
-                pytest.fail("Disposable Python fixture did not become ready")
-            time.sleep(0.01)
-        return process
+    # pytest retains this directory until owned_runtime stops and reaps its
+    # children. File visibility can precede Path.touch() closing its Windows
+    # handle; deleting the directory immediately after readiness races that close.
+    ready = directory / f"ready-{len(children)}"
+    process = subprocess.Popen(
+        [
+            sys.executable, "-c",
+            "import sys,time; from pathlib import Path; Path(sys.argv[1]).touch(); time.sleep(60)",
+            str(ready),
+        ],
+        stdout=subprocess.DEVNULL,
+        stderr=subprocess.DEVNULL,
+        **dev.platform_spawn_options(),
+    )
+    children.append(process)
+    deadline = time.monotonic() + 5
+    while not ready.exists():
+        if process.poll() is not None:
+            pytest.fail("Disposable Python fixture exited before readiness")
+        if time.monotonic() >= deadline:
+            pytest.fail("Disposable Python fixture did not become ready")
+        time.sleep(0.01)
+    return process
 
 
-def test_native_stop_affects_only_recorded_child(owned_runtime):
+def test_native_stop_affects_only_recorded_child(owned_runtime, tmp_path):
     runtime, children = owned_runtime
-    owned = sleeping_child(children)
-    unrelated = sleeping_child(children)
+    owned = sleeping_child(children, tmp_path)
+    unrelated = sleeping_child(children, tmp_path)
     runtime.processes[owned.pid] = owned
     runtime.register("owned fixture", owned.pid)
     runtime.refresh()
@@ -79,9 +80,9 @@ def test_native_stop_affects_only_recorded_child(owned_runtime):
     assert not runtime.path.exists()
 
 
-def test_native_crashed_child_is_reaped_and_stale_state_cleans(owned_runtime):
+def test_native_crashed_child_is_reaped_and_stale_state_cleans(owned_runtime, tmp_path):
     runtime, children = owned_runtime
-    child = sleeping_child(children)
+    child = sleeping_child(children, tmp_path)
     runtime.processes[child.pid] = child
     runtime.register("crashed fixture", child.pid)
     child.terminate()
@@ -120,7 +121,7 @@ def test_native_unrelated_port_conflict_never_signals(monkeypatch, tmp_path):
 def test_native_cli_missing_node_has_actionable_failure_without_setup(tmp_path):
     env = dict(os.environ, HOME=str(tmp_path), USERPROFILE=str(tmp_path), PATH="")
     result = subprocess.run(
-        [sys.executable, str(Path(dev.__file__).resolve()), "doctor", "--profile", "legacy"],
+        [sys.executable, str(Path(dev.__file__).resolve()), "diagnose", "--profile", "legacy"],
         cwd=tmp_path,
         env=env,
         capture_output=True,
@@ -128,7 +129,8 @@ def test_native_cli_missing_node_has_actionable_failure_without_setup(tmp_path):
         timeout=20,
     )
     assert result.returncode == 1
-    assert "Node.js" in result.stderr and "Install" in result.stderr
+    output = result.stdout + result.stderr
+    assert "NODE_NPM_UNAVAILABLE" in output and "Node/npm" in output
     assert not list(tmp_path.iterdir())
 
 
@@ -137,7 +139,7 @@ def test_native_cli_incomplete_profile_fails_before_setup_without_fallback(tmp_p
     private.mkdir(mode=0o700)
     env = dict(os.environ, HOME=str(tmp_path), USERPROFILE=str(tmp_path), PATH="")
     result = subprocess.run(
-        [sys.executable, str(Path(dev.__file__).resolve()), "start", "--profile", "auto"],
+        [sys.executable, str(Path(dev.__file__).resolve()), "start", "--profile", "greenfield"],
         cwd=tmp_path,
         env=env,
         capture_output=True,
@@ -148,3 +150,26 @@ def test_native_cli_incomplete_profile_fails_before_setup_without_fallback(tmp_p
     assert "incomplete" in result.stderr and "No fallback" in result.stderr
     assert list(tmp_path.iterdir()) == [private]
     assert not list(private.iterdir())
+
+
+def test_native_cli_auto_without_git_refuses_discovery_and_preserves_private_records(tmp_path):
+    private = tmp_path / ".sbom-greenfield-uuid"
+    private.mkdir(mode=0o700)
+    retained = private / "retained-unknown.record"
+    retained.write_bytes(b"synthetic-private-record-must-survive")
+    before = (retained.read_bytes(), retained.stat().st_ino, retained.stat().st_mtime_ns)
+    env = dict(os.environ, HOME=str(tmp_path), USERPROFILE=str(tmp_path), PATH="")
+    result = subprocess.run(
+        [sys.executable, str(Path(dev.__file__).resolve()), "start", "--profile", "auto"],
+        cwd=tmp_path,
+        env=env,
+        capture_output=True,
+        text=True,
+        timeout=20,
+    )
+    assert result.returncode == 1
+    assert "WORKSPACE_REPOSITORY_UNVERIFIED" in result.stderr
+    assert "synthetic-private-record-must-survive" not in result.stdout + result.stderr
+    assert list(tmp_path.iterdir()) == [private]
+    assert list(private.iterdir()) == [retained]
+    assert (retained.read_bytes(), retained.stat().st_ino, retained.stat().st_mtime_ns) == before

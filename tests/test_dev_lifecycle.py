@@ -31,7 +31,8 @@ def isolated(monkeypatch, tmp_path):
     monkeypatch.setattr(dev, "reachable", lambda *args: False)
     monkeypatch.setattr(dev, "service_available", lambda *args: False)
     monkeypatch.setattr(dev, "mailpit_ready", lambda: False)
-    monkeypatch.setattr(dev, "ensure_virtualenv", lambda: None)
+    monkeypatch.setattr(dev, "require_virtualenv", lambda: None)
+    monkeypatch.setattr(dev, "ensure_virtualenv", lambda: pytest.fail("Startup attempted virtualenv preparation"))
     monkeypatch.setattr(dev, "validate_repository_layout", lambda *args, **kwargs: None, raising=False)
     monkeypatch.setattr(dev, "validate_prerequisites", lambda *args, **kwargs: None, raising=False)
     monkeypatch.setattr(dev, "resolve_profile", lambda requested="auto": "legacy" if requested == "auto" else requested, raising=False)
@@ -54,7 +55,7 @@ def state(runtime, services=None):
     return value
 
 
-@pytest.mark.parametrize("command", ["start", "stop", "restart", "status", "doctor", "logs"])
+@pytest.mark.parametrize("command", ["start", "stop", "restart", "status", "diagnose", "doctor", "logs"])
 def test_parse_commands(command):
     assert dev.parse_args([command, "--verbose"]).command == command
     assert dev.parse_args(["--verbose", command]).verbose
@@ -359,7 +360,7 @@ def test_check_overrides_lifecycle_without_mutation(monkeypatch):
     monkeypatch.setattr(dev, "stop_application", lambda: pytest.fail("stop during check"))
     checked = []
     monkeypatch.setattr(dev, "start_application", lambda args: pytest.fail("startup during check"))
-    monkeypatch.setattr(dev, "doctor", lambda args: checked.append(args.check), raising=False)
+    monkeypatch.setattr(dev, "diagnose", lambda args: checked.append(args.check), raising=False)
     dev.main()
     assert checked == [True]
 

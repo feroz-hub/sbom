@@ -7,6 +7,7 @@ Provides a single source of truth for application configuration.
 Supports both pydantic v2 with pydantic-settings and standalone pydantic v2.
 """
 
+import os
 from pathlib import Path
 from typing import Any, Literal
 
@@ -973,6 +974,7 @@ Settings.APP_VERSION = "2.0.0"
 # =========================================================================
 
 _settings_instance: Settings | None = None
+_settings_resource_id: str | None = None
 
 
 def get_analysis_legacy_level() -> int:
@@ -990,9 +992,24 @@ def get_settings() -> Settings:
     Returns:
         Settings: The application settings instance.
     """
-    global _settings_instance
+    global _settings_instance, _settings_resource_id
+    from app.dev_instance import InstanceNamespaceError, get_instance_namespace
+
+    resource_id = get_instance_namespace().resource_id
+    if resource_id is not None and (
+        os.environ.get("APP_ENVIRONMENT") != "development" or os.environ.get("PYTHON_DOTENV_DISABLED") != "1"
+    ):
+        raise InstanceNamespaceError("DEV_INSTANCE_ENVIRONMENT_UNVERIFIED")
+    if _settings_instance is not None and resource_id != _settings_resource_id:
+        raise InstanceNamespaceError("DEV_INSTANCE_ENVIRONMENT_UNVERIFIED")
     if _settings_instance is None:
-        _settings_instance = Settings()
+        # Isolated children receive an already validated component projection.
+        # Pydantic's dotenv source is independent of python-dotenv's disable flag.
+        candidate = Settings(_env_file=None) if resource_id is not None else Settings()
+        if resource_id is not None and (not candidate.auth_enabled or candidate.dev_default_tenant):
+            raise InstanceNamespaceError("DEV_INSTANCE_ENVIRONMENT_UNVERIFIED")
+        _settings_instance = candidate
+        _settings_resource_id = resource_id
     return _settings_instance
 
 
@@ -1002,8 +1019,9 @@ def reset_settings() -> None:
 
     Useful for testing or forcing a reload from environment variables.
     """
-    global _settings_instance
+    global _settings_instance, _settings_resource_id
     _settings_instance = None
+    _settings_resource_id = None
 
 
 def mask_database_url(url: str) -> str:

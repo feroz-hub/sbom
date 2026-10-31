@@ -9,6 +9,8 @@ A populated pre-UUID target must not cross revision 100 through these commands.
 Existing compatible UUID targets require their own transition review.
 [Development profiles](development/README.md) and
 [configuration precedence](reference/configuration.md) describe local use.
+The SBO-98 development status adapter described below does not authorize or run
+this staging procedure, and rejects staging/production environment scope.
 
 ## Prerequisites and target
 
@@ -20,7 +22,7 @@ observations, not verified current services or production endpoints; the
 home-directory Greenfield developer profile uses different ports. No MailKit
 service is introduced. Do not assume credentials or resources apply elsewhere.
 
-Create the new database using the normal PostgreSQL operator tooling (`createdb` or the approved platform console). Obtain connection credentials through secret management; do not paste a connection string into a ticket, command history or repository. Export `DATABASE_URL` securely to the new database, and verify database name/server and that no public application tables exist. Use matching PostgreSQL-version backup/restore tools.
+Create the new database using the normal PostgreSQL operator tooling (`createdb` or the approved platform console). Obtain connection credentials through secret management; do not paste a connection string into a ticket, command history or repository. Supply the approved target `DATABASE_URL` through the operator's secret-managed process environment, and verify database name/server and that no public application tables exist. Use matching PostgreSQL-version backup/restore tools. Do not use a manual secret export as a workaround for a development configuration mismatch.
 
 ## Configuration
 
@@ -42,7 +44,7 @@ The API remains authenticated when HCL is disabled. HCL bearer tokens fail close
 
 ## Schema and normal seeds
 
-From the repository root with the project virtual environment and securely exported target URL:
+From the repository root with the project virtual environment and approved target process environment:
 
 ```sh
 .venv/bin/python -m alembic upgrade head
@@ -62,9 +64,52 @@ Migration 048 seeds and validates the immutable authorization catalogue transact
 
 Start the normal API, Redis, Celery security-mail worker and Beat, and production-built BFF through the existing deployment tooling. Check backend liveness, IAM readiness/worker heartbeat and BFF `/api/ready`. Configure ingress to block direct backend access and trust only approved proxy ranges. Do not invent HCL settings to satisfy startup.
 
+## Read-only development enrollment inspection
+
+For an existing local Native developer profile, prefer the unified launcher:
+
+```sh
+python scripts/dev.py setup --native-admin-status --profile legacy --legacy-config managed --confirm-database sbom_analyser_dev
+python scripts/dev.py setup --native-admin-status --profile greenfield --confirm-database sbom_greenfield_uuid
+python scripts/bootstrap_native_platform_user.py --profile legacy --legacy-config managed --confirm-database sbom_analyser_dev status
+```
+
+The opt-in standalone route delegates before SQLAlchemy/application imports and
+never enables enrollment. Exact database confirmation precedes driver access;
+the existing selected snapshot supplies protected credentials without shell
+exports. Managed selection matches prepared startup defaults; Windows/env Native
+installations select their family and exact saved local target. Unrelated `.env`
+files are ignored without being read, because this status path imports no
+Settings and pins explicit psycopg connection keywords. It verifies server
+read-only state, actual database and migration head before aggregate IAM queries,
+then rolls back/closes without commits, audits, users, tokens or mail.
+
+JSON contains allowlisted state and booleans, never email/user IDs. Exit 0 means a
+valid observation, including `ENROLLMENT_REQUIRED`, not readiness or authority to
+enroll. Inspection errors exit 1; incompatible flags exit 2. It works with the
+application stopped but still validates original Native configuration. The
+internal child-environment baseline disables bootstrap; it is not executable
+enrollment permission. Profile-based create/resend is not implemented and is
+refused. A future privileged runner requires explicit Settings dotenv isolation,
+source revalidation, live prerequisite validation and operator approval.
+
+The [configuration reference](reference/configuration.md#native-enrollment-inspection-sbo-98-phase-5-status-increment)
+records the raw-environment-versus-managed-child root cause, aggregate meanings,
+compatibility differences and HCL.CS approval gates. This increment reported 68
+isolated operator/CLI unit tests passing; real database, email/activation and
+native cross-platform acceptance were not run. It does not complete Phase 5.
+
 ## Operator bootstrap
 
-Enable `NATIVE_PLATFORM_BOOTSTRAP_ENABLED=true` in the operator environment. Authentication, Native enrollment and encrypted outbox must also be enabled. Use only approved identity information. Example values below are placeholders, not permission to send external mail:
+This existing explicit-environment staging procedure is separate from the new
+development status path; no profile-based privileged runner is wired. First
+review aggregate state where applicable, obtain explicit target/action/identity
+approval and validate actual JWT/session/rate-limit, Redis, SMTP/encrypted outbox,
+worker/Beat and verified HTTPS readiness. Then enable
+`NATIVE_PLATFORM_BOOTSTRAP_ENABLED=true` only for the approved operator window.
+Authentication, Native enrollment and encrypted outbox must also be enabled.
+Use only approved identity information. Example values below are placeholders,
+not permission to send external mail:
 
 ```sh
 .venv/bin/python scripts/bootstrap_native_platform_user.py \
@@ -74,7 +119,14 @@ Enable `NATIVE_PLATFORM_BOOTSTRAP_ENABLED=true` in the operator environment. Aut
   --phone approved-test-phone --operator-reference approved-change-reference
 ```
 
-The exact confirmation must match the securely supplied `DATABASE_URL` database name. The command has no password option and returns only safe status. It creates one pending global IAMUser, Native identity, singleton PENDING reservation, normal five-hour activation token, encrypted outbox and audit. It creates no tenant or effective platform grant. It does not send mail itself.
+The exact confirmation must match the securely supplied `DATABASE_URL` database
+name. The command has no password option. Its legacy result includes account
+ID/email and delivery state, so handle output as restricted identity information;
+it is not the aggregate development status contract. It creates one pending
+global IAMUser, Native identity, singleton PENDING reservation, normal five-hour
+activation token, encrypted outbox and audit. It creates no tenant or effective
+platform grant. It does not send mail itself. No live enrollment was performed
+by the SBO-98 status increment.
 
 The singleton primary key/check constraints plus PostgreSQL transaction advisory lock serialize independent CLI processes before any user creation. Existing usable database Platform Admins, a pending reservation, a completed reservation or identity collisions refuse new enrollment. The reservation uses a restrictive user foreign key and survives completion; disabled/deleted/restarted application state cannot reopen bootstrap. Do not delete the guard manually.
 
@@ -84,7 +136,13 @@ The existing Celery security-mail worker dispatches committed outbox rows throug
 
 Activation atomically creates the Argon2id credential, marks the user verified/ACTIVE, calls the existing platform authorization service, marks the reservation COMPLETED and persists audits. Failure to grant or audit rolls back activation and token consumption. The reserved user needs no tenant membership. Normal non-bootstrap activation is unchanged.
 
-After completion, disable `NATIVE_PLATFORM_BOOTSTRAP_ENABLED`. Even if accidentally left true, the durable guard refuses another initial user. A pending user's activation can complete after this operator creation flag is disabled; normal Native enrollment/activation flags must remain enabled. Sign in through `/native-sign-in`.
+After completion, verify the effective active/verified Platform Admin grant
+through the approved application authority, then disable
+`NATIVE_PLATFORM_BOOTSTRAP_ENABLED`. Even if accidentally left true, the durable
+guard refuses another initial user. A pending user's activation can complete
+after this operator creation flag is disabled; normal Native enrollment/activation
+flags must remain enabled. Sign in through `/native-sign-in`. Never insert a
+password, activation state or grant through SQL or delete the reservation.
 
 ## Status and recovery
 
@@ -95,7 +153,14 @@ After completion, disable `NATIVE_PLATFORM_BOOTSTRAP_ENABLED`. Even if accidenta
   --confirm-database sbom_native_greenfield resend-activation
 ```
 
-Status is read-only and works with bootstrap mode disabled. It shows enablement, state, user ID/email/account status, delivery status and usable-admin availability. It never prints hashes, tokens, ciphertext or secrets.
+These are the older no-profile commands, retained for the explicitly prepared
+operator environment. Its status works with bootstrap mode disabled but imports
+application settings and the wrapper calls `db.commit()` even on status; do not
+treat it as the strict read-only diagnostic path. It shows enablement, state,
+user ID/email/account status, delivery status and usable-admin availability.
+Treat output as restricted identity information. It does not print passwords,
+hashes, activation tokens, ciphertext or private keys. Prefer the profile-based
+aggregate route above for local development inspection.
 
 Resend requires explicit bootstrap enablement, no usable admin and the same PENDING reservation. It rotates the normal activation token, cancels earlier pending delivery, enqueues a fresh encrypted email and audits; it never creates another user. Expired activation is recoverable this way. Completion blocks resend. An unrelated account/status conflict requires operator review, not manual grant/guard deletion.
 
@@ -138,3 +203,27 @@ SBOM_RUN_HTTP_ACCEPTANCE=1 SBOM_RUN_BACKUP_ACCEPTANCE=1 \
 The greenfield test needs the existing approved loopback Mailpit and an explicitly disposable test PostgreSQL URL. It creates a second completely empty DB, runs ordinary Alembic (without fixture seeding there), starts an isolated Redis/Celery worker, races two real bootstrap CLI processes and consumes captured emails. It uses the minimum 30-second activation-resend cooldown and the unchanged 60-second reset cooldown. Do not run it against production infrastructure. The HTTP test needs a Native-only production frontend build and launches two actual BFF processes. The container override selects matching PostgreSQL backup tools, not a production backup target.
 
 Build the Native-only frontend with `NEXT_PUBLIC_AUTH_ENABLED=true`, `NEXT_PUBLIC_HCL_AUTH_ENABLED=false` and empty HCL issuer/client settings. The Dockerfile exposes the new HCL switch as a build argument. The server Compose backfill issuer and OIDC transaction-key file are optional for Native-only mode; HCL deployments must still supply their real backfill identity configuration and mounted transaction key. `NATIVE_IAM_PRODUCTION` defaults true in server Compose; a local Mailpit-only override must be explicitly false and must not be used to claim production validation.
+
+## SBO-101 workspace guidance: live enrollment remains closed
+
+Use `python scripts/dev.py workspace plan --scope administrator --mode isolated
+--auth native` for read-only first-run guidance. With a registered mode,
+`workspace prepare --scope administrator` also only presents guidance. Native
+status is UNKNOWN until an approved exact-installation inspection exists; the
+command does not query a database, gather identities/passwords or create/resend.
+Existing valid administrators should sign in normally; pending/completed
+reservations must be preserved. Mock/shared previews cannot enroll users.
+
+The service's email, first/last name, phone and operator-reference requirements
+remain unchanged. A future authorized flow must use its audited singleton and
+encrypted activation outbox. The human sets a password only on the verified HTTPS
+activation page. The existing managed enrollment child is unconditionally closed
+pending the [independent-authority design](engineering/dev-workspaces-security-sbo101.md),
+security/DBA/Engineering Lead approval and separately approved disposable tests.
+HCL/Entra needs its separate IdP-owned procedure and has no Native-password fallback.
+
+The older acceptance commands and transport approvals above refer to their
+original scope. They do not authorize SBO-101 to adopt the protected checkout's
+PostgreSQL, Redis or Mailpit, initialize a schema, run destructive fixtures,
+generate private material or change trust. Approve exact isolated resources and
+operations first; do not use those commands to bypass workspace blockers.

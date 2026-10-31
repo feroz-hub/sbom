@@ -263,14 +263,18 @@ def test_native_windows_cooperative_task_completion_and_scheduler_close(tmp_path
             child = subprocess.Popen([sys.executable, "-u", "-c", NATIVE_PROGRAM, str(tmp_path), mode], env=env,
                                      stdout=output, stderr=subprocess.STDOUT, **dev.platform_spawn_options())
         runtime.processes[child.pid] = child
-        runtime.register(component, child.pid)
-        record = runtime.state["services"][component]
         deadline = time.monotonic() + 15
         while not (tmp_path / "started").exists():
             assert child.poll() is None, log.read_text(errors="replace")
             assert time.monotonic() < deadline, log.read_text(errors="replace")
-            runtime.refresh()
             time.sleep(.05)
+        # This fixture tests active-task warm shutdown and scheduler close.
+        # Establish the actual fixture workload first, as the other native
+        # smoke fixtures do. A Windows venv wrapper can have initializing
+        # descendants whose image is not yet queryable. Production ownership
+        # checks still refuse them; do not relax those checks for a fixture.
+        runtime.register(component, child.pid)
+        record = runtime.state["services"][component]
         runtime.refresh()
         forced = []
         original = runtime._windows_terminate

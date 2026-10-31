@@ -25,6 +25,14 @@ def isolated_runtime(monkeypatch, tmp_path):
     monkeypatch.setattr(dev, "resolve_profile", lambda requested="auto": "legacy" if requested == "auto" else requested)
 
 
+@pytest.fixture
+def no_database_creation(monkeypatch):
+    create = MagicMock(side_effect=AssertionError("Credential validation attempted database creation"))
+    monkeypatch.setattr(dev, "ensure_database", create)
+    yield create
+    create.assert_not_called()
+
+
 def mock_virtualenv_handoff(monkeypatch, tmp_path, platform):
     python = tmp_path / "venv" / "python.exe"
     python.parent.mkdir()
@@ -89,11 +97,14 @@ def test_virtualenv_handoff_does_not_relaunch_inside_venv(monkeypatch, tmp_path)
     dev.ensure_virtualenv()
 
 
-@pytest.mark.parametrize("keys,expected,masked", [
-    ("Secret9!\r", "Secret9!", "********"),
-    ("\bAb\bC\r", "AC", "**\b \b*"),
-    ("A\x00KB\xe0MC\r", "ABC", "***"),
-])
+@pytest.mark.parametrize(
+    "keys,expected,masked",
+    [
+        ("Secret9!\r", "Secret9!", "********"),
+        ("\bAb\bC\r", "AC", "**\b \b*"),
+        ("A\x00KB\xe0MC\r", "ABC", "***"),
+    ],
+)
 def test_windows_password_is_masked(monkeypatch, capsys, keys, expected, masked):
     characters = iter(keys)
     monkeypatch.setattr(dev.sys, "platform", "win32")
@@ -119,6 +130,7 @@ def test_windows_password_cancellation_is_safe(monkeypatch, capsys, key):
 def test_username_entry_cancellation_is_safe(exception):
     def cancelled(prompt):
         raise exception
+
     with pytest.raises(dev.SetupError, match="credential entry cancelled"):
         dev.read_postgres_credentials(input_fn=cancelled)
 
@@ -133,21 +145,26 @@ def test_non_windows_password_uses_getpass(monkeypatch, platform):
 
 
 @pytest.mark.parametrize("valid", [False, True])
-def test_interactive_credentials_validated_before_persistence(monkeypatch, tmp_path, capsys, valid):
+def test_interactive_credentials_validated_before_persistence(
+    monkeypatch, tmp_path, capsys, valid, no_database_creation
+):
     config = tmp_path / ".env.dev.local"
     prompts = []
     attempts = []
 
-    def validate(url):
+    def validate(url, *, allow_missing):
+        assert allow_missing is False
         attempts.append(url)
         assert not config.exists()
         if not valid or dev.unquote(dev.urlsplit(url).password or "") != "private-secret":
             raise dev.SetupError("invalid")
 
-    monkeypatch.setattr(dev, "ensure_database", validate)
+    monkeypatch.setattr(dev, "validate_database_credentials", validate)
     kwargs = dict(
-        config_path=config, repository_env=tmp_path / "missing.env",
-        pgpass_path=tmp_path / "missing.pgpass", interactive=True,
+        config_path=config,
+        repository_env=tmp_path / "missing.env",
+        pgpass_path=tmp_path / "missing.pgpass",
+        interactive=True,
         input_fn=lambda prompt: prompts.append(prompt) or "  ",
         password_fn=lambda prompt: "private-secret",
     )
@@ -259,10 +276,14 @@ def test_docker_database_credentials_are_unchanged() -> None:
     )
 
 
-def test_saved_local_database_credentials_are_reused(monkeypatch: pytest.MonkeyPatch, tmp_path: Path) -> None:
+def test_saved_local_database_credentials_are_reused(
+    monkeypatch: pytest.MonkeyPatch, tmp_path: Path, no_database_creation
+) -> None:
     saved_url = "postgresql+psycopg://saved:saved-secret@localhost:5432/sbom_analyser_dev"
     checked = []
-    monkeypatch.setattr(dev, "ensure_database", lambda url: checked.append(url))
+    monkeypatch.setattr(
+        dev, "validate_database_credentials", lambda url, *, allow_missing: checked.append((url, allow_missing))
+    )
     resolved = dev.resolve_local_database_url(
         saved_url,
         5432,
@@ -271,7 +292,7 @@ def test_saved_local_database_credentials_are_reused(monkeypatch: pytest.MonkeyP
         interactive=False,
     )
     assert resolved == saved_url
-    assert checked == [saved_url]
+    assert checked == [(saved_url, False)]
 
 
 @pytest.mark.parametrize("host", ["localhost", "127.0.0.1"])
@@ -296,9 +317,7 @@ def test_pgpass_local_credentials_are_parsed_without_exposing_password(tmp_path:
         "localhost:5432:sbom_analyser_dev:local-user:local\\:secret\n"
     )
     candidates = dev.pgpass_database_candidates(path, 5432)
-    assert candidates == [
-        "postgresql+psycopg://local-user:local%3Asecret@127.0.0.1:5432/sbom_analyser_dev"
-    ]
+    assert candidates == ["postgresql+psycopg://local-user:local%3Asecret@127.0.0.1:5432/sbom_analyser_dev"]
 
 
 def test_standard_pgpass_paths() -> None:
@@ -309,15 +328,16 @@ def test_standard_pgpass_paths() -> None:
 
 
 def test_local_prompt_defaults_to_postgres_and_hides_password(
-    monkeypatch: pytest.MonkeyPatch, tmp_path: Path, capsys: pytest.CaptureFixture[str]
+    monkeypatch: pytest.MonkeyPatch, tmp_path: Path, capsys: pytest.CaptureFixture[str], no_database_creation
 ) -> None:
     prompts = []
 
-    def validate(url: str) -> None:
+    def validate(url: str, *, allow_missing) -> None:
+        assert allow_missing is False
         if dev.unquote(dev.urlsplit(url).password or "") != "prompt-secret":
             raise dev.SetupError("invalid")
 
-    monkeypatch.setattr(dev, "ensure_database", validate)
+    monkeypatch.setattr(dev, "validate_database_credentials", validate)
     resolved = dev.resolve_local_database_url(
         None,
         5432,
@@ -333,15 +353,16 @@ def test_local_prompt_defaults_to_postgres_and_hides_password(
 
 
 def test_invalid_prompted_credentials_can_be_retried_without_password_output(
-    monkeypatch: pytest.MonkeyPatch, tmp_path: Path, capsys: pytest.CaptureFixture[str]
+    monkeypatch: pytest.MonkeyPatch, tmp_path: Path, capsys: pytest.CaptureFixture[str], no_database_creation
 ) -> None:
     passwords = iter(["wrong-secret", "right-secret"])
 
-    def validate(url: str) -> None:
+    def validate(url: str, *, allow_missing) -> None:
+        assert allow_missing is False
         if dev.unquote(dev.urlsplit(url).password or "") != "right-secret":
             raise dev.SetupError("invalid")
 
-    monkeypatch.setattr(dev, "ensure_database", validate)
+    monkeypatch.setattr(dev, "validate_database_credentials", validate)
     resolved = dev.resolve_local_database_url(
         None,
         5432,
@@ -358,13 +379,17 @@ def test_invalid_prompted_credentials_can_be_retried_without_password_output(
     assert "right-secret" not in output
 
 
-def test_invalid_local_credentials_are_not_persisted(monkeypatch: pytest.MonkeyPatch, tmp_path: Path) -> None:
+def test_invalid_local_credentials_are_not_persisted(
+    monkeypatch: pytest.MonkeyPatch, tmp_path: Path, no_database_creation
+) -> None:
     config = tmp_path / ".env.dev.local"
-    monkeypatch.setattr(dev, "ensure_database", lambda url: (_ for _ in ()).throw(dev.SetupError("invalid")))
-    with pytest.raises(dev.SetupError, match="credentials are required"):
+    invalid_url = dev.local_database_url("fixture-user", "fixture-invalid-secret", 5432)
+    validate = MagicMock(side_effect=dev.SetupError("invalid"))
+    monkeypatch.setattr(dev, "validate_database_credentials", validate)
+    with pytest.raises(dev.SetupError, match="SAVED_DATABASE_CREDENTIALS_REVIEW_REQUIRED"):
         dev.configure_local_database(
-            {"DATABASE_URL": dev.default_database_url("local", 5432)},
-            {},
+            {"DATABASE_URL": invalid_url},
+            {"DATABASE_URL": invalid_url},
             5432,
             config_path=config,
             repository_env=tmp_path / "missing.env",
@@ -372,13 +397,17 @@ def test_invalid_local_credentials_are_not_persisted(monkeypatch: pytest.MonkeyP
             interactive=False,
         )
     assert not config.exists()
+    validate.assert_called_once_with(invalid_url, allow_missing=False)
 
 
-def test_valid_local_credentials_are_persisted(monkeypatch: pytest.MonkeyPatch, tmp_path: Path) -> None:
+def test_explicit_valid_local_credentials_are_persisted_without_ambient_adoption(
+    monkeypatch: pytest.MonkeyPatch, tmp_path: Path, no_database_creation
+) -> None:
     repository_env = tmp_path / ".env"
-    repository_env.write_text("DATABASE_URL=postgresql://local:valid-secret@localhost:5432/production_name\n")
+    repository_env.write_text("DATABASE_URL=postgresql://ambient:must-not-adopt@localhost:5432/production_name\n")
     config = tmp_path / ".env.dev.local"
-    monkeypatch.setattr(dev, "ensure_database", lambda url: None)
+    validate = MagicMock()
+    monkeypatch.setattr(dev, "validate_database_credentials", validate)
     values = {"DATABASE_URL": dev.default_database_url("local", 5432)}
     dev.configure_local_database(
         values,
@@ -387,12 +416,14 @@ def test_valid_local_credentials_are_persisted(monkeypatch: pytest.MonkeyPatch, 
         config_path=config,
         repository_env=repository_env,
         pgpass_path=tmp_path / "missing.pgpass",
-        interactive=False,
+        interactive=True,
+        input_fn=lambda prompt: "local",
+        password_fn=lambda prompt: "valid-secret",
     )
     persisted = dev.read_config(config)
-    assert persisted["DATABASE_URL"] == (
-        "postgresql+psycopg://local:valid-secret@127.0.0.1:5432/sbom_analyser_dev"
-    )
+    assert persisted["DATABASE_URL"] == ("postgresql+psycopg://local:valid-secret@127.0.0.1:5432/sbom_analyser_dev")
+    validate.assert_called_once_with(persisted["DATABASE_URL"], allow_missing=False)
+    assert "must-not-adopt" not in config.read_text()
 
 
 def test_fresh_explicit_local_selection_sets_development_urls_without_mutating_input() -> None:
@@ -593,7 +624,7 @@ def test_check_mode_does_not_start_services_or_processes(
     monkeypatch.setattr(dev, "ensure_database", lambda url: pytest.fail("database touched"))
     monkeypatch.setattr(dev, "start_process", lambda *args: pytest.fail("process started"))
     monkeypatch.setattr(dev, "wait_for_mailpit_ready", lambda *args: pytest.fail("readiness wait started"))
-    dev.main()
+    assert dev.main() == 1  # Missing prepared configuration is reported, never created.
     output = capsys.readouterr().out
     assert "read-only checks finished" in output
     assert "BEGIN PRIVATE KEY" not in output
@@ -629,7 +660,9 @@ def frontend_install(monkeypatch, tmp_path):
 
     def install(command):
         assert command == ["npm", "ci", "--prefix", "frontend"]
-        (frontend / "node_modules").mkdir(exist_ok=True)
+        cli = frontend / "node_modules/next/dist/bin/next"
+        cli.parent.mkdir(parents=True, exist_ok=True)
+        cli.touch()
         return SimpleNamespace(returncode=0)
 
     runner = MagicMock(side_effect=install)
@@ -660,6 +693,22 @@ def test_frontend_manifest_change_reinstalls(frontend_install, manifest):
     assert runner.call_count == 2
     assert stamp.read_text() != previous
     dev.ensure_frontend()
+    assert runner.call_count == 2
+
+
+def test_removed_next_cli_with_valid_stamp_is_reinstalled_once(frontend_install):
+    frontend, runner = frontend_install
+    dev.ensure_frontend(certificate=False)
+    stamp = frontend / "node_modules/.sbom-dependencies-sha256"
+    original_stamp = stamp.read_bytes()
+    cli = frontend / "node_modules/next/dist/bin/next"
+    cli.unlink()
+    assert stamp.read_bytes() == original_stamp
+    assert dev.ensure_frontend(certificate=False) == "npm"
+    assert runner.call_count == 2
+    assert cli.is_file()
+    assert stamp.read_bytes() == original_stamp
+    dev.ensure_frontend(certificate=False)
     assert runner.call_count == 2
 
 
@@ -753,19 +802,27 @@ def test_readiness_validates_api_database_and_iam(monkeypatch):
     import io
     import json
     from contextlib import nullcontext
+
     requests = []
     manager = MagicMock()
     manager.state = {"services": {"API": {"pid": 100}}}
     manager.service_status.return_value = "RUNNING"
     monkeypatch.setattr(dev, "background_health", lambda *args, **kwargs: None)
+
     def response(url, **kwargs):
         requests.append(url)
         body = io.StringIO(json.dumps({"database": {"available": True}, "ready": True}))
         body.status = 200
         return nullcontext(body)
+
     monkeypatch.setattr(dev, "urlopen", response)
-    dev.wait_http_component(manager, {}, "API", [("http://127.0.0.1:18000/health", "database"),
-                                                  ("http://127.0.0.1:18000/ready/iam", "iam")], timeout=1)
+    dev.wait_http_component(
+        manager,
+        {},
+        "API",
+        [("http://127.0.0.1:18000/health", "database"), ("http://127.0.0.1:18000/ready/iam", "iam")],
+        timeout=1,
+    )
     assert requests == ["http://127.0.0.1:18000/health", "http://127.0.0.1:18000/ready/iam"]
 
 

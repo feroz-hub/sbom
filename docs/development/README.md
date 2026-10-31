@@ -5,6 +5,161 @@ Use only `python scripts/dev.py` from a complete checkout. Read the
 TLS and recovery, and the [bootstrap guide](../../scripts/BOOTSTRAP.md) for
 controlled setup. Production deployment uses its own Compose/runtime commands.
 
+## Multiple worktrees: SBO-101 foundation
+
+The first SBO-101 increment adds authoritative Git discovery, public instance
+proposals and protected registry metadata. It does **not** provision or start an
+isolated application stack. An unprepared checkout invoked without arguments now
+shows a read-only inventory instead of attempting application startup. Existing
+installations and explicit legacy commands retain their existing dispatch.
+
+```sh
+python scripts/dev.py workspace list
+python scripts/dev.py workspace status --json
+python scripts/dev.py workspace diagnose
+python scripts/dev.py workspace plan --mode isolated --auth native
+python scripts/dev.py workspace plan --worktree <git-worktree-path> --mode mock --auth native
+python scripts/dev.py workspace prepare --scope registry --mode isolated --auth native
+```
+
+`list`, `status`, `diagnose` and `plan` do not create directories, locks or registry
+records, read private environment files, connect to services or install packages.
+Git discovery uses bounded local helpers with index writes, fsmonitor, filters,
+hooks, submodule recursion and network transports disabled or refused. Unknown
+Git/filesystem identity stays BLOCKED. A clean checkout never proves its agent is
+idle; `agent_owner` remains UNKNOWN until coordination outside Git establishes it.
+
+`prepare --scope registry` requires a verifiable user-owned home anchor and an
+interactive exact-instance confirmation. Its private metadata lives under
+`~/.sbom-dev/repositories/<repository-id>/instances`; it does not repair or require
+private ACLs on existing Git directories. It rechecks commit,
+filesystem identities, public dependency manifests, controller source and the
+plan before recording public metadata. It creates no credentials, certificates,
+database, container or application process. Changed inputs invalidate that
+consent. Unknown artifacts or unsafe permissions stop the operation without
+repair or deletion. On a noninteractive shell the command reports approval is
+required. Keep partial metadata for explicit recovery.
+
+The plan separates dependency preparation from configuration, providers,
+database operations, TLS material/trust and administrator enrollment. Missing
+`.env.dev.local` does not block a **dependency-only proposal**. Executing that
+dependency category is now separately available on the dependent PR B branch:
+
+```sh
+python scripts/dev.py workspace plan --scope dependencies
+python scripts/dev.py workspace prepare --scope dependencies
+```
+
+Review workstation package-source policy first. Preparation requires exact,
+time-limited interactive consent for the displayed fingerprint. It uses binary
+Python packages from PyPI and locked npm registry packages with install scripts
+disabled. Corporate package-source overrides are not silently inherited; a
+workstation requiring another index needs its reviewed policy adapter first.
+No private `.env` file is read. It creates physical worktree-local dependencies,
+private attempt state and freshness stamps; interrupted or unstamped artifacts
+are preserved and block automatic replacement. A matching stamp still requires
+live package verification before a skip. Compiler readiness remains explicitly
+unverified; ordinary startup still requires its existing native compiler check.
+New dependency-only or interrupted installations continue to receive inventory
+until private configuration is prepared. Existing venv-only dispatch is retained.
+
+The remaining lifecycle operations are delivered in later increments;
+registered-instance `workspace start/stop/restart` now name the concrete missing
+provider, credential-ownership, Settings-child, Runtime and TLS adapters and a
+proposed log location. They remain BLOCKED and never manage processes or adopt
+the old checkout's services. `stop` preserves unknown records even if source
+changed. Existing applications still use their original profile launcher for
+safe shutdown. Logs/test/comparison adapters are separate increments. Do not
+treat a proposal or a registry state as readiness.
+
+The dependent safe-test increment adds:
+
+```sh
+python scripts/dev.py workspace test --suite unit --plan --json
+python scripts/dev.py workspace test --suite unit
+```
+
+This is a limited reviewed pure-contract suite, not the application test suite.
+It requires that worktree's verified SBO-101 dependency stamp, stages only the
+reviewed source closure under a new private directory and disables application
+conftest, dotenv, plugin autoload, source pytest configuration and shared temp
+cleanup. Child output is reduced to validated counts/codes; retained owned
+artifacts are reported. Never substitute a shared interpreter or run the normal
+application fixtures against a protected database. Database/integration/migration
+and `all` suites remain BLOCKED until an exact disposable-target adapter and its
+operations are separately approved. A marker or environment variable cannot
+authorize them.
+
+First-administrator guidance is a separate read-only category:
+
+```sh
+python scripts/dev.py workspace plan --scope administrator --mode isolated --auth native
+python scripts/dev.py workspace prepare --scope administrator
+```
+
+The second form reuses a previously registered mode; it also performs guidance
+only. Neither inspects a database or requests identity fields/passwords. Native
+reports UNKNOWN until an approved exact-installation status adapter exists;
+HCL reports its separate Engineering Lead/IdP approval requirement. Preview
+modes cannot enroll an administrator. Live Native creation/resend stays closed.
+See the [authority proposal](../engineering/dev-workspaces-security-sbo101.md)
+and [Native guide](../native-iam-greenfield-setup.md) before any real enrollment.
+
+Read-only observation commands:
+
+```sh
+python scripts/dev.py workspace status --json
+python scripts/dev.py workspace diagnose --host --json
+python scripts/dev.py workspace compare --baseline <git-listed-baseline> --worktree <git-listed-candidate>
+python scripts/dev.py workspace logs --service api --lines 80
+python scripts/dev.py workspace logs --service worker --follow --json
+```
+
+`list` reports Git/registry observations; its PASS is not application readiness.
+`status`/`diagnose` return BLOCKED/exit 1 until actual resource/runtime/readiness
+adapters exist, including when a descriptor claims READY. No service is contacted.
+Host opt-in shows CPU and home-filesystem disk observations only, with no memory
+or capacity approval claim. Comparison identifies sources and proposed resources;
+API, screenshots, traces, visual and authenticated acceptance remain unverified.
+`diagnose` also reuses the dependency inspector for public manifest/tool/stamp
+observations, with bounded owned Python/Node probes and no installers or private
+environment files. Package/compiler readiness remains unverified; unsafe source
+permissions receive a specific review code. `status` performs no software probes.
+
+Logs require a registered instance and a verified private local source under
+`~/.sbom-dev/instances/<UUID>/.dev-logs`. Only timestamp/level/allowlisted error
+class/known Windows error/reported status metadata is shown; message content stays
+private. Human output offers the verified path for direct local review. Fixed
+components include setup/API/frontend/default/reports/Beat; external provider logs
+remain BLOCKED until an engine ownership adapter exists. Missing logs are SKIPPED,
+not created. Lines are bounded to 1–200; follow is bounded to 30 seconds and JSON
+follow emits one object per line. No old checkout log fallback or state deletion.
+
+Mock/shared-backend runtime previews, real browser comparison and full isolated
+start/stop are not implemented by this foundation. Further source adapters continue
+without an installed engine; unavailable runtimes and unapproved policies block
+real provisioning, not independent source development or synthetic validation. See the
+[implementation evidence](../engineering/dev-workspaces-sbo101.md) and
+[acceptance ledger](../engineering/dev-workspaces-acceptance-sbo101.md) for exact
+commands/results and unexecuted scenarios. A passing contract is not E2E evidence.
+
+For ATLAS/NEXUS work, first confirm each agent's branch and reserved files. Use
+Git-listed canonical paths explicitly in the plan. Every instance has a distinct
+proposed UUID, service/volume/queue/Beat namespace and HTTPS hostname; those names
+grant no ownership. Plans propose ports from configurable development ranges;
+they do not bind or reserve operating-system ports. Later startup must verify the
+actual bind and provider identity. Dedicated hostnames and browser contexts are
+required because cookies are not isolated by port. Approved TLS and IdP callback
+registration remain separate prerequisites.
+
+The initial isolated mode requires a separately approved container-engine and
+data-resource plan. It never adopts the protected checkout's PostgreSQL, Redis,
+Mailpit, credentials or scheduler. Docker/Podman installation, real provisioning,
+database operations and full two-stack acceptance have not been executed by this
+foundation. Native create/resend remains unconditionally closed under SBO-98.
+See the [instance contract](../reference/configuration.md#workspace-instance-contract-sbo-101-foundation)
+for metadata, locking and approval boundaries.
+
 ## Profiles and platforms
 
 Greenfield uses private ~/.sbom-greenfield-uuid and verified fixed Docker
@@ -16,8 +171,10 @@ state, unknown ownership or wrong-profile configuration fails without fallback.
 
 Windows/macOS/Linux adapters exist in scripts/dev.py. The actual
 [verification matrix](../engineering/dev-launcher-platform-matrix.md) separates
-macOS Greenfield acceptance, Linux process smoke checks, mocked adapters and
-untested full Windows/Linux operation. Greenfield's old macOS-only helper
+macOS Greenfield acceptance, Linux process smoke checks and mocked adapters.
+The merged [PR #44 report](../engineering/dev-launcher-windows-lifecycle.md) records
+separate Managed Legacy native Windows lifecycle evidence, not new diagnostic,
+HCL.CS/browser or full Linux acceptance. Greenfield's old macOS-only helper
 restriction is superseded by native trust adapters; that does not establish
 full platform acceptance. Pending upgrades remain blocked on Windows until its
 backup/restore procedure is verified.
@@ -29,14 +186,17 @@ provider integrations. “Native Windows” does not mean the Native IAM provide
 ## First development setup
 
 Install Python 3.11+, Node.js >=20.9.0 with npm, and Docker/Compose or the explicitly
-configured local data services through approved workstation tooling. The launcher
-checks prerequisites before setup, reuses its virtualenv and content-stamped
-pip/npm installs, and reports required command failures with redacted detail.
+configured local data services through approved workstation tooling. Begin with
+`python scripts/dev.py setup --plan`; then review the actions/blockers and obtain
+the required approvals before interactive setup. Each required action category
+needs explicit consent, and changed inputs require a new plan. Only authorized
+setup prepares its virtualenv and content-stamped pip/npm installs.
 System software and trusted root certificates are not installed silently.
 
 Review the [database gate](../DATABASE_BOOTSTRAP_AND_UPGRADE.md) before explicit
 initialization/upgrade. Ordinary start refuses an outdated schema; it does not
-initialize, reset or automatically upgrade it. Setup offers separately controlled
+install dependencies, create keys/certificates, create a database, initialize,
+reset or automatically upgrade it. Setup offers separately controlled
 provisioning, confirmed empty-database initialization, migration and isolated
 frontend build flags; see the bootstrap guide for exact commands. Never use a
 populated pre-UUID database across revision 100.
@@ -50,20 +210,42 @@ operator prerequisites. Do not change authentication to bypass a failed scenario
 
 ```sh
 python scripts/dev.py
+python scripts/dev.py setup --plan
 python scripts/dev.py setup
 python scripts/dev.py start
 python scripts/dev.py stop
 python scripts/dev.py restart
 python scripts/dev.py status
-python scripts/dev.py doctor
+python scripts/dev.py diagnose
 python scripts/dev.py logs --service reports --lines 80
 python scripts/dev.py --check
 ```
 
-No command means start. --check is a read-only doctor alias. Start/restart run in
+No command means start. `diagnose` is read-only; `--check` and `setup --check` use
+the same inspection path. `doctor` is temporarily accepted with one stderr
+deprecation notice. Diagnostic mutation-flag combinations are refused before
+preparation. See [diagnostic results and exit codes](../reference/configuration.md#read-only-diagnostics-sbo-98-phase-2).
+Start/restart run in
 the foreground; keep that terminal open and use another for inspection/stop.
 Only verified launcher-owned processes are managed. Stop preserves data services,
 volumes, credentials and logs. Missing startup prerequisites do not block stop/status.
+
+Diagnostics neither install nor repair an environment. A missing configuration,
+pending migration, uncreated/pending administrator or untrusted certificate needs
+an explicitly authorized corrective action. HCL.CS first-eligible-user privileged
+provisioning still requires Engineering Lead and identity-provider-owner approval.
+Do not change providers, enable a bypass or create an administrator to make a check
+pass. Read the [controlled setup and recovery contract](../reference/configuration.md#controlled-setup-and-prepared-startup-sbo-98-phase-3), including
+explicit dependency-repair safeguards and retained partial artifacts. Use
+`setup --plan --repair-dependencies` to review a pinned repair; only subsequent
+category consent permits installers, and private-material/ownership gates remain.
+Startup/build verify the already-installed native compiler without invoking
+Next's downloader. Ordinary start/diagnostics never perform that repair. Setup also
+requests `frontend-workspace` consent for linked source/dependencies and verified
+public configuration copies. Node runtime/build use the [projected environment
+and isolated workspace](../reference/configuration.md#component-environments-and-frontend-workspace-sbo-98-phase-4);
+source private environment files remain untouched. Shared operator-script
+configuration remains later work; setup/diagnostics never authorizes enrollment.
 
 ## Ports, environment and queues
 
@@ -91,10 +273,30 @@ See [configuration precedence](../reference/configuration.md) and
 
 Do not use another profile, kill an unrelated port owner, rotate keys or reset
 data to bypass a refusal. Preserve unresolved journals, backup material and
-ownership records for diagnosis. Use status, doctor and redacted logs, then
+ownership records for diagnosis. Use status, diagnose and redacted logs, then
 [operations troubleshooting](../operations/troubleshooting.md).
 
 Do not start the same private home-directory Greenfield installation from two
 worktrees. A Git worktree does not isolate runtime databases, credentials or
 services. Full platform/provider/login/release acceptance remains separate from
 unit or process-smoke results.
+
+## SBO-101 candidate worktrees
+
+The draft candidate adds `python scripts/dev.py setup` for a consolidated,
+explicit preparation session. Use `setup --plan` or
+`workspace setup --mode mock --auth native --check --json` for read-only planning.
+Prepared new instances use the same normal start/diagnose/status/logs/stop entry
+point. Explicit Legacy/Greenfield profiles retain their existing flow.
+
+Mock is a labelled synthetic theme/layout preview. Certificates and preview files
+need separate consent; no container/database is required. Real shared/isolated
+startup remains blocked pending company policy, independent live target bindings
+and approved disposable acceptance. This host additionally reports a private-home
+ownership refusal; setup never repairs permissions or installs trust automatically.
+
+See the [configuration/runbook](../reference/configuration.md#guided-worktree-preparation-sbo-101-candidate)
+and [executed evidence and gates](../engineering/dev-workspaces-sbo101.md).
+Known-UUID recovery uses `workspace stop --instance-id <known-instance-uuid>`;
+retain unknown records and a verified repository/controller. Native administrator
+creation/resend remains closed pending independent authorization approval.

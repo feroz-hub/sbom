@@ -57,7 +57,7 @@ def greenfield_installation(checkout, monkeypatch):
     return state
 
 
-@pytest.mark.parametrize("command", ["start", "stop", "restart", "status", "doctor", "logs"])
+@pytest.mark.parametrize("command", ["start", "stop", "restart", "status", "diagnose", "doctor", "logs"])
 def test_one_public_parser_accepts_all_lifecycle_commands(command):
     assert dev.parse_args([command]).command == command
 
@@ -82,7 +82,7 @@ def test_public_help_is_available_from_a_clone_without_a_virtualenv(checkout):
         timeout=10,
     )
     assert result.returncode == 0, result.stderr
-    assert "doctor" in result.stdout
+    assert "diagnose" in result.stdout and "doctor" in result.stdout
     assert "logs" in result.stdout
     assert "--profile" in result.stdout
     assert not (root / ".venv").exists()
@@ -356,14 +356,14 @@ def test_log_tail_rejects_unbounded_or_invalid_line_count(lines):
 
 
 def test_doctor_missing_dependencies_never_installs_or_reads_passwords(checkout, monkeypatch):
-    forbidden = Mock(side_effect=AssertionError("doctor attempted mutation or secret read"))
-    for name in ("ensure_virtualenv", "ensure_dependencies", "ensure_frontend", "generate_keys", "ensure_database", "start_process", "read_config"):
+    forbidden = Mock(side_effect=AssertionError("doctor attempted mutation or password prompt"))
+    for name in ("ensure_virtualenv", "ensure_dependencies", "ensure_frontend", "generate_keys", "ensure_database", "start_process", "read_postgres_credentials"):
         monkeypatch.setattr(dev, name, forbidden)
+    monkeypatch.setattr(dev, "read_config", lambda: {})
     monkeypatch.setattr(dev.shutil, "which", lambda name, **kwargs: None)
     monkeypatch.setattr(dev.GreenfieldStack, "node_binary", Mock(side_effect=dev.SetupError("Node.js is missing; install Node.js LTS")))
     monkeypatch.setattr(dev.subprocess, "run", forbidden)
-    with pytest.raises(dev.SetupError):
-        dev.doctor(SimpleNamespace(profile="legacy", check=True))
+    assert dev.doctor(dev.parse_args(["doctor", "--profile", "legacy"])) == 1
     forbidden.assert_not_called()
 
 
@@ -433,6 +433,9 @@ def test_canonical_greenfield_port_failure_precedes_secret_reads_and_processes(m
 
 
 def test_greenfield_application_port_failure_precedes_dependency_install(monkeypatch):
+    from scripts import dev_prepared
+
+    monkeypatch.setattr(dev_prepared, "require_project", lambda launcher: "npm")
     monkeypatch.setattr(dev, "check_application_ports", Mock(side_effect=dev.SetupError("synthetic occupied port")))
     forbidden = Mock(side_effect=AssertionError("setup before port conflict"))
     monkeypatch.setattr(dev, "ensure_dependencies", forbidden)
@@ -455,7 +458,7 @@ def test_canonical_greenfield_tls_failure_precedes_container_resume(greenfield_i
     monkeypatch.setattr(dev.subprocess, "Popen", forbidden)
     with pytest.raises(dev.LocalHttps.HttpsTrustError, match="untrusted"):
         dev.GreenfieldProfile.start(SimpleNamespace(check=False), Mock())
-    certificate.assert_called_once_with(greenfield_installation, prepare=True)
+    certificate.assert_called_once_with(greenfield_installation, prepare=False)
     forbidden.assert_not_called()
 
 

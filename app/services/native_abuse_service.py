@@ -15,8 +15,10 @@ from limits import RateLimitItemPerMinute
 from limits.storage import storage_from_string
 from limits.strategies import FixedWindowRateLimiter
 
+from ..dev_instance import get_instance_namespace
 from ..settings import get_settings
 
+_INSTANCE_NAMESPACE = get_instance_namespace()
 log = logging.getLogger(__name__)
 
 
@@ -37,11 +39,19 @@ def check(request, endpoint, account=""):
     key = hashlib.sha256(account.strip().lower().encode()).hexdigest()
     try:
         limits = limiter(s.native_auth_rate_limit_storage_uri)
-        allowed = limits.hit(RateLimitItemPerMinute(s.native_auth_ip_limit_per_minute), "native", endpoint, source)
+        allowed = limits.hit(
+            RateLimitItemPerMinute(s.native_auth_ip_limit_per_minute),
+            _INSTANCE_NAMESPACE.native_rate_limit_bucket,
+            endpoint,
+            source,
+        )
         if account:
             allowed = (
                 limits.hit(
-                    RateLimitItemPerMinute(s.native_auth_account_limit_per_minute), "native-account", endpoint, key
+                    RateLimitItemPerMinute(s.native_auth_account_limit_per_minute),
+                    _INSTANCE_NAMESPACE.native_account_rate_limit_bucket,
+                    endpoint,
+                    key,
                 )
                 and allowed
             )
