@@ -773,6 +773,12 @@ records and disabled
 install scripts. Source `.npmrc` and inherited private package configuration are
 not applied. Only the documented public package sources are currently supported;
 company mirrors require a separately reviewed policy adapter.
+The tool-local built-in npm configuration is independently checked and bound to
+the plan. Only empty/comment-only input or the documented public Windows prefix
+directive is allowed; scoped registries, authentication, proxy and TLS/CA
+overrides require review. No raw configuration values or comment hashes appear
+in the public plan. Unsupported npm layouts or changed built-in input block
+execution before an installer is invoked.
 The existing lock has entries without artifact integrity; this adapter preserves
 that version-pinned contract and does not claim complete artifact attestation.
 

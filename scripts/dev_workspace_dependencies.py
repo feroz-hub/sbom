@@ -109,6 +109,38 @@ def _file(path, root, limit=8388608):
     return [str(path), *stamp(after), digest.hexdigest()]
 
 
+def _npm_builtin_policy(npm):
+    """Approve npm's always-loaded tool config without retaining comment bytes."""
+    code = "DEPENDENCY_NPM_BUILTIN_POLICY_REQUIRED"
+    try:
+        if npm.name != "npm-cli.js" or npm.parent.name != "bin":
+            _fail(code)
+        root, path = npm.parent.parent, npm.parent.parent / "npmrc"
+        dev_private.validate_parent(path, root)
+        parent = root.lstat()
+        if not os.path.lexists(path):
+            return (str(path), "missing", parent.st_dev, parent.st_ino)
+        before = _file(path, root, 65536)
+        contents = dev_environment.bounded_read_bytes(path, 65536)
+        if hashlib.sha256(contents).hexdigest() != before[-1] or _file(path, root, 65536) != before:
+            _fail(code)
+        directives = []
+        for line in contents.decode("utf-8").splitlines():
+            line = line.strip()
+            if not line or line.startswith(("#", ";")):
+                continue
+            # Standard Windows npm distribution default. Every npm invocation
+            # supplies its own --prefix, so this never controls a target path.
+            if line not in {"prefix=${APPDATA}/npm", "prefix=${APPDATA}\\npm"} or directives:
+                _fail(code)
+            directives.append("prefix-appdata-npm")
+        # Never bind raw comments (which could contain private material), or a
+        # digest of them, into the public fingerprint. Metadata still pins edits.
+        return (str(path), "present", *before[1:-1], tuple(directives))
+    except Exception:
+        _fail(code)
+
+
 def _tree(path):
     """Metadata proof; allow only contained standard venv/.bin links, no sharing."""
     digest, count, deadline = hashlib.sha256(), 0, time.monotonic() + 15
@@ -217,6 +249,7 @@ class DependencyPlan:
     tool_versions: Mapping[str, tuple]
     target_stamps: Mapping[str, str | None] = field(repr=False)
     controller_proofs: tuple[tuple, ...] = field(repr=False)
+    npm_builtin_policy: tuple = field(repr=False)
     actions: tuple[str, ...]
     blockers: tuple[str, ...]
     fingerprint: str
@@ -304,7 +337,7 @@ def inspect_dependencies(snapshot, selected, *, manifest_hashes=None, python_exe
         _fail("DEPENDENCY_WORKTREE_UNVERIFIED")
     root = selected.identity.canonical_path
     tools, versions, hashes, stamps, blockers = {}, {}, {}, {}, []
-    controllers = ()
+    controllers, npm_builtin = (), ()
     requirements, packages = (), MappingProxyType({})
     anchor = dev_workspace._identity(state_anchor or Path.home())
     try:
@@ -342,6 +375,7 @@ def inspect_dependencies(snapshot, selected, *, manifest_hashes=None, python_exe
             _fail("DEPENDENCY_NPM_CLI_REQUIRED")
         for name, path in (("python", python), ("node", node), ("npm", npm)):
             tools[name] = tuple(_file(path, path.parent, 268435456))
+        npm_builtin = _npm_builtin_policy(npm)
         environment = _environment(tools)
         raw = _invoke(runner, (str(python), "-I", "-S", "-B", "-c", "import json,sys;print(json.dumps(list(sys.version_info[:3])))"), root, environment, "DEPENDENCY_PYTHON_REQUIRED")
         version = json.loads(raw)
@@ -362,10 +396,11 @@ def inspect_dependencies(snapshot, selected, *, manifest_hashes=None, python_exe
         blockers.append("DEPENDENCY_INSPECTION_BLOCKED")
     public = {"repository_id": snapshot.repository_id, "worktree_id": selected.worktree_id, "head": selected.head,
               "root": _identity(selected.identity), "anchor": _identity(anchor), "hashes": hashes,
-              "tools": tools, "versions": versions, "stamps": stamps, "controllers": controllers, "blockers": blockers}
+              "tools": tools, "versions": versions, "stamps": stamps, "controllers": controllers,
+              "npm_builtin_policy": npm_builtin, "blockers": blockers}
     actions = tuple(("verify-" if stamps.get(kind) else "prepare-") + kind for kind in ("python", "frontend"))
     return DependencyPlan(snapshot, selected, anchor, MappingProxyType(hashes), requirements, packages,
-                          MappingProxyType(tools), MappingProxyType(versions), MappingProxyType(stamps), controllers, actions,
+                          MappingProxyType(tools), MappingProxyType(versions), MappingProxyType(stamps), controllers, npm_builtin, actions,
                           tuple(blockers), hashlib.sha256(_json(public)).hexdigest())
 
 
@@ -385,6 +420,8 @@ def _revalidate(plan):
     for proof in plan.tools.values():
         if tuple(_file(Path(proof[0]), Path(proof[0]).parent, 268435456)) != proof:
             _fail("DEPENDENCY_TOOL_CHANGED")
+    if _npm_builtin_policy(Path(plan.tools["npm"][0])) != plan.npm_builtin_policy:
+        _fail("DEPENDENCY_NPM_BUILTIN_POLICY_REQUIRED")
     for proof in plan.controller_proofs:
         if tuple(_file(Path(proof[0]), Path(proof[0]).parent)) != proof:
             _fail("DEPENDENCY_CONTROLLER_CHANGED")
@@ -480,7 +517,9 @@ def _verify_installed(plan, kind, target, stage, runner):
             _fail("DEPENDENCY_PYTHON_VERIFICATION_FAILED")
         return {"python": list(plan.tool_versions["python"])}
     node, npm = plan.tools["node"][0], plan.tools["npm"][0]
-    raw = _invoke(runner, (node, npm, "--userconfig=" + environment["NPM_CONFIG_USERCONFIG"], "--globalconfig=" + environment["NPM_CONFIG_GLOBALCONFIG"], "--version"), stage, environment, "DEPENDENCY_NPM_REQUIRED", 30).decode("ascii").strip()
+    if _npm_builtin_policy(Path(npm)) != plan.npm_builtin_policy:
+        _fail("DEPENDENCY_NPM_BUILTIN_POLICY_REQUIRED")
+    raw = _invoke(runner, (node, npm, "--userconfig=" + environment["NPM_CONFIG_USERCONFIG"], "--globalconfig=" + environment["NPM_CONFIG_GLOBALCONFIG"], "--prefix", str(stage), "--version"), stage, environment, "DEPENDENCY_NPM_REQUIRED", 30).decode("ascii").strip()
     if re.fullmatch(r"\d+\.\d+\.\d+", raw) is None:
         _fail("DEPENDENCY_NPM_REQUIRED")
     script = (
@@ -582,6 +621,7 @@ def prepare_dependencies(plan, *, authorize, runner=None):
                         if hashlib.sha256(contents).hexdigest() != plan.manifest_hashes[name]:
                             _fail("DEPENDENCY_MANIFEST_CHANGED")
                         dev_private.create_private_file(npm_project / Path(name).name, contents)
+                    _revalidate(plan)
                     _invoke(runner, (plan.tools["node"][0], plan.tools["npm"][0], "--userconfig=" + environment["NPM_CONFIG_USERCONFIG"], "--globalconfig=" + environment["NPM_CONFIG_GLOBALCONFIG"], "ci", "--prefix", str(npm_project), "--registry=https://registry.npmjs.org/", "--strict-ssl=true", "--ignore-scripts", "--no-audit", "--no-fund"), stage, environment, "DEPENDENCY_NPM_INSTALL_FAILED", 600)
                     for name in _MANIFESTS[1:]:
                         if _file(npm_project / Path(name).name, npm_project)[-1] != plan.manifest_hashes[name]:

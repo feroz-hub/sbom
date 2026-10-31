@@ -3,6 +3,7 @@
 from __future__ import annotations
 
 import base64
+import hashlib
 import json
 import os
 import sys
@@ -42,6 +43,7 @@ class SyntheticInstaller:
             user = Path(options["environment"]["NPM_CONFIG_USERCONFIG"])
             global_config = Path(options["environment"]["NPM_CONFIG_GLOBALCONFIG"])
             assert user != global_config and user.read_bytes() == global_config.read_bytes() == b""
+            assert "--prefix" in command
         if "list(sys.version_info[:3])" in command[-1]:
             return result(0, b"[3, 12, 7]")
         if command[-1] == "--version":
@@ -106,13 +108,16 @@ def candidate(tmp_path_factory, monkeypatch):
     }}}
     (root / "frontend/package.json").write_text(json.dumps(package), encoding="utf-8")
     (root / "frontend/package-lock.json").write_text(json.dumps(lock), encoding="utf-8")
-    paths = {"python_executable": tools / "python.exe", "node_executable": tools / "node.exe", "npm_cli": tools / "npm-cli.js"}
+    private_directory(tools / "npm")
+    private_directory(tools / "npm/bin")
+    paths = {"python_executable": tools / "python.exe", "node_executable": tools / "node.exe", "npm_cli": tools / "npm/bin/npm-cli.js"}
     for path in paths.values():
         path.write_bytes(b"synthetic-public-tool:" + path.name.encode())
     identity, common = dev_workspace._identity(root), dev_workspace._identity(root / ".git")
     selected = dev_workspace.WorktreeSnapshot("b" * 64, root, identity, "c" * 40, "refs/heads/fixture", False, False, False, False, False)
     snapshot = dev_workspace.RepositorySnapshot("a" * 64, root, identity, selected.head, (selected,), common)
-    fixture = SimpleNamespace(root=root, home=home, tools=paths, selected=selected, snapshot=snapshot)
+    fixture = SimpleNamespace(root=root, home=home, tools=paths, selected=selected, snapshot=snapshot,
+                              npmrc=tools / "npm/npmrc")
     fixture.runner = SyntheticInstaller(fixture)
     monkeypatch.setattr(dev_workspace, "discover_workspaces", lambda path: snapshot)
     forbidden = Mock(side_effect=AssertionError("Synthetic dependency test attempted a real subprocess"))
@@ -348,3 +353,107 @@ def test_missing_both_registry_artifact_fields_preserves_exact_version_pinning(c
     entry["version"] = "^16.3.4"
     path.write_text(json.dumps(data), encoding="utf-8")
     assert "DEPENDENCY_NPM_LOCK_POLICY_REQUIRED" in inspect(candidate).blockers
+
+
+@pytest.mark.parametrize("contents", [None, b"", b"# npm distribution defaults\n; reviewed comment\n",
+                                      b"prefix=${APPDATA}/npm\n", b"prefix=${APPDATA}\\npm\n"])
+def test_safe_builtin_npm_configuration_is_pinned_without_comment_bytes(candidate, contents):
+    if contents is not None:
+        candidate.npmrc.write_bytes(contents)
+    plan = inspect(candidate)
+    assert not plan.blockers
+    public = repr(plan) + json.dumps(plan.to_dict())
+    assert str(candidate.npmrc) not in public
+    if contents:
+        assert contents.decode() not in repr(plan.npm_builtin_policy)
+        assert hashlib.sha256(contents).hexdigest() not in repr(plan.npm_builtin_policy)
+    outcome = dependencies.prepare_dependencies(plan, authorize=lambda value: True, runner=candidate.runner)
+    assert outcome.exit_code == 0
+    assert all("--prefix" in command for command, _ in candidate.runner.calls if len(command) > 2
+               and Path(command[1]).name == "npm-cli.js")
+
+
+@pytest.mark.parametrize("contents", [
+    b"@company:registry=https://corporate.invalid/npm\n",
+    b"//registry.npmjs.org/:_authToken=" + SECRET.encode() + b"\n",
+    b"registry=https://corporate.invalid/npm\n",
+    b"proxy=https://corporate.invalid\n", b"https-proxy=https://corporate.invalid\n",
+    b"cafile=/private/corporate.pem\n", b"strict-ssl=false\n",
+    b"prefix=/somewhere/else\n", b"unknown=true\n",
+    b"prefix=${APPDATA}/npm\nprefix=${APPDATA}/npm\n", b"\xff\n",
+])
+def test_unapproved_builtin_npm_configuration_blocks_before_tool_execution(candidate, contents, capsys):
+    candidate.npmrc.write_bytes(contents)
+    plan = inspect(candidate)
+    assert plan.blockers == ("DEPENDENCY_NPM_BUILTIN_POLICY_REQUIRED",)
+    assert not plan.npm_builtin_policy and candidate.runner.calls == []
+    assert SECRET not in repr(plan) + json.dumps(plan.to_dict()) + repr(capsys.readouterr())
+    assert hashlib.sha256(contents).hexdigest() not in json.dumps(plan.to_dict())
+    approval = Mock(side_effect=AssertionError("Blocked policy requested consent"))
+    assert dependencies.prepare_dependencies(plan, authorize=approval, runner=candidate.runner).exit_code == 1
+    approval.assert_not_called()
+    assert not (candidate.home / ".sbom-dev").exists()
+
+
+@pytest.mark.parametrize("before,after", [(None, b""), (b"", None),
+                                         (b"prefix=${APPDATA}/npm\n", b""),
+                                         (b"", b"@company:registry=https://corporate.invalid/npm\n")])
+def test_builtin_npm_configuration_drift_invalidates_consent_before_mutation(candidate, before, after):
+    if before is not None:
+        candidate.npmrc.write_bytes(before)
+    plan = inspect(candidate)
+    assert not plan.blockers
+
+    def approve(value):
+        if after is None:
+            candidate.npmrc.unlink()  # Only the exact file created by this test.
+        else:
+            candidate.npmrc.write_bytes(after)
+        return True
+
+    candidate.runner.calls.clear()
+    outcome = dependencies.prepare_dependencies(plan, authorize=approve, runner=candidate.runner)
+    assert outcome.code == "DEPENDENCY_NPM_BUILTIN_POLICY_REQUIRED" and not outcome.artifacts_retained
+    assert candidate.runner.calls == []
+    assert not (candidate.root / ".venv").exists() and not (candidate.home / ".sbom-dev").exists()
+
+
+def test_builtin_npm_comment_changes_bind_metadata_without_hashing_private_comments(candidate):
+    candidate.npmrc.write_text("# " + SECRET + "\n", encoding="utf-8")
+    plan = inspect(candidate)
+    assert not plan.blockers and SECRET not in repr(plan.npm_builtin_policy)
+    assert hashlib.sha256(candidate.npmrc.read_bytes()).hexdigest() not in repr(plan.npm_builtin_policy)
+    candidate.npmrc.write_bytes(b"# changed distribution comment\n")
+    assert inspect(candidate).fingerprint != plan.fingerprint
+    with pytest.raises(dependencies.DependencyError, match="^DEPENDENCY_NPM_BUILTIN_POLICY_REQUIRED$"):
+        dependencies._revalidate(plan)
+
+
+def test_builtin_npm_policy_is_revalidated_after_python_install_before_npm(candidate):
+    plan = inspect(candidate)
+    candidate.runner.on_install = lambda: candidate.npmrc.write_bytes(b"strict-ssl=false\n")
+    outcome = dependencies.prepare_dependencies(plan, authorize=lambda value: True, runner=candidate.runner)
+    assert outcome.code == "DEPENDENCY_NPM_BUILTIN_POLICY_REQUIRED" and outcome.artifacts_retained
+    assert not any("ci" in command for command, _ in candidate.runner.calls)
+    assert candidate.npmrc.read_bytes() == b"strict-ssl=false\n"
+
+
+def test_redirected_builtin_npm_configuration_is_not_read_or_adopted(candidate):
+    outside = candidate.home / "private npm configuration"
+    if os.name == "nt":
+        private_directory(outside)
+        (outside / "preserve").write_text(SECRET, encoding="utf-8")
+        import _winapi
+
+        _winapi.CreateJunction(str(outside), str(candidate.npmrc))
+    else:
+        outside.write_text(SECRET, encoding="utf-8")
+        candidate.npmrc.symlink_to(outside)
+    try:
+        assert inspect(candidate).blockers == ("DEPENDENCY_NPM_BUILTIN_POLICY_REQUIRED",)
+        assert candidate.runner.calls == []
+    finally:
+        if os.name == "nt":
+            os.rmdir(candidate.npmrc)  # Only this exact test-created junction entry.
+        else:
+            candidate.npmrc.unlink()

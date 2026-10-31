@@ -176,6 +176,17 @@ with the same harness and the dependency/provider test files: **95 passed in
 engine inventories in tests were synthetic. Native temporary filesystem and
 ownership paths were exercised. This is not package/network/provider acceptance.
 
+A subsequent read-only source review found npm's built-in config can override
+scoped registries despite isolated user/global config. A focused follow-up binds
+that tool-local input and rejects unsupported directives before installer
+execution, without exposing values or hashing raw comments into public plans.
+This review correction changes only the dependency adapter/tests and evidence;
+it does not alter package manifests or install packages.
+After that correction, the same safe harness ran dependency/provider/CLI tests:
+**146 passed in 74.10s** on Python 3.14.6. The changed dependency tests on
+Python 3.12.10: **48 passed in 51.39s**. Ruff passed. All installers remained
+synthetic. PR B is draft [#56](https://github.com/feroz-hub/sbom/pull/56).
+
 ## Disposable acceptance procedure (not yet authorized or executed)
 
 1. Review the candidate diff and CI on Windows/macOS/Linux, preserving SBO-98.
