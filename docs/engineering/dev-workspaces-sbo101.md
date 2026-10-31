@@ -671,8 +671,44 @@ Result: **338 passed in 441.65s**. Lifecycle/runtime/native fixture and bundle
 cross-contract selection earlier passed **197 tests in 58.57s**. Scoped Ruff
 passed. Actual PKI generation, provider provisioning and database acceptance are
 **NOT RUN**. PR I's first CI run independently exposed hosted executable/default
-file-owner compatibility problems in its native fixture; that repair is isolated
+file validation failures in its native fixture; the Windows default-owner cause
+remains a hypothesis pending hosted confirmation. That repair is isolated
 on its existing branch and is not represented by these J synthetic results.
+
+## Increment K — explicit data preparation and durable operation recovery
+
+`dev_workspace_database_prepare.py` separates `initdb`, database/role/schema
+preparation and reviewed migration into distinct exact-target consented actions.
+It binds engine, image, container, volume birth, nonroot contract, cluster identity,
+database, roles, OIDs, source and schema selections. Every critical mutation and
+commit revalidates authority and target. Ordinary engine/application startup cannot
+initialize a cluster or invoke Alembic. Runtime roles remain restricted, schema
+ownership uses a separate NOLOGIN role, and no Native bootstrap grant is added.
+
+`dev_workspace_operation_journal.py` persists an append-only private sequence of
+operation reservation, intents, returned resource IDs and outcomes. OS locks,
+CAS, file identities, chained records and no-replace publication reject concurrent
+or uncertain history. Readers never create a lock, claim or recovery operation.
+Failed cleanup retains validated helper IDs and a cleanup-uncertain result across
+invocations. Those IDs are diagnostic evidence, never permission to terminate a
+resource. A pre-claim failure cannot overwrite another operation's reservation;
+its caller must report retained IDs, and the helper adapter journals its own
+authorized creation independently. Failed journal writes cannot promise durability.
+
+The inspected Windows/Python 3.14.6 safe-harness command was:
+
+```powershell
+& C:\sbom\.venv\Scripts\python.exe -B C:\sbom\.windows\worktrees\SBO-98-component-env\.dev-logs\safe_pytest.py tests/test_dev_workspace_operation_journal.py tests/test_dev_workspace_database_prepare.py tests/test_dev_workspace_database_adapters.py --timeout=60
+```
+
+Result: **169 passed in 28.27s** after correcting two new test fixtures to use
+the actual `DB_HELPER_UNCONFIRMED` enum (initial run: 167 passed, two fixture
+failures). The adapter source in that combined selection is delivered separately
+in L. Scoped Ruff passed. Real native private file/lock/atomic operations were
+exercised only on newly created test directories; all engine, SQL, migration,
+authorization and resource observations were synthetic. No provider or database
+operation ran. Real image policy, helper execution, restricted-role and migration
+acceptance require exact disposable-target approval.
 
 ## Disposable acceptance procedure (not yet authorized or executed)
 
