@@ -187,6 +187,15 @@ def _snapshot(values: Mapping[str, str | None]) -> dict[str, str]:
     return result
 
 
+def _process_snapshot(values: Mapping[str, str | None]) -> dict[str, str]:
+    """Inherited process names the OS defines outside identifier syntax are not settings.
+
+    Every 64-bit Windows defines ``ProgramFiles(x86)``; bash exports functions as
+    ``BASH_FUNC_name%%``. Leave them out of the plan; saved/file snapshots stay strict.
+    """
+    return _snapshot({key: value for key, value in values.items() if not isinstance(key, str) or _NAME.fullmatch(key)})
+
+
 def component_environment(environment: Mapping[str, str], component: str) -> Mapping[str, str]:
     """Pure role projection; server roles retain shared Settings/task inputs."""
     env = _snapshot(environment)
@@ -488,7 +497,7 @@ def resolve_configuration(
             if not defaults or key not in env:
                 env[key], provenance[key] = value, source
 
-    process = _snapshot(inherited)
+    process = _process_snapshot(inherited)
     if profile == "greenfield":
         if greenfield is None:
             raise ConfigurationError("SETUP_REQUIRED", "Supply the existing protected Greenfield snapshots.")

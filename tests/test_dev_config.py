@@ -105,6 +105,24 @@ def test_managed_existing_resolution_preserves_saved_precedence_without_startup_
     assert plan.authentication_enabled is None
 
 
+@pytest.mark.parametrize("family", ["managed", "windows"])
+def test_windows_shaped_process_environment_resolves_without_non_identifier_names(family):
+    # Integration review: ``ProgramFiles(x86)`` is always present on 64-bit Windows.
+    inherited = {
+        "PROGRAMFILES(X86)": "C:\\Program Files (x86)",
+        "COMMONPROGRAMFILES(X86)": "C:\\Program Files (x86)\\Common Files",
+        "BASH_FUNC_module%%": "() {  eval x\n}",
+        "SYSTEMROOT": "C:\\WINDOWS",
+    }
+    plan = resolve(inherited=inherited, family=family)
+    assert plan.environment["SYSTEMROOT"] == "C:\\WINDOWS"
+    for environment in (plan.environment, *plan.components.values()):
+        assert not {"PROGRAMFILES(X86)", "COMMONPROGRAMFILES(X86)", "BASH_FUNC_module%%"} & environment.keys()
+    with pytest.raises(dev_config.ConfigurationError) as caught:
+        resolve(inherited=inherited, saved={"DATABASE_URL": LOCAL_URL, "PROGRAMFILES(X86)": "saved"}, family=family)
+    assert caught.value.code == "INVALID_ENVIRONMENT"
+
+
 def test_public_url_cannot_project_embedded_credentials():
     with pytest.raises(dev_config.ConfigurationError) as caught:
         resolve(saved={"DATABASE_URL": LOCAL_URL, "NEXT_PUBLIC_API_URL": "https://user:fixture-secret@localhost/"})
