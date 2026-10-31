@@ -1235,8 +1235,14 @@ The actual candidate's read-only `workspace setup --mode mock --auth native
 URLs. It returned exit1, one JSON object, empty stderr and
 `CONTROL_HOME_ACCESS_UNVERIFIED / OWNER_MISMATCH / EqualSid / winerror=null`.
 Observed protected original/candidate configuration, runtime and state metadata
-stayed unchanged. This execution context cannot approve its own home ownership;
-use the intended approved account or obtain IT review without automatic ACL repair.
+stayed unchanged. The integration review established the cause on this
+workstation: the profile directory `C:\Users\<user>` is owned by
+`NT AUTHORITY\SYSTEM` (the Windows default) while the process is not elevated and
+its token user is the profile user. `dev_windows_acl.py` requires the owner SID to
+equal the token user even for non-private anchor directories, so this is an
+owner-policy decision, not an execution-context defect. Accepting SYSTEM or
+Administrators ownership for anchor checks needs Engineering Lead/security
+approval; no ACL or owner was changed.
 
 Final remote fetch confirmed `origin/main` remained
 `fc59432a4eec46f009b3809bd751e510d3b2887c`. Every pre-existing worktree was still

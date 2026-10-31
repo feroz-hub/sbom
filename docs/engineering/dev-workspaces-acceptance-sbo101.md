@@ -103,7 +103,39 @@ confirmed owner-policy refusal. It is not evidence of an untrusted DACL grant,
 an access-denied Win32 code, or PostgreSQL failure. The earlier dependency-root
 `GetAce / UNTRUSTED_GRANT` observation concerns a different path and check. Neither
 check authorizes ACL/owner repair; preserve the existing state and obtain the
-Engineering Lead/IT decision on an approved private location.
+Engineering Lead/IT decision on an approved private location. The integration
+review traced the owner refusal to policy: the Windows profile directory is owned
+by `NT AUTHORITY\SYSTEM` by default, and anchor checks require the token user as
+owner. The decision needed is whether SYSTEM/Administrators-owned anchor
+directories are acceptable; see the security review.
+
+## Integration review into main
+
+The complete SBO-98 → SBO-101 chain (#49–#72, candidate `0e83e22`) was merged
+onto `main` `fc59432` with history preserved; the merge had no conflicts and
+retains SBO-97. Independent review then confirmed and fixed four defects that
+the synthetic suites and CI could not see:
+
+- Every 64-bit Windows defines `ProgramFiles(x86)`; the resolver refused the
+  inherited process snapshot, so Legacy `start`, `setup`, `diagnose` and Native
+  status failed on any Windows workstation.
+- The Windows venv `python.exe` is a redirector, so setup consent recorded by the
+  launcher was refused after the handoff (`SETUP_APPROVAL_INVALID`).
+- One blocked sibling worktree (bare, pruned or unverifiable) blocked default
+  `start`/`stop`/`status` in every checkout of the repository.
+- Guided setup read a `family` option the CLI never defines, so
+  `workspace setup --mode mock --auth native --check` always planned
+  `SETUP_SELECTION_REQUIRED`.
+
+Windows hosts with `LongPathsEnabled=0` fail about 47 workspace/bundle/bindings
+tests when pytest's default temporary root is deep (user profile temp path plus
+`.sbom-dev\repositories\<sha256>\...`). Run them with a short `--basetemp`; the
+same tests pass there and on hosted Windows CI. This is a test-path limit, not
+evidence for the real `~/.sbom-dev` location.
+
+None of the NOT RUN/BLOCKED scenarios above changed status: the integration adds
+no real provider, database, application, browser, trust or administrator
+evidence.
 
 ## Executed Windows interpreter and cleanup evidence
 
