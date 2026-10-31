@@ -3,6 +3,62 @@
 Scope: current configuration boundaries, checked against e62951c2 on
 28 October 2026. Examples are templates, not one interchangeable environment.
 
+## Pure development configuration plans (SBO-98, Phase 1)
+
+The side-effect-free `scripts/dev_config.py` library is introduced against the
+approved main baseline `69e71088d7fef06874fe1e2eac7a53db0fd2f333`. It is not yet
+connected to launcher startup, diagnostics, setup or operator scripts. Existing
+commands, configuration files, private readers and process-ownership behavior
+remain authoritative. This is a library, not another environment-management CLI.
+
+Callers supply already-read snapshots and explicit profile, configuration family,
+native repository/state paths and operating system. Pure text parsers preserve
+the managed JSON-string, literal PowerShell and noninterpolating dotenv formats.
+Future adapters must retain the existing ACL, symlink/reparse-point, profile
+selection and runtime-family pinning checks before reading protected files.
+
+The resolver copies its inputs into immutable environment, provenance,
+classification and component maps. It never reads ambient environment variables
+or files, imports application startup, connects to services, creates credentials,
+initializes state or writes files. Managed `existing` resolution preserves
+process-then-saved inspection precedence; `startup` models fixed settings for an
+already prepared installation. It deliberately refuses missing saved database
+configuration or a PostgreSQL provider change instead of inventing credentials or
+preparing a database. Windows/env and Greenfield precedence remains covered by
+parity tests against the current launcher.
+
+The database target contains only host, port and database name. Passing local
+target policy does **not** establish live identity, readiness, process ownership
+or permission for initialization or administrator enrollment. The new library
+refuses query/fragment-bearing database URLs, control characters, ambiguous
+leading database-path slashes, port zero and case-variant environment names.
+Some old Windows/env inputs accepted these forms; they require explicit review,
+not silent normalization or removal of TLS options. No existing file is changed,
+and the unused library does not tighten the running launcher's behavior yet.
+
+Authentication metadata records explicit supplied flags without selecting or
+converting a mode. `authentication_enabled=None` means unresolved/absent; omitted
+component defaults and differing backend/frontend boolean handling still need
+diagnosis. Existing Native, HCL.CS, Entra, mixed and disabled values are preserved
+in inspection plans. Fresh authenticated onboarding policy is a later phase.
+
+Unknown settings are classified conservatively as secret. Environment values
+are excluded from plan representations, but the environment maps intentionally
+contain secrets and must never be serialized into logs or issues. Frontend and
+public projections use explicit allowlists: the BFF keeps its legitimate session
+encryption key and Redis session connection, but not database, Native signing,
+SMTP, outbox or provider-storage secrets. Browser projection permits only
+reviewed public names. API/worker/Beat projections retain the complete server
+configuration for compatibility; narrower backend roles require the Phase 4
+consumer audit. These projections are not yet used to launch processes.
+
+Later separately reviewed phases introduce `python scripts/dev.py diagnose`
+(with temporary `doctor` compatibility), controlled setup, component injection
+and authorized Native enrollment. They must not reuse mutable preparation as a
+resolver, automatically migrate/create databases, replace saved keys or install
+certificate trust. HCL.CS first-eligible-user provisioning still requires
+Engineering Lead and identity-provider-owner design approval.
+
 ## Sources and precedence
 
 | Execution path | Effective sources |
