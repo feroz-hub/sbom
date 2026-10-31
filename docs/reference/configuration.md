@@ -1028,6 +1028,16 @@ provider prerequisites. Redis support does not prove multi-replica acceptance.
 
 ## Build versus runtime
 
+For proposed SBO-101 isolated provider contracts, `workspace plan --scope
+provider --mode isolated --auth native --provider-policy <proposal.json> --json`
+uses the strict version-1 `container` and `compose` policy objects. This is
+read-only planning, not company-policy approval. It prints public references and
+gates, never private file paths or contents. No default image digest or nonroot
+identity is inferred. The adapter and real-execution limitations are documented
+in the [SBO-101 evidence report](../engineering/dev-workspaces-sbo101.md#increment-g--compose-compatible-provider-adapter).
+Do not run generated manifests manually to bypass the adapter's identity,
+nonroot, database and exact-target approval checks.
+
 | Setting class | Handling |
 | --- | --- |
 | NEXT_PUBLIC_* | Public, potentially embedded in frontend assets at build time. Never put keys/tokens here. Keep compiled auth flags consistent with BFF/backend runtime settings. |

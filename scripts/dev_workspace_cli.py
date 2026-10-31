@@ -84,8 +84,12 @@ def _parser():
     )
     parser.add_argument(
         "--scope",
-        choices=("registry", "dependencies", "administrator"),
+        choices=("registry", "dependencies", "administrator", "provider"),
         help="Preparation category; administrator guidance cannot execute enrollment",
+    )
+    parser.add_argument(
+        "--provider-policy", type=Path,
+        help="Explicit proposed provider JSON; never supplies company or resource authorization",
     )
     parser.add_argument("--port-min", type=int, default=20000)
     parser.add_argument("--port-max", type=int, default=29999)
@@ -721,9 +725,55 @@ def _logs_command(args, root):
     return 1 if report.status == "BLOCKED" else 0
 
 
+def _provider_command(args, root):
+    """Inspect only. Engine execution needs independent policy and target consent."""
+    if __package__:
+        from . import dev_workspace_provider_input
+    else:
+        import dev_workspace_provider_input
+    if args.command == "prepare":
+        _fail("PROVIDER_EXACT_TARGET_AUTHORIZATION_REQUIRED")
+    plan, _, _ = _make_plan(args, root)
+    if args.provider_policy is None:
+        public = {
+            "status": "BLOCKED", "code": "PROVIDER_POLICY_SELECTION_REQUIRED",
+            "engine_on_path": shutil.which("docker") is not None,
+            "podman_on_path": shutil.which("podman") is not None,
+            "engine_probed": False, "live_authorized": False,
+            "database_authorized": False, "ownership_verified": False,
+        }
+    else:
+        source = args.provider_policy.absolute()
+        before = source.lstat()
+        if (source.is_symlink() or not stat.S_ISREG(before.st_mode)
+                or before.st_nlink != 1 or getattr(before, "st_file_attributes", 0) & 0x400):
+            _fail("PROVIDER_POLICY_FILE_UNVERIFIED")
+        raw = dev_environment.bounded_read_bytes(source, 65536)
+        after = source.lstat()
+        def stamp(value):
+            return value.st_dev, value.st_ino, value.st_size, value.st_mtime_ns, value.st_ctime_ns
+        if stamp(before) != stamp(after):
+            _fail("PROVIDER_POLICY_FILE_CHANGED")
+        provider, manifest = dev_workspace_provider_input.parse_policy(raw, plan.descriptor)
+        public = {
+            "status": "BLOCKED", "code": "PROVIDER_RUNTIME_CONTRACT_REVIEW_REQUIRED",
+            "provider": provider.to_dict(), "compose": manifest.to_dict(),
+            "engine_probed": False, "live_authorized": False,
+            "database_authorized": False, "ownership_verified": False,
+        }
+    if args.json:
+        print(json.dumps(public, sort_keys=True))
+    else:
+        print(f"[BLOCKED] {public['code']}; review policy, images, nonroot contracts and exact disposable targets.")
+        print("[INFO] No engine, secret file, provider resource or database was accessed.")
+    return 1
+
+
 def run_cli(argv, root):
     args = _parser().parse_args(argv)
     try:
+        if args.provider_policy is not None and (args.scope != "provider" or args.command != "plan"):
+            _fail("WORKSPACE_PROVIDER_OPTIONS_REQUIRED")
         if (
             (args.baseline is not None and args.command != "compare")
             or ((args.service or args.follow or args.lines != 80) and args.command != "logs")
@@ -761,6 +811,8 @@ def run_cli(argv, root):
                 inspect_software=args.command == "diagnose",
             )
         if args.command == "plan":
+            if args.scope == "provider":
+                return _provider_command(args, root)
             if args.scope == "administrator":
                 return _onboarding_guidance(args, root)
             if args.scope == "dependencies":
@@ -773,6 +825,8 @@ def run_cli(argv, root):
             _print_plan(plan, args.json)
             return 1 if plan.blockers else 0
         if args.command == "prepare":
+            if args.scope == "provider":
+                return _provider_command(args, root)
             if args.scope == "administrator":
                 return _onboarding_guidance(args, root)
             if args.scope == "dependencies":

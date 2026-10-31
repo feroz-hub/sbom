@@ -10,7 +10,7 @@ it never means ownership, readiness or a mutation was independently authorized.
 Fresh PostgreSQL containers can initialize their data on first boot. Provider
 creation therefore requires target-specific database/credential approval too.
 Pinned company images must be validated for their nonroot UID/data/port contract
-in separately approved disposable acceptance before any executor is implemented.
+in separately approved disposable acceptance before any real executor use.
 """
 
 from __future__ import annotations

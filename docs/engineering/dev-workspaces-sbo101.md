@@ -442,6 +442,72 @@ No engine install, image pull, container/volume/database creation, virtualizatio
 change or protected-service substitution is authorized. Follow-on drafts will
 distinguish implemented synthetic paths from pending real-provider acceptance.
 
+## Increment G — Compose-compatible provider adapter
+
+Implemented source: `dev_workspace_compose.py`, `dev_workspace_engine.py` and
+`dev_workspace_provider_input.py`, with provider planning in the existing public
+launcher. No reference digest is silently selected. A proposed policy explicitly
+supplies the engine identity, policy reference, pinned images, numeric nonroot
+UID/GID, platform, limits, data ownership/population contract, health budgets and
+fourteen private file references. File contents and paths are absent from public
+output. Duplicate/unknown JSON fields, credentials-as-fields and mutable image
+tags are refused. A policy file is a proposal, not an authorization source.
+
+```powershell
+python scripts/dev.py workspace plan --scope provider --mode isolated --auth native --json
+python scripts/dev.py workspace plan --scope provider --mode isolated --auth native --provider-policy <reviewed-proposal.json> --json
+```
+
+These commands do not invoke an engine or read the referenced secret files.
+Without a policy they report `PROVIDER_POLICY_SELECTION_REQUIRED`; with a valid
+proposal they return the redacted contract and review gates. `prepare --scope
+provider` requires separate exact-target authorization and performs no mutation.
+The Python adapter can execute approved operations through an injected trusted
+policy authority and durable creation journal; the CLI does not turn JSON review
+markers into that authority.
+
+The generator emits Compose JSON (a YAML subset). The concrete Docker adapter
+consumes that same specification but deliberately avoids `compose up`: resource
+creation records returned immutable network/container IDs, and fresh anonymous
+data volumes are obtained from those new container receipts. Logical names and
+labels alone never authorize adoption or shutdown. Start/stop re-inspect engine,
+image, process/container and resource identities immediately before operations.
+Partial or uncertain results retain receipts and report unconfirmed operations;
+there is no remove-volume, pull, build, automatic database initialization or
+destructive recovery path. Podman is a separate explicitly unsupported adapter
+until implemented and validated, rather than assumed Docker equivalence.
+
+PostgreSQL runtime invokes `postgres` directly, not its auto-initializing image
+entrypoint. Fresh `initdb`, restricted-role/schema preparation and nonroot volume
+ownership need separately approved preparation. Host TLS/auth health adapters
+are explicit prerequisites; an image health status is not verified readiness.
+Mailpit's internal readyz behavior is insufficient to establish certificate
+verification. File-backed Compose secrets do not remap host UID/GID/mode: the
+approved image/host must demonstrate actual nonroot readability and protected
+permissions. Rootless engines alone do not prove this contract.
+
+Synthetic generation, policy parsing and fake Docker runner tests exercise real
+command construction, denial paths, drift and partial outcomes. Real engine
+discovery/provisioning, image provenance/architecture/scanning/registry checks,
+nonroot integration and service/database readiness remain **NOT RUN**. Missing
+runtime/policy blocks those real operations only. Runtime wiring, guided private
+preparation and previews continue as independent source increments.
+
+Executed G validation on Windows / Python 3.14.6:
+
+```powershell
+& C:\sbom\.venv\Scripts\python.exe -B C:\sbom\.windows\worktrees\SBO-98-component-env\.dev-logs\safe_pytest.py tests/test_dev_workspace_engine.py tests/test_dev_workspace_compose.py tests/test_dev_workspace_provider_input.py tests/test_dev_workspace_provider.py tests/test_dev_workspace_cli.py --timeout=60
+```
+
+Result: **240 passed in 325.96s**, including all 64 engine tests on the final
+mutation-boundary source. The harness disables application conftest/plugin
+autoload, uses in-memory SQLite sentinels and a new private temporary directory.
+Compose/parser compatibility on the existing Python 3.12.10 validation
+interpreter: **78 passed in 1.23s**. Scoped Ruff checks passed. Existing PRs
+#58, #59 and #60 each reported 20 completed successful checks at their exact
+heads when rechecked; each remains Draft. These are source/fixture results, not
+real provider or complete application acceptance.
+
 ## Disposable acceptance procedure (not yet authorized or executed)
 
 1. Review the candidate diff and CI on Windows/macOS/Linux, preserving SBO-98.
