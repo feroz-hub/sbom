@@ -187,6 +187,46 @@ After that correction, the same safe harness ran dependency/provider/CLI tests:
 Python 3.12.10: **48 passed in 51.39s**. Ruff passed. All installers remained
 synthetic. PR B is draft [#56](https://github.com/feroz-hub/sbom/pull/56).
 
+## PR C: isolated launch contracts, live execution BLOCKED
+
+Adds `dev_workspace_lifecycle`, pure `app/dev_instance` names, matching tests and
+actionable CLI refusal for registered-instance start/stop/restart. Immutable
+snapshots check exact dedicated targets, roles, Redis databases, paths, origins,
+auth flags, key separation and readiness prerequisites. Public serialization
+excludes private values and secret hashes. Commands are placeholders; cleanup
+only requests the existing Runtime to independently revalidate recorded
+identities. Unknown/reused/unregistered identities remain protected, including
+partial-start and lost-configuration cases.
+
+This increment **does not implement a full-stack executor**. Required engine,
+credential-provenance, Settings-child, Runtime/path and hostname/TLS adapters are
+explicit blockers. The pure namespace helper is not yet wired to every API/task/
+session/heartbeat consumer. It cannot establish isolation by itself. Concrete
+provider selection depends on company engine/image policy and exact approved
+disposable targets; no existing protected service may substitute for that work.
+Source contracts are reviewable now; full Phase 3 acceptance remains incomplete.
+Existing application/lifecycle/shutdown and production consumers are unchanged.
+
+Native Windows Python 3.14.6, same safe harness:
+
+```powershell
+& C:\sbom\.venv\Scripts\python.exe -B `
+  C:\sbom\.windows\worktrees\SBO-98-component-env\.dev-logs\safe_pytest.py `
+  tests/test_dev_workspace_lifecycle.py tests/test_dev_instance_namespaces.py `
+  tests/test_dev_windows_lifecycle.py tests/test_dev_windows_shutdown.py --timeout=60
+```
+
+Result: **185 passed in 23.16s**. Python 3.12.10 lifecycle/namespace tests:
+**103 passed in 0.68s**. Ruff passed. These are pure/synthetic adapter contracts
+and existing Windows regressions; no isolated stack, provider, database, TLS or
+administrator operation was executed.
+Workspace and lifecycle CLI tests on Python 3.14.6, using the same harness and
+`tests/test_dev_workspace_cli.py tests/test_dev_workspace_lifecycle_cli.py
+--timeout=60`: **64 passed in 21.89s**. Runtime/process/socket/file-write/private-
+read tripwires verified that reported READY or caller markers cannot enable live
+execution. A changed HEAD blocks start/restart while stop retains its independent
+Runtime-adapter diagnosis and preserves records.
+
 ## Disposable acceptance procedure (not yet authorized or executed)
 
 1. Review the candidate diff and CI on Windows/macOS/Linux, preserving SBO-98.

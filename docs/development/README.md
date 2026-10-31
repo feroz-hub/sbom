@@ -64,8 +64,13 @@ New dependency-only or interrupted installations continue to receive inventory
 until private configuration is prepared. Existing venv-only dispatch is retained.
 
 The remaining lifecycle operations are delivered in later increments;
-`workspace start/stop/restart/logs/test/compare` currently return a
-specific BLOCKED result. Do not treat a proposal or a registry state as readiness.
+registered-instance `workspace start/stop/restart` now name the concrete missing
+provider, credential-ownership, Settings-child, Runtime and TLS adapters and a
+proposed log location. They remain BLOCKED and never manage processes or adopt
+the old checkout's services. `stop` preserves unknown records even if source
+changed. Existing applications still use their original profile launcher for
+safe shutdown. Logs/test/comparison adapters are separate increments. Do not
+treat a proposal or a registry state as readiness.
 
 For ATLAS/NEXUS work, first confirm each agent's branch and reserved files. Use
 Git-listed canonical paths explicitly in the plan. Every instance has a distinct

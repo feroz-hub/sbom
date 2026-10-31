@@ -425,6 +425,70 @@ def _prepare_registry(args, root):
     return 0
 
 
+def _registered_instance(args, root):
+    snapshot = dev_workspace.discover_workspaces(root)
+    if snapshot.status != "PASS":
+        _fail("WORKSPACE_INVENTORY_INCOMPLETE")
+    selected = _select(snapshot, root, args.worktree)
+    records = _registry(snapshot).read()
+    if records.codes:
+        _fail(
+            "WORKSPACE_INSTANCE_REGISTRATION_REQUIRED" if records.codes == ("REGISTRY_MISSING",) else records.codes[0]
+        )
+    entry = next((row for row in records.entries if row.descriptor.worktree_id == selected.worktree_id), None)
+    if entry is None:
+        _fail("WORKSPACE_INSTANCE_REGISTRATION_REQUIRED")
+    return snapshot, selected, entry
+
+
+def _lifecycle_blocked(args, root):
+    if any(
+        (
+            args.scope,
+            args.mode,
+            args.auth,
+            args.provider,
+            args.generation is not None,
+            args.port_min != 20000,
+            args.port_max != 29999,
+        )
+    ):
+        _fail("WORKSPACE_PREPARED_SELECTION_REQUIRED")
+    if __package__:
+        from . import dev_workspace_lifecycle
+    else:
+        import dev_workspace_lifecycle
+    _, selected, entry = _registered_instance(args, root)
+    if args.command != "stop" and entry.descriptor.commit != selected.head:
+        _fail("WORKSPACE_INSTANCE_SOURCE_CHANGED")
+    codes = dev_workspace_lifecycle.live_execution_blockers()
+    code = "INSTANCE_RUNTIME_ADAPTER_REQUIRED" if args.command == "stop" else codes[0]
+    result = {
+        "status": "BLOCKED",
+        "code": code,
+        "blockers": list(codes),
+        "instance_id": entry.descriptor.instance_id,
+        "runtime_ownership_verified": False,
+        "component": "instance-lifecycle",
+        "process_status": "UNVERIFIED",
+        "proposed_log_path": str(Path.home() / ".sbom-dev/instances" / entry.descriptor.instance_id / ".dev-logs"),
+        "log_created": False,
+    }
+    if args.json:
+        print(json.dumps(result, sort_keys=True))
+    else:
+        print(f"[BLOCKED] {code}; instance {entry.descriptor.instance_id}; runtime ownership unverified.")
+        for reason in codes:
+            print(f"[BLOCKED] {reason}; reviewed company provider policy and concrete verified adapters are required.")
+        print(
+            f"[INFO] Proposed log directory {_path(result['proposed_log_path'])}; no application was started or stopped."
+        )
+        print(
+            "[NEXT] Preserve records/resources. Existing profile-managed applications must be stopped through their original launcher from their own checkout."
+        )
+    return 1
+
+
 def run_cli(argv, root):
     args = _parser().parse_args(argv)
     try:
@@ -457,6 +521,8 @@ def run_cli(argv, root):
             if args.scope == "dependencies":
                 return _prepare_dependencies(args, root)
             return _prepare_registry(args, root)
+        if args.command in {"start", "stop", "restart"}:
+            return _lifecycle_blocked(args, root)
         _fail("WORKSPACE_CAPABILITY_NOT_PREPARED")
     except Exception as error:
         code = getattr(error, "code", "WORKSPACE_INSPECTION_FAILED")
