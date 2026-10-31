@@ -1,11 +1,13 @@
 # SBO-101: implementation evidence and approval boundaries
 
-Delivery state: safe planning, controlled dependency preparation, restricted test
-orchestration, closed onboarding guidance and read-only observations are
-implemented in incremental drafts. Full isolated application execution, mock/
-shared runtime previews, real private configuration/TLS/provider adapters and
-live administrator onboarding remain **incomplete / BLOCKED**. No independent
-review, merge, deployment or full native acceptance is claimed by unit/CI results.
+Delivery state: planning, controlled dependencies, private configuration/TLS,
+provider/data preparation contracts, Runtime execution, read-only inspection,
+restricted tests and closed onboarding guidance have implemented source and
+synthetic evidence in incremental drafts. Public guided/mock integration is
+being connected separately. Real isolated/shared application execution and live
+administrator onboarding remain **BLOCKED** by the specific authority, policy,
+transport and acceptance gates below. No independent review, merge, deployment
+or full native acceptance is claimed by unit/CI results.
 
 ## Baseline and coordination
 
@@ -404,13 +406,13 @@ authority exists for them on this host. No protected services were adopted.
 | Area | Files / dependencies | Risk or gate | Current protection |
 | --- | --- | --- | --- |
 | Source integration | SBO-98 #49–#54 → SBO-101 #55 onward | Draft stack dependency; no independent sign-off claimed | Old branches unchanged; issue-only worktree/branches; no merge |
-| Legacy lifecycle | `scripts/dev.py`, existing Runtime | Native process regression / unknown PID | Lifecycle AST unchanged; native regression list; no new termination path |
-| New runtime | `dev_workspace_lifecycle`, `app/dev_instance` | Execution/consumer/config/TLS adapters unimplemented | Unconditional live block; no fabricated READY |
-| Data services | `dev_workspace_provider` | Company engine/images/UID policy and exact disposable resource approval absent | Pure proposals/consistency only; no daemon/DB executor |
+| Legacy lifecycle | `scripts/dev.py`, existing Runtime | Native process regression / unknown PID | Ownership/termination checks preserved; optional private IO for new instances; native regressions and limitations recorded |
+| New runtime | `dev_workspace_lifecycle`, `app/dev_instance`, Runtime/readiness adapters | Missing independent provider/transport authority and real acceptance | Concrete source with fail-closed callback gates; no fabricated READY |
+| Data services | Provider/engine/database adapters and journal | Company engine/images/UID policy and exact disposable resource approval absent | Concrete adapters synthetically tested; no live daemon/DB action; absent actual-session peer attestor blocks SQL |
 | Dependencies | `dev_workspace_dependencies`, CLI | Untrusted root grant; binary-only/public-index policy; interrupted state | Specific native refusal; exact consent/revalidation; retained journals; no repair/adoption |
 | Privileged Native | `dev_workspace_onboarding`, unchanged SBO-98 guard | Independent principal/authority/readiness/commit design not approved | All live actions closed; exact context drift tests; separate security proposal |
 | HCL.CS | Existing provider services / approved registration | IdP-owner first-user and per-origin callback/trust decisions | No invented identity, password fallback or privileged provisioning |
-| Shared contracts | Application/DTO/schema/migrations | Other-agent or deployment conflict | No NEXUS active work confirmed; these consumers/schemas/deployment files unchanged |
+| Shared contracts | Application/DTO/schema/migrations | Other-agent or deployment conflict | No NEXUS active work confirmed; optional development namespace consumers changed in H; DTO/schema/migrations/deployment unchanged |
 | Observations | `dev_workspace_observe`, CLI | Metadata/consistency cannot prove live health; unknown private source | No service contact, raw message content or state mutation; ACL/identity checks |
 | Tests | Fixed source closure / explicit workflow lists | Application fixtures can migrate/truncate; fake execution is not E2E | No application conftest; sanitized SQLite sentinels; real data suites blocked |
 
@@ -737,6 +739,96 @@ execution stays BLOCKED until that transport integration, credential-audit polic
 helper/image policy and exact disposable operations receive review/approval.
 Absolute wall-clock libpq cancellation also needs native acceptance; the native
 connection/server limits alone do not establish that guarantee.
+
+## Increment M — read-only inspection and process-bound readiness
+
+`dev_workspace_inspect.py` loads canonical Runtime state without acquiring a
+runtime lock, refreshing/saving state, starting services or inspecting application
+configuration. It verifies pinned root, launcher and component identities and
+keeps exited, reused and access-denied processes distinct. Saved READY flags
+cannot establish readiness. Known private/provider receipts remain observations,
+not ownership or operator authority. Deleted source/configuration does not permit
+discarding a record or prevent independent identity-based diagnosis.
+
+`dev_workspace_readiness.py` implements bounded native listener inspection on
+Windows/Linux and a verified owned lsof helper on macOS. Before contacting a
+local service it requires the expected host PID/birth/executable and rechecks
+afterward. Docker guest PIDs cannot substitute for Windows host-forwarder proofs.
+API probes use inert `/` and Native `/ready/iam`, avoiding `/health`, whose NVD
+initialization side effect makes it unsuitable for strict read-only diagnostics.
+Workers/Beat passive diagnosis requires current instance-specific health records
+and progress. Explicit startup acceptance is a separate active operation.
+
+PostgreSQL requires exact schema/target and verified TLS, a read-only transaction,
+rollback/close and CA/listener revalidation. Redis probes use TLS, AUTH, SELECT,
+PING and GET only; the frontend user must refuse an out-of-namespace GET. SMTP
+uses EHLO, mandatory verified STARTTLS, AUTH and QUIT; no message is sent. TLS
+checks validate PKI/SAN/key matching and bounded trust roots. No trust store,
+database, cache value, mail outbox, application audit record or configuration is
+modified by those checks. Native access-denied diagnostics now carry structured
+numeric Windows errors; arbitrary exception strings remain suppressed. The
+Runtime bridge preserves only typed safe categories, error codes and owned-probe
+IDs through verified startup cleanup.
+
+Limitations: listener enumeration/connect is not atomic; stronger exclusion of
+an intervening rebind requires listener handoff or independent server attestation.
+Synchronous libpq has native connection/server limits but no proven absolute
+wall-clock cancellation. A bounded caller can return while its read-only thread
+finishes rollback/close. Browser/OS trust, authentication acceptance and provider
+host-forwarder proof remain separate; no supplied JSON READY marker grants them.
+Actual network/provider/database acceptance has **not run**.
+
+Windows/Python 3.14.6 safe-harness validation:
+
+```powershell
+& C:\sbom\.venv\Scripts\python.exe -B C:\sbom\.windows\worktrees\SBO-98-component-env\.dev-logs\safe_pytest.py tests/test_dev_workspace_readiness.py tests/test_dev_workspace_inspect.py tests/test_dev_workspace_diagnostics_bridge.py tests/test_dev_workspace_runtime.py tests/test_dev_windows_lifecycle.py tests/test_dev_windows_shutdown.py -k 'not test_native_windows_cooperative_task_completion_and_scheduler_close' --timeout=60
+```
+
+Result: **267 passed, 2 deselected in 58.51s**. The preceding run included those
+two existing native cooperative fixtures: **268 passed, 1 failed in 73.10s**.
+Windows denied `QueryFullProcessImageNameW` with error 5 for a fixture child during
+refresh and verified cleanup. Ownership stayed unknown/refused; a subsequent
+read-only CIM lookup found neither reported PID. This transient native failure
+is retained as a limitation, not recast as synthetic success. The standalone
+readiness/lifecycle selection earlier passed **191 tests in 33.24s**. New listener,
+HTTP/SQL/Redis/SMTP and PKI-positive observations were injected synthetic adapters;
+mutation tripwires and real new private files verify the read-only boundaries.
+The first integration run also identified three inspector tests expecting the
+old absent Windows metadata; those now assert the structured numeric error and a
+separate message-only negative test preserves redaction. Scoped Ruff passed.
+
+After integrating the private Runtime IO repair, the combined closure had
+**282 passed, one failed in 107.60s**: the other existing native cooperative
+fixture encountered the same error-5 query while a Windows venv descendant was
+initializing. The native warm-shutdown fixtures now wait for their actual
+task/scheduler workload before registering ownership, matching the other native
+smoke fixtures. This changes test synchronization only; production still refuses
+unverifiable descendants. Recheck:
+
+```powershell
+& C:\sbom\.venv\Scripts\python.exe -B C:\sbom\.windows\worktrees\SBO-98-component-env\.dev-logs\safe_pytest.py tests/test_dev_windows_shutdown.py -k test_native_windows_cooperative_task_completion_and_scheduler_close --timeout=60
+```
+
+Result: **2 passed, 33 deselected in 11.15s**. The subsequent read-only CIM lookup
+also found neither earlier reported PID. Python 3.12.10 readiness/inspection/
+runtime/bridge selection passed **194 tests in 66.49s**. This is real fixture-only
+Celery memory-transport shutdown evidence, not provider/application acceptance.
+Upstream PR I at `84519cbb2730777162a779a2fdbf07feadd92657` now has **20/20 reported
+CI checks successful**, including hosted Windows/macOS/Linux and Python3.11/3.12.
+The original elevated-token Windows default-owner explanation remains an
+inference: the private writer repair passed hosted CI, but the runner token's
+actual default-owner SID was not captured.
+
+Independent review then identified that Celery control ping/queue/stat inspection
+publishes broker messages. `background()` now performs only bounded protected
+heartbeat/progress reads and fresh PID/birth/executable checks. Its result is
+`BACKGROUND_HEARTBEAT_OBSERVED`, explicitly partial and with
+`active_control_verified=false`. Only the separately named
+`background_startup()` can invoke active control after its broker/process proofs;
+it must never be called from read-only status/diagnose. Tests tripwire app/Celery/
+Kombu/Redis imports and socket/process construction on the passive path.
+The inspected readiness/lifecycle selection passed **206 tests in 52.88s**;
+Ruff and Python3.11/3.12 grammar checks passed. No live broker was contacted.
 
 ## Disposable acceptance procedure (not yet authorized or executed)
 

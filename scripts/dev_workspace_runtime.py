@@ -35,6 +35,7 @@ if __package__:
         dev_workspace_dependencies,
         dev_workspace_lifecycle,
         dev_workspace_preview,
+        dev_workspace_readiness,
     )
 else:
     import dev_config
@@ -45,6 +46,7 @@ else:
     import dev_workspace_dependencies
     import dev_workspace_lifecycle
     import dev_workspace_preview
+    import dev_workspace_readiness
 
 _LOGS = {
     "Celery worker": "celery-worker.log",
@@ -136,9 +138,15 @@ _ERRORS = frozenset(
 
 
 class RuntimeAdapterError(ValueError):
-    def __init__(self, code, *, inspection=None):
-        self.code = code if type(code) is str and code in _ERRORS else "INSTANCE_RUNTIME_ADAPTER_INVALID"
-        self.inspection = inspection
+    def __init__(self, code, *, winerror=None, probe_pid=None, inspection=None):
+        self.code = (
+            code
+            if type(code) is str and code in _ERRORS | dev_workspace_readiness._CODES
+            else "INSTANCE_RUNTIME_ADAPTER_INVALID"
+        )
+        self.winerror = winerror if type(winerror) is int and 0 <= winerror <= 0xFFFFFFFF else None
+        self.probe_pid = probe_pid if type(probe_pid) is int and 0 < probe_pid <= 0xFFFFFFFF else None
+        self.inspection = inspection if type(inspection) is RuntimeInspection else None
         super().__init__(self.code)
 
 
@@ -159,10 +167,22 @@ class RuntimeInspection:
     winerror: int | None = None
 
     def __post_init__(self):
-        if (type(self.stage) is not str or self.stage not in {"runtime-directory", "runtime-state", "runtime-lock", "runtime-stop"}
-                or type(self.category) is not str or self.category not in {"OWNER_MISMATCH", "UNTRUSTED_GRANT", "OBJECT_UNVERIFIED",
-                                         "OWNER_OR_MODE_MISMATCH", "OVERSIZED", "ACL_UNVERIFIED"}
-                or self.winerror is not None and (type(self.winerror) is not int or not 0 <= self.winerror <= 0xFFFFFFFF)):
+        if (
+            type(self.stage) is not str
+            or self.stage not in {"runtime-directory", "runtime-state", "runtime-lock", "runtime-stop"}
+            or type(self.category) is not str
+            or self.category
+            not in {
+                "OWNER_MISMATCH",
+                "UNTRUSTED_GRANT",
+                "OBJECT_UNVERIFIED",
+                "OWNER_OR_MODE_MISMATCH",
+                "OVERSIZED",
+                "ACL_UNVERIFIED",
+            }
+            or self.winerror is not None
+            and (type(self.winerror) is not int or not 0 <= self.winerror <= 0xFFFFFFFF)
+        ):
             _fail("INSTANCE_RUNTIME_ADAPTER_INVALID")
 
     def to_dict(self):
@@ -173,11 +193,16 @@ def _private_failure(stage, error=None, *, category=None):
     allowed = {"OWNER_MISMATCH", "UNTRUSTED_GRANT", "OBJECT_UNVERIFIED", "OWNER_OR_MODE_MISMATCH", "OVERSIZED"}
     selected = category or getattr(error, "category", None)
     if type(selected) is not str or selected not in allowed:
-        selected = "OWNER_OR_MODE_MISMATCH" if getattr(error, "code", None) == "REGISTRY_ACCESS_UNVERIFIED" else "ACL_UNVERIFIED"
+        selected = (
+            "OWNER_OR_MODE_MISMATCH"
+            if getattr(error, "code", None) == "REGISTRY_ACCESS_UNVERIFIED"
+            else "ACL_UNVERIFIED"
+        )
     code = getattr(error, "winerror", None)
     code = code if type(code) is int and 0 <= code <= 0xFFFFFFFF else None
-    raise RuntimeAdapterError("INSTANCE_RUNTIME_RECORD_UNVERIFIED",
-                              inspection=RuntimeInspection(stage, selected, code)) from None
+    raise RuntimeAdapterError(
+        "INSTANCE_RUNTIME_RECORD_UNVERIFIED", inspection=RuntimeInspection(stage, selected, code)
+    ) from None
 
 
 def _private_parent(path, root):
@@ -233,7 +258,9 @@ def private_atomic_json(path, value, *, root):
         created = dev_instance_registry._stamp(dev_instance_registry._private(stage))
         for attempt in range(11):
             _private_parent(path, root)
-            current = dev_instance_registry._stamp(dev_instance_registry._private(path)) if os.path.lexists(path) else None
+            current = (
+                dev_instance_registry._stamp(dev_instance_registry._private(path)) if os.path.lexists(path) else None
+            )
             if current != before or dev_instance_registry._stamp(dev_instance_registry._private(stage)) != created:
                 _private_failure("runtime-state")
             try:
@@ -457,6 +484,8 @@ class RuntimeOutcome:
     records_retained: bool = False
     ready: bool = False
     component: str | None = None
+    winerror: int | None = None
+    probe_pid: int | None = None
     inspection: RuntimeInspection | None = None
 
     def to_dict(self):
@@ -466,6 +495,8 @@ class RuntimeOutcome:
             "records_retained": self.records_retained,
             "ready": self.ready,
             "component": self.component,
+            "winerror": self.winerror if type(self.winerror) is int and 0 <= self.winerror <= 0xFFFFFFFF else None,
+            "probe_pid": self.probe_pid if type(self.probe_pid) is int and 0 < self.probe_pid <= 0xFFFFFFFF else None,
             "services": [
                 {
                     "component": item.component,
@@ -476,7 +507,7 @@ class RuntimeOutcome:
                 for item in self.services
             ],
         }
-        if self.inspection is not None:
+        if type(self.inspection) is RuntimeInspection:
             result["inspection"] = self.inspection.to_dict()
         return result
 
@@ -487,10 +518,24 @@ def _bounded(callback, timeout):
     def call():
         try:
             result.put((True, callback()))
-        except RuntimeAdapterError as error:
-            result.put((False, error.code))
+        except (RuntimeAdapterError, dev_workspace_readiness.ReadinessError) as error:
+            # Only our exact typed, enumerated diagnostics cross this boundary.
+            # Arbitrary exceptions cannot supply categories, paths or credentials.
+            if type(error) not in {RuntimeAdapterError, dev_workspace_readiness.ReadinessError}:
+                error = RuntimeAdapterError("INSTANCE_READINESS_PROBE_FAILED")
+            result.put(
+                (
+                    False,
+                    RuntimeAdapterError(
+                        error.code,
+                        winerror=error.winerror,
+                        probe_pid=error.probe_pid,
+                        inspection=error.inspection if type(error) is RuntimeAdapterError else None,
+                    ),
+                )
+            )
         except BaseException:
-            result.put((False, "INSTANCE_READINESS_PROBE_FAILED"))
+            result.put((False, RuntimeAdapterError("INSTANCE_READINESS_PROBE_FAILED")))
 
     threading.Thread(target=call, daemon=True, name="sbom-instance-readonly-probe").start()
     try:
@@ -498,7 +543,7 @@ def _bounded(callback, timeout):
     except queue.Empty:
         _fail("INSTANCE_READINESS_TIMEOUT")
     if not success:
-        _fail(value)
+        raise value from None
     return value
 
 
@@ -539,8 +584,14 @@ class WorkspaceRuntime:
                 try:
                     info = dev_instance_registry._private(path)
                 except Exception as error:
-                    _private_failure({".dev-runtime.json": "runtime-state", ".dev-runtime.lock": "runtime-lock",
-                                      ".dev-runtime.stop": "runtime-stop"}[name], error)
+                    _private_failure(
+                        {
+                            ".dev-runtime.json": "runtime-state",
+                            ".dev-runtime.lock": "runtime-lock",
+                            ".dev-runtime.stop": "runtime-stop",
+                        }[name],
+                        error,
+                    )
                 if info.st_size > 1048576:
                     _fail("INSTANCE_RUNTIME_RECORD_UNVERIFIED")
 
@@ -555,9 +606,13 @@ class WorkspaceRuntime:
             _fail("INSTANCE_RUNTIME_ADAPTER_INVALID")
         configure = getattr(runtime, "configure_private_io", None)
         if callable(configure):
+
             def writer(path, value):
                 return private_atomic_json(path, value, root=self.location.root)
-            configure(state_writer=writer, lock_creator=lambda path: private_runtime_lock(path, root=self.location.root))
+
+            configure(
+                state_writer=writer, lock_creator=lambda path: private_runtime_lock(path, root=self.location.root)
+            )
             self.atomic_json = writer
         return runtime
 
@@ -873,6 +928,8 @@ class WorkspaceRuntime:
                 diagnostics,
                 (runtime is not None and not complete) or os.path.lexists(self.location.root / ".dev-runtime.json"),
                 component=self.current_component,
+                winerror=error.winerror if type(error) is RuntimeAdapterError else None,
+                probe_pid=error.probe_pid if type(error) is RuntimeAdapterError else None,
                 inspection=getattr(error, "inspection", None) if type(error) is RuntimeAdapterError else None,
             )
 
