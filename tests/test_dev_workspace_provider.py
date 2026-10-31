@@ -143,6 +143,17 @@ def test_plan_and_policy_are_immutable_detached_and_deterministic():
         replace(first, fingerprint="0" * 64)
 
 
+def test_resource_receipts_survive_source_and_preparation_metadata_updates():
+    original = provider.plan_provider(descriptor(), policy())
+    selected = replace(original.descriptor, commit="9" * 40, configuration_present=True, config_generation=2)
+    updated = provider.plan_provider(selected, original.policy)
+    assert original.containers == updated.containers and original.labels == updated.labels
+    assert original.fingerprint == updated.fingerprint
+    assert original.to_dict()["source_context"] != updated.to_dict()["source_context"]
+    changed = provider.plan_provider(descriptor(generation=2), original.policy)
+    assert original.fingerprint != changed.fingerprint
+
+
 @pytest.mark.parametrize(
     "image",
     [

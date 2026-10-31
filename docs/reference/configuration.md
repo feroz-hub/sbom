@@ -1054,6 +1054,14 @@ read-only planning, not company-policy approval. It prints public references and
 gates, never private file paths or contents. No default image digest or nonroot
 identity is inferred. The adapter and real-execution limitations are documented
 in the [SBO-101 evidence report](../engineering/dev-workspaces-sbo101.md#increment-g--compose-compatible-provider-adapter).
+
+The subsequent [private preparation contract](../engineering/dev-workspaces-sbo101.md#increment-j--protected-private-preparation-and-transport-contracts)
+creates fresh per-instance configuration only with explicit credential and
+certificate authorization. It does not adopt existing service credentials, change
+OS trust, initialize a database or enable Native administrator creation. Its
+PostgreSQL, Python/Node Redis and SMTP transport settings are validated separately.
+Stable provider resource receipts survive source updates; operation approvals
+remain bound to the current source and configuration generation.
 Do not run generated manifests manually to bypass the adapter's identity,
 nonroot, database and exact-target approval checks.
 

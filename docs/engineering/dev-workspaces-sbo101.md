@@ -629,6 +629,51 @@ acceptance. Those real scenarios remain **NOT RUN**, with explicit approval and
 integration prerequisites. No existing configuration, certificate, database or
 historical runtime record was altered.
 
+## Increment J — protected private preparation and transport contracts
+
+`dev_workspace_bundle.py` implements an explicitly authorized, new-generation
+private configuration/credential/certificate bundle. Planning is pure. Preparation
+requires both credential and certificate consent, pinned source/parent identities,
+private files, a pending journal and a completion receipt published last. Existing
+unknown or interrupted generations are retained. A known receipt permits reuse
+after a source commit without regenerating secrets. The real material generator
+has **not run** during this task; positive crypto fixtures are synthetic and the
+real validator has negative invalid-PEM tests.
+
+The generated configuration uses independent backend and frontend Redis users,
+namespace-restricted frontend ACLs, encrypted security-mail and the existing
+canonical `AI_CONFIG_ENCRYPTION_KEY` consumer. Backend secrets are excluded from
+the frontend projection. PostgreSQL requires hostname/chain verification plus
+`gssencmode=disable` and `sslcertmode=disable`, avoiding ambient GSS/client-cert
+selection. Python Redis, Node Redis and SMTP have separate validated transport
+contracts. Unknown query parameters, conflicting key aliases and mismatched CA
+paths fail closed. No schema, application startup or trust-store operation occurs.
+
+The shared trust bundle allows bounded public roots plus the new local authority;
+other private files retain smaller bounds. Existing credential and certificate
+files are neither imported nor replaced. Company image/nonroot policy, actual
+certificate generation and real provider readiness remain separately gated.
+
+A pure-plan regression confirmed provider fingerprints changed with a source
+commit despite identical resources. Stable resource fingerprints now exclude
+source/preparation metadata, while every engine operation's consent still binds
+the full current descriptor. Existing resource receipts remain reusable;
+old source-bound operation consent is refused. Synthetic renewed-consent tests
+exercise that distinction without a container engine.
+
+Executed on Windows/Python 3.14.6:
+
+```powershell
+& C:\sbom\.venv\Scripts\python.exe -B C:\sbom\.windows\worktrees\SBO-98-component-env\.dev-logs\safe_pytest.py tests/test_dev_workspace_provider.py tests/test_dev_workspace_engine.py tests/test_dev_workspace_compose.py tests/test_dev_workspace_provider_input.py tests/test_dev_workspace_cli.py tests/test_dev_workspace_bundle.py tests/test_dev_workspace_tls_contract.py --timeout=90
+```
+
+Result: **338 passed in 441.65s**. Lifecycle/runtime/native fixture and bundle
+cross-contract selection earlier passed **197 tests in 58.57s**. Scoped Ruff
+passed. Actual PKI generation, provider provisioning and database acceptance are
+**NOT RUN**. PR I's first CI run independently exposed hosted executable/default
+file-owner compatibility problems in its native fixture; that repair is isolated
+on its existing branch and is not represented by these J synthetic results.
+
 ## Disposable acceptance procedure (not yet authorized or executed)
 
 1. Review the candidate diff and CI on Windows/macOS/Linux, preserving SBO-98.

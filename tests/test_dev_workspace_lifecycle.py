@@ -12,6 +12,7 @@ import sys
 import types
 from dataclasses import FrozenInstanceError, replace
 from pathlib import Path, PurePosixPath, PureWindowsPath
+from urllib.parse import urlencode
 
 import pytest
 from scripts import dev_instance_plan as plans
@@ -20,6 +21,7 @@ from scripts import dev_workspace_lifecycle as lifecycle
 SECRET = "fixture-private-lifecycle-value-never-print"
 SESSION = base64.b64encode(b"a" * 32).decode()
 OUTBOX = base64.b64encode(b"b" * 32).decode()
+PROVIDER = base64.b64encode(b"c" * 32).decode()
 
 
 def prepared(*, worktree="b" * 64, auth="native", platform="win32", module=lifecycle, **plan_changes):
@@ -38,6 +40,7 @@ def prepared(*, worktree="b" * 64, auth="native", platform="win32", module=lifec
     state = path("C:/fixture/private" if platform == "win32" else "/fixture/private") / descriptor.instance_id
     source = path("C:/fixture/checkout" if platform == "win32" else "/fixture/checkout")
     ports, resources = descriptor.ports, descriptor.resources
+    trust = str(state / "bundles/fixture-generation/tls/trust-bundle.pem")
     environment = {
         "SBOM_DEV_RESOURCE_ID": descriptor.instance_id,
         "SBOM_DEV_INSTANCE": "d" * 32,
@@ -55,6 +58,7 @@ def prepared(*, worktree="b" * 64, auth="native", platform="win32", module=lifec
         "NEXT_PUBLIC_HCL_AUTH_ENABLED": "false" if auth == "native" else "true",
         "AUTH_SESSION_STORE": "redis",
         "AUTH_SESSION_ENCRYPTION_KEY": SESSION,
+        "AI_CONFIG_ENCRYPTION_KEY": PROVIDER,
         "APP_ORIGIN": descriptor.origin,
         "CORS_ORIGINS": descriptor.origin,
         "API_RATE_LIMIT_ENABLED": "true",
@@ -62,13 +66,18 @@ def prepared(*, worktree="b" * 64, auth="native", platform="win32", module=lifec
         "DEV_FRONTEND_PORT": str(ports["frontend"]),
         "SBOM_API_URL": f"http://127.0.0.1:{ports['api']}",
         "NEXT_PUBLIC_API_URL": f"http://127.0.0.1:{ports['api']}",
-        "DATABASE_URL": f"postgresql+psycopg://{resources['restricted_database_role']}:{SECRET}@127.0.0.1:{ports['postgres']}/{resources['database']}",
+        "DATABASE_URL": f"postgresql+psycopg://{resources['restricted_database_role']}:{SECRET}@127.0.0.1:{ports['postgres']}/{resources['database']}?"
+        + urlencode({"sslmode": "verify-full", "sslrootcert": trust,
+                     "gssencmode": "disable", "sslcertmode": "disable"}),
+        "SSL_CERT_FILE": trust,
+        "NODE_EXTRA_CA_CERTS": trust,
         "REPORT_ARTIFACT_STORAGE_PATH": str(state / "artifacts"),
         "SBOM_WORKSPACE_STORAGE_DIR": str(state / "workspaces"),
         "SMTP_HOST": "127.0.0.1",
         "SMTP_PORT": str(ports["smtp"]),
         "SMTP_USE_TLS": "false",
-        "SMTP_USE_STARTTLS": "false",
+        "SMTP_USE_STARTTLS": "true",
+        "SMTP_USERNAME": "sbom_" + descriptor.instance_id.replace("-", ""),
         "SMTP_PASSWORD": SECRET,
         "PROVIDER_SECRET": SECRET,
     }
@@ -79,7 +88,13 @@ def prepared(*, worktree="b" * 64, auth="native", platform="win32", module=lifec
         ("AUTH_SESSION_REDIS_URL", 1),
         ("NATIVE_AUTH_RATE_LIMIT_STORAGE_URI", 3),
     ):
-        environment[name] = f"redis://default:{SECRET}@127.0.0.1:{ports['redis']}/{index}"
+        username = "sbom_session" if name == "AUTH_SESSION_REDIS_URL" else "sbom_runtime"
+        password = "fixture-private-frontend-redis-password" if name == "AUTH_SESSION_REDIS_URL" else SECRET
+        environment[name] = f"rediss://{username}:{password}@127.0.0.1:{ports['redis']}/{index}"
+        if name != "AUTH_SESSION_REDIS_URL":
+            environment[name] += "?" + urlencode({
+                "ssl_cert_reqs": "required", "ssl_check_hostname": "true", "ssl_ca_certs": trust,
+            })
     if auth == "native":
         environment.update(
             NATIVE_SECURITY_OUTBOX_ENABLED="true",
