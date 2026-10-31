@@ -442,6 +442,8 @@ def resolve_configuration(
             target = _database(env["DATABASE_URL"], profile, family)
             if saved.get("DEV_POSTGRES_PROVIDER") not in {None, pg}:
                 raise ConfigurationError("SETUP_REQUIRED", "Review an explicit database-provider change during setup.")
+            if saved.get("DEV_REDIS_PROVIDER") not in {None, redis}:
+                raise ConfigurationError("SETUP_REQUIRED", "Review an explicit Redis-provider change during setup.")
             if target.port != ports.postgres:
                 raise ConfigurationError(
                     "DATABASE_PORT_CONFLICT", "Selected PostgreSQL port differs from saved configuration."

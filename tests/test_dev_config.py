@@ -221,6 +221,71 @@ def test_managed_startup_refuses_provider_change_without_replacing_credentials()
     assert saved["DATABASE_URL"] == LOCAL_URL
 
 
+@pytest.mark.parametrize(("selected_provider", "redis_port"), [("local", 6379), ("docker", dev.REDIS_PORT)])
+@pytest.mark.parametrize("explicit_selection", [False, True])
+@pytest.mark.parametrize("saved_provider_present", [False, True])
+def test_managed_startup_matching_or_missing_redis_provider_preserves_existing_parity(
+    selected_provider, redis_port, explicit_selection, saved_provider_present
+):
+    saved = {"DATABASE_URL": LOCAL_URL, "DEV_POSTGRES_PROVIDER": "local"}
+    if saved_provider_present:
+        saved["DEV_REDIS_PROVIDER"] = selected_provider
+    inherited = {"DEV_REDIS_PROVIDER": "docker" if selected_provider == "local" else "local"}
+    original_saved, original_inherited = dict(saved), dict(inherited)
+    expected = {**inherited, **dev.resolve_config(saved, 5432, redis_port, 1025, "local", selected_provider)}
+    plan = resolve(
+        purpose="startup",
+        inherited=inherited,
+        saved=saved,
+        ports=dev_config.ServicePorts(
+            5432, redis_port, 1025, "local", selected_provider if explicit_selection else None
+        ),
+    )
+    assert dict(plan.environment) == expected
+    assert plan.environment["DEV_REDIS_PROVIDER"] == selected_provider
+    assert plan.provenance["DEV_REDIS_PROVIDER"] == "selection.providers"
+    assert saved == original_saved and inherited == original_inherited
+
+
+@pytest.mark.parametrize(
+    ("saved_provider", "selected_provider", "redis_port"),
+    [("local", "docker", dev.REDIS_PORT), ("docker", "local", 6379), ("fixture-unknown-provider", "local", 6379)],
+)
+@pytest.mark.parametrize("explicit_selection", [False, True])
+def test_managed_startup_refuses_redis_provider_change_without_mutating_snapshots(
+    saved_provider, selected_provider, redis_port, explicit_selection
+):
+    saved = {
+        "DATABASE_URL": LOCAL_URL,
+        "DEV_POSTGRES_PROVIDER": "local",
+        "DEV_REDIS_PROVIDER": saved_provider,
+        "AUTH_SESSION_REDIS_URL": f"redis://fixture:{PASSWORD}@127.0.0.1:6379/1",
+    }
+    inherited = {"DEV_REDIS_PROVIDER": selected_provider, "PROCESS_ONLY": "unchanged"}
+    original_saved, original_inherited = dict(saved), dict(inherited)
+    with pytest.raises(dev_config.ConfigurationError) as caught:
+        resolve(
+            purpose="startup",
+            inherited=inherited,
+            saved=saved,
+            ports=dev_config.ServicePorts(
+                5432, redis_port, 1025, "local", selected_provider if explicit_selection else None
+            ),
+        )
+    assert caught.value.code == "SETUP_REQUIRED"
+    assert "Redis-provider change" in str(caught.value)
+    assert PASSWORD not in str(caught.value) and PASSWORD not in repr(caught.value)
+    assert saved["AUTH_SESSION_REDIS_URL"] not in str(caught.value)
+    assert saved == original_saved and inherited == original_inherited
+
+
+def test_managed_existing_inspection_preserves_saved_redis_provider_without_selecting_a_different_one():
+    saved = {"DATABASE_URL": LOCAL_URL, "DEV_REDIS_PROVIDER": "docker"}
+    plan = resolve(saved=saved, ports=dev_config.ServicePorts(5432, 6379, 1025, "local", "local"))
+    assert dict(plan.environment) == saved
+    assert plan.provenance["DEV_REDIS_PROVIDER"] == "managed"
+
+
 def test_plan_and_nested_maps_are_immutable_and_detached_from_input():
     inherited = {"PATH": "initial-path"}
     saved = {"DATABASE_URL": LOCAL_URL, "NEXT_PUBLIC_AUTH_ENABLED": "true", "CUSTOM_SETTING": "initial"}
