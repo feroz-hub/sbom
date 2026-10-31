@@ -173,6 +173,24 @@ def test_setup_json_is_readonly_and_secret_redacted(fixture, monkeypatch, capsys
     assert not (fixture.home / ".sbom-dev").exists()
 
 
+def test_cli_arguments_without_family_select_new_instance_only_when_mode_and_auth_are_explicit(fixture):
+    # Integration review: the public parser defines no family/existing_family.
+    session = control.SetupSession(fixture.root, home=fixture.home, observe_options=fixture.control_options)
+    parsed = vars(args())
+    del parsed["family"], parsed["existing_family"]
+    selection = session.selection(SimpleNamespace(**parsed))
+    assert (selection.mode, selection.auth_mode, selection.family, selection.existing_family) == (
+        "mock",
+        "native",
+        "instance",
+        None,
+    )
+    rows = {row.category: row for row in session.plan(selection).rows}
+    assert rows["selection"].code == "SETUP_SELECTION_READY"
+    parsed["auth"] = None
+    assert session.selection(SimpleNamespace(**parsed)).family is None
+
+
 def test_full_mock_preparation_uses_separate_consents_and_persists_known_tls(fixture, fake_crypto, monkeypatch):
     before = control.SetupSession(fixture.root, home=fixture.home, observe_options=fixture.control_options)
     inspected = before.plan(before.selection(args()))

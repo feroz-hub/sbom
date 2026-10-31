@@ -344,6 +344,9 @@ class SetupSession:
             (entry.descriptor for entry in records.entries if entry.descriptor.worktree_id == selected.worktree_id),
             None,
         )
+        # The public CLI has no family option: an explicit mode and auth select
+        # a new instance; existing private configuration is still reviewed.
+        explicit = bool(getattr(args, "mode", None) and getattr(args, "auth", None))
         return setup.Selection(
             selected.worktree_id,
             getattr(args, "mode", None) or (existing.mode if existing else None),
@@ -352,7 +355,7 @@ class SetupSession:
             getattr(args, "generation", None)
             if getattr(args, "generation", None) is not None
             else (existing.generation if existing else 1),
-            getattr(args, "family", None) or ("instance" if existing else None),
+            getattr(args, "family", None) or ("instance" if existing or explicit else None),
             getattr(args, "existing_family", None) or ("instance" if existing else None),
         )
 
