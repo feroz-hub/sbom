@@ -9,6 +9,7 @@ import importlib.util
 import json
 import subprocess
 import sys
+import time
 from dataclasses import replace
 from pathlib import Path
 from urllib.parse import quote
@@ -59,6 +60,15 @@ def test_native_partial_startup_cleans_only_verified_fixture_processes(tmp_path)
     def owned_popen(*args, **kwargs):
         child = subprocess.Popen(*args, **kwargs)
         children.append(child)
+        # macOS framework Python may exec the final interpreter after Popen
+        # returns. Like test_dev_native_process, establish fixture workload
+        # before recording its executable identity. Never accept a changed
+        # executable in production ownership checks to make this fixture pass.
+        deadline = time.monotonic() + 8
+        while len(tuple((root / ".dev-logs").glob("*.fixture-ready"))) < len(children):
+            assert child.poll() is None, "Native helper exited before its stable fixture workload"
+            assert time.monotonic() < deadline, "Native helper workload was not established"
+            time.sleep(.01)
         return child
 
     def runtime_factory(directory):
