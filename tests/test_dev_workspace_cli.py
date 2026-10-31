@@ -251,6 +251,33 @@ def test_selected_instance_requires_verified_source_before_even_missing_registry
     forbidden.assert_not_called()
 
 
+@pytest.mark.parametrize("sibling", ["bare", "prunable"])
+def test_blocked_sibling_worktree_does_not_block_this_checkouts_dispatch(checkout, monkeypatch, sibling):
+    # Integration review: an unrelated bare/pruned worktree must not stop Legacy stop/status.
+    blocked = dev_workspace.WorktreeSnapshot(
+        None, checkout.root.parent / "removed-sibling", None, None, None, None,
+        sibling == "bare", None, None, sibling == "prunable", status="BLOCKED", codes=("GIT_WORKTREE_UNVERIFIED",),
+    )
+    snapshot = replace(
+        checkout.snapshot,
+        worktrees=(*checkout.snapshot.worktrees, blocked),
+        status="BLOCKED",
+        codes=("WORKTREE_INSPECTION_BLOCKED",),
+    )
+    checkout.discover.return_value = snapshot
+    reader = Mock(return_value=cli.dev_instance_registry.RegistrySnapshot(codes=("REGISTRY_MISSING",)))
+    monkeypatch.setattr(cli, "_registry", Mock(return_value=SimpleNamespace(read=reader)))
+    assert cli.selected_instance(checkout.root) is None
+    own = replace(checkout.snapshot.worktrees[0], status="BLOCKED", codes=("GIT_WORKTREE_UNVERIFIED",))
+    checkout.discover.return_value = replace(snapshot, worktrees=(own, blocked))
+    with pytest.raises(cli.WorkspaceCommandError, match="^WORKSPACE_TARGET_UNVERIFIED$"):
+        cli.selected_instance(checkout.root)
+    checkout.discover.return_value = replace(snapshot, codes=("WORKTREE_INSPECTION_BLOCKED", "GIT_PROBE_UNVERIFIED"))
+    with pytest.raises(cli.WorkspaceCommandError, match="^WORKSPACE_REPOSITORY_UNVERIFIED$"):
+        cli.selected_instance(checkout.root)
+    reader.assert_called_once_with()
+
+
 def test_valid_unregistered_repository_is_distinct_from_unverified_discovery(checkout, monkeypatch):
     reader = Mock(return_value=cli.dev_instance_registry.RegistrySnapshot(codes=("REGISTRY_MISSING",)))
     monkeypatch.setattr(cli, "_registry", Mock(return_value=SimpleNamespace(read=reader)))

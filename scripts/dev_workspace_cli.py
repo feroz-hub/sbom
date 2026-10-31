@@ -621,9 +621,12 @@ def _control():
 def selected_instance(root):
     """Presence of a protected registration chooses dispatch, never readiness."""
     snapshot = dev_workspace.discover_workspaces(root)
+    # Another worktree's blocked row never decides this checkout's dispatch;
+    # repository-level failures and this checkout's own row still fail closed.
+    siblings_only = snapshot.status == "BLOCKED" and snapshot.codes == ("WORKTREE_INSPECTION_BLOCKED",)
     if (
-        snapshot.status != "PASS"
-        or snapshot.codes
+        (snapshot.status != "PASS" and not siblings_only)
+        or (snapshot.codes and not siblings_only)
         or snapshot.repository_id is None
         or snapshot.common_directory is None
         or snapshot.identity is None
