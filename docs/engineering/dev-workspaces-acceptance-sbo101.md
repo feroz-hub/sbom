@@ -23,15 +23,15 @@ Do not convert those entries to PASS from code inspection alone.
 | T03 two worktrees | Real disposable Git worktrees, separate registry records/IDs/port proposals | Not run: two applications |
 | T04 concurrent UI edits | Worktree identity/dirty observations | Not run: parallel UI runtimes |
 | T05 baseline/candidate comparison | Public comparison contract | Not run: browser/screenshots/traces |
-| T06 mock frontend | Mode proposal excludes data services/workers/Beat | Not run: mock runtime adapter |
-| T07 shared backend | Mode proposal requires explicit registration | Not run: target/tenant/TLS/session approvals |
+| T06 mock frontend | Synthetic Next fixture preparation, exact-runtime adapter and inert public-theme extraction | Not run: real Node/HTTPS/browser visual runtime |
+| T07 shared backend | Explicit registration, auth/session/tenant/TLS/compiler callback gates and linked source | Not run: actual approved backend/browser acceptance |
 | T08 backend edit with another preview | Commit/config drift contract | Not run: parallel runtimes |
 | T09 two backend stacks | Unique namespace/target contract | Not run: approved independent providers |
 | T10 shared database selection | Dedicated target/role refusal contract | Not run: negative live database access |
 | T11 cookie collision across ports | Unique hostname proposal; no port-only isolation claim | Not run: TLS/browser/callback verification |
 | T12 unknown port owner | Legacy ownership regressions; proposals do not reserve ports | Not run: isolated bind/rebind race |
 | T13 stale/corrupt runtime | Legacy PID reuse/unknown ownership tests; registry corruption refusal | Not run: candidate crash/recovery |
-| T14 worker/Beat shutdown | Existing Windows cooperative-shutdown/native process regressions | Not run: isolated active jobs |
+| T14 worker/Beat shutdown | Existing Windows regressions plus candidate Runtime partial-startup cleanup of four real fixture helpers | Not run: real isolated workers/Beat or active jobs |
 | T15 queue/Beat collision | Instance namespace/launch contracts | Not run: two live brokers/schedulers |
 | T16 unauthorized migration | Nonunit/test/schema operations gated; existing migration guards | Not run: destructive/migration operation |
 | T17 protected DB fixtures | Application conftest excluded; sanitized SQLite sentinels | Prohibited without target-specific approval |

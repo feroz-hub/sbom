@@ -84,12 +84,16 @@ def _parser():
     )
     parser.add_argument(
         "--scope",
-        choices=("registry", "dependencies", "administrator", "provider"),
+        choices=("registry", "dependencies", "administrator", "provider", "preview"),
         help="Preparation category; administrator guidance cannot execute enrollment",
     )
     parser.add_argument(
         "--provider-policy", type=Path,
         help="Explicit proposed provider JSON; never supplies company or resource authorization",
+    )
+    parser.add_argument(
+        "--preview-settings", type=Path,
+        help="Explicit existing Node/TLS paths and optional approved non-production backend registration",
     )
     parser.add_argument("--port-min", type=int, default=20000)
     parser.add_argument("--port-max", type=int, default=29999)
@@ -772,6 +776,8 @@ def _provider_command(args, root):
 def run_cli(argv, root):
     args = _parser().parse_args(argv)
     try:
+        if args.preview_settings is not None and (args.scope != "preview" or args.command not in {"plan", "prepare"}):
+            _fail("WORKSPACE_PREVIEW_OPTIONS_REQUIRED")
         if args.provider_policy is not None and (args.scope != "provider" or args.command != "plan"):
             _fail("WORKSPACE_PROVIDER_OPTIONS_REQUIRED")
         if (
@@ -811,6 +817,12 @@ def run_cli(argv, root):
                 inspect_software=args.command == "diagnose",
             )
         if args.command == "plan":
+            if args.scope == "preview":
+                if __package__:
+                    from . import dev_workspace_preview_cli
+                else:
+                    import dev_workspace_preview_cli
+                return dev_workspace_preview_cli.run(args, root)
             if args.scope == "provider":
                 return _provider_command(args, root)
             if args.scope == "administrator":
@@ -825,6 +837,12 @@ def run_cli(argv, root):
             _print_plan(plan, args.json)
             return 1 if plan.blockers else 0
         if args.command == "prepare":
+            if args.scope == "preview":
+                if __package__:
+                    from . import dev_workspace_preview_cli
+                else:
+                    import dev_workspace_preview_cli
+                return dev_workspace_preview_cli.run(args, root)
             if args.scope == "provider":
                 return _provider_command(args, root)
             if args.scope == "administrator":
