@@ -49,7 +49,7 @@ def _path(value):
 def _parser():
     parser = _SafeParser(
         prog="python scripts/dev.py workspace",
-        description="Read-only Git worktree inventory and isolated-instance proposals.",
+        description="Git worktree inventory, isolated-instance proposals and separately consented preparation.",
         epilog="Plans/registry identities are not resource ownership or privileged authorization. Existing services are never adopted.",
     )
     parser.add_argument(
@@ -228,6 +228,102 @@ def _print_plan(plan, as_json):
     )
 
 
+def _dependency_plan(args, root):
+    if any(
+        (
+            args.mode,
+            args.auth,
+            args.provider,
+            args.generation is not None,
+            args.port_min != 20000,
+            args.port_max != 29999,
+        )
+    ):
+        _fail("WORKSPACE_DEPENDENCY_INSTANCE_OPTIONS_REFUSED")
+    if __package__:
+        from . import dev_workspace_dependencies
+    else:
+        import dev_workspace_dependencies
+    snapshot = dev_workspace.discover_workspaces(root)
+    if snapshot.status != "PASS":
+        _fail("WORKSPACE_INVENTORY_INCOMPLETE")
+    selected = _select(snapshot, root, args.worktree)
+    hashes = _manifest_hashes(selected.root, selected.identity, snapshot.root, snapshot.identity)
+    plan = dev_workspace_dependencies.inspect_dependencies(snapshot, selected, manifest_hashes=hashes)
+    fingerprint = hashlib.sha256(
+        json.dumps(
+            {"dependency_plan": plan.fingerprint, "controller_inputs": hashes},
+            sort_keys=True,
+            separators=(",", ":"),
+        ).encode("ascii")
+    ).hexdigest()
+    public = {
+        "category": "software-dependencies",
+        "worktree_id": selected.worktree_id,
+        "repository_id": snapshot.repository_id,
+        "commit": selected.head,
+        "actions": list(plan.actions),
+        "blockers": list(plan.blockers),
+        "tool_versions": dict(plan.tool_versions),
+        "fingerprint": fingerprint,
+        "private_configuration_required": False,
+        "package_sources": ["https://pypi.org/simple", "https://registry.npmjs.org"],
+    }
+    return plan, public
+
+
+def _print_dependency_plan(public, as_json):
+    if as_json:
+        print(json.dumps(public, sort_keys=True))
+        return
+    print(f"[PLANNED] software-dependencies; worktree {public['worktree_id']}; commit {public['commit']}")
+    print(f"[PLANNED] fingerprint {public['fingerprint']}")
+    print("[INFO] Private configuration is not required. No database or application is contacted.")
+    print(
+        "[INFO] Binary Python packages from pypi.org; locked npm packages from registry.npmjs.org; install scripts disabled."
+    )
+    for action in public["actions"]:
+        print(f"[NEEDS APPROVAL] {action}; independent writable dependencies, no shared mutable environment.")
+    for code in public["blockers"]:
+        print(f"[BLOCKED] {code}; preserve existing artifacts for review.")
+
+
+def _prepare_dependencies(args, root):
+    if __package__:
+        from . import dev_workspace_dependencies
+    else:
+        import dev_workspace_dependencies
+    plan, public = _dependency_plan(args, root)
+    _print_dependency_plan(public, args.json)
+    if plan.blockers:
+        return 1
+    if args.json or not sys.stdin.isatty() or not sys.stdout.isatty():
+        _fail("WORKSPACE_DEPENDENCY_APPROVAL_REQUIRED")
+    deadline = time.monotonic() + 120
+    literal = "DEPENDENCIES " + public["fingerprint"]
+    response = input(
+        f"Review workstation package-source policy. Only this worktree's dependencies will be prepared. Type {literal}: "
+    )
+    if response != literal or time.monotonic() > deadline:
+        _fail("WORKSPACE_DEPENDENCY_APPROVAL_REQUIRED")
+
+    def authorize(candidate):
+        _, current = _dependency_plan(args, root)
+        if candidate is not plan or current != public or time.monotonic() > deadline:
+            raise dev_workspace_dependencies.DependencyError("DEPENDENCY_PLAN_CHANGED") from None
+        return True
+
+    outcome = dev_workspace_dependencies.prepare_dependencies(plan, authorize=authorize)
+    print(
+        f"[{'PASS' if outcome.exit_code == 0 else 'BLOCKED'}] {outcome.code}; prepared={','.join(outcome.prepared) or 'none'}; verified={','.join(outcome.skipped) or 'none'}."
+    )
+    if outcome.artifacts_retained:
+        print(
+            "[INFO] Owned preparation artifacts were retained; no automatic repair or deletion. Review dependency plan before retrying."
+        )
+    return outcome.exit_code
+
+
 def _inventory(root, as_json=False, requested=None):
     snapshot = dev_workspace.discover_workspaces(root)
     records = (
@@ -348,12 +444,18 @@ def run_cli(argv, root):
             selected = args.worktree or (root if args.command != "list" else None)
             return _inventory(root, args.json, selected)
         if args.command == "plan":
+            if args.scope == "dependencies":
+                _, public = _dependency_plan(args, root)
+                _print_dependency_plan(public, args.json)
+                return 1 if public["blockers"] else 0
             if args.scope:
                 _fail("WORKSPACE_READ_ONLY_OPTIONS_REQUIRED")
             plan, _, _ = _make_plan(args, root)
             _print_plan(plan, args.json)
             return 1 if plan.blockers else 0
         if args.command == "prepare":
+            if args.scope == "dependencies":
+                return _prepare_dependencies(args, root)
             return _prepare_registry(args, root)
         _fail("WORKSPACE_CAPABILITY_NOT_PREPARED")
     except Exception as error:
@@ -381,6 +483,16 @@ def fresh_checkout(root):
         )
     ):
         return False
+    # Presence chooses guidance only; it never proves artifact ownership or
+    # dependency freshness. Existing unmanaged venv-only checkouts keep dispatch.
+    if any(
+        (root / ".venv" / name).exists()
+        for name in (
+            ".sbom-workspace-dependencies.json",
+            ".sbom-workspace-dependency-attempt",
+        )
+    ):
+        return True
     return not (root / ".venv").is_dir()
 
 

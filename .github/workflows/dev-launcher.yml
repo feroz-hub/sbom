@@ -83,6 +83,8 @@ jobs:
           scripts/dev_native_enrollment.py tests/test_dev_native_enrollment.py tests/test_dev_native_enrollment_cli.py
           scripts/dev_workspace.py scripts/dev_workspace_cli.py scripts/dev_instance_plan.py
           scripts/dev_instance_registry.py scripts/dev_instance_storage.py
+          scripts/dev_workspace_dependencies.py scripts/dev_workspace_provider.py
+          tests/test_dev_workspace_dependencies.py tests/test_dev_workspace_provider.py
           tests/test_dev_workspace.py tests/test_dev_workspace_cli.py tests/test_dev_instance_plan.py
           tests/test_dev_instance_registry.py tests/test_dev_instance_storage.py
           tests/test_dev_operator.py tests/test_dev_operator_cli.py
@@ -99,7 +101,8 @@ jobs:
           [compile(Path(name).read_text(encoding='utf-8'), name, 'exec')
           for name in ('scripts/dev.py', 'scripts/dev_config.py', 'scripts/dev_diagnostics.py',
           'scripts/dev_environment.py', 'scripts/dev_prepared.py', 'scripts/dev_private.py', 'scripts/dev_setup.py', 'scripts/dev_windows_acl.py', 'scripts/dev_components.py', 'scripts/dev_frontend.py', 'scripts/dev_operator.py', 'scripts/bootstrap_native_platform_user.py', 'scripts/dev_native_enrollment.py',
-          'scripts/dev_workspace.py', 'scripts/dev_workspace_cli.py', 'scripts/dev_instance_plan.py', 'scripts/dev_instance_registry.py', 'scripts/dev_instance_storage.py')]"
+          'scripts/dev_workspace.py', 'scripts/dev_workspace_cli.py', 'scripts/dev_instance_plan.py', 'scripts/dev_instance_registry.py', 'scripts/dev_instance_storage.py',
+          'scripts/dev_workspace_dependencies.py', 'scripts/dev_workspace_provider.py')]"
       - name: Cross-platform unit and mocked adapter regressions
         run: >-
           python -m pytest -p no:cacheprovider --noconftest -q
@@ -108,6 +111,7 @@ jobs:
           tests/test_dev_native_enrollment.py tests/test_dev_native_enrollment_cli.py
           tests/test_dev_workspace.py tests/test_dev_workspace_cli.py tests/test_dev_instance_plan.py
           tests/test_dev_instance_registry.py tests/test_dev_instance_storage.py
+          tests/test_dev_workspace_dependencies.py tests/test_dev_workspace_provider.py
           tests/test_dev_prepared.py tests/test_dev_private_files.py tests/test_dev_setup.py
           tests/test_dev_windows_acl.py
           tests/test_dev_component_environments.py tests/test_dev_frontend_workspace.py

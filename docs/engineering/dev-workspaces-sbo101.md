@@ -96,7 +96,12 @@ Ruff and `git diff --check` passed. Python 3.11 grammar parsing passed; this is
 syntax compatibility, not execution on a Python 3.11 runtime. AST comparisons
 verify that `Runtime`, process inspection and existing startup helpers remain
 identical to the integration dependency. No macOS/Linux native test was run on
-this Windows host; CI and independent native acceptance are still required.
+this Windows host. PR A is draft [#55](https://github.com/feroz-hub/sbom/pull/55),
+commit `6571e0e85e639a8040098c226176d54479c4905a`. Its
+[pull-request CI](https://github.com/feroz-hub/sbom/actions/runs/41176063817)
+and push CI completed successfully: four launcher OS/Python jobs and six real
+frontend-fixture OS/Node jobs per run, including Python 3.11 and Node 26.1.0.
+Independent native full-stack acceptance is still required.
 
 ### Exact read-only checks
 
@@ -120,6 +125,67 @@ and Git result order. The affected Git/CLI tests passed afterward: **46 passed,
 planning completed in 16.34s and returned its explicit missing-configuration and
 approval blockers. All stderr was empty. Slow/unresponsive filesystems can still
 produce a bounded BLOCKED result; the launcher does not silently omit worktrees.
+
+## PR B: dependency preparation and provider abstraction
+
+Adds `dev_workspace_dependencies` and `dev_workspace_provider`, their focused
+tests, CLI category consent and ignored same-volume npm attempt directories.
+Existing setup/start commands retain their previous configuration/security gates.
+Dependency preparation is independent of `.env.dev.local`: its read-only plan
+uses public source/tool identity, and its user-level writer requires exact
+interactive consent plus repeated input verification. Unknown or partial targets
+are retained, not adopted, repaired or deleted. Successful dependency outcomes
+explicitly leave compiler/application readiness unverified.
+
+The provider library supplies immutable, image-digest/nonroot-policy proposals
+and strict normalized inventory comparisons. It executes no engine command,
+generates no credentials and never treats supplied JSON/labels as independent
+ownership. An engine-specific ownership adapter is still required after company
+provider policy is approved. PostgreSQL's first container boot itself can
+initialize data, so provisioning cannot precede target-specific database approval.
+
+Actual native read-only `workspace plan --scope dependencies --json` returned
+exit 1 with `private_configuration_required=false`, both dependency actions and
+the precise blocker `DEPENDENCY_ROOT_ACCESS_REVIEW_REQUIRED`. A safe native ACL
+inspection identified `GetAce / UNTRUSTED_GRANT` (no OS error code). The worktree
+has a write grant outside the adapter's trusted principals. No permissions were
+changed and no installer ran. Use an approved safe-permission checkout or IT
+review; do not repair the protected root automatically.
+
+One pre-final combined test run produced 402 passed and one policy failure:
+the approved npm lock has 154 entries without both `resolved` and `integrity`.
+The adapter was corrected to preserve exact version pins for those entries while
+forcing the registry and strict TLS; partial or unsafe explicit metadata remains
+refused. This is not complete artifact-hash attestation. Package manifests and
+lockfiles were unchanged. Tests and read-only evidence never used real
+pip/npm installation, container creation or database access.
+
+Final Python 3.14.6 command (same safe harness/worktree as PR A):
+
+```powershell
+& C:\sbom\.venv\Scripts\python.exe -B `
+  C:\sbom\.windows\worktrees\SBO-98-component-env\.dev-logs\safe_pytest.py `
+  tests/test_dev_workspace_dependencies.py tests/test_dev_workspace_provider.py `
+  tests/test_dev_workspace_cli.py tests/test_dev_setup.py `
+  tests/test_dev_diagnose.py tests/test_dev_launcher.py --timeout=60
+```
+
+Result: **406 passed in 65.15s**. Python 3.12.10, using its existing interpreter
+with the same harness and the dependency/provider test files: **95 passed in
+19.14s**. Ruff passed for the six Phase B source/test files; all installers and
+engine inventories in tests were synthetic. Native temporary filesystem and
+ownership paths were exercised. This is not package/network/provider acceptance.
+
+A subsequent read-only source review found npm's built-in config can override
+scoped registries despite isolated user/global config. A focused follow-up binds
+that tool-local input and rejects unsupported directives before installer
+execution, without exposing values or hashing raw comments into public plans.
+This review correction changes only the dependency adapter/tests and evidence;
+it does not alter package manifests or install packages.
+After that correction, the same safe harness ran dependency/provider/CLI tests:
+**146 passed in 74.10s** on Python 3.14.6. The changed dependency tests on
+Python 3.12.10: **48 passed in 51.39s**. Ruff passed. All installers remained
+synthetic. PR B is draft [#56](https://github.com/feroz-hub/sbom/pull/56).
 
 ## Disposable acceptance procedure (not yet authorized or executed)
 

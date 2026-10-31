@@ -105,3 +105,6 @@ deploy/certs/*
 deploy/secrets/*
 !deploy/secrets/.gitkeep
 sbom-analyser-images-*.tar
+
+# Per-worktree owned npm preparation attempts; preserve after interruption.
+frontend/.sbom-dependencies-*/

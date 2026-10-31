@@ -208,6 +208,16 @@ def test_existing_private_or_runtime_state_keeps_legacy_dispatch(tmp_path):
     assert (tmp_path / ".dev-runtime.json").read_text() == "unknown-owned-record-preserve"
 
 
+@pytest.mark.parametrize("marker", [".sbom-workspace-dependencies.json", ".sbom-workspace-dependency-attempt"])
+def test_dependency_only_or_interrupted_new_setup_still_gets_inventory(tmp_path, marker):
+    (tmp_path / ".venv").mkdir()
+    assert not cli.fresh_checkout(tmp_path)  # Existing unmanaged behavior.
+    (tmp_path / ".venv" / marker).write_text("public marker", encoding="utf-8")
+    assert cli.fresh_checkout(tmp_path)
+    (tmp_path / ".env.dev.local").write_text("private-synthetic-not-read", encoding="utf-8")
+    assert not cli.fresh_checkout(tmp_path)
+
+
 def test_workspace_dispatch_precedes_old_parser_and_runtime(checkout, monkeypatch):
     monkeypatch.setattr(sys, "argv", ["scripts/dev.py", "workspace", "list"])
     monkeypatch.setattr(dev, "ROOT", checkout.root)
@@ -222,6 +232,93 @@ def _fixture_index_hashes(paths):
     import hashlib
 
     return {path: (hashlib.sha256(path.read_bytes()).hexdigest(), path.stat().st_mtime_ns) for path in paths}
+
+
+@pytest.fixture
+def dependency_inspection(checkout, monkeypatch):
+    from scripts import dev_workspace_dependencies as dependencies
+
+    plan = SimpleNamespace(
+        fingerprint="d" * 64,
+        actions=("prepare-python", "prepare-frontend"),
+        blockers=(),
+        tool_versions={"python": (3, 12, 10), "node": (26, 1, 0)},
+    )
+    inspect = Mock(return_value=plan)
+    prepare = Mock(side_effect=AssertionError("CLI reached installer without consent"))
+    monkeypatch.setattr(dependencies, "inspect_dependencies", inspect)
+    monkeypatch.setattr(dependencies, "prepare_dependencies", prepare)
+    return SimpleNamespace(module=dependencies, plan=plan, inspect=inspect, prepare=prepare)
+
+
+def test_dependency_plan_is_independent_of_private_configuration(checkout, dependency_inspection, monkeypatch, capsys):
+    original = cli.dev_environment.bounded_read_bytes
+
+    def public_only(path, *args, **kwargs):
+        assert path.name not in {".env", ".env.dev.local", ".env.local"}
+        return original(path, *args, **kwargs)
+
+    monkeypatch.setattr(cli.dev_environment, "bounded_read_bytes", public_only)
+    assert cli.run_cli(["plan", "--scope", "dependencies", "--json"], checkout.root) == 0
+    public = json.loads(capsys.readouterr().out)
+    assert public["private_configuration_required"] is False
+    assert public["category"] == "software-dependencies"
+    assert public["actions"] == ["prepare-python", "prepare-frontend"]
+    assert dependency_inspection.inspect.call_args.args == (checkout.snapshot, checkout.snapshot.worktrees[0])
+    dependency_inspection.prepare.assert_not_called()
+
+
+def test_dependency_noninteractive_preparation_requires_consent(checkout, dependency_inspection, monkeypatch, capsys):
+    monkeypatch.setattr(cli.sys.stdin, "isatty", lambda: False)
+    assert cli.run_cli(["prepare", "--scope", "dependencies"], checkout.root) == 1
+    assert "WORKSPACE_DEPENDENCY_APPROVAL_REQUIRED" in capsys.readouterr().out
+    dependency_inspection.prepare.assert_not_called()
+
+
+@pytest.mark.parametrize("changed", [False, True])
+def test_dependency_consent_revalidates_before_installer(checkout, dependency_inspection, monkeypatch, capsys, changed):
+    args = cli._parser().parse_args(["prepare", "--scope", "dependencies"])
+    _, public = cli._dependency_plan(args, checkout.root)
+    monkeypatch.setattr(cli.sys.stdin, "isatty", lambda: True)
+    monkeypatch.setattr(cli.sys.stdout, "isatty", lambda: True)
+
+    def confirm(prompt):
+        if changed:
+            (checkout.root / "requirements.txt").write_text("changed-public-manifest", encoding="utf-8")
+        return "DEPENDENCIES " + public["fingerprint"]
+
+    monkeypatch.setattr("builtins.input", confirm)
+    entered = []
+
+    def prepare(plan, *, authorize):
+        assert authorize(plan) is True
+        entered.append("synthetic-only")
+        return dependency_inspection.module.DependencyOutcome("DEPENDENCIES_PREPARED", 0, ("python", "frontend"))
+
+    dependency_inspection.prepare.side_effect = prepare
+    assert cli.run_cli(["prepare", "--scope", "dependencies"], checkout.root) == (1 if changed else 0)
+    assert entered == ([] if changed else ["synthetic-only"])
+    if changed:
+        assert "DEPENDENCY_PLAN_CHANGED" in capsys.readouterr().out
+    assert not (checkout.root / ".dev-runtime.json").exists()
+
+
+def test_expired_dependency_consent_never_calls_installer(checkout, dependency_inspection, monkeypatch, capsys):
+    args = cli._parser().parse_args(["prepare", "--scope", "dependencies"])
+    _, public = cli._dependency_plan(args, checkout.root)
+    monkeypatch.setattr(cli.sys.stdin, "isatty", lambda: True)
+    monkeypatch.setattr(cli.sys.stdout, "isatty", lambda: True)
+    moment = [0.0]
+    monkeypatch.setattr(cli.time, "monotonic", lambda: moment[0])
+
+    def confirm(prompt):
+        moment[0] = 121.0
+        return "DEPENDENCIES " + public["fingerprint"]
+
+    monkeypatch.setattr("builtins.input", confirm)
+    assert cli.run_cli(["prepare", "--scope", "dependencies"], checkout.root) == 1
+    assert "WORKSPACE_DEPENDENCY_APPROVAL_REQUIRED" in capsys.readouterr().out
+    dependency_inspection.prepare.assert_not_called()
 
 
 def test_actual_two_git_worktrees_register_independent_public_instances_without_starting_resources(
