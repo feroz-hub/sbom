@@ -705,6 +705,7 @@ def action_targets(provider, compose, *, recorded=None, secrets=()):
         files = recorded.secrets if recorded is not None else secrets
         targets = [
             provider.fingerprint,
+            provider.descriptor.to_dict(),
             compose.fingerprint,
             compose.policy.private_binding(),
             [(item.reference, str(item.path), item.identity) for item in files],
@@ -785,6 +786,7 @@ def plan_action(provider, capability, consent, *, compose, recorded=None, secret
         controllers = _controllers()
         binding = [
             provider.fingerprint,
+            provider.descriptor.to_dict(),
             compose.fingerprint,
             compose.policy.private_binding(),
             capability.engine_identity,

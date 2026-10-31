@@ -459,6 +459,26 @@ def test_exact_operator_consent_cannot_be_reused_for_another_recorded_id(prepare
     assert not mutations(prepared.fake)
 
 
+def test_source_advance_preserves_resource_identity_but_invalidates_old_action_consent(prepared):
+    old = request(prepared)
+    selected = replace(prepared.plan.descriptor, commit="9" * 40,
+                       configuration_present=True, config_generation=2)
+    updated = provider.plan_provider(selected, prepared.plan.policy)
+    contract = compose.plan_compose(updated, prepared.compose.policy, review=prepared.compose.review)
+    assert updated.fingerprint == prepared.plan.fingerprint
+    assert contract.fingerprint == prepared.compose.fingerprint
+    targets = engine.action_targets(updated, contract, recorded=old.recorded)
+    assert targets != old.consent.targets_fingerprint
+    with pytest.raises(engine.EngineError, match="^ENGINE_CONSENT_REQUIRED$"):
+        engine.plan_action(updated, prepared.capability, old.consent, compose=contract, recorded=old.recorded)
+    renewed = replace(old.consent, targets_fingerprint=targets,
+                      operation_id="1e4681fa-5e25-4a0e-9ac5-74d03e551384")
+    planned = engine.plan_action(updated, prepared.capability, renewed, compose=contract, recorded=old.recorded)
+    outcome = engine.DockerEngineClient(prepared.capability, authority=Authority(), runner=prepared.fake).execute(planned)
+    assert outcome.code == "ENGINE_ACTION_COMPLETED"
+    assert set(outcome.completed_ids) == {record.object_id for record in old.recorded.containers}
+
+
 def test_public_controller_code_drift_blocks_before_engine_mutation(prepared, monkeypatch):
     planned = request(prepared)
     changed = list(planned.controller_proofs)

@@ -12,7 +12,7 @@ from collections.abc import Mapping, Sequence
 from dataclasses import dataclass, field
 from pathlib import PurePosixPath, PureWindowsPath
 from types import MappingProxyType
-from urllib.parse import unquote, urlsplit
+from urllib.parse import parse_qsl, unquote, urlsplit
 
 if __package__:
     from . import dev_config, dev_instance_plan
@@ -71,6 +71,7 @@ _PRELOADS = frozenset(
         "DJANGO_SETTINGS_MODULE",
         "UVICORN_APP",
         "UVICORN_ENV_FILE",
+        "SSLKEYLOGFILE",
     }
 )
 _ERRORS = frozenset(
@@ -92,6 +93,7 @@ _ERRORS = frozenset(
         "INSTANCE_SHARED_KEY_REFUSED",
         "INSTANCE_HCL_CONFIGURATION_REQUIRED",
         "INSTANCE_FRONTEND_CONFIGURATION_INVALID",
+        "INSTANCE_TLS_CONFIGURATION_REQUIRED",
         "INSTANCE_COMPONENT_INVALID",
         "INSTANCE_PROVIDER_ATTESTATION_REQUIRED",
         "INSTANCE_RUNTIME_OBSERVATION_INVALID",
@@ -191,15 +193,38 @@ def _require(env, expected):
         _fail("INSTANCE_CONFIGURATION_MISMATCH")
 
 
-def _url(value):
+def _url(value, *, allow_query=False):
     try:
         parsed = urlsplit(value)
         _ = parsed.port  # Force validation without exposing the supplied URL.
-        if parsed.fragment or parsed.query:
+        if parsed.fragment or (parsed.query and not allow_query):
             raise ValueError()
         return parsed
     except (TypeError, ValueError):
         _fail("INSTANCE_DATA_TARGET_INVALID")
+
+
+def _tls_query(parsed, expected):
+    try:
+        pairs = parse_qsl(parsed.query, keep_blank_values=True, strict_parsing=True, max_num_fields=8)
+        if len(dict(pairs)) != len(pairs) or dict(pairs) != expected:
+            raise ValueError()
+    except (TypeError, ValueError):
+        _fail("INSTANCE_TLS_CONFIGURATION_REQUIRED")
+
+
+def _trust_bundle(snapshot):
+    env = snapshot.environment
+    path_type = PureWindowsPath if snapshot.platform == "win32" else PurePosixPath
+    selected = env.get("SSL_CERT_FILE", "")
+    path, state = path_type(selected), path_type(snapshot.state_root)
+    if (not selected or not path.is_absolute() or not path.is_relative_to(state)
+            or path == state or not path.name or env.get("NODE_EXTRA_CA_CERTS") != selected
+            or any(ord(char) < 32 or ord(char) == 127 for char in selected)
+            or any(part in {".", ".."} for part in selected.replace("\\", "/").split("/"))
+            or env.get("SSL_CERT_DIR")):
+        _fail("INSTANCE_TLS_CONFIGURATION_REQUIRED")
+    return selected
 
 
 def _key(value):
@@ -256,7 +281,8 @@ def _validate_configuration(descriptor, snapshot):
         _fail("INSTANCE_CONFIGURATION_MISMATCH")
     if env.get("GREENFIELD_STATE") or env.get("SBOM_DEV_PROFILE", "isolated") != "isolated":
         _fail("INSTANCE_SHARED_NAMESPACE_REFUSED")
-    database = _url(env.get("DATABASE_URL", ""))
+    trust = _trust_bundle(snapshot)
+    database = _url(env.get("DATABASE_URL", ""), allow_query=True)
     if (
         database.scheme != "postgresql+psycopg"
         or database.hostname != "127.0.0.1"
@@ -266,6 +292,9 @@ def _validate_configuration(descriptor, snapshot):
         or not database.password
     ):
         _fail("INSTANCE_DATABASE_TARGET_REFUSED")
+    _tls_query(database, {"sslmode": "verify-full", "sslrootcert": trust,
+                          "gssencmode": "disable", "sslcertmode": "disable"})
+    redis_passwords = {}
     for key, index in (
         ("REDIS_URL", 0),
         ("CELERY_BROKER_URL", 0),
@@ -273,15 +302,23 @@ def _validate_configuration(descriptor, snapshot):
         ("AUTH_SESSION_REDIS_URL", 1),
         ("NATIVE_AUTH_RATE_LIMIT_STORAGE_URI", 3),
     ):
-        redis = _url(env.get(key, ""))
+        redis = _url(env.get(key, ""), allow_query=True)
         if (
-            redis.scheme not in {"redis", "rediss"}
+            redis.scheme != "rediss"
             or redis.hostname != "127.0.0.1"
             or redis.port != ports["redis"]
             or redis.path != "/" + str(index)
             or not redis.password
+            or unquote(redis.username or "") != ("sbom_session" if key == "AUTH_SESSION_REDIS_URL" else "sbom_runtime")
         ):
             _fail("INSTANCE_REDIS_TARGET_REFUSED")
+        _tls_query(redis, {} if key == "AUTH_SESSION_REDIS_URL" else {
+            "ssl_cert_reqs": "required", "ssl_check_hostname": "true", "ssl_ca_certs": trust,
+        })
+        redis_passwords[key] = unquote(redis.password)
+    backend_passwords = {value for key, value in redis_passwords.items() if key != "AUTH_SESSION_REDIS_URL"}
+    if len(backend_passwords) != 1 or redis_passwords["AUTH_SESSION_REDIS_URL"] in backend_passwords:
+        _fail("INSTANCE_SHARED_KEY_REFUSED")
     namespace_values = {
         "CELERY_DEFAULT_QUEUE": resources["queue_default"],
         "CELERY_REPORTS_QUEUE": resources["queue_reports"],
@@ -307,13 +344,19 @@ def _validate_configuration(descriptor, snapshot):
         "LOG_FILE", ""
     ) not in {"", str(state / ".dev-logs" / "application.log")}:
         _fail("INSTANCE_PATH_LAYOUT_INVALID")
-    if (
-        env.get("SMTP_USE_TLS") not in {"true", "false"}
-        or env.get("SMTP_USE_STARTTLS") not in {"true", "false"}
-        or env["SMTP_USE_TLS"] == env["SMTP_USE_STARTTLS"] == "true"
-    ):
-        _fail("INSTANCE_CONFIGURATION_MISMATCH")
+    _require(env, {"SMTP_USE_TLS": "false", "SMTP_USE_STARTTLS": "true",
+                   "SMTP_USERNAME": "sbom_" + descriptor.instance_id.replace("-", "")})
+    if not env.get("SMTP_PASSWORD"):
+        _fail("INSTANCE_KEY_CONFIGURATION_REQUIRED")
     session_key = _key(env.get("AUTH_SESSION_ENCRYPTION_KEY", ""))
+    provider_key = _key(env.get("AI_CONFIG_ENCRYPTION_KEY", ""))
+    if any(env.get(name) and env[name] != env["AI_CONFIG_ENCRYPTION_KEY"]
+           for name in ("APP_SECRET_KEY", "SETTINGS_SECRET_KEY")):
+        _fail("INSTANCE_CONFIGURATION_MISMATCH")
+    if provider_key == session_key or (
+        env.get("NATIVE_SECURITY_OUTBOX_KEY") and provider_key == _key(env["NATIVE_SECURITY_OUTBOX_KEY"])
+    ):
+        _fail("INSTANCE_SHARED_KEY_REFUSED")
     if native:
         _require(
             env,

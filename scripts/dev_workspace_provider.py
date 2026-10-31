@@ -334,6 +334,12 @@ class ContainerProviderPlan:
                 "role_separation_requires_database_acceptance": True,
             },
             "fingerprint": self.fingerprint,
+            "source_context": {
+                "commit": self.descriptor.commit,
+                "manifest_hashes": dict(self.descriptor.manifest_hashes),
+                "config_generation": self.descriptor.config_generation,
+                "reported_configuration_present": self.descriptor.configuration_present,
+            },
             "approval_required": True,
             "required_approvals": [
                 "company-container-policy",
@@ -398,7 +404,11 @@ def _specs(descriptor, policy):
 
 
 def _fingerprint(descriptor, policy, labels, specs, owner, runtime):
-    public = [descriptor.to_dict(), policy.to_dict(), dict(labels), [item.to_dict() for item in specs], owner, runtime]
+    # Resource receipts survive ordinary source commits and preparation metadata
+    # updates. Mutation consent separately binds the complete source descriptor.
+    identity = {key: value for key, value in descriptor.to_dict().items()
+                if key not in {"commit", "manifest_hashes", "config_generation", "configuration_present"}}
+    public = [identity, policy.to_dict(), dict(labels), [item.to_dict() for item in specs], owner, runtime]
     return hashlib.sha256(json.dumps(public, sort_keys=True, separators=(",", ":")).encode()).hexdigest()
 
 

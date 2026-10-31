@@ -13,6 +13,7 @@ from dataclasses import FrozenInstanceError, replace
 from pathlib import Path
 from types import SimpleNamespace
 from unittest.mock import Mock
+from urllib.parse import quote
 
 import pytest
 from scripts import dev, dev_instance_plan, dev_instance_storage, dev_private, dev_windows_acl
@@ -426,7 +427,9 @@ def isolated_specs(instance, *, include_frontend=True):
     dev_instance_storage.initialize_private_directory(source, anchor=instance.anchor)
     dev_private.create_private_file(source / ".env", SECRET.encode())
     environment = {
-        key: value.replace(snapshot.state_root, str(instance.root)) for key, value in snapshot.environment.items()
+        key: value.replace(snapshot.state_root, str(instance.root)).replace(
+            quote(snapshot.state_root, safe=""), quote(str(instance.root), safe="")
+        ) for key, value in snapshot.environment.items()
     }
     snapshot = replace(snapshot, source_root=str(source), state_root=str(instance.root), environment=environment)
     lifecycle = adapter.dev_workspace_lifecycle.plan_lifecycle(descriptor, snapshot)
