@@ -72,6 +72,24 @@ changed. Existing applications still use their original profile launcher for
 safe shutdown. Logs/test/comparison adapters are separate increments. Do not
 treat a proposal or a registry state as readiness.
 
+The dependent safe-test increment adds:
+
+```sh
+python scripts/dev.py workspace test --suite unit --plan --json
+python scripts/dev.py workspace test --suite unit
+```
+
+This is a limited reviewed pure-contract suite, not the application test suite.
+It requires that worktree's verified SBO-101 dependency stamp, stages only the
+reviewed source closure under a new private directory and disables application
+conftest, dotenv, plugin autoload, source pytest configuration and shared temp
+cleanup. Child output is reduced to validated counts/codes; retained owned
+artifacts are reported. Never substitute a shared interpreter or run the normal
+application fixtures against a protected database. Database/integration/migration
+and `all` suites remain BLOCKED until an exact disposable-target adapter and its
+operations are separately approved. A marker or environment variable cannot
+authorize them.
+
 For ATLAS/NEXUS work, first confirm each agent's branch and reserved files. Use
 Git-listed canonical paths explicitly in the plan. Every instance has a distinct
 proposed UUID, service/volume/queue/Beat namespace and HTTPS hostname; those names

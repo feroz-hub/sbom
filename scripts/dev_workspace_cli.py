@@ -87,6 +87,12 @@ def _parser():
     )
     parser.add_argument("--port-min", type=int, default=20000)
     parser.add_argument("--port-max", type=int, default=29999)
+    parser.add_argument(
+        "--suite",
+        choices=("unit", "database", "integration", "migrations", "all"),
+        help="Test category; data suites remain separately gated",
+    )
+    parser.add_argument("--plan", action="store_true", help="Inspect a workspace test plan without executing it")
     return parser
 
 
@@ -489,9 +495,64 @@ def _lifecycle_blocked(args, root):
     return 1
 
 
+def _test_command(args, root):
+    if any(
+        (
+            args.scope,
+            args.mode,
+            args.auth,
+            args.provider,
+            args.generation is not None,
+            args.port_min != 20000,
+            args.port_max != 29999,
+        )
+    ):
+        _fail("WORKSPACE_TEST_SELECTION_INVALID")
+    if __package__:
+        from . import dev_workspace_tests
+    else:
+        import dev_workspace_tests
+    suite = args.suite or "unit"
+    if suite == "unit":
+        snapshot = dev_workspace.discover_workspaces(root)
+        if snapshot.status != "PASS":
+            _fail("WORKSPACE_INVENTORY_INCOMPLETE")
+        selected = _select(snapshot, root, args.worktree)
+        plan = dev_workspace_tests.plan_tests(selected.root, worktree_id=selected.worktree_id, suite=suite)
+    else:
+        plan = dev_workspace_tests.plan_tests(root, suite=suite)
+    if args.plan or plan.blockers:
+        if args.json:
+            print(json.dumps(plan.to_dict(), sort_keys=True))
+        else:
+            print(
+                f"[PLANNED] {suite} category; only the limited pure-contract unit suite is available. No application conftest or database authority."
+            )
+            for code in plan.blockers:
+                print(
+                    f"[BLOCKED] {code}; use the dependency plan or obtain exact disposable-target review as appropriate."
+                )
+        return 1 if plan.blockers else 0
+    outcome = dev_workspace_tests.run_tests(plan)
+    if args.json:
+        print(json.dumps(outcome.to_dict(), sort_keys=True))
+    else:
+        print(f"[{'PASS' if outcome.exit_code == 0 else 'BLOCKED'}] {outcome.code}; raw child output is withheld.")
+        print(json.dumps(outcome.to_dict(), sort_keys=True))
+        if outcome.retained_directory is not None:
+            print(
+                f"[INFO] Owned test artifacts retained at {_path(outcome.retained_directory)}; no automatic deletion."
+            )
+    return outcome.exit_code
+
+
 def run_cli(argv, root):
     args = _parser().parse_args(argv)
     try:
+        if args.command != "test" and (args.plan or args.suite):
+            _fail("WORKSPACE_TEST_OPTIONS_REQUIRED")
+        if args.command == "test":
+            return _test_command(args, root)
         if args.command in {"list", "status", "diagnose"}:
             if any(
                 (

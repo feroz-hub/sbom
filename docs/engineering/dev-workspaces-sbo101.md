@@ -227,6 +227,52 @@ read tripwires verified that reported READY or caller markers cannot enable live
 execution. A changed HEAD blocks start/restart while stop retains its independent
 Runtime-adapter diagnosis and preserves records.
 
+## PR D: restricted test command, data suites BLOCKED
+
+Adds `dev_workspace_tests`, its source/CLI tests, explicit `workspace test --suite
+unit [--plan]`, workflow and existing guide/reference updates. The suite contains
+only the reviewed pure instance-plan/namespace/provider contracts. It binds exact
+source/HEAD/filesystem/local-interpreter proofs, uses a newly created private
+copied import closure and excludes application conftest, dotenv, pytest config,
+external plugins, arbitrary tests/arguments and old temp cleanup. It is trusted
+user-level execution, not a sandbox. Only validated counts/codes escape child
+output. All data suites unconditionally require a future exact-target adapter
+and separate authorization.
+
+Read-only review found a repeated-Ctrl+C cleanup corner: a second cancellation
+could lose the original child metadata. The correction reports
+`TEST_CHILD_CLEANUP_UNCONFIRMED` with the original PID and false cleanup status
+without PID/tree escalation. Root access uncertainty now has its own
+`TEST_ROOT_ACCESS_REVIEW_REQUIRED` diagnosis and never repairs permissions.
+
+Native Windows Python 3.14.6, same safe harness:
+
+```powershell
+& C:\sbom\.venv\Scripts\python.exe -B `
+  C:\sbom\.windows\worktrees\SBO-98-component-env\.dev-logs\safe_pytest.py `
+  tests/test_dev_workspace_tests.py tests/test_dev_workspace_tests_cli.py `
+  tests/test_dev_workspace_cli.py --timeout=60
+```
+
+Final result: **185 passed in 50.99s**. Python 3.12.10, same harness and the two
+new test files: **157 passed in 31.10s**. Ruff passed. All delegated suite children
+were synthetic. An early combined command before the CLI test file landed
+collected zero tests; the completed lists above passed. No real delegated suite
+has run because a genuinely SBO-101-prepared interpreter is unavailable.
+
+Actual `workspace test --suite database --plan --json` returned exit 1,
+`DISPOSABLE_TARGET_AUTHORIZATION_REQUIRED`, `database_authorized=false` and empty
+stderr. A pre-correction actual unit-plan check refused the native root ACL as
+generic unverified-worktree; its now-specific diagnosis is covered by the final
+negative tests. No data resource, installer, runtime, trust or privileged service
+was touched.
+The final actual candidate command `workspace test --suite unit --plan --json`
+then returned **TEST_ROOT_ACCESS_REVIEW_REQUIRED**, exit 1,
+`database_authorized=false`, empty stderr. No real suite child ran. PR B at
+`7de355e583d21234ea68237674ce8f88dad2a37a` and PR C (#57) at
+`3295afa7e519d4f62292b1cc3abfeabc0eb43065` each had 20 successful CI checks
+(push and PR runs) when inspected; no failures were returned.
+
 ## Disposable acceptance procedure (not yet authorized or executed)
 
 1. Review the candidate diff and CI on Windows/macOS/Linux, preserving SBO-98.
