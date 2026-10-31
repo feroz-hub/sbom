@@ -4657,11 +4657,29 @@ def parse_args(argv=None):
     return parser.parse_args(argv)
 
 
+def _workspace_source_present():
+    """Presence selects verification only; a marker never proves ownership."""
+    if not os.path.lexists(ROOT / ".git"):
+        if any(
+            os.path.lexists(target / name)
+            for target in (ROOT / ".venv", ROOT / "frontend" / "node_modules")
+            for name in (".sbom-workspace-dependencies.json", ".sbom-workspace-dependency-attempt")
+        ):
+            raise SetupError(
+                "WORKSPACE_SOURCE_UNVERIFIED: preserve dependency and runtime records; "
+                "restore the intended Git worktree or use a surviving controller's explicit instance-ID recovery."
+            )
+        return False
+    return True
+
+
 def workspace_auto_arguments(args):
     """Select new-instance UX without converting a supported existing profile."""
     if sys.version_info < MIN_PYTHON:
         return None
     if getattr(args, "profile", "auto") != "auto" or getattr(args, "legacy_config", "auto") != "auto":
+        return None
+    if not _workspace_source_present():
         return None
     library = _workspace_library()
     try:
@@ -4699,7 +4717,7 @@ def main() -> None:
     global VERBOSE, ACTIVE_RUNTIME, ACTIVE_PROFILE, ACTIVE_LEGACY_CONFIG
     if len(sys.argv) > 1 and sys.argv[1] == "workspace":
         return _workspace_library().run_cli(sys.argv[2:], ROOT)
-    if len(sys.argv) == 1 and sys.version_info >= MIN_PYTHON:
+    if len(sys.argv) == 1 and sys.version_info >= MIN_PYTHON and _workspace_source_present():
         workspace_cli = _workspace_library()
         if workspace_cli.fresh_checkout(ROOT):
             workspace_args = workspace_auto_arguments(parse_args([]))
@@ -4733,9 +4751,6 @@ def main() -> None:
         if workspace_args is not None:
             return _workspace_library().run_cli(workspace_args, ROOT)
         return doctor(args) if args.command == "doctor" else diagnose(args)
-    workspace_args = workspace_auto_arguments(args)
-    if workspace_args is not None:
-        return _workspace_library().run_cli(workspace_args, ROOT)
     if args.native_admin_create or args.native_admin_resend:
         if (
             args.command != "setup"
@@ -4760,13 +4775,18 @@ def main() -> None:
                 file=sys.stderr,
             )
             return 2
-        action = "create" if args.native_admin_create else "resend-activation"
-        return native_admin_enrollment(args, action=action)
     if args.native_admin_status:
         if args.command != "setup" or any((args.plan, args.provision_greenfield, args.initialize_database, args.migrate,
                                           args.frontend_build, args.postgres_provider, args.redis_provider, args.mailpit_provider, args.repair_dependencies)):
             print("[FAIL] CLI: NATIVE_STATUS_OPTIONS; Native status cannot be combined with preparation or lifecycle actions.", file=sys.stderr)
             return 2
+    workspace_args = workspace_auto_arguments(args)
+    if workspace_args is not None:
+        return _workspace_library().run_cli(workspace_args, ROOT)
+    if args.native_admin_create or args.native_admin_resend:
+        action = "create" if args.native_admin_create else "resend-activation"
+        return native_admin_enrollment(args, action=action)
+    if args.native_admin_status:
         return native_admin_status(args)
     if args.command == "setup":
         return setup_application(args)

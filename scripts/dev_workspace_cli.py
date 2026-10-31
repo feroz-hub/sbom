@@ -621,14 +621,22 @@ def _control():
 def selected_instance(root):
     """Presence of a protected registration chooses dispatch, never readiness."""
     snapshot = dev_workspace.discover_workspaces(root)
-    if snapshot.repository_id is None or snapshot.common_directory is None:
-        return None
+    if (
+        snapshot.status != "PASS"
+        or snapshot.codes
+        or snapshot.repository_id is None
+        or snapshot.common_directory is None
+        or snapshot.identity is None
+    ):
+        _fail("WORKSPACE_REPOSITORY_UNVERIFIED")
+    selected = _listed_target(snapshot, root, None)
+    if selected.status != "PASS" or selected.worktree_id is None or selected.head is None:
+        _fail("WORKSPACE_TARGET_UNVERIFIED")
     records = _registry(snapshot).read()
     if records.codes == ("REGISTRY_MISSING",):
         return None
     if records.codes:
         _fail(records.codes[0])
-    selected = _listed_target(snapshot, root, None)
     return next((entry.descriptor for entry in records.entries if entry.descriptor.worktree_id == selected.worktree_id), None)
 
 
