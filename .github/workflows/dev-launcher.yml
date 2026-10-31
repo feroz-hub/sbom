@@ -100,6 +100,7 @@ jobs:
           scripts/dev_workspace_preview.py scripts/dev_workspace_preview_cli.py scripts/dev_workspace_runtime.py
           scripts/dev_workspace_bundle.py tests/test_dev_workspace_bundle.py tests/test_dev_workspace_tls_contract.py
           scripts/dev_workspace_database_prepare.py scripts/dev_workspace_operation_journal.py
+          scripts/dev_workspace_database_adapters.py tests/test_dev_workspace_database_adapters.py
           tests/test_dev_workspace_database_prepare.py tests/test_dev_workspace_operation_journal.py
           tests/test_dev_workspace_preview.py tests/test_dev_workspace_preview_cli.py tests/test_dev_workspace_runtime.py tests/test_dev_workspace_runtime_native.py
           tests/test_dev_workspace.py tests/test_dev_workspace_cli.py tests/test_dev_instance_plan.py
@@ -124,7 +125,8 @@ jobs:
           'app/settings.py', 'app/workers/celery_app.py', 'app/workers/report_notifications.py', 'app/routers/report_notifications.py',
           'app/services/native_operations.py', 'app/services/native_abuse_service.py',
           'scripts/dev_workspace_preview.py', 'scripts/dev_workspace_preview_cli.py', 'scripts/dev_workspace_runtime.py',
-          'scripts/dev_workspace_bundle.py', 'scripts/dev_workspace_database_prepare.py', 'scripts/dev_workspace_operation_journal.py')]"
+          'scripts/dev_workspace_bundle.py', 'scripts/dev_workspace_database_prepare.py', 'scripts/dev_workspace_operation_journal.py',
+          'scripts/dev_workspace_database_adapters.py')]"
       - name: Cross-platform unit and mocked adapter regressions
         run: >-
           python -m pytest -p no:cacheprovider --noconftest -q
@@ -143,6 +145,7 @@ jobs:
           tests/test_dev_workspace_preview.py tests/test_dev_workspace_preview_cli.py tests/test_dev_workspace_runtime.py
           tests/test_dev_workspace_bundle.py tests/test_dev_workspace_tls_contract.py
           tests/test_dev_workspace_database_prepare.py tests/test_dev_workspace_operation_journal.py
+          tests/test_dev_workspace_database_adapters.py
           tests/test_dev_prepared.py tests/test_dev_private_files.py tests/test_dev_setup.py
           tests/test_dev_windows_acl.py
           tests/test_dev_component_environments.py tests/test_dev_frontend_workspace.py
