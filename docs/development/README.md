@@ -105,6 +105,44 @@ modes cannot enroll an administrator. Live Native creation/resend stays closed.
 See the [authority proposal](../engineering/dev-workspaces-security-sbo101.md)
 and [Native guide](../native-iam-greenfield-setup.md) before any real enrollment.
 
+Read-only observation commands:
+
+```sh
+python scripts/dev.py workspace status --json
+python scripts/dev.py workspace diagnose --host --json
+python scripts/dev.py workspace compare --baseline <git-listed-baseline> --worktree <git-listed-candidate>
+python scripts/dev.py workspace logs --service api --lines 80
+python scripts/dev.py workspace logs --service worker --follow --json
+```
+
+`list` reports Git/registry observations; its PASS is not application readiness.
+`status`/`diagnose` return BLOCKED/exit 1 until actual resource/runtime/readiness
+adapters exist, including when a descriptor claims READY. No service is contacted.
+Host opt-in shows CPU and home-filesystem disk observations only, with no memory
+or capacity approval claim. Comparison identifies sources and proposed resources;
+API, screenshots, traces, visual and authenticated acceptance remain unverified.
+`diagnose` also reuses the dependency inspector for public manifest/tool/stamp
+observations, with bounded owned Python/Node probes and no installers or private
+environment files. Package/compiler readiness remains unverified; unsafe source
+permissions receive a specific review code. `status` performs no software probes.
+
+Logs require a registered instance and a verified private local source under
+`~/.sbom-dev/instances/<UUID>/.dev-logs`. Only timestamp/level/allowlisted error
+class/known Windows error/reported status metadata is shown; message content stays
+private. Human output offers the verified path for direct local review. Fixed
+components include setup/API/frontend/default/reports/Beat; external provider logs
+remain BLOCKED until an engine ownership adapter exists. Missing logs are SKIPPED,
+not created. Lines are bounded to 1–200; follow is bounded to 30 seconds and JSON
+follow emits one object per line. No old checkout log fallback or state deletion.
+
+Mock/shared-backend runtime previews, real browser comparison and full isolated
+start/stop are not implemented by this foundation. Further source adapters continue
+without an installed engine; unavailable runtimes and unapproved policies block
+real provisioning, not independent source development or synthetic validation. See the
+[implementation evidence](../engineering/dev-workspaces-sbo101.md) and
+[acceptance ledger](../engineering/dev-workspaces-acceptance-sbo101.md) for exact
+commands/results and unexecuted scenarios. A passing contract is not E2E evidence.
+
 For ATLAS/NEXUS work, first confirm each agent's branch and reserved files. Use
 Git-listed canonical paths explicitly in the plan. Every instance has a distinct
 proposed UUID, service/volume/queue/Beat namespace and HTTPS hostname; those names

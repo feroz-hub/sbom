@@ -1,5 +1,12 @@
 # SBO-101: implementation evidence and approval boundaries
 
+Delivery state: safe planning, controlled dependency preparation, restricted test
+orchestration, closed onboarding guidance and read-only observations are
+implemented in incremental drafts. Full isolated application execution, mock/
+shared runtime previews, real private configuration/TLS/provider adapters and
+live administrator onboarding remain **incomplete / BLOCKED**. No independent
+review, merge, deployment or full native acceptance is claimed by unit/CI results.
+
 ## Baseline and coordination
 
 The Engineering Lead authorized `https://github.com/feroz-hub/sbom.git`, including
@@ -140,8 +147,9 @@ explicitly leave compiler/application readiness unverified.
 The provider library supplies immutable, image-digest/nonroot-policy proposals
 and strict normalized inventory comparisons. It executes no engine command,
 generates no credentials and never treats supplied JSON/labels as independent
-ownership. An engine-specific ownership adapter is still required after company
-provider policy is approved. PostgreSQL's first container boot itself can
+ownership. An engine-specific ownership adapter is still required in a subsequent
+source increment; its development does not wait for installed engines or policy
+approval. PostgreSQL's first container boot itself can
 initialize data, so provisioning cannot precede target-specific database approval.
 
 Actual native read-only `workspace plan --scope dependencies --json` returned
@@ -319,6 +327,120 @@ form returned HCL_APPROVAL_REQUIRED/HCL_OPERATOR_IDP_APPROVAL_REQUIRED. Both
 returned exit 1, `inspection_performed=false`,
 `live_enrollment_authorized=false`, empty identity-field lists and empty stderr.
 These are static guidance results, not database status or authenticated authority.
+
+## PR F: source comparison, redacted observations and acceptance ledger
+
+Adds `dev_workspace_observe`, focused native-file/CLI tests and the existing
+launcher's compare/log/status/diagnose integration. Git inventory remains distinct
+from application readiness: status/diagnose explicitly return BLOCKED/exit 1
+while the concrete readiness adapters are missing, even for caller-reported READY.
+Fresh/unregistered diagnostics do not fabricate descriptors. Optional CPU/home-
+disk observations are separate from service or memory/capacity acceptance.
+Diagnose reuses only public dependency inspection, with bounded owned helper
+objects, no installer, private environment, package-readiness or compiler claim.
+
+Comparison exposes observed sources and proposed origins/resources; runtime,
+API, screenshot/trace, visual and authenticated acceptance flags stay false.
+Local logs use fixed files under the private per-instance `.dev-logs` root and
+never fall back to historical checkout logs. Only allowlisted metadata escapes;
+raw messages/identity/credentials remain withheld. Provider logs are blocked.
+Follow is bounded to 30 seconds, records to 200 and reads to a fixed tail.
+
+Real Windows temporary-file testing found that `lstat` and `fstat` expose different
+creation/change-time values on this host. Cross-open comparison uses stable
+identity/size/mtime, while full stamps remain checked within each API. ACL,
+owner, regular-file, single-link and path pinning are retained. This is confirmed
+native file behavior, separate from Runtime PID birth/executable verification.
+
+Focused observer tests exercised native private ACL/file reads plus synthetic
+identity drift/redaction; CLI tests exercised the actual boundary with synthetic
+Git/registry observations. An early test fixture forbade every public read and
+produced three teardown errors when software inspection was connected; it was
+corrected to allow only exact public manifest/controller paths while keeping
+private/mutable/network/app tripwires. No protected resource operation occurred.
+
+Python 3.12.10, same safe harness with
+`tests/test_dev_workspace_observe.py tests/test_dev_workspace_observe_cli.py
+tests/test_dev_workspace_cli.py --timeout=60`: **116 passed, 2 skipped in 45.86s**.
+The skips are POSIX mode semantics and unavailable Windows symlink privilege;
+native private ACL reads passed. Ruff passed for all new source/tests. The final
+complete inspected Windows-applicable workflow list plus native fixture-owned
+process smoke passed on Python 3.14.6: **2,202 passed, 43 skipped, 6 existing
+Alembic warnings in 296.70s**. No test failure remained. This selected 41 reviewed
+launcher/workspace files; it was not application-wide pytest.
+
+Exact final selection/command, from the implementation worktree:
+
+```powershell
+@'
+import re, subprocess, sys
+from pathlib import Path
+text = Path('.github/workflows/dev-launcher.yml').read_text(encoding='utf-8')
+block = text.split('- name: Cross-platform unit and mocked adapter regressions', 1)[1].split('\n      - name:', 1)[0]
+tests = list(dict.fromkeys(re.findall(r'tests/[a-z0-9_]+\.py', block) + ['tests/test_dev_native_process.py']))
+assert tests and all(Path(p).is_file() and p.startswith(('tests/test_dev_', 'tests/test_greenfield_windows_compat')) for p in tests)
+raise SystemExit(subprocess.run([sys.executable, '-B',
+    'C:/sbom/.windows/worktrees/SBO-98-component-env/.dev-logs/safe_pytest.py',
+    *tests, '--timeout=60']).returncode)
+'@ | & C:\sbom\.venv\Scripts\python.exe -B -
+```
+
+The command used the existing issue-local sanitized harness; its transport-only
+environment, SQLite sentinels, disabled dotenv/plugin autoload/cache/bytecode,
+unique temporary root and `--noconftest` policy remain as described above.
+AST checks confirm Runtime/process/start helpers are still unchanged from the
+integration baseline. All 12 new modules parse with Python 3.11 grammar; actual
+cross-platform Python 3.11 execution is covered by the CI matrix, not this host.
+The managed enrollment guard/bootstrap/service still have an empty baseline diff.
+
+The [T01–T36 / A01–A15 ledger](dev-workspaces-acceptance-sbo101.md) marks each
+limited contract separately from unexecuted real acceptance and gives the
+approval-dependent native procedure. Real two-stack/background/browser/tenant/
+activation tests are not run; no approved provider, private material or privileged
+authority exists for them on this host. No protected services were adopted.
+
+## Risks, conflicts and required decisions
+
+| Area | Files / dependencies | Risk or gate | Current protection |
+| --- | --- | --- | --- |
+| Source integration | SBO-98 #49–#54 → SBO-101 #55 onward | Draft stack dependency; no independent sign-off claimed | Old branches unchanged; issue-only worktree/branches; no merge |
+| Legacy lifecycle | `scripts/dev.py`, existing Runtime | Native process regression / unknown PID | Lifecycle AST unchanged; native regression list; no new termination path |
+| New runtime | `dev_workspace_lifecycle`, `app/dev_instance` | Execution/consumer/config/TLS adapters unimplemented | Unconditional live block; no fabricated READY |
+| Data services | `dev_workspace_provider` | Company engine/images/UID policy and exact disposable resource approval absent | Pure proposals/consistency only; no daemon/DB executor |
+| Dependencies | `dev_workspace_dependencies`, CLI | Untrusted root grant; binary-only/public-index policy; interrupted state | Specific native refusal; exact consent/revalidation; retained journals; no repair/adoption |
+| Privileged Native | `dev_workspace_onboarding`, unchanged SBO-98 guard | Independent principal/authority/readiness/commit design not approved | All live actions closed; exact context drift tests; separate security proposal |
+| HCL.CS | Existing provider services / approved registration | IdP-owner first-user and per-origin callback/trust decisions | No invented identity, password fallback or privileged provisioning |
+| Shared contracts | Application/DTO/schema/migrations | Other-agent or deployment conflict | No NEXUS active work confirmed; these consumers/schemas/deployment files unchanged |
+| Observations | `dev_workspace_observe`, CLI | Metadata/consistency cannot prove live health; unknown private source | No service contact, raw message content or state mutation; ACL/identity checks |
+| Tests | Fixed source closure / explicit workflow lists | Application fixtures can migrate/truncate; fake execution is not E2E | No application conftest; sanitized SQLite sentinels; real data suites blocked |
+
+Engineering Lead/IT must provide the approved Docker/Podman policy and image/data/
+port/user contracts before a concrete provider is used for real resources. Source
+development and synthetic validation of provider-agnostic Compose-compatible
+adapters continue without them. Exact provider/database/
+credential/schema/TLS operations then need separate target-specific approval.
+The Native authority proposal requires security/DBA/Engineering Lead review and
+disposable acceptance before enablement; HCL provisioning additionally needs its
+IdP owner. Original service health/database contents have not been re-inspected:
+no command targeted them or wrote their configuration, certificates or runtime.
+
+Linear updates cannot be sent in this session; provide the actual draft/commit/
+test/blocker summary for the Engineering Lead to post to SBO-101. Do not mark the
+issue complete while these implementation and acceptance gates remain.
+
+### Subsequent Engineering Lead direction
+
+After this foundation, the Engineering Lead explicitly directed continued source
+implementation of concrete provider interfaces, capability discovery, manifest
+generation, lifecycle/ownership/approval boundaries, limits/health, previews and
+remaining setup/runtime phases. Missing Docker/Podman and unconfirmed company
+policy are **real-execution limits only**, not reasons to stop independent coding.
+The pinned references in `infra/greenfield-uuid/compose.yml` are source references,
+not approved images/policy. Architecture/provenance/scanning/registry/nonroot/
+platform checks and exact resource/database approval are required before use.
+No engine install, image pull, container/volume/database creation, virtualization
+change or protected-service substitution is authorized. Follow-on drafts will
+distinguish implemented synthetic paths from pending real-provider acceptance.
 
 ## Disposable acceptance procedure (not yet authorized or executed)
 

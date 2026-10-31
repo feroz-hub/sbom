@@ -4,6 +4,9 @@ Scope: development configuration boundaries, SBO-98 Phases 1–4 and the separat
 reviewable Native status and gated enrollment increments of Phase 5, based on
 approved main `69e71088d7fef06874fe1e2eac7a53db0fd2f333`. Examples are templates,
 not one interchangeable environment.
+Dependent SBO-101 workspace planning, dependency preparation, restricted testing,
+guidance and observation increments are described below. Concrete isolated-stack
+execution remains incomplete and blocked; these do not replace production setup.
 
 ## Pure development configuration plans (SBO-98, Phase 1)
 
@@ -841,10 +844,12 @@ The CLI now reports missing adapter codes and a proposed per-instance log path.
 It starts/stops nothing and preserves runtime records. Full stack provisioning,
 Settings `_env_file=None` child initialization, restricted credential provenance,
 engine ownership, queue/Beat/session consumer wiring, process execution and
-hostname-specific TLS remain implementation work behind approved company-provider
-policy and exact disposable resource/preparation gates. No two-stack acceptance
-is claimed. Mock/shared runtime modes remain unavailable until full isolation and
-their separate origin/authentication contracts are established.
+hostname-specific TLS remain implementation work in subsequent source increments.
+The Engineering Lead explicitly authorized provider-agnostic, Compose-compatible
+source development without an installed Docker/Podman engine. Policy, image,
+nonroot and exact resource approvals gate real execution only. No two-stack
+acceptance is claimed. Mock/shared source adapters continue with separate
+origin/authentication contracts; they are not supplied by this contract increment.
 
 ## Restricted workspace tests (SBO-101 PR D)
 
@@ -902,6 +907,49 @@ It does not claim current runtime roles already enforce the proposed authority.
 HCL requires its IdP owner's approved procedure and never falls back to a Native
 password. Existing Native status procedures retain their exact database
 confirmation; this new guidance does not invoke them or inherit their approvals.
+
+## Read-only workspace observations (SBO-101 PR F)
+
+`workspace list` is Git/public-registry inventory. `workspace status` and
+`workspace diagnose` now explicitly return BLOCKED/exit 1 until concrete
+dependency/configuration/provider/database/auth/TLS/worker/process/readiness read
+adapters exist. Git status is a separate field; application verification remains
+false. Unregistered instances have metadata-required codes, not fabricated
+descriptors. No `.env`, application bootstrap, database, audit or provider socket
+is accessed. Optional `--host` reports CPU/home-disk observations only; it neither
+approves capacity nor claims memory/pressure acceptance.
+`diagnose` and fresh inventory additionally reuse the read-only dependency
+inspector for public manifests, tool versions and stamp observations. Only its
+bounded owned Python/Node helper objects may be cleaned up on timeout. No
+installer or package-readiness check runs, no private environment is projected,
+and matching stamps still report package verification required. `status` retains
+the lighter observation path without those software probes.
+
+`workspace compare --baseline <listed-path> --worktree <listed-path>` compares
+observed commits/branches/dirty state and registered public proposals. Proposed
+origins/resources and registered-HEAD drift remain distinct from live ownership.
+API compatibility, screenshots/traces, visuals and functional acceptance are
+always unverified. Missing registry metadata still permits source-only comparison;
+uncertain registry/Git identity blocks it. No URL is opened automatically.
+
+`workspace logs --service <component> --lines 80 [--follow]` reads only fixed local
+per-instance private files. Current-user ownership, trusted/private ACLs, canonical
+nonredirected parents, regular single-link files and pinned before/after identities
+are required. No missing file or directory is created. Reads are bounded and
+project only allowlisted timestamps/levels/error classes/Windows codes/reported
+statuses, never arbitrary message text, identity payloads or connection strings.
+Verified human-local paths are withheld from JSON; no uncertain path or raw
+message is emitted. Provider logs require an independently verified engine adapter
+and remain BLOCKED. Follow runs at most 30 seconds, emits changed metadata as
+newline-delimited JSON and supports cancellation without process actions. Limits
+are 1–200 records and a fixed bounded tail. Original checkout/historical logs are
+never used as fallback.
+
+Windows native testing found `lstat`/`fstat` creation/change-time differences.
+Stable identity/size/mtime is compared across the open boundary; full stamps are
+still checked before/after within each API. ACL, regular-file, link-count and
+path identity verification remain intact. This is log-read compatibility,
+not a relaxation of Runtime process ownership or an actual full-stack test.
 
 ## Sources and precedence
 
