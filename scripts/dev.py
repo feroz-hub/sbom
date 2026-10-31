@@ -356,6 +356,7 @@ def windows_children(pid: int) -> list[dict]:
         for handle in reversed(handles):
             kernel.CloseHandle(handle)
 
+
 def atomic_json(path: Path, value: dict) -> None:
     fd, name = tempfile.mkstemp(prefix=path.name + ".", suffix=".tmp", dir=path.parent)
     try:
@@ -765,7 +766,6 @@ class Runtime:
         self.stop_path.unlink(missing_ok=True)
         self.state = None
         return True
-
 
 
 ROOT = Path(__file__).resolve().parents[1]
@@ -1565,6 +1565,93 @@ def native_admin_status(args):
         sys.dont_write_bytecode = previous
 
 
+def native_admin_enrollment(args, *, action):
+    """Use only the gated default adapter; identity stays in its private prompts."""
+    previous = sys.dont_write_bytecode
+    sys.dont_write_bytecode = True
+    try:
+        adapter = _development_library("dev_native_enrollment")
+        result = adapter.run_enrollment(args, sys.modules[__name__], action=action)
+        blocked = {
+            "ENROLLMENT_ACTION_INVALID",
+            "ENROLLMENT_IDENTITY_REQUIRED",
+            "ENROLLMENT_IDENTITY_INVALID",
+            "ENROLLMENT_RESEND_IDENTITY_INVALID",
+            "ENROLLMENT_READINESS_UNVERIFIED",
+            "ENROLLMENT_STATE_REFUSED",
+            "ENROLLMENT_PLAN_CHANGED",
+            "ENROLLMENT_CONFIGURATION_BLOCKED",
+            "ENROLLMENT_INSPECTION_FAILED",
+            "ENROLLMENT_HELPER_NOT_STARTED",
+            "ENROLLMENT_REFUSED",
+        }
+        messages = {
+            "ACTIVATION_QUEUED": (
+                0,
+                "OK",
+                "Activation queued in the encrypted outbox; complete the approved HTTPS email flow.",
+            ),
+            "ENROLLMENT_READINESS_CONTRACT_REQUIRED": (
+                1,
+                "BLOCKED",
+                "Live enrollment remains gated pending reviewed runtime configuration, Native IAM, activation origin and approved mail attestations.",
+            ),
+            "ENROLLMENT_APPROVAL_REQUIRED": (
+                1,
+                "BLOCKED",
+                "Use an interactive terminal; exact database confirmation and explicit operator approval are required.",
+            ),
+            "ENROLLMENT_APPROVAL_DECLINED": (1, "INFO", "Operator approval was declined; no enrollment was requested."),
+            "ENROLLMENT_CANCELLED": (130, "INFO", "Enrollment was cancelled before a helper outcome was returned."),
+            "OUTCOME_UNCONFIRMED": (1, "WARN", "The enrollment helper outcome could not be confirmed."),
+        }
+        for code in blocked:
+            messages[code] = (
+                1,
+                "BLOCKED",
+                "Review the selected Native configuration, exact database confirmation and approved enrollment state.",
+            )
+        if not isinstance(result.code, str) or result.code not in messages:
+            raise ValueError()
+        exit_code, kind, guidance = messages[result.code]
+        expected_commit = (
+            True if result.code == "ACTIVATION_QUEUED" else None if result.code == "OUTCOME_UNCONFIRMED" else False
+        )
+        if (
+            type(result.exit_code) is not int
+            or result.exit_code != exit_code
+            or result.committed is not expected_commit
+            or type(result.cleanup_confirmed) is not bool
+            or (result.code != "OUTCOME_UNCONFIRMED" and not result.cleanup_confirmed)
+        ):
+            raise ValueError()
+        say(kind, "Native enrollment", f"{result.code}; {guidance}")
+        if result.committed is None:
+            say(
+                "WARN",
+                "Native enrollment",
+                "Commit outcome is uncertain. Do not retry automatically; inspect setup --native-admin-status with the exact --confirm-database first.",
+            )
+        if not result.cleanup_confirmed:
+            pid = result.helper_pid
+            suffix = f" (owned helper PID {pid})" if type(pid) is int and 0 < pid <= 4294967295 else ""
+            say(
+                "WARN",
+                "Native enrollment",
+                f"Helper cleanup is unconfirmed{suffix}. Verify ownership before any manual cleanup.",
+            )
+        return exit_code
+    except Exception:
+        say(
+            "BLOCKED",
+            "Native enrollment",
+            "ENROLLMENT_ADAPTER_FAILED; the result could not be confirmed. Do not retry automatically; inspect read-only Native status before further action.",
+        )
+        return 1
+    finally:
+        sys.dont_write_bytecode = previous
+
+
 def _development_library(name):
     """Import a private launcher library from a checkout or a direct script."""
     import importlib
@@ -1733,8 +1820,6 @@ def _prepare_authorized_setup(args, profile):
             validate_existing_schema(env["DATABASE_URL"], validate_target=ACTIVE_LEGACY_CONFIG == "managed")
             run_migrations(env)
     say("OK", "Setup", "authorized preparation finished; retained private material and data safeguards; no application processes started")
-
-
 
 
 def check_profile_ownership(runtime, profile: str) -> None:
@@ -4439,7 +4524,7 @@ def log_service(value):
 def parse_args(argv=None):
     parser = argparse.ArgumentParser(
         description="One local SBOM Analyzer launcher: Windows, macOS and Linux adapters",
-        epilog="Default: start. During start, Ctrl+C stops owned application processes; data services remain running. During diagnose, Ctrl+C cancels checks only.",
+        epilog="Default: start. During start, Ctrl+C stops owned application processes; data services remain running. During diagnose, Ctrl+C cancels checks only. Native create/resend remain BLOCKED pending a reviewed runtime readiness attestation contract.",
     )
     parser.add_argument(
         "command", nargs="?", default="start",
@@ -4452,6 +4537,16 @@ def parse_args(argv=None):
                         help="setup only: explicitly plan a pinned dependency repair; category consent is still required")
     parser.add_argument("--native-admin-status", action="store_true",
                         help="setup only: read-only aggregate Native enrollment status; requires exact --confirm-database")
+    parser.add_argument(
+        "--native-admin-create",
+        action="store_true",
+        help="setup only: gated future Native enrollment flow; currently BLOCKED pending reviewed readiness attestations; identity is prompted privately",
+    )
+    parser.add_argument(
+        "--native-admin-resend",
+        action="store_true",
+        help="setup only: gated future pending-activation resend; currently BLOCKED pending reviewed readiness attestations; identity is prompted privately",
+    )
     for service in ("postgres", "redis", "mailpit"):
         parser.add_argument(f"--{service}-provider", choices=("local", "docker"),
                             help=f"setup only: explicitly select the {service} provider; saved providers stay pinned")
@@ -4496,13 +4591,53 @@ def main() -> None:
     args = parse_args()
     VERBOSE = args.verbose
     if args.check or args.command in {"diagnose", "doctor"}:
-        if any((args.provision_greenfield, args.initialize_database, args.migrate,
-                args.frontend_build, args.confirm_database, args.plan,
-                args.postgres_provider, args.redis_provider, args.mailpit_provider, args.repair_dependencies, args.native_admin_status)):
+        if any(
+            (
+                args.provision_greenfield,
+                args.initialize_database,
+                args.migrate,
+                args.frontend_build,
+                args.confirm_database,
+                args.plan,
+                args.postgres_provider,
+                args.redis_provider,
+                args.mailpit_provider,
+                args.repair_dependencies,
+                args.native_admin_status,
+                args.native_admin_create,
+                args.native_admin_resend,
+            )
+        ):
             print("[FAIL] CLI: DIAGNOSTIC_OPTIONS; diagnose cannot be combined with preparation or database flags.",
                   file=sys.stderr)
             return 2
         return doctor(args) if args.command == "doctor" else diagnose(args)
+    if args.native_admin_create or args.native_admin_resend:
+        if (
+            args.command != "setup"
+            or args.native_admin_status
+            or (args.native_admin_create and args.native_admin_resend)
+            or any(
+                (
+                    args.plan,
+                    args.provision_greenfield,
+                    args.initialize_database,
+                    args.migrate,
+                    args.frontend_build,
+                    args.postgres_provider,
+                    args.redis_provider,
+                    args.mailpit_provider,
+                    args.repair_dependencies,
+                )
+            )
+        ):
+            print(
+                "[FAIL] CLI: NATIVE_ENROLLMENT_OPTIONS; choose one setup enrollment action without status, preparation or lifecycle actions.",
+                file=sys.stderr,
+            )
+            return 2
+        action = "create" if args.native_admin_create else "resend-activation"
+        return native_admin_enrollment(args, action=action)
     if args.native_admin_status:
         if args.command != "setup" or any((args.plan, args.provision_greenfield, args.initialize_database, args.migrate,
                                           args.frontend_build, args.postgres_provider, args.redis_provider, args.mailpit_provider, args.repair_dependencies)):

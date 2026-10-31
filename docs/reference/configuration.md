@@ -1,7 +1,7 @@
 # Configuration reference
 
 Scope: development configuration boundaries, SBO-98 Phases 1–4 and the separately
-reviewable Native status increment of Phase 5, based on
+reviewable Native status and gated enrollment increments of Phase 5, based on
 approved main `69e71088d7fef06874fe1e2eac7a53db0fd2f333`. Examples are templates,
 not one interchangeable environment.
 
@@ -63,11 +63,14 @@ projections initially retain complete shared Settings/task inputs for
 compatibility; this is not least privilege between those three backend roles.
 Further narrowing requires additional consumer review.
 
-Later separately reviewed work covers shared operator configuration and authorized
-Native enrollment. It must not reuse mutable preparation as a resolver, automatically
-migrate/create databases, replace saved keys or install certificate trust.
+Shared operator configuration now supports read-only status and a staged Native
+enrollment adapter whose public default remains BLOCKED. Live enrollment still
+requires separately reviewed readiness attestations and authorization. It must not
+reuse mutable preparation as a resolver, automatically migrate/create databases,
+replace saved keys or install certificate trust.
 The Native bootstrap CLI can opt into the shared resolver for aggregate status
-only; profile-based create/resend execution is not implemented.
+only; its profile-based create/resend execution remains unavailable. The separate
+launcher create/resend entry points are described under the readiness gate below.
 HCL.CS first-eligible-user provisioning still requires Engineering Lead and
 identity-provider-owner design approval.
 
@@ -511,9 +514,10 @@ This exception does not change application startup precedence. The internal
 `native_child_environment()` is a disabled-bootstrap snapshot only, with
 `NATIVE_PLATFORM_BOOTSTRAP_ENABLED=false`; it refuses an unselected Settings
 dotenv source and rechecks full projection of a selected env file. No privileged
-child runner is wired. Future execution still needs separately reviewed
-`Settings(_env_file=None)`/cache isolation and source revalidation: Python-dotenv's
-disable flag alone does not disable Pydantic's independent `.env` reader.
+execution is authorized by that snapshot. The separate staged enrollment adapter
+below implements fresh `Settings(_env_file=None)`/cache isolation and source
+revalidation, while its public default remains BLOCKED. Python-dotenv's disable
+flag alone does not disable Pydantic's independent `.env` reader.
 
 Successful output is aggregate JSON: allowlisted `code`/`state` plus booleans for
 usable administrator availability, enrollment need, existing users
@@ -549,8 +553,8 @@ authority through the existing service transaction. Verify the effective grant,
 then disable temporary bootstrap enablement. Pending activation can complete
 after that temporary flag is disabled.
 
-This describes the existing service contract and the proposed controlled runner;
-the new runner is **not implemented**, and no live enrollment was performed.
+This describes the existing service contract and the implemented staged adapter;
+its public default readiness remains **BLOCKED**, and no live enrollment was performed.
 Exact target confirmation alone cannot authorize it. Use approved disposable
 resources, approved identity/mail destinations and explicit live-operation
 approval for later validation. Never insert a password, activation state, grant
@@ -577,6 +581,112 @@ it is not a diagnostic dry run.
 `grant_local_platform_admin.py` requires authentication disabled and is excluded
 from this authenticated onboarding design. No HCL privileged provisioning or
 SQL-based activation/grant shortcut is added.
+
+## Controlled Native adapter: remaining readiness gate (SBO-98, Phase 5)
+
+The new internal enrollment adapter is staged for review. Both the public
+readiness path and the private child's mutation gate return
+`ENROLLMENT_READINESS_CONTRACT_REQUIRED`. Neither entry point can currently create
+an account or resend activation. An injected parent checker cannot open the
+child's gate. This phase does not claim complete onboarding or authorize live
+execution.
+
+The future setup entry points are `setup --native-admin-create` and
+`setup --native-admin-resend`, with explicit profile/family and exact
+`--confirm-database`. They currently return a specific BLOCKED diagnosis. They
+cannot be combined with `--plan`, diagnostic aliases, dependency repair,
+initialization/migration, provisioning, builds or provider changes. Identity and
+readiness-bypass flags are deliberately absent from the command line.
+
+The staged flow resolves the same selected Native environment, inspects aggregate
+status, requires every readiness fact, collects identity privately, requires an
+exact action and separate existing-user review, rechecks source/configuration and
+the observed user state, then uses one fresh child. Credentials travel in its
+allowlisted environment and identity in a private stdin protocol, never command
+arguments or files. The pipe's self-matching nonce provides correlation only;
+neither that nonce nor a configuration fingerprint proves authorization.
+The child denies execution before configuration reads or application imports.
+The staged transaction code, exercised only with fake authorization and fake
+application/driver modules in tests, installs the selected environment projection
+and disables both dotenv paths with `Settings(_env_file=None)`. A separately pinned
+`TenantSession` owns the connection/transaction used for exact target/schema
+proof and the existing approved create/resend service. No SQL inserts, password
+creation, manual grants or alternate bootstrap service are introduced. Bootstrap
+enablement would be child-local; no saved configuration is rewritten. Mutation
+authorization, actual environment equality and fresh source/configuration
+fingerprints are checked again immediately before create/resend and before
+commit. A refusal after staged work rolls back; uncertain cleanup or commit
+outcomes retain the existing unconfirmed-outcome behavior.
+
+Cancellation before helper handoff returns `ENROLLMENT_CANCELLED` (exit 130).
+After handoff, a lost execution outcome, timeout, malformed/lost acknowledgment or
+unconfirmed cleanup is reported as `OUTCOME_UNCONFIRMED`. Do not retry
+automatically. Inspect aggregate status and the durable reservation before
+recovery; retain uncertain owned-helper details.
+Cleanup uses only the original helper handle. Existing email activation, password
+creation and effective-grant services remain authoritative.
+
+The Engineering Lead must review the following readiness contract before the
+default gate can be enabled, and approve disposable resources before live tests:
+
+| Required fact | Current limitation and proposed direction |
+| --- | --- |
+| Running configuration binding | A matching profile/port and healthy process do not prove it uses the currently selected database/keys. Design an opaque per-instance configuration binding checked alongside verified PID identity; do not print secrets or silently adopt old records. |
+| Native IAM enabled | `ready: true` can describe disabled Native mode. Require explicit enabled evidence on the intended API, preserving existing contracts unless a change is reviewed. |
+| Activation origin | A localhost TLS handshake alone does not verify the configured activation origin. Bind the exact HTTPS origin, hostname and trusted certificate to the selected installation. |
+| Approved mail target | EHLO/TLS proves protocol availability, not authenticated delivery or recipient approval. Define approved Mailpit/SMTP evidence and explicit destination consent; diagnose must never send mail. |
+| Owned delivery workers | A global Redis readiness key is insufficient. Bind consumer/Beat heartbeats, queues and configuration to this verified instance. |
+
+### Local enrollment threat model and authorization contract
+
+The supported boundary is a trusted checkout/interpreter invoking the unchanged
+approved enrollment services. A direct local caller may choose every environment
+marker and JSON field, possess the selected development credentials and compute a
+matching source fingerprint. Those values cannot authorize the helper. In
+particular, a parent PASS report, TTY claim, operator reference or bootstrap-enabled
+environment is not independently authenticated operator approval.
+
+The private dispatch, direct transaction entry, create/resend boundary and commit
+boundary therefore each use a production gate that always refuses. There is no
+environment flag, JSON capability, command-line switch or injectable parent
+checker that enables this gate. Tests replace it only inside processes whose
+application modules, drivers, sessions and services are synthetic. A directly
+invoked real helper is tested with mutation/network/import tripwires and must
+return the fixed blocked result without reading private configuration.
+
+Future enablement requires Engineering Lead and security approval of an
+independent authority and a verifiable channel, followed by disposable end-to-end
+acceptance. At each mutation boundary that authority must establish:
+
+- The verified live instance and PID creation/executable identities, current
+  configuration generation, selected database/schema and actual effective child
+  Settings agree. A local file hash or a healthy port alone is insufficient.
+- Native mode, trusted activation origin, approved mail recipient/transport and
+  owned worker/Beat/queue evidence are current for that same instance.
+- An independently authenticated operator explicitly approved this identity,
+  action and exact target. Evidence must be bound to those facts and a short-lived,
+  single-use request with expiry/revocation checks; caller-created tokens or a key
+  supplied by that same caller are insufficient.
+
+The child must obtain and validate that evidence itself through the reviewed
+channel before application imports and again before service mutation and commit.
+The current repository has no approved implementation of that authority/channel;
+the fixed gate must remain closed until a separately reviewed change supplies it.
+Source and environment drift checks are additional rejection checks, not a
+substitute for runtime or operator attestation. Changes to external readiness
+between checks also require a reviewed validity/lease policy; repeated snapshots
+alone cannot make distributed readiness atomic with a database transaction.
+
+This helper is not a privilege boundary against an operator who can modify its
+Python source/interpreter, attach a debugger, or use the database credentials
+outside it. Database-role restrictions, host access controls and deployment
+isolation remain independent responsibilities. No remote exploit or protected
+database mutation was demonstrated by this review. HCL privileged provisioning
+and the existing standalone bootstrap tools retain their separate approval rules.
+
+HCL.CS privileged provisioning remains unimplemented pending Engineering Lead and
+identity-provider-owner approval. No database preparation, migration, enrollment,
+trust change, merge or deployment was performed by these staged adapters.
 
 ## Sources and precedence
 
