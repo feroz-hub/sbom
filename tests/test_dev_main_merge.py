@@ -103,7 +103,8 @@ def test_old_launcher_python_hands_off_to_an_existing_venv(monkeypatch, tmp_path
     monkeypatch.setattr(dev.sys, "version_info", (3, 9, 6, "final", 0))
     monkeypatch.setattr(dev.sys, "argv", ["dev.py", "start", "--profile", "legacy"])
     handoff = MagicMock(side_effect=SystemExit(0))
-    monkeypatch.setattr(dev, "ensure_virtualenv", handoff)
+    monkeypatch.setattr(dev, "require_virtualenv", handoff)
+    monkeypatch.setattr(dev, "ensure_virtualenv", lambda: pytest.fail("Startup attempted virtualenv preparation"))
     with pytest.raises(SystemExit):
         dev.main()
     handoff.assert_called_once_with()
@@ -391,19 +392,25 @@ def test_uuid_databases_skip_the_row_probe(monkeypatch, revision) -> None:
 
 def test_refused_pre_uuid_database_never_reaches_migrations(monkeypatch):
     env = {"DATABASE_URL": "postgresql+psycopg://test:synthetic@127.0.0.1:55439/sbom_analyser_dev"}
-    for name in ("ensure_virtualenv", "ensure_dependencies", "ensure_frontend", "legacy_https_context"):
-        monkeypatch.setattr(dev, name, lambda *args, **kwargs: None)
-    monkeypatch.setattr(dev, "prepare_managed_legacy", lambda: env)
+    forbidden = MagicMock(side_effect=AssertionError("Unrelated preparation before migration guard"))
+    for name in ("ensure_virtualenv", "require_virtualenv", "ensure_dependencies", "ensure_frontend", "ensure_database"):
+        monkeypatch.setattr(dev, name, forbidden)
+    monkeypatch.setattr(dev, "legacy_https_context", lambda: None)
+    monkeypatch.setattr(dev, "prepare_managed_legacy", lambda *, setup_args: env)
     monkeypatch.setattr(
         dev, "validate_existing_schema", MagicMock(side_effect=dev.SetupError("pre-UUID revision refused"))
     )
     upgrade = MagicMock(side_effect=AssertionError("Alembic after refusal"))
     monkeypatch.setattr(dev, "run_migrations", upgrade)
+    args = dev.parse_args(["setup", "--profile", "legacy", "--migrate", "--confirm-database", "sbom_analyser_dev"])
+    args._setup_authorized_categories = frozenset({"database-migrate"})
+    # Consent/lock handling is covered separately. This checks the authorized
+    # migration chain still refuses populated pre-UUID state before Alembic.
     with pytest.raises(dev.SetupError, match="pre-UUID revision refused"):
-        dev.setup_application(
-            dev.parse_args(["setup", "--profile", "legacy", "--migrate", "--confirm-database", "sbom_analyser_dev"])
-        )
+        dev._prepare_authorized_setup(args, "legacy")
+    dev.validate_existing_schema.assert_called_once_with(env["DATABASE_URL"], validate_target=True)
     upgrade.assert_not_called()
+    forbidden.assert_not_called()
 
 
 def test_compose_failure_detail_only_when_no_local_fallback(monkeypatch, capsys) -> None:

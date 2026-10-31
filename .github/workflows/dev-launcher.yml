@@ -7,8 +7,7 @@ on:
   pull_request:
     paths:
       - "scripts/dev.py"
-      - "scripts/dev_config.py"
-      - "scripts/dev_diagnostics.py"
+      - "scripts/dev_*.py"
       - "scripts/greenfield*migration*.py"
       - "tests/test_dev*.py"
       - "tests/test_greenfield*.py"
@@ -26,8 +25,7 @@ on:
   push:
     paths:
       - "scripts/dev.py"
-      - "scripts/dev_config.py"
-      - "scripts/dev_diagnostics.py"
+      - "scripts/dev_*.py"
       - "scripts/greenfield*migration*.py"
       - "tests/test_dev*.py"
       - "tests/test_greenfield*.py"
@@ -71,19 +69,25 @@ jobs:
           cache-dependency-path: requirements.txt
       - name: Install isolated test dependencies
         run: python -m pip install -r requirements.txt ruff
-      - name: Lint the launcher, configuration resolver and read-only diagnostics
+      - name: Lint the launcher and controlled development configuration
         run: >-
           python -m ruff check scripts/dev.py scripts/dev_config.py scripts/dev_diagnostics.py
+          scripts/dev_environment.py scripts/dev_prepared.py scripts/dev_private.py scripts/dev_setup.py
+          scripts/dev_windows_acl.py tests/test_dev_windows_acl.py
           tests/test_dev_main_merge.py tests/test_dev_config.py tests/test_dev_diagnose.py
+          tests/test_dev_prepared.py tests/test_dev_private_files.py tests/test_dev_setup.py
       - name: Compile without starting the launcher
         run: >-
           python -c "from pathlib import Path;
           [compile(Path(name).read_text(encoding='utf-8'), name, 'exec')
-          for name in ('scripts/dev.py', 'scripts/dev_config.py', 'scripts/dev_diagnostics.py')]"
+          for name in ('scripts/dev.py', 'scripts/dev_config.py', 'scripts/dev_diagnostics.py',
+          'scripts/dev_environment.py', 'scripts/dev_prepared.py', 'scripts/dev_private.py', 'scripts/dev_setup.py', 'scripts/dev_windows_acl.py')]"
       - name: Cross-platform unit and mocked adapter regressions
         run: >-
           python -m pytest -p no:cacheprovider --noconftest -q
           tests/test_dev_config.py tests/test_dev_diagnose.py
+          tests/test_dev_prepared.py tests/test_dev_private_files.py tests/test_dev_setup.py
+          tests/test_dev_windows_acl.py
           tests/test_dev_launcher.py tests/test_dev_lifecycle.py
           tests/test_dev_windows_lifecycle.py tests/test_dev_windows_shutdown.py
           tests/test_dev_background.py tests/test_dev_main_merge.py

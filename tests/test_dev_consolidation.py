@@ -433,6 +433,9 @@ def test_canonical_greenfield_port_failure_precedes_secret_reads_and_processes(m
 
 
 def test_greenfield_application_port_failure_precedes_dependency_install(monkeypatch):
+    from scripts import dev_prepared
+
+    monkeypatch.setattr(dev_prepared, "require_project", lambda launcher: "npm")
     monkeypatch.setattr(dev, "check_application_ports", Mock(side_effect=dev.SetupError("synthetic occupied port")))
     forbidden = Mock(side_effect=AssertionError("setup before port conflict"))
     monkeypatch.setattr(dev, "ensure_dependencies", forbidden)
@@ -455,7 +458,7 @@ def test_canonical_greenfield_tls_failure_precedes_container_resume(greenfield_i
     monkeypatch.setattr(dev.subprocess, "Popen", forbidden)
     with pytest.raises(dev.LocalHttps.HttpsTrustError, match="untrusted"):
         dev.GreenfieldProfile.start(SimpleNamespace(check=False), Mock())
-    certificate.assert_called_once_with(greenfield_installation, prepare=True)
+    certificate.assert_called_once_with(greenfield_installation, prepare=False)
     forbidden.assert_not_called()
 
 

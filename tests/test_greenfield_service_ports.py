@@ -1,4 +1,5 @@
 """Real loopback port regressions; no database, credentials or services are used."""
+
 from __future__ import annotations
 
 import errno
@@ -66,12 +67,21 @@ def test_conflict_precedes_credentials_workspace_and_process_creation(monkeypatc
 
 
 def test_launcher_reports_specific_conflict_without_verbose(monkeypatch):
+    from scripts import dev_prepared
+
+    monkeypatch.setattr(dev_prepared, "require_project", Mock(return_value="npm"))
     monkeypatch.setattr(dev, "check_application_ports", Mock())
-    monkeypatch.setattr(dev, "ensure_dependencies", Mock())
-    monkeypatch.setattr(dev, "ensure_frontend", Mock())
-    monkeypatch.setattr(dev.GreenfieldProfile, "start", Mock(side_effect=dev.GreenfieldStack.ServicePortError("port 18000 already in use")))
+    forbidden = Mock(side_effect=AssertionError("port reporting attempted preparation"))
+    monkeypatch.setattr(dev, "ensure_dependencies", forbidden)
+    monkeypatch.setattr(dev, "ensure_frontend", forbidden)
+    monkeypatch.setattr(
+        dev.GreenfieldProfile,
+        "start",
+        Mock(side_effect=dev.GreenfieldStack.ServicePortError("port 18000 already in use")),
+    )
     with pytest.raises(dev.SetupError, match="port 18000 already in use"):
         dev.start_application(SimpleNamespace(profile="greenfield", check=False))
+    forbidden.assert_not_called()
 
 
 @pytest.mark.parametrize("platform,reuse", [("darwin", True), ("linux", True), ("win32", False)])

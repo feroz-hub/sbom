@@ -4,7 +4,8 @@ Callers supply snapshots read through the existing profile's protected readers.
 Resolving a plan proves only local target policy, not live database identity,
 ownership, readiness or authorization to prepare/enroll. Values are deliberately
 excluded from representations. Do not serialize a plan into logs or issue bodies.
-This first phase is not yet connected to the launcher or privileged scripts.
+The launcher adapters read snapshots separately; privileged actions still require
+their own target confirmation and operator authorization.
 """
 
 from __future__ import annotations
