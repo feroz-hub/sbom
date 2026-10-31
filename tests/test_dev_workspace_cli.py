@@ -45,8 +45,17 @@ def test_readonly_inventory_has_no_registry_lock_private_read_or_mutation(checko
     forbidden = Mock(side_effect=AssertionError("Read-only command mutated or read private material"))
     monkeypatch.setattr(cli.dev_instance_registry.InstanceRegistry, "publish", forbidden)
     monkeypatch.setattr(os, "mkdir", forbidden)
-    monkeypatch.setattr(cli.dev_environment, "bounded_read_bytes", forbidden)
-    assert cli.run_cli([command, "--json"], checkout.root) == 0
+    if command == "diagnose":
+        original = cli.dev_environment.bounded_read_bytes
+
+        def public_only(path, *args, **kwargs):
+            assert path.name not in {".env", ".env.dev.local", ".env.local"}
+            return original(path, *args, **kwargs)
+
+        monkeypatch.setattr(cli.dev_environment, "bounded_read_bytes", public_only)
+    else:
+        monkeypatch.setattr(cli.dev_environment, "bounded_read_bytes", forbidden)
+    assert cli.run_cli([command, "--json"], checkout.root) == (0 if command == "list" else 1)
     result = json.loads(capsys.readouterr().out)
     assert result["registry_codes"] == ["REGISTRY_MISSING"]
     assert result["worktrees"][0]["runtime_ownership"] == "UNVERIFIED"

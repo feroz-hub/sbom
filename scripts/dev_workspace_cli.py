@@ -95,6 +95,23 @@ def _parser():
         help="Test category; data suites remain separately gated",
     )
     parser.add_argument("--plan", action="store_true", help="Inspect a workspace test plan without executing it")
+    parser.add_argument("--baseline", type=Path, help="Git-listed baseline worktree for source comparison")
+    parser.add_argument(
+        "--service", choices=("setup", "api", "frontend", "worker", "reports", "beat", "postgres", "redis", "mailpit")
+    )
+    parser.add_argument(
+        "--lines", type=int, default=80, help="Bounded log metadata records (1..200), never message text"
+    )
+    parser.add_argument(
+        "--follow",
+        action="store_true",
+        help="Follow verified local log metadata for at most 30 seconds; JSON is newline-delimited",
+    )
+    parser.add_argument(
+        "--host",
+        action="store_true",
+        help="Optional read-only CPU/home-filesystem disk observation; no readiness approval",
+    )
     return parser
 
 
@@ -332,7 +349,42 @@ def _prepare_dependencies(args, root):
     return outcome.exit_code
 
 
-def _inventory(root, as_json=False, requested=None):
+def _dependency_observation(snapshot, selected):
+    """Public software inspection only; no installation or package-readiness claim."""
+    if __package__:
+        from . import dev_workspace_dependencies
+    else:
+        import dev_workspace_dependencies
+    try:
+        hashes = _manifest_hashes(selected.root, selected.identity, snapshot.root, snapshot.identity)
+        plan = dev_workspace_dependencies.inspect_dependencies(snapshot, selected, manifest_hashes=hashes)
+        code = (
+            plan.blockers[0]
+            if plan.blockers
+            else (
+                "DEPENDENCY_PREPARATION_REQUIRED"
+                if any(value is None for value in plan.target_stamps.values())
+                else "DEPENDENCY_PACKAGE_VERIFICATION_REQUIRED"
+            )
+        )
+        return {
+            "status": "BLOCKED" if plan.blockers or code == "DEPENDENCY_PREPARATION_REQUIRED" else "WARN",
+            "code": code,
+            "tool_versions": dict(plan.tool_versions),
+            "actions": list(plan.actions),
+            "package_verification_performed": False,
+            "compiler_verified": False,
+        }
+    except Exception:
+        return {
+            "status": "BLOCKED",
+            "code": "WORKSPACE_PUBLIC_SOFTWARE_INSPECTION_UNVERIFIED",
+            "package_verification_performed": False,
+            "compiler_verified": False,
+        }
+
+
+def _inventory(root, as_json=False, requested=None, *, diagnostic=False, include_host=False, inspect_software=False):
     snapshot = dev_workspace.discover_workspaces(root)
     records = (
         _registry(snapshot).read()
@@ -365,12 +417,28 @@ def _inventory(root, as_json=False, requested=None):
                 "last_code": entry.last_code if entry else None,
             }
         )
+        if diagnostic:
+            if __package__:
+                from . import dev_workspace_observe
+            else:
+                import dev_workspace_observe
+            report = (
+                dev_workspace_observe.diagnose_instance(entry.descriptor, include_host=include_host)
+                if entry
+                else dev_workspace_observe.diagnose_unregistered(include_host=include_host)
+            )
+            rows[-1]["diagnostics"] = report.to_dict()
+            if inspect_software:
+                rows[-1]["dependency_observation"] = _dependency_observation(snapshot, item)
     result = {
         "version": 1,
         "repository_id": snapshot.repository_id,
-        "status": snapshot.status,
+        "status": "BLOCKED" if diagnostic else snapshot.status,
+        "git_status": snapshot.status,
+        "application_readiness_verified": False,
         "codes": list(snapshot.codes),
         "registry_codes": list(records.codes),
+        "discovered_worktree_count": len(snapshot.worktrees),
         "worktrees": rows,
     }
     if as_json:
@@ -385,6 +453,14 @@ def _inventory(root, as_json=False, requested=None):
             )
             for code in row["codes"]:
                 print(f"[BLOCKED] {code}")
+            for check in row.get("diagnostics", {}).get("results", []):
+                print(f"[{check['status']}] {check['category']}: {check['code']}")
+            if row.get("diagnostics", {}).get("host"):
+                print("[INFO] Host observations: " + json.dumps(row["diagnostics"]["host"], sort_keys=True))
+            if software := row.get("dependency_observation"):
+                print(
+                    f"[{software['status']}] software: {software['code']}; package/compiler readiness remains unverified."
+                )
         for code in records.codes:
             print(
                 f"[{'MISSING' if code == 'REGISTRY_MISSING' else 'BLOCKED'}] {code}; preserve records and review workspace plan."
@@ -392,7 +468,11 @@ def _inventory(root, as_json=False, requested=None):
         print(
             "[INFO] Resource/runtime identities are not verified by Git or a registry descriptor. No service was contacted."
         )
-    return 1 if snapshot.status != "PASS" or records.codes not in {(), ("REGISTRY_MISSING",)} else 0
+        if diagnostic:
+            print(
+                "[NEXT] Review workspace plan and dependency plan. Approved read adapters are required before application readiness can be verified."
+            )
+    return 1 if diagnostic or snapshot.status != "PASS" or records.codes not in {(), ("REGISTRY_MISSING",)} else 0
 
 
 def _prepare_registry(args, root):
@@ -570,13 +650,94 @@ def _test_command(args, root):
     return outcome.exit_code
 
 
+def _observation_selection(args):
+    if any(
+        (
+            args.scope,
+            args.mode,
+            args.auth,
+            args.provider,
+            args.generation is not None,
+            args.port_min != 20000,
+            args.port_max != 29999,
+        )
+    ):
+        _fail("WORKSPACE_READ_ONLY_OPTIONS_REQUIRED")
+
+
+def _compare_command(args, root):
+    _observation_selection(args)
+    if args.baseline is None:
+        _fail("WORKSPACE_BASELINE_REQUIRED")
+    if __package__:
+        from . import dev_workspace_observe
+    else:
+        import dev_workspace_observe
+    snapshot = dev_workspace.discover_workspaces(root)
+    baseline = _listed_target(snapshot, root, args.baseline)
+    candidate = _listed_target(snapshot, root, args.worktree)
+    records = _registry(snapshot).read()
+    report = dev_workspace_observe.compare_workspaces(snapshot, baseline.worktree_id, candidate.worktree_id, records)
+    print(json.dumps(report.to_dict(), sort_keys=True, ensure_ascii=True))
+    if not args.json:
+        print(
+            "[INFO] Source/public proposal comparison only. Runtime, API compatibility, screenshots and visual acceptance remain unverified."
+        )
+    return 1 if report.status == "BLOCKED" else 0
+
+
+def _logs_command(args, root):
+    _observation_selection(args)
+    if not 1 <= args.lines <= 200:
+        _fail("WORKSPACE_LOG_LIMIT_INVALID")
+    if __package__:
+        from . import dev_workspace_observe
+    else:
+        import dev_workspace_observe
+    _, _, entry = _registered_instance(args, root)
+    deadline, previous = time.monotonic() + 30, None
+    try:
+        while True:
+            report = dev_workspace_observe.observe_logs(
+                entry.descriptor.instance_id, args.service or "api", max_lines=args.lines
+            )
+            public = report.to_dict()
+            if public != previous:
+                print(json.dumps(public, sort_keys=True), flush=True)
+                if not args.json:
+                    print(
+                        "[INFO] Log metadata only; message bodies are withheld. This is not verified process readiness."
+                    )
+                    if report.local_path is not None:
+                        print(
+                            f"[INFO] Open the verified local file privately for full content: {_path(report.local_path)}"
+                        )
+                previous = public
+            if not args.follow or report.status != "OBSERVED" or time.monotonic() >= deadline:
+                break
+            time.sleep(0.5)
+    except KeyboardInterrupt:
+        return 130
+    return 1 if report.status == "BLOCKED" else 0
+
+
 def run_cli(argv, root):
     args = _parser().parse_args(argv)
     try:
+        if (
+            (args.baseline is not None and args.command != "compare")
+            or ((args.service or args.follow or args.lines != 80) and args.command != "logs")
+            or (args.host and args.command not in {"status", "diagnose"})
+        ):
+            _fail("WORKSPACE_OBSERVATION_OPTIONS_REQUIRED")
         if args.command != "test" and (args.plan or args.suite):
             _fail("WORKSPACE_TEST_OPTIONS_REQUIRED")
         if args.command == "test":
             return _test_command(args, root)
+        if args.command == "compare":
+            return _compare_command(args, root)
+        if args.command == "logs":
+            return _logs_command(args, root)
         if args.command in {"list", "status", "diagnose"}:
             if any(
                 (
@@ -591,7 +752,14 @@ def run_cli(argv, root):
             ):
                 _fail("WORKSPACE_READ_ONLY_OPTIONS_REQUIRED")
             selected = args.worktree or (root if args.command != "list" else None)
-            return _inventory(root, args.json, selected)
+            return _inventory(
+                root,
+                args.json,
+                selected,
+                diagnostic=args.command != "list",
+                include_host=args.host,
+                inspect_software=args.command == "diagnose",
+            )
         if args.command == "plan":
             if args.scope == "administrator":
                 return _onboarding_guidance(args, root)
@@ -661,7 +829,9 @@ def initial_inventory(root):
         print(
             f"[{'PASS' if shutil.which(name) else 'MISSING'}] {name}; executable discovery only, dependency readiness is not established."
         )
-    _inventory(root)
+    print(f"[INFO] Platform {sys.platform}; Python interpreter {64 if sys.maxsize > 2**32 else 32}-bit.")
+    _inventory(root, requested=root, diagnostic=True, include_host=True, inspect_software=True)
+    print("[NEXT] Inspect all worktrees with python scripts/dev.py workspace list.")
     print("[NEXT] Choose an instance plan: python scripts/dev.py workspace plan --mode isolated --auth native")
     print(
         "[NEXT] Dependency preparation, provider resources, database operations and TLS trust have separate approval scopes."
