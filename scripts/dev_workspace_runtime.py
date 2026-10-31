@@ -28,6 +28,7 @@ from uuid import uuid4
 if __package__:
     from . import (
         dev_config,
+        dev_environment,
         dev_instance_plan,
         dev_instance_registry,
         dev_instance_storage,
@@ -39,6 +40,7 @@ if __package__:
     )
 else:
     import dev_config
+    import dev_environment
     import dev_instance_plan
     import dev_instance_registry
     import dev_instance_storage
@@ -87,15 +89,54 @@ _PRELOADS = frozenset(
         "SSLKEYLOGFILE",
     }
 )
-_BOOTSTRAP = (
-    "import os,runpy,sys,uuid;"
-    "resource=os.environ.get('SBOM_DEV_RESOURCE_ID','');"
-    "valid=str(uuid.UUID(resource))==resource and os.environ.get('APP_ENVIRONMENT')=='development' "
-    "and os.environ.get('PYTHON_DOTENV_DISABLED')=='1';"
-    "sys.exit('INSTANCE_SETTINGS_SOURCE_REQUIRED') if not valid else None;"
-    "source,module=sys.argv[1:3];sys.path.insert(0,source);sys.argv=[module,*sys.argv[3:]];"
-    "runpy.run_module(module,run_name='__main__')"
+_INTERPRETER_SIGNAL = b"SBOM_DEV_INTERPRETER_STARTED_V1\n"
+_SIGNAL_FIELDS = frozenset(
+    {"SBOM_DEV_INTERPRETER_SIGNAL", "SBOM_DEV_INTERPRETER_HELPER", "SBOM_DEV_INTERPRETER_HELPER_PROOF"}
 )
+# Running -c proves the framework launcher's interpreter exec has completed.
+# The marker synchronizes only; canonical Runtime still establishes ownership.
+# Execute verified helper bytes without caching a controller scripts package.
+_BOOTSTRAP = """import hashlib,json,os,runpy,stat,sys,types,uuid
+from pathlib import Path
+resource=os.environ.get('SBOM_DEV_RESOURCE_ID','')
+try:
+    valid=str(uuid.UUID(resource))==resource and os.environ.get('APP_ENVIRONMENT')=='development' and os.environ.get('PYTHON_DOTENV_DISABLED')=='1'
+except ValueError:
+    valid=False
+if not valid:
+    sys.exit('INSTANCE_SETTINGS_SOURCE_REQUIRED')
+signal=Path(os.environ['SBOM_DEV_INTERPRETER_SIGNAL'])
+directory=Path(os.environ['SBOM_DEV_STATE_DIR'])
+nonce=signal.name.removeprefix('interpreter-started-').removesuffix('.signal')
+helper=Path(os.environ['SBOM_DEV_INTERPRETER_HELPER'])
+expected=json.loads(os.environ['SBOM_DEV_INTERPRETER_HELPER_PROOF'])
+if not (signal.is_absolute() and signal.parent==directory and directory.name=='.dev-logs' and directory.parent.name==resource and len(nonce)==32 and all(c in '0123456789abcdef' for c in nonce) and signal.name=='interpreter-started-'+nonce+'.signal' and helper.is_absolute() and helper.name=='dev_private.py'):
+    sys.exit('INSTANCE_INTERPRETER_HANDSHAKE_UNVERIFIED: PATH_BINDING')
+def stamp(info):
+    return [info.st_dev,info.st_ino,info.st_size,info.st_mtime_ns,info.st_ctime_ns]
+before=helper.lstat()
+if not stat.S_ISREG(before.st_mode) or before.st_nlink!=1 or getattr(before,'st_file_attributes',0)&1024 or stamp(before)!=expected[:5]:
+    sys.exit('INSTANCE_INTERPRETER_HANDSHAKE_UNVERIFIED: HELPER_IDENTITY')
+fd=os.open(helper,os.O_RDONLY|getattr(os,'O_NOFOLLOW',0)|getattr(os,'O_NONBLOCK',0))
+with os.fdopen(fd,'rb') as stream:
+    opened=os.fstat(stream.fileno())
+    raw=stream.read(1048577)
+    # Windows path/handle creation timestamps differ; identity + size/mtime
+    # bind the open handle, while full path stamps and SHA bind its contents.
+    if stamp(opened)[:4]!=stamp(before)[:4] or opened.st_nlink!=1:
+        sys.exit('INSTANCE_INTERPRETER_HANDSHAKE_UNVERIFIED: HELPER_OPEN_IDENTITY')
+if len(raw)>1048576 or stamp(helper.lstat())!=stamp(before) or hashlib.sha256(raw).hexdigest()!=expected[-1]:
+    sys.exit('INSTANCE_INTERPRETER_HANDSHAKE_UNVERIFIED: HELPER_CONTENT')
+private=types.ModuleType('_sbom_private_sync_'+nonce)
+private.__file__=str(helper)
+exec(compile(raw,str(helper),'exec'),private.__dict__)
+private.validate_parent(signal,directory)
+private.create_private_file(signal,b'SBOM_DEV_INTERPRETER_STARTED_V1\\n')
+source,module=sys.argv[1:3]
+sys.path.insert(0,source)
+sys.argv=[module,*sys.argv[3:]]
+runpy.run_module(module,run_name='__main__')
+"""
 _ERRORS = frozenset(
     {
         "INSTANCE_ACTIVE_RUNTIME_REQUIRED",
@@ -117,6 +158,9 @@ _ERRORS = frozenset(
         "INSTANCE_PRIVATE_RUNTIME_REQUIRED",
         "INSTANCE_PROCESS_IDENTITY_UNVERIFIED",
         "INSTANCE_PROCESS_REGISTRATION_FAILED",
+        "INSTANCE_INTERPRETER_EXITED",
+        "INSTANCE_INTERPRETER_TIMEOUT",
+        "INSTANCE_INTERPRETER_HANDSHAKE_UNVERIFIED",
         "INSTANCE_READINESS_PROBE_FAILED",
         "INSTANCE_READINESS_TIMEOUT",
         "INSTANCE_RUNTIME_ADAPTER_INVALID",
@@ -169,7 +213,8 @@ class RuntimeInspection:
     def __post_init__(self):
         if (
             type(self.stage) is not str
-            or self.stage not in {"runtime-directory", "runtime-state", "runtime-lock", "runtime-stop"}
+            or self.stage
+            not in {"runtime-directory", "runtime-state", "runtime-lock", "runtime-stop", "interpreter-signal"}
             or type(self.category) is not str
             or self.category
             not in {
@@ -189,7 +234,7 @@ class RuntimeInspection:
         return {"stage": self.stage, "category": self.category, "winerror": self.winerror}
 
 
-def _private_failure(stage, error=None, *, category=None):
+def _private_failure(stage, error=None, *, category=None, code="INSTANCE_RUNTIME_RECORD_UNVERIFIED"):
     allowed = {"OWNER_MISMATCH", "UNTRUSTED_GRANT", "OBJECT_UNVERIFIED", "OWNER_OR_MODE_MISMATCH", "OVERSIZED"}
     selected = category or getattr(error, "category", None)
     if type(selected) is not str or selected not in allowed:
@@ -198,10 +243,10 @@ def _private_failure(stage, error=None, *, category=None):
             if getattr(error, "code", None) == "REGISTRY_ACCESS_UNVERIFIED"
             else "ACL_UNVERIFIED"
         )
-    code = getattr(error, "winerror", None)
-    code = code if type(code) is int and 0 <= code <= 0xFFFFFFFF else None
+    winerror = getattr(error, "winerror", None)
+    winerror = winerror if type(winerror) is int and 0 <= winerror <= 0xFFFFFFFF else None
     raise RuntimeAdapterError(
-        "INSTANCE_RUNTIME_RECORD_UNVERIFIED", inspection=RuntimeInspection(stage, selected, code)
+        code, inspection=RuntimeInspection(stage, selected, winerror), winerror=winerror
     ) from None
 
 
@@ -718,7 +763,99 @@ class WorkspaceRuntime:
                 env["SBOM_DEV_WORKER_ROLE"] = role
         return ComponentLaunch(spec.name, argv, spec.cwd, env, spec.port)
 
-    def start_process(self, spec):
+    def _interpreter_signal(self, spec, logs):
+        if spec.name == "Frontend":
+            return spec, None
+        if any(name.upper() in _SIGNAL_FIELDS for name in spec.environment):
+            _fail("INSTANCE_INTERPRETER_HANDSHAKE_UNVERIFIED")
+        helper = Path(__file__).resolve(strict=True).with_name("dev_private.py")
+        proof = tuple(dev_workspace_dependencies._file(helper, helper.parent, 1048576))
+        path = logs / ("interpreter-started-" + uuid4().hex + ".signal")
+        if os.path.lexists(path):
+            _fail("INSTANCE_INTERPRETER_HANDSHAKE_UNVERIFIED")
+        environment = {
+            **spec.environment,
+            "SBOM_DEV_INTERPRETER_SIGNAL": str(path),
+            "SBOM_DEV_INTERPRETER_HELPER": str(helper),
+            "SBOM_DEV_INTERPRETER_HELPER_PROOF": json.dumps(list(proof[1:])),
+        }
+        return ComponentLaunch(spec.name, spec.argv, spec.cwd, environment, spec.port), (path, helper, proof)
+
+    def _wait_interpreter(self, child, signal, deadline):
+        """Wait only for final interpreter execution, never trust marker identity.
+
+        Private metadata is deliberately retained. Empty/prefix writes and
+        Windows sharing violations can precede the helper's fsync/close. All
+        other ambiguity fails closed. An independent elapsed-time bound also
+        protects tests/callers supplying a nonadvancing scheduling clock.
+        """
+        path, helper, proof = signal
+        budget = min(10.0, deadline - self.clock())
+        if budget <= 0:
+            _fail("INSTANCE_INTERPRETER_TIMEOUT")
+        end = time.perf_counter() + budget
+        while True:
+            self.runtime.check_stop()
+            if child.poll() is not None:
+                _fail("INSTANCE_INTERPRETER_EXITED")
+            publication_error = None
+            try:
+                if os.path.lexists(path):
+                    dev_private.validate_parent(path, self.location.root)
+                    before = dev_instance_registry._stamp(dev_instance_registry._private(path))
+                    try:
+                        raw = dev_environment.bounded_read_bytes(path, 128)
+                    except PermissionError as error:
+                        # The Windows CRT drops ERROR_SHARING_VIOLATION while
+                        # the explicit-owner writer holds its exclusive handle.
+                        # Retry only this read, after a successful private ACL
+                        # check; persistent denial remains a reported failure.
+                        if (
+                            sys.platform != "win32"
+                            or error.errno != errno.EACCES
+                            or getattr(error, "winerror", None) is not None
+                        ):
+                            raise
+                        publication_error = error
+                    else:
+                        after = dev_instance_registry._stamp(dev_instance_registry._private(path))
+                        if before == after and raw == _INTERPRETER_SIGNAL:
+                            if tuple(dev_workspace_dependencies._file(helper, helper.parent, 1048576)) != proof:
+                                _fail("INSTANCE_INTERPRETER_HANDSHAKE_UNVERIFIED")
+                            return
+                        if not _INTERPRETER_SIGNAL.startswith(raw):
+                            _fail("INSTANCE_INTERPRETER_HANDSHAKE_UNVERIFIED")
+            except RuntimeAdapterError:
+                raise
+            except FileNotFoundError:
+                pass
+            except Exception as error:
+                if getattr(error, "winerror", None) not in {32, 33}:
+                    _private_failure("interpreter-signal", error, code="INSTANCE_INTERPRETER_HANDSHAKE_UNVERIFIED")
+            remaining = min(end - time.perf_counter(), deadline - self.clock())
+            if remaining <= 0:
+                if publication_error is not None:
+                    _private_failure(
+                        "interpreter-signal", publication_error, code="INSTANCE_INTERPRETER_HANDSHAKE_UNVERIFIED"
+                    )
+                _fail("INSTANCE_INTERPRETER_TIMEOUT")
+            self.sleep(min(0.02, remaining))
+
+    @staticmethod
+    def _registration_winerror(error):
+        canonical = type(error).__name__ == "OwnershipError" and type(error).__module__ in {
+            "scripts.dev",
+            "dev",
+            "__main__",
+        }
+        code = getattr(error, "winerror", None)
+        return (
+            code
+            if (isinstance(error, OSError) or canonical) and type(code) is int and 0 <= code <= 0xFFFFFFFF
+            else None
+        )
+
+    def start_process(self, spec, *, deadline=None):
         runtime = self.runtime
         if runtime is None or runtime.state is None:
             _fail("INSTANCE_ACTIVE_RUNTIME_REQUIRED")
@@ -743,6 +880,7 @@ class WorkspaceRuntime:
         if not os.path.lexists(logs):
             dev_workspace_dependencies._exclusive_directory(logs, self.location.root)
         dev_instance_storage._verify(logs, private=True)
+        spec, signal = self._interpreter_signal(spec, logs)
         path = logs / _LOGS[spec.name]
         if not os.path.lexists(path):
             dev_private.create_private_file(path, b"")
@@ -774,9 +912,18 @@ class WorkspaceRuntime:
         finally:
             os.close(fd)
         runtime.processes[child.pid] = child  # Required before Windows handle-based register.
+        synchronization_error = None
+        if signal is not None:
+            try:
+                self._wait_interpreter(child, signal, deadline if deadline is not None else self.clock() + 10.0)
+            except BaseException as error:
+                synchronization_error = error
         try:
+            # Registration ALWAYS uses the original Popen, including when the
+            # synchronization marker is forged, missing or the child exited.
             runtime.register(spec.name, child.pid, spec.port)
-        except BaseException:
+        except BaseException as error:
+            winerror = self._registration_winerror(error)
             record = runtime.state["services"].setdefault(
                 spec.name, {"pid": child.pid, "birth": None, "exe": None, "members": [], "tree_unverified": True}
             )
@@ -795,7 +942,21 @@ class WorkspaceRuntime:
                             child.wait(timeout=2)
                         except Exception:
                             pass  # Explicit unknown record remains for manual review.
-            _fail("INSTANCE_PROCESS_REGISTRATION_FAILED")
+            if isinstance(error, (KeyboardInterrupt, SystemExit)):
+                raise
+            if synchronization_error is not None:
+                if type(synchronization_error) is RuntimeAdapterError:
+                    raise RuntimeAdapterError(
+                        synchronization_error.code,
+                        inspection=synchronization_error.inspection,
+                        winerror=synchronization_error.winerror
+                        if synchronization_error.winerror is not None
+                        else winerror,
+                    ) from None
+                raise synchronization_error
+            raise RuntimeAdapterError("INSTANCE_PROCESS_REGISTRATION_FAILED", winerror=winerror) from None
+        if synchronization_error is not None:
+            raise synchronization_error
         return spec
 
     def _healthy(self, runtime):
@@ -873,7 +1034,7 @@ class WorkspaceRuntime:
             self._persist(runtime)
             active = []
             for spec in specs:
-                active.append(self.start_process(spec))
+                active.append(self.start_process(spec, deadline=deadline))
                 if spec.name in {"Celery worker", "Celery reports worker"}:
                     continue
                 pending = active if spec.name == "Celery Beat" else (active[-1],)
@@ -894,7 +1055,7 @@ class WorkspaceRuntime:
                 if type(frontend) is not dev_workspace_preview.VerifiedPreviewLaunch:
                     _fail("INSTANCE_FRONTEND_FACTORY_REQUIRED")
                 spec = preview_launch(self.location, frontend)[0]
-                active.append(self.start_process(spec))
+                active.append(self.start_process(spec, deadline=deadline))
                 self._probe(active[-1], probes["Frontend"], deadline)
             self._healthy(runtime)
             if set(runtime.state["services"]) != set(full_names):

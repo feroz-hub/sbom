@@ -9,7 +9,6 @@ import importlib.util
 import json
 import subprocess
 import sys
-import time
 from dataclasses import replace
 from pathlib import Path
 from urllib.parse import quote
@@ -19,7 +18,23 @@ from scripts import dev_workspace_lifecycle as lifecycle
 from scripts import dev_workspace_runtime as adapter
 
 
-def test_native_partial_startup_cleans_only_verified_fixture_processes(tmp_path):
+def test_native_partial_startup_cleans_only_verified_fixture_processes(tmp_path, monkeypatch):
+    private_errors = []
+    original_private_failure = adapter._private_failure
+
+    def private_failure(stage, error=None, **kwargs):
+        # Keep native failure evidence numeric/category-only, never raw errors.
+        private_errors.append(
+            {
+                "stage": stage,
+                "type": type(error).__name__,
+                "errno": getattr(error, "errno", None),
+                "winerror": getattr(error, "winerror", None),
+            }
+        )
+        return original_private_failure(stage, error, **kwargs)
+
+    monkeypatch.setattr(adapter, "_private_failure", private_failure)
     fixtures = Path(__file__).with_name("test_dev_workspace_lifecycle.py")
     spec = importlib.util.spec_from_file_location("sbo101_native_pure_fixtures", fixtures)
     module = importlib.util.module_from_spec(spec)
@@ -53,22 +68,15 @@ def test_native_partial_startup_cleans_only_verified_fixture_processes(tmp_path)
     snapshot = replace(snapshot, source_root=str(source), state_root=str(root), environment=environment)
     plan = lifecycle.plan_lifecycle(descriptor, snapshot)
     location = adapter.RuntimeLocation(descriptor, root, home)
-    launches = adapter.isolated_launches(location, plan, python_executable=Path(sys.executable).resolve(strict=True), frontend=None)
+    launches = adapter.isolated_launches(
+        location, plan, python_executable=Path(sys.executable).resolve(strict=True), frontend=None
+    )
     children = []
     runtimes = []
 
     def owned_popen(*args, **kwargs):
         child = subprocess.Popen(*args, **kwargs)
         children.append(child)
-        # macOS framework Python may exec the final interpreter after Popen
-        # returns. Like test_dev_native_process, establish fixture workload
-        # before recording its executable identity. Never accept a changed
-        # executable in production ownership checks to make this fixture pass.
-        deadline = time.monotonic() + 8
-        while len(tuple((root / ".dev-logs").glob("*.fixture-ready"))) < len(children):
-            assert child.poll() is None, "Native helper exited before its stable fixture workload"
-            assert time.monotonic() < deadline, "Native helper workload was not established"
-            time.sleep(.01)
         return child
 
     def runtime_factory(directory):
@@ -99,10 +107,16 @@ def test_native_partial_startup_cleans_only_verified_fixture_processes(tmp_path)
         outcome = runtime.start(
             launches, preflight=lambda *_: True, probes=probes, frontend_factory=refuse_frontend, timeout=25
         )
-        assert outcome.code == "INSTANCE_FRONTEND_FACTORY_REQUIRED", json.dumps(outcome.to_dict())
+        assert outcome.code == "INSTANCE_FRONTEND_FACTORY_REQUIRED", json.dumps(
+            {"outcome": outcome.to_dict(), "private_errors": private_errors}
+        )
         assert not outcome.ready and not outcome.records_retained
         assert len(children) == 4 and all(child.wait(timeout=10) is not None for child in children)
         assert not (root / ".dev-runtime.json").exists()
+        # Exercise the production adapter's pre-module synchronization, not a
+        # workload delay hidden inside this fixture's Popen wrapper.
+        signals = tuple((root / ".dev-logs").glob("interpreter-started-*.signal"))
+        assert len(signals) == 4 and all(path.read_bytes() == adapter._INTERPRETER_SIGNAL for path in signals)
     finally:
         # Fixture-only recovery also works if a platform cannot verify a child:
         # only these fresh helper modules honor this private sentinel. No PID or
