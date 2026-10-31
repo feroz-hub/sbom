@@ -1115,6 +1115,12 @@ Celery control messages belong exclusively to separately named active startup
 acceptance. Logs expose bounded component metadata and verified local log paths;
 message bodies stay private. No ordinary startup initializes or migrates a
 database, installs dependencies, changes trust or creates an administrator.
+
+New isolated HCL bundles additionally require an explicit approved
+`post_logout_redirect_uri` matching the instance `/logged-out` origin. Its
+absence cannot fall back to `localhost:3000`. Email-verification links use the
+instance `/verify-email` URL in both modes. This does not create or approve an
+IdP registration; incomplete existing HCL material remains preserved/refused.
 Do not run generated manifests manually to bypass the adapter's identity,
 nonroot, database and exact-target approval checks.
 

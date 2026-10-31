@@ -61,6 +61,7 @@ def prepared(*, worktree="b" * 64, auth="native", platform="win32", module=lifec
         "AI_CONFIG_ENCRYPTION_KEY": PROVIDER,
         "APP_ORIGIN": descriptor.origin,
         "CORS_ORIGINS": descriptor.origin,
+        "EMAIL_VERIFICATION_FRONTEND_URL": descriptor.origin + "/verify-email",
         "API_RATE_LIMIT_ENABLED": "true",
         "DEV_API_PORT": str(ports["api"]),
         "DEV_FRONTEND_PORT": str(ports["frontend"]),
@@ -108,7 +109,6 @@ def prepared(*, worktree="b" * 64, auth="native", platform="win32", module=lifec
             NATIVE_JWT_PUBLIC_KEY="fixture-public-native-key",
             NATIVE_ACTIVATION_FRONTEND_URL=descriptor.origin + "/activate-account",
             NATIVE_PASSWORD_RESET_FRONTEND_URL=descriptor.origin + "/reset-password",
-            EMAIL_VERIFICATION_FRONTEND_URL=descriptor.origin + "/verify-email",
         )
     else:
         environment.update(
@@ -117,6 +117,7 @@ def prepared(*, worktree="b" * 64, auth="native", platform="win32", module=lifec
             NEXT_PUBLIC_HCL_IAM_ISSUER="https://identity.example.test",
             NEXT_PUBLIC_HCL_IAM_CLIENT_ID="fixture-client",
             NEXT_PUBLIC_HCL_IAM_REDIRECT_URI=descriptor.origin + "/api/auth/callback",
+            NEXT_PUBLIC_HCL_IAM_POST_LOGOUT_REDIRECT_URI=descriptor.origin + "/logged-out",
         )
     snapshot = module.PreparationSnapshot(
         descriptor.repository_id,
@@ -281,6 +282,33 @@ def test_hcl_issuer_and_origin_must_match_the_selected_frontend_configuration():
         altered = replace(snapshot, environment={**snapshot.environment, "NEXT_PUBLIC_HCL_IAM_ISSUER": value})
         with pytest.raises(lifecycle.LifecycleError, match="^INSTANCE_CONFIGURATION_MISMATCH$"):
             lifecycle.plan_lifecycle(descriptor, altered)
+
+
+@pytest.mark.parametrize("auth", ["native", "hcl"])
+@pytest.mark.parametrize(
+    "value", [None, "", "https://localhost:3000/verify-email", "https://foreign.invalid/verify-email"]
+)
+def test_email_verification_links_never_fall_back_to_another_instance(auth, value):
+    descriptor, snapshot = prepared(auth=auth)
+    environment = dict(snapshot.environment)
+    if value is None:
+        environment.pop("EMAIL_VERIFICATION_FRONTEND_URL")
+    else:
+        environment["EMAIL_VERIFICATION_FRONTEND_URL"] = value
+    with pytest.raises(lifecycle.LifecycleError, match="^INSTANCE_CONFIGURATION_MISMATCH$"):
+        lifecycle.plan_lifecycle(descriptor, replace(snapshot, environment=environment))
+
+
+@pytest.mark.parametrize("value", [None, "", "https://localhost:3000/logged-out", "https://foreign.invalid/logged-out"])
+def test_hcl_logout_requires_exact_operator_registered_instance_origin(value):
+    descriptor, snapshot = prepared(auth="hcl")
+    environment = dict(snapshot.environment)
+    if value is None:
+        environment.pop("NEXT_PUBLIC_HCL_IAM_POST_LOGOUT_REDIRECT_URI")
+    else:
+        environment["NEXT_PUBLIC_HCL_IAM_POST_LOGOUT_REDIRECT_URI"] = value
+    with pytest.raises(lifecycle.LifecycleError, match="^INSTANCE_CONFIGURATION_MISMATCH$"):
+        lifecycle.plan_lifecycle(descriptor, replace(snapshot, environment=environment))
 
 
 @pytest.mark.parametrize("changed", ["commit", "config_generation", "environment", "prerequisites"])

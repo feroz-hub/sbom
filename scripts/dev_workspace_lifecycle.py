@@ -268,6 +268,7 @@ def _validate_configuration(descriptor, snapshot):
             "AUTH_SESSION_STORE": "redis",
             "APP_ORIGIN": descriptor.origin,
             "CORS_ORIGINS": descriptor.origin,
+            "EMAIL_VERIFICATION_FRONTEND_URL": descriptor.origin + "/verify-email",
             "API_RATE_LIMIT_ENABLED": "true",
             "DEV_API_PORT": str(ports["api"]),
             "DEV_FRONTEND_PORT": str(ports["frontend"]),
@@ -367,7 +368,6 @@ def _validate_configuration(descriptor, snapshot):
                 "NATIVE_JWT_ISSUER": descriptor.origin + "/native",
                 "NATIVE_ACTIVATION_FRONTEND_URL": descriptor.origin + "/activate-account",
                 "NATIVE_PASSWORD_RESET_FRONTEND_URL": descriptor.origin + "/reset-password",
-                "EMAIL_VERIFICATION_FRONTEND_URL": descriptor.origin + "/verify-email",
             },
         )
         if not all(
@@ -396,6 +396,7 @@ def _validate_configuration(descriptor, snapshot):
             {
                 "NEXT_PUBLIC_HCL_IAM_ISSUER": env["HCL_IAM_ISSUER"],
                 "NEXT_PUBLIC_HCL_IAM_REDIRECT_URI": descriptor.origin + "/api/auth/callback",
+                "NEXT_PUBLIC_HCL_IAM_POST_LOGOUT_REDIRECT_URI": descriptor.origin + "/logged-out",
             },
         )
     try:

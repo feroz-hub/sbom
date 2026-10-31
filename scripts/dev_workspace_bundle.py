@@ -182,10 +182,14 @@ class HclRegistration:
     redirect_uri: str
     scopes: str
     ca_pem: bytes = b""
+    post_logout_redirect_uri: str | None = None
 
     def __post_init__(self):
         _public_id(self.reference)
-        for value in (self.issuer, self.audience, self.client_id, self.redirect_uri, self.scopes):
+        values = (self.issuer, self.audience, self.client_id, self.redirect_uri, self.scopes)
+        if self.post_logout_redirect_uri is not None:
+            values += (self.post_logout_redirect_uri,)
+        for value in values:
             if (
                 type(value) is not str
                 or not value
@@ -193,7 +197,10 @@ class HclRegistration:
                 or any(ord(char) < 32 or ord(char) == 127 for char in value)
             ):
                 _fail("BUNDLE_HCL_REGISTRATION_INVALID")
-        for value in (self.issuer, self.redirect_uri):
+        urls = (self.issuer, self.redirect_uri)
+        if self.post_logout_redirect_uri is not None:
+            urls += (self.post_logout_redirect_uri,)
+        for value in urls:
             try:
                 url = urlsplit(value)
                 if (
@@ -307,6 +314,10 @@ def _bindings(plan, source, anchor, generation, profiles, registration, days):
         "registration_reference": registration.reference if registration else None,
         "certificate_days": days,
     }
+    if registration is not None:
+        # This exact public instance URL must already be approved at the IdP;
+        # deriving it here would invent an unconfirmed client registration.
+        stable["hcl_post_logout_redirect_uri"] = registration.post_logout_redirect_uri
     material = hashlib.sha256(_json(stable)).hexdigest()
     public = [stable, descriptor.commit, dict(descriptor.manifest_hashes), source.controller_hashes]
     private = [
@@ -323,6 +334,7 @@ def _bindings(plan, source, anchor, generation, profiles, registration, days):
             registration.redirect_uri,
             registration.scopes,
             registration.ca_pem.hex(),
+            registration.post_logout_redirect_uri,
         ],
     ]
     return hashlib.sha256(_json(public)).hexdigest(), material, hashlib.sha256(_json(private)).hexdigest()
@@ -377,6 +389,8 @@ def plan_bundle(plan, source, *, anchor, generation, profiles, registration=None
         _fail("BUNDLE_HCL_REGISTRATION_REQUIRED")
     if registration is not None and registration.redirect_uri != descriptor.origin + "/api/auth/callback":
         _fail("BUNDLE_HCL_REDIRECT_REGISTRATION_REQUIRED")
+    if registration is not None and registration.post_logout_redirect_uri != descriptor.origin + "/logged-out":
+        _fail("BUNDLE_HCL_LOGOUT_REGISTRATION_REQUIRED")
     if type(certificate_days) is not int or not 1 <= certificate_days <= 90:
         _fail("BUNDLE_CERTIFICATE_POLICY_INVALID")
     if (
@@ -554,6 +568,7 @@ def _environment(plan, material):
         "NEXT_PUBLIC_HCL_AUTH_ENABLED": str(not native).lower(),
         "APP_ORIGIN": descriptor.origin,
         "CORS_ORIGINS": descriptor.origin,
+        "EMAIL_VERIFICATION_FRONTEND_URL": descriptor.origin + "/verify-email",
         "DEV_API_PORT": str(ports["api"]),
         "DEV_FRONTEND_PORT": str(ports["frontend"]),
         "SBOM_API_URL": f"http://127.0.0.1:{ports['api']}",
@@ -609,7 +624,6 @@ def _environment(plan, material):
             NATIVE_JWT_VERIFICATION_KEYS_JSON="{}",
             NATIVE_ACTIVATION_FRONTEND_URL=descriptor.origin + "/activate-account",
             NATIVE_PASSWORD_RESET_FRONTEND_URL=descriptor.origin + "/reset-password",
-            EMAIL_VERIFICATION_FRONTEND_URL=descriptor.origin + "/verify-email",
         )
     else:
         registration = plan.registration
@@ -620,6 +634,7 @@ def _environment(plan, material):
             NEXT_PUBLIC_HCL_IAM_ISSUER=registration.issuer,
             NEXT_PUBLIC_HCL_IAM_CLIENT_ID=registration.client_id,
             NEXT_PUBLIC_HCL_IAM_REDIRECT_URI=registration.redirect_uri,
+            NEXT_PUBLIC_HCL_IAM_POST_LOGOUT_REDIRECT_URI=registration.post_logout_redirect_uri,
             NEXT_PUBLIC_HCL_IAM_SCOPES=registration.scopes,
             HCL_IAM_CA_BUNDLE=trust,
         )
