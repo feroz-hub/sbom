@@ -104,6 +104,7 @@ jobs:
           scripts/dev_workspace_readiness.py scripts/dev_workspace_inspect.py
           scripts/dev_workspace_certificates.py scripts/dev_workspace_bindings.py
           scripts/dev_workspace_setup.py scripts/dev_workspace_control.py
+          scripts/dev_workspace_visual.py tests/test_dev_workspace_visual.py
           tests/test_dev_workspace_setup.py tests/test_dev_workspace_control.py tests/test_dev_workspace_dispatch.py
           tests/test_dev_workspace_inventory_runtime.py
           tests/test_dev_workspace_certificates.py tests/test_dev_workspace_bindings.py
@@ -135,7 +136,7 @@ jobs:
           'scripts/dev_workspace_bundle.py', 'scripts/dev_workspace_database_prepare.py', 'scripts/dev_workspace_operation_journal.py',
           'scripts/dev_workspace_database_adapters.py', 'scripts/dev_workspace_readiness.py', 'scripts/dev_workspace_inspect.py',
           'scripts/dev_workspace_certificates.py', 'scripts/dev_workspace_bindings.py',
-          'scripts/dev_workspace_setup.py', 'scripts/dev_workspace_control.py')]"
+          'scripts/dev_workspace_setup.py', 'scripts/dev_workspace_control.py', 'scripts/dev_workspace_visual.py')]"
       - name: Cross-platform unit and mocked adapter regressions
         run: >-
           python -m pytest -p no:cacheprovider --noconftest -q
@@ -159,6 +160,7 @@ jobs:
           tests/test_dev_workspace_certificates.py tests/test_dev_workspace_bindings.py
           tests/test_dev_workspace_setup.py tests/test_dev_workspace_control.py tests/test_dev_workspace_dispatch.py
           tests/test_dev_workspace_inventory_runtime.py
+          tests/test_dev_workspace_visual.py
           tests/test_dev_prepared.py tests/test_dev_private_files.py tests/test_dev_setup.py
           tests/test_dev_windows_acl.py
           tests/test_dev_component_environments.py tests/test_dev_frontend_workspace.py

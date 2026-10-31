@@ -40,9 +40,11 @@ UNIT_TESTS = (
     "tests/test_dev_instance_plan.py",
     "tests/test_dev_instance_namespaces.py",
     "tests/test_dev_workspace_provider.py",
+    "tests/test_dev_workspace_lifecycle.py",
 )
 _SOURCES = (
     "scripts/__init__.py", "scripts/dev_instance_plan.py", "scripts/dev_workspace_provider.py",
+    "scripts/dev_workspace_lifecycle.py", "scripts/dev_config.py",
     "app/__init__.py", "app/dev_instance.py", "tests/__init__.py", *UNIT_TESTS,
 )
 _CONTROLLERS = tuple("scripts/" + name for name in dependencies._CONTROLLERS) + (

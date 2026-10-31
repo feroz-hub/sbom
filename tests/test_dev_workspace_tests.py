@@ -122,7 +122,7 @@ def test_read_only_plan_binds_exact_source_worktree_head_and_stamped_venv(prepar
     assert (plan.root, plan.root_identity, plan.commit, plan.worktree_id) == (
         prepared.root, prepared.selected.identity, HEAD, WORKTREE)
     assert plan.home_identity.canonical_path == prepared.home
-    assert len(plan.sources) == 9 and len(plan.venv_proofs) == 4
+    assert len(plan.sources) == len(testing._SOURCES) and len(plan.venv_proofs) == 4
     assert plan.fingerprint == hashlib.sha256(testing._json(testing._binding(plan))).hexdigest()
     assert plan.to_dict()["tests"] == list(testing.UNIT_TESTS)
     assert plan.to_dict()["scope"] == "pure-development-contracts"
@@ -388,6 +388,44 @@ def test_fixed_bootstrap_supplies_only_fresh_temporary_fixture_without_deletion(
         exec(testing._BOOTSTRAP, {})
     assert caught.value.code == 0
     assert sys.path[0] == str(source)
+
+
+def test_actual_reviewed_copied_closure_runs_without_repository_fixtures_or_installation(prepared):
+    """Manual closure smoke, not adoption of an unstamped product interpreter.
+
+    The public runner's prepared-venv checks stay unchanged. Only this test uses
+    its already-running, independently pinned pytest interpreter to validate the
+    exact staged import closure. No environment/package creation is performed.
+    """
+    executable = Path(sys.executable).absolute()
+    try:
+        # Refuse redirected launch paths, including a POSIX venv symlink whose
+        # resolution would silently switch Python package contexts.
+        if executable.resolve(strict=True) != executable or executable.is_symlink():
+            pytest.skip("Copied-closure smoke requires an existing nonredirected pytest interpreter")
+        interpreter_proof = testing._proof(executable, executable.parent, 268435456)
+    except testing.dependencies.DependencyError:
+        pytest.skip("Existing test interpreter cannot be pinned without altering its installation")
+    planned = testing.plan_tests(prepared.root)
+    assert not planned.blockers
+    stage = prepared.home / (".closure-" + testing.uuid.uuid4().hex)
+    testing._stage(planned, stage)
+    assert {str(path.relative_to(stage / "source")).replace("\\", "/")
+            for path in (stage / "source").rglob("*") if path.is_file()} == set(testing._SOURCES)
+    # Neither upward pytest discovery nor the checkout's application fixtures
+    # may contribute executable configuration to the child.
+    testing.dev_private.create_private_file(stage / "conftest.py", b"raise AssertionError('outside reviewed closure')\n")
+    testing.dev_private.create_private_file(stage / "pytest.ini", b"[pytest]\naddopts = -p unapproved_fixture\n")
+    command = (str(executable), *testing._command(planned, stage)[1:])
+    raw, code, reason, cleanup, pid = testing._execute(command, cwd=stage / "source",
+        environment=testing._environment(planned, stage), timeout=20)
+    # Assertions intentionally never print arbitrary pytest stdout/tracebacks.
+    assert reason is None, "Reviewed copied closure failed its bounded transport"
+    assert code == 0, "Reviewed copied closure failed; stdout is withheld"
+    assert cleanup is True and type(pid) is int and pid > 0
+    counts = dict(testing._counts(raw, code))
+    assert counts.get("passed", 0) > 0 and not counts.get("failed", 0) and not counts.get("errors", 0)
+    assert testing._proof(executable, executable.parent, 268435456) == interpreter_proof
 
 
 @pytest.mark.parametrize("timeout", [True, False, 0, -1, 301, float("nan"), float("inf"), SECRET])

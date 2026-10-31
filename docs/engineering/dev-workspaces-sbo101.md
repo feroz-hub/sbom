@@ -935,6 +935,48 @@ No real key generation, dependency installation, Node/app/provider/database star
 trust change or administrator action occurred. Current mock is a synthetic
 theme/layout fixture, not arbitrary authenticated application-page coverage.
 
+## Increment P — private visual artifacts and real safe-closure smoke
+
+`dev_workspace_visual.py` supplies a concrete Chromium CDP adapter using the
+already pinned websockets/Pillow dependencies. It creates a new private profile
+and process ledger, pins browser/controller identity, restricts navigation to
+the exact mock origin, preserves TLS verification, and requires fresh separate
+browser/OS trust evidence plus process-bound frontend readiness. It can retain
+private PNGs/traces/pixel differences and a completion manifest; public outcomes
+contain safe IDs/hashes/dimensions, not artifact contents or private paths.
+Capture uses explicit artifact consent and canonical cleanup; unknown browser
+records stay retained. No browser download, original browser profile, TLS/CORS/
+authentication bypass or real shared/isolated data capture is enabled. Source
+comparison remains available through `workspace compare`; live visual execution
+is an internal adapter pending reviewed trust integration, not a new public
+caller-JSON authorization route.
+
+Executed visual adapter suite: **48 passed in 236.16s** with fake Chromium/CDP,
+readiness and trust observations. Actual private Runtime IO paths ran without a
+browser. Ruff and Python3.11 grammar passed. No real browser, network capture,
+OS trust change or full visual acceptance ran. Renderer churn and CDP event
+polling still require real approved browser acceptance; screenshots never prove
+API/login/functional acceptance.
+
+The limited public unit runner now stages exactly four reviewed pure tests and
+twelve source files, adding the lifecycle/configuration transport contracts.
+An actual child using the existing pinned test interpreter ran that copied
+closure with poisoned outside conftest/config files excluded. No venv/package
+installation, unstamped product-venv adoption or database fixture permission was
+introduced. Data/integration/migration suites remain separately gated.
+
+The explicit rerun (superseding an earlier retained count without its full command) was:
+
+```powershell
+& C:\sbom\.venv\Scripts\python.exe -B C:\sbom\.windows\worktrees\SBO-98-component-env\.dev-logs\safe_pytest.py tests/test_dev_workspace_tests.py tests/test_dev_workspace_tests_cli.py tests/test_dev_instance_plan.py tests/test_dev_instance_namespaces.py tests/test_dev_workspace_provider.py tests/test_dev_workspace_lifecycle.py --timeout=60
+```
+
+Result: **435 passed in 40.34s** on Windows/Python3.14.6, including the real
+copied-closure child. The lifecycle fixture here includes the subsequently
+delivered HCL-origin contract fix. Scoped Ruff passed. Full inspected launcher
+and cross-platform CI evidence is recorded separately after the final source
+freeze; this test is not real provider/application/enrollment acceptance.
+
 ## Disposable acceptance procedure (not yet authorized or executed)
 
 1. Review the candidate diff and CI on Windows/macOS/Linux, preserving SBO-98.
