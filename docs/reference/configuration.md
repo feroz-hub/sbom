@@ -1028,6 +1028,15 @@ provider prerequisites. Redis support does not prove multi-replica acceptance.
 
 ## Build versus runtime
 
+SBO-101 preview preparation has a separate explicit `workspace plan/prepare
+--scope preview --preview-settings <file>` category. The settings file references
+existing TLS/Node files and an optional non-production backend registration; it
+does not supply credentials or grant readiness. Preparation never installs,
+starts services, creates certificate material or changes OS trust. The [preview
+and Runtime evidence](../engineering/dev-workspaces-sbo101.md#increment-i--preview-preparation-and-canonical-runtime-adapter)
+distinguishes mock visual fixtures, approved shared backends and isolated own-API
+bindings. A custom CA client handshake alone is not browser/OS trust acceptance.
+
 `SBOM_DEV_RESOURCE_ID` is optional launcher-controlled, canonical UUID metadata
 for proposed isolated development stacks. It selects independent queue, Beat,
 session, heartbeat and rate-limit namespaces; it never proves ownership. Keep it

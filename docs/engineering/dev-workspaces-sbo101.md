@@ -555,6 +555,80 @@ AST comparison against `73d29949b31fa3564a56043128bde7118e804ede` confirms
 bootstrap/enrollment service sources also have no diff. Actual simultaneous
 queues/sessions/Beat/rate-limit and full-stack acceptance remain **NOT RUN**.
 
+## Increment I — Preview preparation and canonical Runtime adapter
+
+Implemented `dev_workspace_preview.py`, `dev_workspace_preview_cli.py` and
+`dev_workspace_runtime.py`, exposed through the existing public launcher:
+
+```powershell
+python scripts/dev.py workspace plan --scope preview --mode mock --auth native --preview-settings <existing-preview-settings.json> --json
+python scripts/dev.py workspace prepare --scope preview --mode mock --auth native --preview-settings <existing-preview-settings.json>
+```
+
+The strict version-1 settings object contains `node` (an absolute executable),
+`tls` (`certificate`, `private_key`, `ca_bundle` existing absolute paths), and
+`shared_backend` (`null` for mock, otherwise the explicit registration object).
+It never contains passwords, key contents or readiness/authorization markers.
+Planning reads metadata; preparation requires a current, expiring, exact-plan
+TTY confirmation, creates only private files/links, and reuses verified existing
+preparation without another write prompt. Unknown state is retained/refused.
+These are source review interfaces; guided bundle selection remains subsequent
+integration, so the final onboarding UX need not ask users to discover these paths.
+
+Mock uses a separate synthetic Next app with selected inert design tokens, no
+real application layout/auth/API routes, no remote font dependency and no data
+services. It is a theme/layout fixture, not arbitrary application-page coverage.
+Source style changes require re-preparation; shared/isolated real source is linked
+for HMR. Shared mode requires explicit non-production origin, permitted tenant,
+auth/callback/session verification and a warning that browser actions can mutate
+that backend. No extra worker/Beat is launched. Isolated frontend binding instead
+requires the exact own API port and persistent UUID. It cannot adopt a shared
+backend registration.
+
+TLS, backend and native compiler verification are trusted runtime integrations,
+not caller JSON flags. The existing compiler guard remains unchanged. The
+Runtime adapter uses the canonical launcher's Runtime via injection, private
+per-instance state/logs, original process handles, process creation/executable
+checks, and canonical verified cleanup. Backend children use an isolated Python
+runpy entry with explicit source and an environment-free private CWD; real
+Settings source control comes from H, with no monkeypatch/module overlay.
+Ambient application settings/preloads and TLS key logging are refused/projected
+away. The deferred frontend factory runs only after backend/API probes, then
+requires frontend verification and all five owned records before service readiness.
+Its bounded callbacks perform read-only verification/construction, never spawning
+or preparation. Stop/restart remain independent of private configuration/source
+loss; uncertain process/tree records are retained. Public CLI start remains
+blocked until approved target/provider/private-bundle/readiness bindings are
+connected, rather than accepting a supplied READY marker.
+
+Executed Windows/Python 3.14.6 safe-harness command:
+
+```powershell
+& C:\sbom\.venv\Scripts\python.exe -B C:\sbom\.windows\worktrees\SBO-98-component-env\.dev-logs\safe_pytest.py tests/test_dev_workspace_runtime_native.py tests/test_dev_workspace_runtime.py tests/test_dev_workspace_preview.py tests/test_dev_workspace_preview_cli.py tests/test_dev_workspace_cli.py tests/test_dev_windows_acl.py tests/test_dev_native_process.py --timeout=60
+```
+
+Result: **170 passed in 65.36s**. A later added real-public-theme extraction test
+passed separately (**1 passed, 0.32s**). The native fixture recheck after adding
+its private recovery sentinel also passed (**1 passed, 3.05s**). Existing Python
+3.12.10, preview/runtime/native-fixture selection: **68 passed in 55.02s**. Ruff
+and Python 3.11 grammar checks passed. The initial native fixture exposed safe
+callback error categories being replaced by a generic error; only enumerated
+redacted categories are now preserved, with unknown exception text suppressed.
+
+The native fixture starts four real disposable Python helpers through this
+candidate Runtime adapter. Their workload/readiness is synthetic, and they honor
+the existing Windows shutdown protocol; deliberate frontend refusal cleans all
+four, preserves specific diagnostics and leaves no runtime record or live child.
+It never overlays candidate app modules or runs a database, provider, real worker,
+API, Node server or privileged enrollment. Existing API shutdown can force a
+freshly revalidated handle where no cooperative hook exists, with an explicit
+active-work warning; that baseline trade-off is preserved. These results do not
+establish application startup, authenticated readiness, browser trust/login,
+general mock-page coverage, real Next HTTPS/HMR or simultaneous full-stack
+acceptance. Those real scenarios remain **NOT RUN**, with explicit approval and
+integration prerequisites. No existing configuration, certificate, database or
+historical runtime record was altered.
+
 ## Disposable acceptance procedure (not yet authorized or executed)
 
 1. Review the candidate diff and CI on Windows/macOS/Linux, preserving SBO-98.
