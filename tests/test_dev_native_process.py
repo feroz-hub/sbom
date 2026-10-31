@@ -139,7 +139,7 @@ def test_native_cli_incomplete_profile_fails_before_setup_without_fallback(tmp_p
     private.mkdir(mode=0o700)
     env = dict(os.environ, HOME=str(tmp_path), USERPROFILE=str(tmp_path), PATH="")
     result = subprocess.run(
-        [sys.executable, str(Path(dev.__file__).resolve()), "start", "--profile", "auto"],
+        [sys.executable, str(Path(dev.__file__).resolve()), "start", "--profile", "greenfield"],
         cwd=tmp_path,
         env=env,
         capture_output=True,
@@ -150,3 +150,26 @@ def test_native_cli_incomplete_profile_fails_before_setup_without_fallback(tmp_p
     assert "incomplete" in result.stderr and "No fallback" in result.stderr
     assert list(tmp_path.iterdir()) == [private]
     assert not list(private.iterdir())
+
+
+def test_native_cli_auto_without_git_refuses_discovery_and_preserves_private_records(tmp_path):
+    private = tmp_path / ".sbom-greenfield-uuid"
+    private.mkdir(mode=0o700)
+    retained = private / "retained-unknown.record"
+    retained.write_bytes(b"synthetic-private-record-must-survive")
+    before = (retained.read_bytes(), retained.stat().st_ino, retained.stat().st_mtime_ns)
+    env = dict(os.environ, HOME=str(tmp_path), USERPROFILE=str(tmp_path), PATH="")
+    result = subprocess.run(
+        [sys.executable, str(Path(dev.__file__).resolve()), "start", "--profile", "auto"],
+        cwd=tmp_path,
+        env=env,
+        capture_output=True,
+        text=True,
+        timeout=20,
+    )
+    assert result.returncode == 1
+    assert "WORKSPACE_REPOSITORY_UNVERIFIED" in result.stderr
+    assert "synthetic-private-record-must-survive" not in result.stdout + result.stderr
+    assert list(tmp_path.iterdir()) == [private]
+    assert list(private.iterdir()) == [retained]
+    assert (retained.read_bytes(), retained.stat().st_ino, retained.stat().st_mtime_ns) == before
