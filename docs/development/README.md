@@ -280,3 +280,23 @@ Do not start the same private home-directory Greenfield installation from two
 worktrees. A Git worktree does not isolate runtime databases, credentials or
 services. Full platform/provider/login/release acceptance remains separate from
 unit or process-smoke results.
+
+## SBO-101 candidate worktrees
+
+The draft candidate adds `python scripts/dev.py setup` for a consolidated,
+explicit preparation session. Use `setup --plan` or
+`workspace setup --mode mock --auth native --check --json` for read-only planning.
+Prepared new instances use the same normal start/diagnose/status/logs/stop entry
+point. Explicit Legacy/Greenfield profiles retain their existing flow.
+
+Mock is a labelled synthetic theme/layout preview. Certificates and preview files
+need separate consent; no container/database is required. Real shared/isolated
+startup remains blocked pending company policy, independent live target bindings
+and approved disposable acceptance. This host additionally reports a private-home
+ownership refusal; setup never repairs permissions or installs trust automatically.
+
+See the [configuration/runbook](../reference/configuration.md#guided-worktree-preparation-sbo-101-candidate)
+and [executed evidence and gates](../engineering/dev-workspaces-sbo101.md).
+Known-UUID recovery uses `workspace stop --instance-id <known-instance-uuid>`;
+retain unknown records and a verified repository/controller. Native administrator
+creation/resend remains closed pending independent authorization approval.

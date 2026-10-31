@@ -6,7 +6,7 @@ import sys
 
 # The public read-only entry points must not create import caches on a fresh
 # checkout, including before argument parsing or optional dependency imports.
-if __name__ == "__main__" and (len(sys.argv) == 1 or any(value in {"workspace", "setup", "diagnose", "doctor", "--check"} for value in sys.argv[1:])):
+if __name__ == "__main__" and (len(sys.argv) == 1 or any(value in {"workspace", "setup", "diagnose", "doctor", "status", "logs", "--check"} for value in sys.argv[1:])):
     sys.dont_write_bytecode = True
 
 import argparse
@@ -4657,13 +4657,54 @@ def parse_args(argv=None):
     return parser.parse_args(argv)
 
 
+def workspace_auto_arguments(args):
+    """Select new-instance UX without converting a supported existing profile."""
+    if sys.version_info < MIN_PYTHON:
+        return None
+    if getattr(args, "profile", "auto") != "auto" or getattr(args, "legacy_config", "auto") != "auto":
+        return None
+    library = _workspace_library()
+    try:
+        descriptor = library.selected_instance(ROOT)
+    except Exception as error:
+        code = getattr(error, "code", None)
+        if type(code) is not str or re.fullmatch(r"[A-Z][A-Z0-9_]{0,79}", code) is None:
+            code = "WORKSPACE_SELECTION_UNVERIFIED"
+        raise SetupError(code + ": preserve unknown records and run workspace diagnose.") from None
+    if descriptor is None and not library.fresh_checkout(ROOT):
+        return None
+    if any(getattr(args, name, False) for name in (
+        "provision_greenfield", "initialize_database", "migrate", "frontend_build", "confirm_database",
+        "postgres_provider", "redis_provider", "mailpit_provider", "repair_dependencies",
+        "native_admin_status", "native_admin_create", "native_admin_resend",
+    )):
+        if descriptor is not None:
+            raise SetupError("WORKSPACE_PROFILE_CONVERSION_REFUSED: use workspace setup; existing instance configuration was preserved.")
+        return None
+    command = args.command
+    if command == "setup":
+        return ["setup", *(["--check"] if args.check or args.plan else [])]
+    if args.check or command in {"diagnose", "doctor"}:
+        return ["doctor" if command == "doctor" else "diagnose"]
+    if descriptor is None:
+        return None
+    if command in {"start", "stop", "restart", "status"}:
+        return [command]
+    if command == "logs":
+        return ["logs", "--lines", str(args.lines), "--service", args.service]
+    return None
+
+
 def main() -> None:
     global VERBOSE, ACTIVE_RUNTIME, ACTIVE_PROFILE, ACTIVE_LEGACY_CONFIG
     if len(sys.argv) > 1 and sys.argv[1] == "workspace":
         return _workspace_library().run_cli(sys.argv[2:], ROOT)
-    if len(sys.argv) == 1:
+    if len(sys.argv) == 1 and sys.version_info >= MIN_PYTHON:
         workspace_cli = _workspace_library()
         if workspace_cli.fresh_checkout(ROOT):
+            workspace_args = workspace_auto_arguments(parse_args([]))
+            if workspace_args is not None:
+                return workspace_cli.run_cli(workspace_args, ROOT)
             return workspace_cli.initial_inventory(ROOT)
     args = parse_args()
     VERBOSE = args.verbose
@@ -4688,7 +4729,13 @@ def main() -> None:
             print("[FAIL] CLI: DIAGNOSTIC_OPTIONS; diagnose cannot be combined with preparation or database flags.",
                   file=sys.stderr)
             return 2
+        workspace_args = workspace_auto_arguments(args)
+        if workspace_args is not None:
+            return _workspace_library().run_cli(workspace_args, ROOT)
         return doctor(args) if args.command == "doctor" else diagnose(args)
+    workspace_args = workspace_auto_arguments(args)
+    if workspace_args is not None:
+        return _workspace_library().run_cli(workspace_args, ROOT)
     if args.native_admin_create or args.native_admin_resend:
         if (
             args.command != "setup"

@@ -60,17 +60,21 @@ def _parser():
             "list",
             "plan",
             "prepare",
+            "setup",
             "start",
             "stop",
             "restart",
             "status",
             "diagnose",
+            "doctor",
             "logs",
             "test",
             "compare",
         ),
     )
     parser.add_argument("--worktree", type=Path, help="Select a path from authoritative Git worktree discovery")
+    parser.add_argument("--instance-id", help="Known instance UUID for source-independent stop/status/diagnose")
+    parser.add_argument("--check", action="store_true", help="Read-only checks; never prepare or start")
     parser.add_argument(
         "--json", action="store_true", help="Public metadata only; no environment or private configuration"
     )
@@ -105,7 +109,7 @@ def _parser():
     parser.add_argument("--plan", action="store_true", help="Inspect a workspace test plan without executing it")
     parser.add_argument("--baseline", type=Path, help="Git-listed baseline worktree for source comparison")
     parser.add_argument(
-        "--service", choices=("setup", "api", "frontend", "worker", "reports", "beat", "postgres", "redis", "mailpit")
+        "--service", choices=("all", "setup", "api", "frontend", "worker", "reports", "beat", "postgres", "redis", "mailpit")
     )
     parser.add_argument(
         "--lines", type=int, default=80, help="Bounded log metadata records (1..200), never message text"
@@ -392,7 +396,7 @@ def _dependency_observation(snapshot, selected):
         }
 
 
-def _inventory(root, as_json=False, requested=None, *, diagnostic=False, include_host=False, inspect_software=False):
+def _inventory(root, as_json=False, requested=None, *, diagnostic=False, include_host=False, inspect_software=False, control_args=None):
     snapshot = dev_workspace.discover_workspaces(root)
     records = (
         _registry(snapshot).read()
@@ -402,6 +406,12 @@ def _inventory(root, as_json=False, requested=None, *, diagnostic=False, include
     by_worktree = {entry.descriptor.worktree_id: entry for entry in records.entries}
     rows = []
     worktrees = snapshot.worktrees if requested is None else (_listed_target(snapshot, root, requested),)
+    if control_args is not None and len(worktrees) == 1:
+        entry = by_worktree.get(worktrees[0].worktree_id)
+        if entry is not None:
+            state_root = Path.home() / ".sbom-dev/instances" / entry.descriptor.instance_id
+            if any(os.path.lexists(state_root / name) for name in (".dev-runtime.json", "bindings")):
+                return _control().run_status(control_args, root)
     for item in worktrees:
         entry = by_worktree.get(item.worktree_id)
         rows.append(
@@ -422,9 +432,24 @@ def _inventory(root, as_json=False, requested=None, *, diagnostic=False, include
                 "origin": entry.descriptor.origin if entry else None,
                 "proposed_ports": dict(entry.descriptor.ports) if entry else {},
                 "runtime_ownership": "UNVERIFIED",
+                "process_status": "UNOBSERVED",
                 "last_code": entry.last_code if entry else None,
             }
         )
+        if entry is not None:
+            state_root = Path.home() / ".sbom-dev/instances" / entry.descriptor.instance_id
+            if os.path.lexists(state_root / ".dev-runtime.json"):
+                if __package__:
+                    from . import dev_workspace_inspect
+                else:
+                    import dev_workspace_inspect
+                report = dev_workspace_inspect.inspect_instance(
+                    entry.descriptor, root=state_root, anchor=Path.home(), current_head=item.head,
+                )
+                rows[-1]["process_observation"] = report.to_dict()
+                rows[-1]["process_status"] = report.process_status
+                if report.process_status == "RUNNING":
+                    rows[-1]["runtime_ownership"] = "VERIFIED"
         if diagnostic:
             if __package__:
                 from . import dev_workspace_observe
@@ -537,7 +562,7 @@ def _registered_instance(args, root):
     return snapshot, selected, entry
 
 
-def _lifecycle_blocked(args, root):
+def _lifecycle_blocked(args, root, registration=None):
     if any(
         (
             args.scope,
@@ -554,7 +579,7 @@ def _lifecycle_blocked(args, root):
         from . import dev_workspace_lifecycle
     else:
         import dev_workspace_lifecycle
-    _, selected, entry = _registered_instance(args, root)
+    _, selected, entry = registration or _registered_instance(args, root)
     if args.command != "stop" and entry.descriptor.commit != selected.head:
         _fail("WORKSPACE_INSTANCE_SOURCE_CHANGED")
     codes = dev_workspace_lifecycle.live_execution_blockers()
@@ -583,6 +608,46 @@ def _lifecycle_blocked(args, root):
             "[NEXT] Preserve records/resources. Existing profile-managed applications must be stopped through their original launcher from their own checkout."
         )
     return 1
+
+
+def _control():
+    if __package__:
+        from . import dev_workspace_control
+    else:
+        import dev_workspace_control
+    return dev_workspace_control
+
+
+def selected_instance(root):
+    """Presence of a protected registration chooses dispatch, never readiness."""
+    snapshot = dev_workspace.discover_workspaces(root)
+    if snapshot.repository_id is None or snapshot.common_directory is None:
+        return None
+    records = _registry(snapshot).read()
+    if records.codes == ("REGISTRY_MISSING",):
+        return None
+    if records.codes:
+        _fail(records.codes[0])
+    selected = _listed_target(snapshot, root, None)
+    return next((entry.descriptor for entry in records.entries if entry.descriptor.worktree_id == selected.worktree_id), None)
+
+
+def _lifecycle_command(args, root):
+    if any((args.scope, args.mode, args.auth, args.provider, args.generation is not None,
+            args.port_min != 20000, args.port_max != 29999)):
+        _fail("WORKSPACE_PREPARED_SELECTION_REQUIRED")
+    if args.instance_id is not None:
+        return _control().run_lifecycle(args, root)
+    registration = _registered_instance(args, root)
+    _, selected, entry = registration
+    if args.command != "stop" and entry.descriptor.commit != selected.head:
+        _fail("WORKSPACE_INSTANCE_SOURCE_CHANGED")
+    instance_root = Path.home() / ".sbom-dev/instances" / entry.descriptor.instance_id
+    if entry.descriptor.mode != "mock" and not os.path.lexists(instance_root):
+        # Old public proposals remain proposals. No Runtime/private-file access
+        # is needed until explicit preparation creates an owned instance root.
+        return _lifecycle_blocked(args, root, registration)
+    return _control().run_lifecycle(args, root)
 
 
 def _onboarding_guidance(args, root):
@@ -703,30 +768,32 @@ def _logs_command(args, root):
     else:
         import dev_workspace_observe
     _, _, entry = _registered_instance(args, root)
-    deadline, previous = time.monotonic() + 30, None
+    deadline, previous = time.monotonic() + 30, {}
+    services = ("api", "frontend", "worker", "reports", "beat", "postgres", "redis", "mailpit", "setup") if args.service == "all" else (args.service or "api",)
+    blocked = False
     try:
         while True:
-            report = dev_workspace_observe.observe_logs(
-                entry.descriptor.instance_id, args.service or "api", max_lines=args.lines
-            )
-            public = report.to_dict()
-            if public != previous:
-                print(json.dumps(public, sort_keys=True), flush=True)
-                if not args.json:
-                    print(
-                        "[INFO] Log metadata only; message bodies are withheld. This is not verified process readiness."
-                    )
-                    if report.local_path is not None:
+            observed = True
+            for service in services:
+                report = dev_workspace_observe.observe_logs(entry.descriptor.instance_id, service, max_lines=args.lines)
+                public = report.to_dict()
+                blocked |= report.status == "BLOCKED"
+                observed &= report.status == "OBSERVED"
+                if public != previous.get(service):
+                    print(json.dumps(public, sort_keys=True), flush=True)
+                    if not args.json:
                         print(
-                            f"[INFO] Open the verified local file privately for full content: {_path(report.local_path)}"
+                            "[INFO] Log metadata only; message bodies are withheld. This is not verified process readiness."
                         )
-                previous = public
-            if not args.follow or report.status != "OBSERVED" or time.monotonic() >= deadline:
+                        if report.local_path is not None:
+                            print(f"[INFO] Open the verified local file privately for full content: {_path(report.local_path)}")
+                    previous[service] = public
+            if not args.follow or not observed or time.monotonic() >= deadline:
                 break
             time.sleep(0.5)
     except KeyboardInterrupt:
         return 130
-    return 1 if report.status == "BLOCKED" else 0
+    return 1 if blocked else 0
 
 
 def _provider_command(args, root):
@@ -776,6 +843,21 @@ def _provider_command(args, root):
 def run_cli(argv, root):
     args = _parser().parse_args(argv)
     try:
+        if args.command == "doctor":
+            print("[WARN] doctor is deprecated; use diagnose.", file=sys.stderr)
+            args.command = "diagnose"
+        if args.check and args.command != "setup":
+            args.command = "diagnose"
+        if args.command == "setup" and args.plan:
+            args.check, args.plan = True, False
+        if args.instance_id is not None and args.command not in {"stop", "status", "diagnose"}:
+            _fail("WORKSPACE_INSTANCE_SELECTION_OPTIONS_REQUIRED")
+        if args.command == "setup":
+            if any((args.scope, args.preview_settings, args.provider_policy, args.suite, args.baseline,
+                    args.service, args.follow, args.host, args.lines != 80,
+                    args.port_min != 20000, args.port_max != 29999)):
+                _fail("WORKSPACE_SETUP_OPTIONS_REQUIRED")
+            return _control().run_setup(args, root)
         if args.preview_settings is not None and (args.scope != "preview" or args.command not in {"plan", "prepare"}):
             _fail("WORKSPACE_PREVIEW_OPTIONS_REQUIRED")
         if args.provider_policy is not None and (args.scope != "provider" or args.command != "plan"):
@@ -807,6 +889,9 @@ def run_cli(argv, root):
                 )
             ):
                 _fail("WORKSPACE_READ_ONLY_OPTIONS_REQUIRED")
+            if args.command != "list":
+                if args.instance_id is not None:
+                    return _control().run_status(args, root)
             selected = args.worktree or (root if args.command != "list" else None)
             return _inventory(
                 root,
@@ -815,6 +900,7 @@ def run_cli(argv, root):
                 diagnostic=args.command != "list",
                 include_host=args.host,
                 inspect_software=args.command == "diagnose",
+                control_args=args if args.command != "list" else None,
             )
         if args.command == "plan":
             if args.scope == "preview":
@@ -851,7 +937,7 @@ def run_cli(argv, root):
                 return _prepare_dependencies(args, root)
             return _prepare_registry(args, root)
         if args.command in {"start", "stop", "restart"}:
-            return _lifecycle_blocked(args, root)
+            return _lifecycle_command(args, root)
         _fail("WORKSPACE_CAPABILITY_NOT_PREPARED")
     except Exception as error:
         code = getattr(error, "code", "WORKSPACE_INSPECTION_FAILED")
@@ -867,6 +953,8 @@ def run_cli(argv, root):
 def fresh_checkout(root):
     """Conservative presence-only gate; existing installations keep legacy dispatch."""
     root = Path(root)
+    if os.path.lexists(Path.home() / ".sbom-greenfield-uuid"):
+        return False
     if any(
         path.exists() or path.is_symlink()
         for path in (

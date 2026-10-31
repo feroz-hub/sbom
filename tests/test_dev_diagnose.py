@@ -52,7 +52,9 @@ def result(status="PASS", component="Fixture", code="FIXTURE_RESULT"):
     ],
 )
 def test_diagnostic_forms_dispatch_before_every_mutable_or_prerequisite_path(monkeypatch, arguments):
-    monkeypatch.setattr(dev.sys, "argv", ["dev.py", *arguments])
+    # Exercise the supported existing profile here; fresh-workspace dispatch
+    # and its read-only check forms have separate integration regressions.
+    monkeypatch.setattr(dev.sys, "argv", ["dev.py", *arguments, "--profile", "legacy"])
     forbidden = Mock(side_effect=AssertionError("diagnostic dispatch entered mutable launcher path"))
     for name in (
         "validate_repository_layout",
@@ -209,7 +211,7 @@ def test_native_diagnostic_imports_create_no_cache_or_runtime_files(tmp_path, ar
     env.pop("PYTHONDONTWRITEBYTECODE", None)
     env.pop("PYTHONPATH", None)
     completed = subprocess.run(
-        [sys.executable, "-S", str(scripts / "dev.py"), *arguments],
+        [sys.executable, "-S", str(scripts / "dev.py"), *arguments, "--profile", "legacy"],
         cwd=fixture,
         env=env,
         capture_output=True,
