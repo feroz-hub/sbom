@@ -871,6 +871,38 @@ No caller marker grants database permission. A future target-attesting adapter
 and separate exact resource/operation approval are required before real data
 tests, including any fixture that initializes or truncates a database.
 
+## First-administrator guidance (SBO-101 PR E)
+
+`workspace plan --scope administrator --mode isolated --auth native` presents
+static uninspected guidance. The corresponding `prepare --scope administrator`
+also only presents guidance, reusing a registered selection where available.
+No database inspection, identity collection, password input, permission grant or
+enrollment occurs. Mock/shared previews are ineligible. Native reports UNKNOWN;
+HCL requires its separate approved external-identity procedure. No status,
+configuration generation, target or readiness attestation is fabricated.
+
+The pure `dev_workspace_onboarding` library can classify strictly validated public
+aggregate observations into existing-admin, missing-initialization, required,
+pending, completed, conflict and unknown states. Those supplied observations are
+not independent authority. Existing administrators are reused through sign-in;
+pending/completed reservations are preserved, and completed enrollment never
+reopens. A pending reservation with zero IAM users is inconsistent and requires
+operator review, rather than activation guidance. Exact context/status/schema
+drift invalidates a plan. Every action remains non-executable, even with supplied
+readiness or caller markers.
+
+The existing five service identity fields, encrypted outbox, singleton reservation,
+audit, normal HTTPS activation/password and atomic effective-grant semantics are
+unchanged. The old managed private child guard remains byte-identical and closed.
+The [separate security proposal](../engineering/dev-workspaces-security-sbo101.md)
+defines the local threat model and pending target-bound, expiring, single-use
+operator authority at child/mutation/commit boundaries. Security/DBA/Engineering
+Lead approval and real disposable acceptance are prerequisites to any enablement.
+It does not claim current runtime roles already enforce the proposed authority.
+HCL requires its IdP owner's approved procedure and never falls back to a Native
+password. Existing Native status procedures retain their exact database
+confirmation; this new guidance does not invoke them or inherit their approvals.
+
 ## Sources and precedence
 
 | Execution path | Effective sources |

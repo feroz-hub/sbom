@@ -83,7 +83,9 @@ def _parser():
         "--generation", type=int, help="Explicit public configuration generation; changes invalidate the plan"
     )
     parser.add_argument(
-        "--scope", choices=("registry", "dependencies"), help="Preparation category; resource gates remain separate"
+        "--scope",
+        choices=("registry", "dependencies", "administrator"),
+        help="Preparation category; administrator guidance cannot execute enrollment",
     )
     parser.add_argument("--port-min", type=int, default=20000)
     parser.add_argument("--port-max", type=int, default=29999)
@@ -495,6 +497,28 @@ def _lifecycle_blocked(args, root):
     return 1
 
 
+def _onboarding_guidance(args, root):
+    if __package__:
+        from . import dev_workspace_onboarding
+    else:
+        import dev_workspace_onboarding
+    plan, _, _ = _make_plan(args, root)
+    if plan.descriptor.mode != "isolated":
+        _fail("ONBOARDING_ISOLATED_INSTALLATION_REQUIRED")
+    overview = dev_workspace_onboarding.uninspected_guidance(plan.descriptor.auth_mode)
+    public = overview.to_dict()
+    public["instance_id"] = plan.descriptor.instance_id
+    public["proposed_origin"] = plan.descriptor.origin
+    if args.json:
+        print(json.dumps(public, sort_keys=True))
+    else:
+        print(f"[BLOCKED] {public['code']}; {public['state']}; no installation status inspection was performed.")
+        for step in public["steps"]:
+            print(f"[NEXT] {step['guidance']}")
+        print("[INFO] This command requests no identity details or password and performs no privileged action.")
+    return 1
+
+
 def _test_command(args, root):
     if any(
         (
@@ -569,6 +593,8 @@ def run_cli(argv, root):
             selected = args.worktree or (root if args.command != "list" else None)
             return _inventory(root, args.json, selected)
         if args.command == "plan":
+            if args.scope == "administrator":
+                return _onboarding_guidance(args, root)
             if args.scope == "dependencies":
                 _, public = _dependency_plan(args, root)
                 _print_dependency_plan(public, args.json)
@@ -579,6 +605,8 @@ def run_cli(argv, root):
             _print_plan(plan, args.json)
             return 1 if plan.blockers else 0
         if args.command == "prepare":
+            if args.scope == "administrator":
+                return _onboarding_guidance(args, root)
             if args.scope == "dependencies":
                 return _prepare_dependencies(args, root)
             return _prepare_registry(args, root)

@@ -90,6 +90,21 @@ and `all` suites remain BLOCKED until an exact disposable-target adapter and its
 operations are separately approved. A marker or environment variable cannot
 authorize them.
 
+First-administrator guidance is a separate read-only category:
+
+```sh
+python scripts/dev.py workspace plan --scope administrator --mode isolated --auth native
+python scripts/dev.py workspace prepare --scope administrator
+```
+
+The second form reuses a previously registered mode; it also performs guidance
+only. Neither inspects a database or requests identity fields/passwords. Native
+reports UNKNOWN until an approved exact-installation status adapter exists;
+HCL reports its separate Engineering Lead/IdP approval requirement. Preview
+modes cannot enroll an administrator. Live Native creation/resend stays closed.
+See the [authority proposal](../engineering/dev-workspaces-security-sbo101.md)
+and [Native guide](../native-iam-greenfield-setup.md) before any real enrollment.
+
 For ATLAS/NEXUS work, first confirm each agent's branch and reserved files. Use
 Git-listed canonical paths explicitly in the plan. Every instance has a distinct
 proposed UUID, service/volume/queue/Beat namespace and HTTPS hostname; those names
