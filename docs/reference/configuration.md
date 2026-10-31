@@ -812,6 +812,40 @@ contracts and an actual ownership-verifying engine adapter require review and
 approved disposable acceptance. Fresh PostgreSQL container startup can initialize
 data, so provider creation also needs exact database/credential approval.
 
+## Isolated launch contracts (SBO-101 PR C)
+
+`dev_workspace_lifecycle` validates immutable, private non-repr configuration
+snapshots against public instance identity/generation, platform paths, dedicated
+database role/target, Redis endpoints, namespaces, authenticated mode, key
+separation and HTTPS origin. Backend/frontend projections remain distinct;
+public output contains no environment values or hashes of credentials. Commands
+are placeholders, and the live-execution boundary is permanently BLOCKED until
+the missing concrete adapters are implemented and reviewed. A supplied ready
+Boolean or registry state cannot unlock it.
+
+`app/dev_instance` supplies pure canonical-UUID resource names with exact existing
+production defaults. It is a contract helper; current task producers, session
+stores, IAM heartbeats and application startup are not yet wired to it. Wiring
+all consumers together is required before an isolated runtime can execute. The
+existing `SBOM_DEV_INSTANCE` launch generation is separate from stable resource
+identity and remains unchanged.
+
+The start graph checks provider/config/schema/Redis/TLS/compiler readiness before
+workers, one Beat, API/IAM and HTTPS frontend readiness. Cleanup planning proposes
+only existing Runtime revalidation for recorded observations; it never signals a
+PID. Unknown, reused or unregistered identities are preserved, and configuration
+loss does not prevent considering other recorded components for verified cleanup.
+The existing native Windows/POSIX Runtime remains the termination authority.
+
+The CLI now reports missing adapter codes and a proposed per-instance log path.
+It starts/stops nothing and preserves runtime records. Full stack provisioning,
+Settings `_env_file=None` child initialization, restricted credential provenance,
+engine ownership, queue/Beat/session consumer wiring, process execution and
+hostname-specific TLS remain implementation work behind approved company-provider
+policy and exact disposable resource/preparation gates. No two-stack acceptance
+is claimed. Mock/shared runtime modes remain unavailable until full isolation and
+their separate origin/authentication contracts are established.
+
 ## Sources and precedence
 
 | Execution path | Effective sources |
