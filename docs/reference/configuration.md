@@ -846,6 +846,31 @@ policy and exact disposable resource/preparation gates. No two-stack acceptance
 is claimed. Mock/shared runtime modes remain unavailable until full isolation and
 their separate origin/authentication contracts are established.
 
+## Restricted workspace tests (SBO-101 PR D)
+
+`workspace test --suite unit --plan` is read-only. Explicit `workspace test
+--suite unit` runs only the reviewed instance-plan, namespace and provider pure
+contracts. It does not mean all launcher or application tests. The controller
+and target source closure, canonical worktree/HEAD and local dependency-stamped
+interpreter are pinned and revalidated. Unknown/legacy interpreter stamps require
+review. There is no arbitrary pytest argument/plugin/test/interpreter option.
+
+The runner creates a fresh private source/test stage, copies only the fixed
+reviewed closure and runs with an isolated interpreter bootstrap, null pytest
+configuration, `--noconftest`, disabled external plugins/cache/dotenv and in-memory
+SQLite sentinels. It never reuses or removes an existing pytest temp directory.
+Raw stdout/stderr is bounded and withheld; output contains only fixed categories,
+validated test counts and exit/owned-child-cleanup metadata. Timeout cleanup uses
+only the original child object and reports its root-only limitation; it does not
+authorize descendant or unrelated PID termination. Artifacts are retained.
+
+Trusted source/interpreter/package execution is user-level code, not a sandbox
+against a malicious same-user developer. Database, integration, migration and
+all-test selections always return `DISPOSABLE_TARGET_AUTHORIZATION_REQUIRED`.
+No caller marker grants database permission. A future target-attesting adapter
+and separate exact resource/operation approval are required before real data
+tests, including any fixture that initializes or truncates a database.
+
 ## Sources and precedence
 
 | Execution path | Effective sources |
