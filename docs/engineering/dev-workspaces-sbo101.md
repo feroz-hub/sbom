@@ -710,6 +710,34 @@ authorization and resource observations were synthetic. No provider or database
 operation ran. Real image policy, helper execution, restricted-role and migration
 acceptance require exact disposable-target approval.
 
+## Increment L — concrete provider and SQL preparation adapters
+
+`dev_workspace_database_adapters.py` connects the K contracts to bounded,
+explicit-local-engine Docker commands and Psycopg sessions. Nonroot utility
+helpers have fixed commands, image/security/mount contracts, separate authority
+and durable returned-ID receipts before start. Observation helpers also require
+their own creation approval; they are never called by read-only diagnostics.
+No root entrypoint, chown, image pull, resource removal or default-daemon adoption
+is introduced.
+
+SQL sessions enforce exact role/database/cluster/loopback and explicit verified
+TLS settings, reject ambient libpq overrides and use bounded connection/statement/
+lock limits. Credential changes require the supported libpq password API/SCRAM
+and a reviewed credential-audit policy; there is no plaintext SQL fallback or
+audit-setting bypass. Reviewed migrations use a supplied attested migration
+adapter and transaction, never implicit app/Alembic startup. Writers are closed
+before independent read-only post-commit evidence.
+
+The combined K/L test command above passed **169 tests in 28.27s** with fake
+engine and SQL transports. Scoped Ruff and Python 3.11 grammar passed. Real
+provider/SQL operations remain **NOT RUN**. A required actual-session TLS peer
+attestor is deliberately absent by default: libpq does not expose the certificate
+fingerprint through this adapter. A CA hash is not a peer attestation. Real
+execution stays BLOCKED until that transport integration, credential-audit policy,
+helper/image policy and exact disposable operations receive review/approval.
+Absolute wall-clock libpq cancellation also needs native acceptance; the native
+connection/server limits alone do not establish that guarantee.
+
 ## Disposable acceptance procedure (not yet authorized or executed)
 
 1. Review the candidate diff and CI on Windows/macOS/Linux, preserving SBO-98.
