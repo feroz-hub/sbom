@@ -54,7 +54,7 @@ def state(runtime, services=None):
     return value
 
 
-@pytest.mark.parametrize("command", ["start", "stop", "restart", "status", "doctor", "logs"])
+@pytest.mark.parametrize("command", ["start", "stop", "restart", "status", "diagnose", "doctor", "logs"])
 def test_parse_commands(command):
     assert dev.parse_args([command, "--verbose"]).command == command
     assert dev.parse_args(["--verbose", command]).verbose
@@ -359,7 +359,7 @@ def test_check_overrides_lifecycle_without_mutation(monkeypatch):
     monkeypatch.setattr(dev, "stop_application", lambda: pytest.fail("stop during check"))
     checked = []
     monkeypatch.setattr(dev, "start_application", lambda args: pytest.fail("startup during check"))
-    monkeypatch.setattr(dev, "doctor", lambda args: checked.append(args.check), raising=False)
+    monkeypatch.setattr(dev, "diagnose", lambda args: checked.append(args.check), raising=False)
     dev.main()
     assert checked == [True]
 

@@ -120,7 +120,7 @@ def test_native_unrelated_port_conflict_never_signals(monkeypatch, tmp_path):
 def test_native_cli_missing_node_has_actionable_failure_without_setup(tmp_path):
     env = dict(os.environ, HOME=str(tmp_path), USERPROFILE=str(tmp_path), PATH="")
     result = subprocess.run(
-        [sys.executable, str(Path(dev.__file__).resolve()), "doctor", "--profile", "legacy"],
+        [sys.executable, str(Path(dev.__file__).resolve()), "diagnose", "--profile", "legacy"],
         cwd=tmp_path,
         env=env,
         capture_output=True,
@@ -128,7 +128,8 @@ def test_native_cli_missing_node_has_actionable_failure_without_setup(tmp_path):
         timeout=20,
     )
     assert result.returncode == 1
-    assert "Node.js" in result.stderr and "Install" in result.stderr
+    output = result.stdout + result.stderr
+    assert "NODE_NPM_UNAVAILABLE" in output and "Node/npm" in output
     assert not list(tmp_path.iterdir())
 
 

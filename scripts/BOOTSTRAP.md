@@ -9,7 +9,7 @@ Reopen the terminal and start Docker. Suitable local PostgreSQL/Redis can be use
 with explicitly selected Legacy configuration.
 
 ```sh
-python scripts/dev.py doctor
+python scripts/dev.py diagnose
 python scripts/dev.py setup
 python scripts/dev.py
 ```
@@ -18,6 +18,19 @@ Project pip/npm dependencies and safe missing leaf certificates are prepared;
 existing configuration/keys are preserved. System software and root certificate
 trust are explicit prerequisites. The launcher never approves root trust or
 bypasses TLS verification.
+
+Run `diagnose` before deciding which preparation is necessary. It does not apply
+the setup plan, install dependencies, generate keys/certificates, change trust,
+create/migrate a database, enroll users or start/stop services. `setup --check`
+also takes the read-only diagnostic path; it cannot be combined with provisioning,
+initialization, migration or build flags. The temporary `doctor` alias emits one
+stderr deprecation notice. See [diagnostic results and exit codes](../docs/reference/configuration.md#read-only-diagnostics-sbo-98-phase-2).
+
+The SBO-98 controlled setup wizard and shared operator-script configuration are
+later phases. Existing `setup` remains a preparation command, not a newly approved
+installer or administrator-enrollment flow. Review its explicit actions and obtain
+authorization before database preparation or privileged enrollment; diagnostics
+do not grant that authorization.
 
 ## Greenfield
 
@@ -74,7 +87,7 @@ credentials and administrator accounts remain operator prerequisites. See
 [HCL configuration](../docs/HCL_IAM_CONFIGURATION.md) and the
 [verification matrix](../docs/engineering/dev-launcher-platform-matrix.md).
 
-Use doctor, status and logs --service <name> for diagnosis. Restore incomplete
+Use diagnose, status and logs --service <name> for diagnosis. Restore incomplete
 certificates/private state rather than rotating credentials. Resolve occupied
 ports deliberately; unrelated listeners are never killed.
 

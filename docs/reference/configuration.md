@@ -1,15 +1,17 @@
 # Configuration reference
 
-Scope: current configuration boundaries, checked against e62951c2 on
-28 October 2026. Examples are templates, not one interchangeable environment.
+Scope: development configuration boundaries and SBO-98 Phases 1–2, based on
+approved main `69e71088d7fef06874fe1e2eac7a53db0fd2f333`. Examples are templates,
+not one interchangeable environment.
 
 ## Pure development configuration plans (SBO-98, Phase 1)
 
 The side-effect-free `scripts/dev_config.py` library is introduced against the
-approved main baseline `69e71088d7fef06874fe1e2eac7a53db0fd2f333`. It is not yet
-connected to launcher startup, diagnostics, setup or operator scripts. Existing
-commands, configuration files, private readers and process-ownership behavior
-remain authoritative. This is a library, not another environment-management CLI.
+approved main baseline `69e71088d7fef06874fe1e2eac7a53db0fd2f333`. Read-only
+diagnostics use it; launcher startup, mutable setup and operator scripts retain
+their existing configuration paths. Configuration files, protected private readers
+and process-ownership behavior remain authoritative. This is a library, not
+another environment-management CLI.
 
 Callers supply already-read snapshots and explicit profile, configuration family,
 native repository/state paths and operating system. Pure text parsers preserve
@@ -33,8 +35,8 @@ or permission for initialization or administrator enrollment. The new library
 refuses query/fragment-bearing database URLs, control characters, ambiguous
 leading database-path slashes, port zero and case-variant environment names.
 Some old Windows/env inputs accepted these forms; they require explicit review,
-not silent normalization or removal of TLS options. No existing file is changed,
-and the unused library does not tighten the running launcher's behavior yet.
+not silent normalization or removal of TLS options. Diagnostics report these
+conditions without changing files. Startup's existing readers remain unchanged.
 
 Authentication metadata records explicit supplied flags without selecting or
 converting a mode. `authentication_enabled=None` means unresolved/absent; omitted
@@ -52,12 +54,109 @@ reviewed public names. API/worker/Beat projections retain the complete server
 configuration for compatibility; narrower backend roles require the Phase 4
 consumer audit. These projections are not yet used to launch processes.
 
-Later separately reviewed phases introduce `python scripts/dev.py diagnose`
-(with temporary `doctor` compatibility), controlled setup, component injection
+Later separately reviewed phases cover controlled setup, component injection
 and authorized Native enrollment. They must not reuse mutable preparation as a
 resolver, automatically migrate/create databases, replace saved keys or install
-certificate trust. HCL.CS first-eligible-user provisioning still requires
-Engineering Lead and identity-provider-owner design approval.
+certificate trust. The new diagnostic command does not change current mutable
+setup/startup behavior or connect standalone bootstrap scripts to the resolver.
+HCL.CS first-eligible-user provisioning still requires Engineering Lead and
+identity-provider-owner design approval.
+
+## Read-only diagnostics (SBO-98, Phase 2)
+
+Use the single public launcher from the intended checkout:
+
+```sh
+python scripts/dev.py diagnose
+python scripts/dev.py diagnose --profile legacy --legacy-config managed
+python scripts/dev.py diagnose --profile legacy --legacy-config windows
+python scripts/dev.py diagnose --profile greenfield
+```
+
+`diagnose` is the primary command. `doctor` is a temporary compatibility alias
+which emits one deprecation notice on stderr and uses the same checks/exit policy.
+Existing supported `--check` forms use the diagnostic path before mutable setup
+or runtime dispatch, including `python scripts/dev.py setup --check`. Combining
+diagnostics with provisioning, database initialization/migration or frontend-build
+flags is a usage error, not permission to apply those changes.
+
+The command inspects already selected configuration and uses bounded observational
+checks. It never installs packages, prepares a virtualenv, writes configuration,
+generates keys/certificates, changes certificate trust, creates/migrates a database,
+creates users/tokens/grants, acquires or updates runtime locks, refreshes ownership,
+starts/stops services or publishes Celery control RPC/tasks. PostgreSQL observations
+use read-only transactions. Runtime records are observations only: uncertain or
+reused PIDs are never adopted, cleared or killed. Existing UNKNOWN records remain
+protected.
+
+Observational network requests and protocol handshakes can appear in service
+access logs. HTTPS inspection uses a verified TLS handshake rather than fetching
+a Next.js page that could trigger development compilation. Pinned leaf verification
+does not establish OS/browser trust. Never bypass certificate validation to make
+a diagnostic check pass.
+
+Reporting deadlines also cover DNS and slow protocol headers. A timed-out probe
+runs only read-only operations in a daemon thread and may finish until CLI exit;
+the thread is never forcibly cancelled or used for preparation. As explicitly
+approved for SBO-98, timeout cleanup may stop only short-lived Node, Docker or
+native trust-tool children created by that diagnostic through their original
+`Popen` objects/handles. It never signals a saved PID, managed service or unrelated
+process. External helpers have their own timeouts; a reporting timeout does not
+prove an in-flight read-only operation has completed. Database probes retain
+server-side read-only/statement limits and close without committing. A library
+caller that keeps its process alive must account for that residual probe lifetime.
+API inspection uses the inert service-info endpoint and selected Native readiness;
+it avoids `/health`, whose NVD mirror read path can attempt a settings seed.
+
+HTTP metadata/health probes use direct selected endpoints rather than ambient
+proxy settings. HCL environments requiring a corporate proxy need an explicitly
+reviewed transport adapter; successful direct discovery does not prove provider
+registration or login. Ambiguous relative HCL CA paths and unreviewed Redis URL
+query options are reported for review; diagnostics never rewrite or discard them.
+
+Results carry a safe component, status, reason and corrective guidance. Connection
+strings, passwords, private keys, tokens and raw provider/database exceptions are
+not diagnostic output.
+
+| Status | Meaning |
+| --- | --- |
+| PASS | The bounded check succeeded; it establishes only the stated observation. |
+| WARN | Review a limitation or nonrequired condition; it does not authorize repair. |
+| FAIL | A required check failed with actionable guidance. |
+| BLOCKED | A required check cannot proceed safely until a prerequisite/approval is resolved. |
+| SKIPPED | The check is not applicable or has no safely observable running component. |
+
+Exit 0 means there are no failed or blocked required checks; 1 means a required
+check failed or is blocked; 2 means invalid usage, including mutation-flag
+combinations; 130 means cancellation. Existing `status` exit 3 for stopped/unhealthy
+runtime remains unchanged. An intentionally stopped application is not evidence
+of a crashed worker or corrupted installation.
+
+Diagnostic coverage distinguishes:
+
+- dependency/toolchain presence from installation and build acceptance;
+- configuration provenance/conflicts from permission to rewrite private files;
+- approved target identity, connectivity and schema state from initialization;
+- Native JWT/session/rate-limit/outbox/mail prerequisites from live activation;
+- HCL.CS configuration/TLS observations from provider registration and actual login;
+- aggregate enrollment state from authorized privileged provisioning;
+- existing certificate validity, verified TLS and independent native trust;
+- recorded process identity, available heartbeats and bounded service health
+  from full application readiness and task/mail delivery.
+
+Missing enrollment, pending activation or a schema mismatch produces corrective
+guidance only. Native enrollment still delegates to the approved bootstrap and
+activation services under explicit operator authorization and exact database
+identification. HCL.CS has no newly approved first-eligible-user provisioning flow.
+Do not invoke bootstrap helpers as diagnostic dry runs: some wrappers commit or
+write audit records even on refusal.
+
+For an existing machine, preserve configuration, credentials, certificates and
+runtime records; run `diagnose` with the intended profile/family, review its safe
+findings and seek authorization for the specific corrective action. Do not reset
+data, rotate keys, alter trust or switch authentication/profile to bypass a check.
+New-machine controlled setup remains a later phase. No new live platform/provider
+acceptance is implied by adding diagnostics or passing unit tests.
 
 ## Sources and precedence
 

@@ -2,6 +2,13 @@
 
 from __future__ import annotations
 
+import sys
+
+# The public read-only entry points must not create import caches on a fresh
+# checkout, including before argument parsing or optional dependency imports.
+if __name__ == "__main__" and any(value in {"diagnose", "doctor", "--check"} for value in sys.argv[1:]):
+    sys.dont_write_bytecode = True
+
 import argparse
 import base64
 import binascii
@@ -20,7 +27,6 @@ import ssl
 import stat
 import struct
 import subprocess
-import sys
 import tempfile
 import time
 import uuid
@@ -1692,46 +1698,31 @@ def validate_prerequisites() -> None:
     say("OK", "Prerequisites", f"Python {platform.python_version()}, Node {result.stdout.strip()}, npm found")
 
 
-def doctor(args) -> None:
-    """Read-only prerequisite inspection; never creates a venv, credentials or DB."""
-    global ACTIVE_PROFILE
-    validate_repository_layout()
-    validate_prerequisites()
-    profile = resolve_profile(args.profile)
-    ACTIVE_PROFILE = profile
-    say("OK", "Profile", profile)
-    if profile == "greenfield":
-        # Check trust before reading application passwords or resuming containers.
+def diagnose(args) -> int:
+    """Collect bounded read-only checks without preparation or runtime adoption."""
+    previous = sys.dont_write_bytecode
+    sys.dont_write_bytecode = True
+    try:
         try:
-            import cryptography  # noqa: F401
-        except ImportError:
-            raise SetupError(
-                "Project cryptography dependency is missing. Run python scripts/dev.py start to prepare the project virtualenv, then rerun doctor."
-            ) from None
-        LocalHttps.ensure_certificate(GreenfieldStack.STATE, prepare=False)
-        GreenfieldProfile.inventory()
-        say("OK", "Greenfield", "existing container identities and HTTPS trust verified")
-    else:
-        if not docker_available():
-            if not service_available("postgres", 5432) or not service_available("redis", 6379):
-                raise SetupError(
-                    "Docker is unavailable and local PostgreSQL/Redis are not both reachable. "
-                    "Install/start Docker Desktop (Windows/macOS) or Docker Engine with Compose (Linux), "
-                    "or start your explicitly configured local services."
-                )
-        say(
-            "OK",
-            "Configuration",
-            "existing .env.dev.local will be preserved"
-            if CONFIG.is_file()
-            else "first start will prepare private Legacy settings",
-        )
-    if (Runtime(ROOT).load() or {}).get("services"):
-        if not application_status(profile):
-            raise SetupError(
-                "Doctor found an unhealthy managed runtime. Inspect the named component logs and restart after correcting it."
-            )
-    say("OK", "Doctor", "read-only checks finished; native authentication/browser acceptance is separate")
+            from scripts import dev_diagnostics
+        except ModuleNotFoundError as error:
+            if error.name != "scripts":
+                raise
+            import dev_diagnostics
+
+        report = dev_diagnostics.run_checks(args, sys.modules[__name__])
+        for result in report.results:
+            print(f"[{result.status}] {result.component}: {result.code}; {result.guidance}", flush=True)
+        print("[INFO] Diagnose: read-only checks finished; login/browser acceptance is separate", flush=True)
+        return report.exit_code
+    finally:
+        sys.dont_write_bytecode = previous
+
+
+def doctor(args) -> int:
+    """Temporary deprecated compatibility alias for the same read-only checks."""
+    print("[WARN] doctor is deprecated; use python scripts/dev.py diagnose.", file=sys.stderr)
+    return diagnose(args)
 
 
 def profile_log_paths(profile: str) -> dict[str, Path]:
@@ -1808,10 +1799,10 @@ def display_data_logs(args):
             f"{args.service} is externally managed. Read logs through its configured OS/service manager; no container ownership was inferred."
         )
     if not container:
-        raise SetupError(f"No recorded {args.service} container. Run doctor to check the selected installation.")
+        raise SetupError(f"No recorded {args.service} container. Run diagnose to check the selected installation.")
     result = run(command + ["logs", "--tail", str(args.lines), container])
     if result.returncode:
-        raise SetupError(f"Unable to read {args.service} Docker logs. Check Docker availability and run doctor.")
+        raise SetupError(f"Unable to read {args.service} Docker logs. Check Docker availability and run diagnose.")
     env = profile_environment(args.profile)
     print(redact((result.stdout or "") + (result.stderr or ""), env))
 
@@ -1908,7 +1899,7 @@ class LocalHttps:
                         raise ValueError()
         except (OSError, ValueError, TypeError, KeyError, subprocess.TimeoutExpired):
             raise LocalHttps.HttpsTrustError(
-                "Windows file ownership/private ACL verification failed. Restrict this path to your user, SYSTEM and Administrators using Windows Security/Advanced permissions, then rerun doctor; no ACL was changed."
+                "Windows file ownership/private ACL verification failed. Restrict this path to your user, SYSTEM and Administrators using Windows Security/Advanced permissions, then rerun diagnose; no ACL was changed."
             ) from None
 
     @staticmethod
@@ -1957,7 +1948,7 @@ class LocalHttps:
             )
         except (OSError, subprocess.TimeoutExpired):
             raise LocalHttps.HttpsTrustError(
-                "System certificate trust verification could not run; restore the native trust tools and rerun doctor."
+                "System certificate trust verification could not run; restore the native trust tools and rerun diagnose."
             ) from None
 
     @staticmethod
@@ -2006,7 +1997,7 @@ class LocalHttps:
             return False
         except (AttributeError, OSError, ValueError, TypeError, x509.ExtensionNotFound):
             raise LocalHttps.HttpsTrustError(
-                "Windows native ROOT store verification failed; review local CA trust and rerun doctor."
+                "Windows native ROOT store verification failed; review local CA trust and rerun diagnose."
             ) from None
 
     @staticmethod
@@ -2138,7 +2129,7 @@ class LocalHttps:
         )
         if not executable:
             raise LocalHttps.HttpsTrustError(
-                "System curl is required to verify served HTTPS with native trust; install/restore curl and rerun doctor."
+                "System curl is required to verify served HTTPS with native trust; install/restore curl and rerun diagnose."
             )
         result = subprocess.run(
             [
@@ -2695,7 +2686,7 @@ class GreenfieldProfile:
             timeout=20,
         )
         if result.returncode:
-            raise SetupError("Greenfield Docker inventory failed. Start its Docker engine/context and retry doctor.")
+            raise SetupError("Greenfield Docker inventory failed. Start its Docker engine/context and retry diagnose.")
         return json.loads(result.stdout)
 
     @staticmethod
@@ -3044,7 +3035,7 @@ def select_service(
     raise SetupError(
         f"{service.title()} is unavailable"
         + (f" on its saved {preferred} provider; no provider fallback occurred" if preferred else "")
-        + ". Start the configured service or Docker engine, then rerun python scripts/dev.py doctor."
+        + ". Start the configured service or Docker engine, then rerun python scripts/dev.py diagnose."
     )
 
 
@@ -4213,12 +4204,14 @@ def log_service(value):
 def parse_args(argv=None):
     parser = argparse.ArgumentParser(
         description="One local SBOM Analyzer launcher: Windows, macOS and Linux adapters",
-        epilog="Default: start. Ctrl+C stops owned application processes; data services remain running.",
+        epilog="Default: start. During start, Ctrl+C stops owned application processes; data services remain running. During diagnose, Ctrl+C cancels checks only.",
     )
     parser.add_argument(
-        "command", nargs="?", default="start", choices=("setup", "start", "stop", "restart", "status", "doctor", "logs")
+        "command", nargs="?", default="start",
+        choices=("setup", "start", "stop", "restart", "status", "diagnose", "doctor", "logs"),
+        help="diagnose is read-only; doctor is a deprecated compatibility alias",
     )
-    parser.add_argument("--check", action="store_true", help="alias for read-only doctor")
+    parser.add_argument("--check", action="store_true", help="compatibility alias for read-only diagnose")
     parser.add_argument("--verbose", action="store_true", help="redacted setup diagnostics")
     parser.add_argument(
         "--profile",
@@ -4259,7 +4252,14 @@ def main() -> None:
     global VERBOSE, ACTIVE_RUNTIME, ACTIVE_PROFILE, ACTIVE_LEGACY_CONFIG
     args = parse_args()
     VERBOSE = args.verbose
-    if args.check or args.command in {"setup", "start", "restart", "doctor"}:
+    if args.check or args.command in {"diagnose", "doctor"}:
+        if any((args.provision_greenfield, args.initialize_database, args.migrate,
+                args.frontend_build, args.confirm_database)):
+            print("[FAIL] CLI: DIAGNOSTIC_OPTIONS; diagnose cannot be combined with preparation or database flags.",
+                  file=sys.stderr)
+            return 2
+        return doctor(args) if args.command == "doctor" else diagnose(args)
+    if args.command in {"setup", "start", "restart"}:
         if not venv_python().exists() or Path(sys.prefix).resolve() == VENV.resolve():
             validate_python_version()
         validate_repository_layout()
@@ -4272,9 +4272,6 @@ def main() -> None:
     ACTIVE_LEGACY_CONFIG = pin_legacy_configuration(args.legacy_config, Runtime(ROOT).load())
     if args.command == "setup":
         setup_application(args)
-        return
-    if args.check or args.command == "doctor":
-        doctor(args)
         return
     args.profile = (
         control_profile(args.profile) if args.command in {"stop", "status"} else resolve_profile(args.profile)
@@ -4381,7 +4378,7 @@ def cli() -> int:
     except Exception as error:
         # Never print configuration objects, connection strings or a traceback
         # that can include credential-bearing subprocess arguments.
-        print(f"[ERROR] Setup failed: {type(error).__name__}. Run doctor, then inspect redacted logs.", file=sys.stderr)
+        print(f"[ERROR] Setup failed: {type(error).__name__}. Run diagnose, then inspect redacted logs.", file=sys.stderr)
         return 1
 
 

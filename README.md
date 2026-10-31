@@ -44,11 +44,14 @@ python3 scripts/dev.py start
 python3 scripts/dev.py stop
 python3 scripts/dev.py restart
 python3 scripts/dev.py status
-python3 scripts/dev.py doctor
+python3 scripts/dev.py diagnose
 python3 scripts/dev.py logs --service reports --lines 80
 ```
 
-No command means start; --check is a read-only doctor alias. Start/restart stay
+No command means start; `diagnose` is read-only and `--check` is its compatibility
+form. `doctor` remains a temporary alias with one deprecation notice on stderr.
+See the [diagnostic contract](docs/reference/configuration.md#read-only-diagnostics-sbo-98-phase-2)
+for checks, statuses, exit codes and limitations. Start/restart stay
 in the foreground. Stop/Ctrl+C manage only verified owned application processes
 and preserve data services, credentials, certificates and volumes. Port/name/PID
 alone never authorizes termination. Required setup failures show a redacted tail;
@@ -79,9 +82,10 @@ explicit setup controls in [bootstrap guidance](scripts/BOOTSTRAP.md), with
 confirmed targets and the [database gate](docs/DATABASE_BOOTSTRAP_AND_UPGRADE.md).
 Do not reset data or rotate credentials to bypass a refusal.
 
-The launcher contains Windows/macOS/Linux adapters. Native Windows and full Linux
-application acceptance remain unverified; pending Greenfield upgrades are blocked
-on Windows until native backup/restore validation. See the
+The launcher contains Windows/macOS/Linux adapters. Prior Managed Legacy native
+Windows lifecycle acceptance is recorded in the merged [PR #44 report](docs/engineering/dev-launcher-windows-lifecycle.md);
+it does not establish new diagnostic, HCL.CS/browser or full Linux acceptance.
+Pending Greenfield upgrades are blocked on Windows until native backup/restore validation. See the
 [verification matrix](docs/engineering/dev-launcher-platform-matrix.md) and
 [lifecycle guide](docs/dev-launcher-lifecycle.md). Trust is never installed silently
 and TLS verification remains enabled. External identity providers and initial

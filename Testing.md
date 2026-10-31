@@ -68,15 +68,28 @@ python3 scripts/dev.py start
 python3 scripts/dev.py stop
 python3 scripts/dev.py restart
 python3 scripts/dev.py status
-python3 scripts/dev.py doctor
+python3 scripts/dev.py diagnose
 python3 scripts/dev.py logs
 python3 scripts/dev.py logs --service reports --lines 80
 ```
 
-`status`, `doctor` and `logs` inspect the environment. Use `restart` only when
+`status`, `diagnose` and `logs` inspect the environment. Use `restart` only when
 needed. `stop` or Ctrl+C stops verified launcher-owned application processes;
 database containers, persisted data, credentials and certificates are preserved.
 Ordinary startup does not initialize or implicitly upgrade a database.
+
+`diagnose` performs bounded read-only checks, including when invoked through
+`--check` or `setup --check`; it never prepares the environment or starts services.
+The temporary `doctor` alias emits one deprecation notice on stderr. See the
+[diagnostic contract](docs/reference/configuration.md#read-only-diagnostics-sbo-98-phase-2)
+for statuses and exit codes. These checks do not constitute browser, provider
+login, email-delivery or full-stack acceptance.
+
+Launcher/resolver/diagnostic tests must use `--noconftest` as in
+`.github/workflows/dev-launcher.yml`. The general `tests/conftest.py` can migrate,
+truncate and reseed its selected test database. Run application integration
+tests only against explicitly approved disposable resources, never a protected
+development database.
 
 The **verified macOS Greenfield environment** uses:
 
@@ -85,8 +98,10 @@ The **verified macOS Greenfield environment** uses:
 
 These are environment-specific URLs, not universal defaults. Use the selected
 profile's reported URLs and preserved configuration on other installations.
-The UI links below target this verified Greenfield frontend. Native Windows and
-full Linux application acceptance remain unverified; consult the
+The UI links below target this verified Greenfield frontend. Prior Managed Legacy
+native Windows lifecycle evidence is in the merged [PR #44 report](docs/engineering/dev-launcher-windows-lifecycle.md).
+That evidence does not establish current diagnostic, HCL.CS/browser or full Linux
+acceptance; consult the
 [platform matrix](docs/engineering/dev-launcher-platform-matrix.md).
 
 Use the approved test enrollment/login flow. Confirm tenant selection and
