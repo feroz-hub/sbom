@@ -380,7 +380,7 @@ def atomic_json(path: Path, value: dict) -> None:
 
 
 class Runtime:
-    def __init__(self, root: Path):
+    def __init__(self, root: Path, *, state_writer=None, lock_creator=None):
         self.root = root.resolve()
         self.path = self.root / ".dev-runtime.json"
         self.lock_path = self.root / ".dev-runtime.lock"
@@ -391,11 +391,35 @@ class Runtime:
         self.inspection_errors: dict[int, str] = {}
         self._shutdown_deadline: float | None = None
         self._shutdown_prepared: set[tuple[int, str | None, str | None]] = set()
+        self._state_writer = self._lock_creator = None
+        self.configure_private_io(state_writer=state_writer, lock_creator=lock_creator)
+
+    def configure_private_io(self, *, state_writer, lock_creator):
+        """Trusted instance IO only; legacy callers retain their existing policy."""
+        if self.lock is not None or self.state is not None or any(
+            value is not None and not callable(value) for value in (state_writer, lock_creator)
+        ):
+            raise OwnershipError("Runtime IO must be configured before acquiring ownership.")
+        self._state_writer, self._lock_creator = state_writer, lock_creator
+
+    def _publish_json(self, path, value):
+        if self._state_writer is None:
+            atomic_json(path, value)
+        else:
+            self._state_writer(path, value)
 
     def acquire(self) -> bool:
         # Keep this inode permanently. Unlinking a lock allows two independent
         # lock holders; OS locks automatically release on exit, including crashes.
-        fd = os.open(self.lock_path, os.O_RDWR | os.O_CREAT, 0o600)
+        if self._lock_creator is None:
+            fd = os.open(self.lock_path, os.O_RDWR | os.O_CREAT, 0o600)
+        else:
+            expected = self._lock_creator(self.lock_path)
+            fd = os.open(self.lock_path, os.O_RDWR | getattr(os, "O_NOFOLLOW", 0))
+            opened = os.fstat(fd)
+            if (opened.st_dev, opened.st_ino) != expected:
+                os.close(fd)
+                raise OwnershipError("Runtime lock identity changed before acquisition.")
         self.lock = os.fdopen(fd, "r+b")
         try:
             if sys.platform == "win32":
@@ -462,7 +486,7 @@ class Runtime:
         }
         if profile is not None:
             self.state["profile"] = profile
-        atomic_json(self.path, self.state)
+        self._publish_json(self.path, self.state)
 
     def check_stop(self) -> None:
         if self.state and self.stop_path.exists():
@@ -489,7 +513,7 @@ class Runtime:
         if sys.platform == "win32" and name in {"Celery worker", "Celery reports worker", "Celery Beat"}:
             record["shutdown"] = {"instance": self.state["instance"], "component": name}
         self.state["services"][name] = record
-        atomic_json(self.path, self.state)
+        self._publish_json(self.path, self.state)
 
     def _snapshot_members(self, record: dict) -> list[dict]:
         members = windows_children(record["pid"]) if sys.platform == "win32" else group_members(record["pid"])
@@ -534,7 +558,7 @@ class Runtime:
             except OwnershipError as error:
                 self.inspection_errors[record["pid"]] = str(error)
                 raise OwnershipError(self.diagnostic(name, record, error)) from None
-        atomic_json(self.path, self.state)
+        self._publish_json(self.path, self.state)
 
     def service_status(self, record: dict) -> str:
         try:
@@ -692,9 +716,10 @@ class Runtime:
                 if matches(saved, current):
                     if not force:
                         directory = Path(cooperative["SBOM_DEV_STATE_DIR"])
-                        directory.mkdir(parents=True, exist_ok=True)
+                        if self._state_writer is None:
+                            directory.mkdir(parents=True, exist_ok=True)
                         path = windows_shutdown_path(directory, cooperative["SBOM_DEV_INSTANCE"], saved["pid"])
-                        atomic_json(path, {**current, "instance": cooperative["SBOM_DEV_INSTANCE"]})
+                        self._publish_json(path, {**current, "instance": cooperative["SBOM_DEV_INSTANCE"]})
                     elif not kernel.TerminateProcess(handle, 1):
                         code = ctypes.get_last_error()
                         _windows_query_failed(kernel, handle, saved["pid"], "TerminateProcess", code)
@@ -760,7 +785,7 @@ class Runtime:
                 say("WARN", name, self.diagnostic(name, record, error) + "; runtime record retained; inspect and retry stop")
         state["services"] = remaining
         if remaining:
-            atomic_json(self.path, state)
+            self._publish_json(self.path, state)
             return False
         self.path.unlink(missing_ok=True)
         self.stop_path.unlink(missing_ok=True)
@@ -848,8 +873,26 @@ def heartbeat_path(env: dict[str, str], role: str) -> Path:
 
 def write_service_heartbeat(env, role, **metadata):
     path = heartbeat_path(env, role)
+    payload = {"instance": env["SBOM_DEV_INSTANCE"], "pid": os.getpid(), "time": time.time(), **metadata}
+    if "SBOM_DEV_RESOURCE_ID" in env:
+        resource = env["SBOM_DEV_RESOURCE_ID"]
+        try:
+            valid = (str(uuid.UUID(resource)) == resource and path.is_absolute()
+                     and path.parent.name == ".dev-logs" and path.parent.parent.name == resource
+                     and env.get("APP_ENVIRONMENT") == "development" and env.get("PYTHON_DOTENV_DISABLED") == "1"
+                     and role in {"default", "reports", "beat"})
+        except (ValueError, TypeError, AttributeError):
+            valid = False
+        if not valid:
+            raise OwnershipError("Instance heartbeat context is unverified; no file was written.")
+        if __package__:
+            from .dev_workspace_runtime import private_atomic_json
+        else:
+            from dev_workspace_runtime import private_atomic_json
+        private_atomic_json(path, payload, root=path.parent.parent)
+        return
     path.parent.mkdir(mode=0o700, exist_ok=True)
-    atomic_json(path, {"instance": env["SBOM_DEV_INSTANCE"], "pid": os.getpid(), "time": time.time(), **metadata})
+    atomic_json(path, payload)
 
 
 def configure_local_schedule(app, profile):
