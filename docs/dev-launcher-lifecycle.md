@@ -5,9 +5,10 @@ checkout with Python 3.11+ (use python3 where needed):
 
 ```sh
 python scripts/dev.py
+python scripts/dev.py setup --plan
 python scripts/dev.py setup
 python scripts/dev.py status
-python scripts/dev.py doctor
+python scripts/dev.py diagnose
 python scripts/dev.py logs --service reports --lines 80
 python scripts/dev.py logs --service postgres --lines 80
 python scripts/dev.py stop
@@ -16,9 +17,14 @@ python scripts/dev.py restart
 
 No command means start. Start/restart stay in the foreground; keep that terminal
 open and use another for management. Ctrl+C stops owned application processes.
-Doctor (also --check) inspects without installing dependencies or changing data.
-Status returns 0 when healthy and 3 when stopped/unhealthy. Setup/start failures
-return 1.
+`diagnose` performs bounded read-only checks. `--check`, including `setup --check`,
+uses the same path before mutable preparation. The temporary `doctor` alias emits
+one stderr deprecation notice. Provisioning/initialization/migration/build flags
+cannot be combined with diagnostics. See the [diagnostic contract](reference/configuration.md#read-only-diagnostics-sbo-98-phase-2).
+Diagnostic results are PASS, WARN, FAIL, BLOCKED or SKIPPED: exit 0 has no failed or
+blocked required checks, 1 reports a required failure/block, 2 is invalid usage,
+and 130 is cancellation. Status retains exit 0 when healthy and 3 when
+stopped/unhealthy. Setup/start failures return 1.
 
 ## Profiles
 
@@ -45,28 +51,42 @@ flags, ports and database identities remain authoritative and are not overwritte
 
 Python 3.11+, Node.js 20.9+ with npm and selected data services are prerequisites.
 Greenfield requires Docker/Compose and its approved mkcert CA. Missing system
-software produces install instructions. Project virtualenv/pip/npm dependencies
-are prepared only when needed, using content-based freshness checks.
+software produces install instructions. `setup --plan` observes required actions;
+interactive `setup` requests category-specific consent and revalidates inputs.
+Project virtualenv/pip/npm dependencies are prepared only by authorized setup,
+using content-based freshness checks. Bare startup requires prepared dependencies
+and never installs packages, discovers database credentials or generates keys.
+Startup/build probe only the already-installed native compiler through an owned
+Node process; they never use Next's compiler downloader. An explicit
+`setup --repair-dependencies` plan and category consent are required to rerun
+pinned installers; normal startup and diagnostics never repair dependencies.
 System software, OS services and trusted roots are not installed silently.
 
 Ordinary startup authenticates to PostgreSQL/Redis and validates the existing
-schema. It does not initialize, reset or implicitly upgrade a database.
+schema. It does not create, initialize, reset or implicitly upgrade a database.
 See [bootstrap instructions](../scripts/BOOTSTRAP.md) for guarded setup flags.
 Stop application processes before schema changes. First-user creation remains
 the [Native IAM operator procedure](native-iam-greenfield-setup.md).
 
 Greenfield reuses verified containers, networks, volumes, private credentials and
-its independently trusted mkcert CA. A missing leaf may be prepared after trust
-verification. Legacy reuses its certificate pair or creates a self-signed leaf;
+its independently trusted mkcert CA. New leaf creation belongs to explicit,
+authorized setup; ordinary startup validates existing material only. Legacy
+reuses its pair, or authorized setup creates a missing self-signed leaf;
 browser/OS trust requires explicit operator approval. Incomplete pairs fail
 without replacing surviving material. TLS and hostname verification remain enabled.
+See [controlled preparation and recovery limits](reference/configuration.md#controlled-setup-and-prepared-startup-sbo-98-phase-3)
+for new-file Windows DACL safeguards, guarded dependency repair
+and retained partial artifacts. Existing private files and trust are not repaired.
 
 ## Complete runtime
 
-Dependency order is verified/resumed data services (including managed Mailpit),
+Dependency order is verified data services (including managed Mailpit),
 authenticated PostgreSQL/Redis checks, default celery queue worker, reports queue
-worker, one separate Beat, FastAPI, then HTTPS Next.js. All receive the resolved
-profile environment. Saved RELOAD=true enables the backend reloader using the same owned API command.
+worker, one separate Beat, FastAPI, then HTTPS Next.js. API/workers/Beat retain
+shared server settings; Node receives only its approved BFF/public inputs in the
+prepared environment-free workspace. Parent runtime metadata retains selected
+ports and ownership information. See [component environments](reference/configuration.md#component-environments-and-frontend-workspace-sbo-98-phase-4).
+Saved RELOAD=true enables the backend reloader using the same owned API command.
 Linux workers use prefork, concurrency 1; macOS/Windows use
 solo. Windows Celery has upstream platform limitations.
 

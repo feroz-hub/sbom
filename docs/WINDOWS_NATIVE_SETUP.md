@@ -16,7 +16,8 @@ Docker Desktop where required, and explicitly approved HTTPS trust. Open a new
 PowerShell terminal at the repository root:
 
 ```powershell
-python scripts/dev.py doctor --profile legacy --legacy-config windows
+python scripts/dev.py diagnose --profile legacy --legacy-config windows
+python scripts/dev.py setup --plan --profile legacy --legacy-config windows
 python scripts/dev.py setup --profile legacy --legacy-config windows
 python scripts/dev.py --profile legacy --legacy-config windows
 python scripts/dev.py status --profile legacy
@@ -30,6 +31,32 @@ $env:NAME = 'value' assignments. Nonliteral code is rejected. Saved local databa
 credentials, Redis broker, ports, authentication and provider CA/redirect settings
 remain authoritative. Missing API/frontend ports default to 8000/3000.
 Managed Legacy and Greenfield remain separate.
+`setup --plan` is read-only. Interactive setup needs category-specific consent and
+revalidates its inputs; ordinary start requires prepared dependencies/configuration
+and never installs packages, discovers credentials or creates keys/certificates.
+Selected Legacy services must already be running. Missing original material is
+restored through review rather than replaced. New managed/private-key files use
+protected Windows DACLs on supported filesystems; existing ACLs and OS trust are
+not repaired. See [setup recovery limits](reference/configuration.md#controlled-setup-and-prepared-startup-sbo-98-phase-3).
+The separate `frontend-workspace` category creates verified nonprivileged Windows
+directory junctions to source/dependencies; no Developer Mode or trust setting is
+changed. Unknown/redirected workspaces and `.env*` files in them block use and are
+retained. The [component environment contract](reference/configuration.md#component-environments-and-frontend-workspace-sbo-98-phase-4)
+preserves selected ports and original certificate/CA/transaction-key paths while
+excluding backend-only secrets from Node runtime/build.
+The native compiler probe checks the selected Node architecture's installed SWC
+binding without invoking Next's downloader. If missing/incompatible, review
+`setup --plan --repair-dependencies`; repair still needs category consent and
+does not bypass private-file, ownership or database safeguards. Verified HTTPS,
+HMR and full SBOM acceptance remain separately reported validation work.
+
+`diagnose` is the primary read-only inspection command. `--check` and
+`setup --check` use that path before mutable setup; mutation flags are refused.
+The temporary `doctor` alias emits one deprecation notice on stderr. See the
+[diagnostic contract](reference/configuration.md#read-only-diagnostics-sbo-98-phase-2)
+for statuses, exit codes and limitations. Diagnostics never install dependencies,
+change root trust, generate credentials/certificates, alter database state or
+write/clear runtime ownership records. Preserve UNKNOWN records for investigation.
 
 Keep the foreground terminal open. The launcher manages the default worker,
 reports worker, separate Beat, API and HTTPS frontend. Windows workers use solo.
@@ -42,8 +69,10 @@ registered redirects, provider CA bundles and initial administrators remain expl
 operator prerequisites. TLS verification is never disabled. Database initialization/
 upgrade needs explicit controls in the [bootstrap guide](../scripts/BOOTSTRAP.md).
 
-Native Windows and browser authentication were unavailable. Mocked adapters do not
-establish Windows acceptance. Pending Greenfield migration backup/restore remains
+The merged [PR #44 report](engineering/dev-launcher-windows-lifecycle.md) records
+prior Managed Legacy native Windows lifecycle acceptance. This HCL.CS guide does
+not establish current provider/browser or new diagnostic acceptance; mocked
+adapters are not native acceptance. Pending Greenfield migration backup/restore remains
 blocked on Windows. See [platform evidence](engineering/dev-launcher-platform-matrix.md)
 and [HCL settings](HCL_IAM_CONFIGURATION.md).
 

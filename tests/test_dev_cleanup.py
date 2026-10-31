@@ -89,7 +89,7 @@ def test_help_requires_no_retired_modules_or_project_dependencies():
         timeout=10,
     )
     assert result.returncode == 0, result.stderr
-    assert "setup,start,stop,restart,status,doctor,logs" in result.stdout
+    assert "setup,start,stop,restart,status,diagnose,doctor,logs" in result.stdout
 
 
 def test_optional_saved_backend_reload_uses_same_canonical_command():
@@ -127,12 +127,14 @@ def test_explicit_status_uses_requested_profile_for_health_and_diagnostics(monke
 
 @pytest.mark.parametrize("flag", ["--migrate", "--initialize-database", "--provision-greenfield"])
 def test_schema_setup_refuses_running_managed_services(monkeypatch, flag):
-    args = dev.parse_args(["setup", "--profile", "greenfield", flag])
+    args = dev.parse_args(["setup", "--profile", "greenfield", flag, "--confirm-database", dev.GreenfieldStack.DB])
+    args._setup_authorized_categories = frozenset({"database-migrate" if flag == "--migrate" else "database-initialize"})
     monkeypatch.setattr(dev.Runtime, "load", lambda _: {"services": {"API": {"pid": 123}}})
     forbidden = Mock(side_effect=AssertionError("provisioning reached"))
     monkeypatch.setattr(dev, "validate_prerequisites", forbidden)
-    with pytest.raises(dev.SetupError, match="Stop the managed runtime"):
-        dev.setup_application(args)
+    monkeypatch.setattr(dev.Runtime, "acquire", forbidden)
+    with pytest.raises(dev.SetupError, match="verified-ownership stop"):
+        dev._apply_setup_application(args)
     forbidden.assert_not_called()
 
 

@@ -12,6 +12,7 @@
 .dev-runtime.stop
 .dev-runtime.*.tmp
 .dev-logs/
+.dev-frontend/
 !.env.example
 !.env.hcl-iam.example
 !.env.native-iam.example
@@ -104,3 +105,6 @@ deploy/certs/*
 deploy/secrets/*
 !deploy/secrets/.gitkeep
 sbom-analyser-images-*.tar
+
+# Per-worktree owned npm preparation attempts; preserve after interruption.
+frontend/.sbom-dependencies-*/

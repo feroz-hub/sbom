@@ -2,6 +2,13 @@
 
 from __future__ import annotations
 
+import sys
+
+# The public read-only entry points must not create import caches on a fresh
+# checkout, including before argument parsing or optional dependency imports.
+if __name__ == "__main__" and (len(sys.argv) == 1 or any(value in {"workspace", "setup", "diagnose", "doctor", "status", "logs", "--check"} for value in sys.argv[1:])):
+    sys.dont_write_bytecode = True
+
 import argparse
 import base64
 import binascii
@@ -20,7 +27,6 @@ import ssl
 import stat
 import struct
 import subprocess
-import sys
 import tempfile
 import time
 import uuid
@@ -33,7 +39,7 @@ from urllib.request import urlopen
 MIN_PYTHON = (3, 11)
 MIN_NODE = (20, 9, 0)
 WINDOWS_SHUTDOWN_GRACE = 30.0
-REQUIRED_FILES = ("requirements.txt", "alembic.ini", "frontend/package.json", "frontend/package-lock.json")
+REQUIRED_FILES = ("requirements.txt", "alembic.ini", "frontend/package.json", "frontend/package-lock.json", "scripts/dev_next_guard.cjs")
 GREENFIELD_UUID_BASELINE = "100_greenfield_uuid_final"
 PUBLIC_IDENTITY_TABLES = ("tenants", "projects", "products", "logical_sbom", "sbom_source", "sbom_component")
 
@@ -66,7 +72,12 @@ def _windows_kernel():
 
 
 def _windows_error(pid, operation, code):
-    return OwnershipError(f"PID {pid}: {operation} failed (winerror={code}; status=UNKNOWN; ownership unverified).")
+    safe_code = code if type(code) is int and 0 <= code <= 0xFFFFFFFF else None
+    error = OwnershipError(f"PID {pid}: {operation} failed (winerror={safe_code}; status=UNKNOWN; ownership unverified).")
+    error.winerror = safe_code
+    error.operation = operation
+    error.process_status = "UNKNOWN"
+    return error
 
 
 def _windows_exited(kernel, handle, pid):
@@ -84,7 +95,11 @@ def _windows_query_failed(kernel, handle, pid, operation, code):
         if _windows_exited(kernel, handle, pid):
             return None
     except OwnershipError as wait_error:
-        raise OwnershipError(f"{error} {wait_error}") from None
+        combined = OwnershipError(f"{error} {wait_error}")
+        combined.winerror = error.winerror
+        combined.secondary_winerror = getattr(wait_error, "winerror", None)
+        combined.operation, combined.process_status = operation, "UNKNOWN"
+        raise combined from None
     raise error
 
 
@@ -350,6 +365,7 @@ def windows_children(pid: int) -> list[dict]:
         for handle in reversed(handles):
             kernel.CloseHandle(handle)
 
+
 def atomic_json(path: Path, value: dict) -> None:
     fd, name = tempfile.mkstemp(prefix=path.name + ".", suffix=".tmp", dir=path.parent)
     try:
@@ -373,7 +389,7 @@ def atomic_json(path: Path, value: dict) -> None:
 
 
 class Runtime:
-    def __init__(self, root: Path):
+    def __init__(self, root: Path, *, state_writer=None, lock_creator=None):
         self.root = root.resolve()
         self.path = self.root / ".dev-runtime.json"
         self.lock_path = self.root / ".dev-runtime.lock"
@@ -384,11 +400,35 @@ class Runtime:
         self.inspection_errors: dict[int, str] = {}
         self._shutdown_deadline: float | None = None
         self._shutdown_prepared: set[tuple[int, str | None, str | None]] = set()
+        self._state_writer = self._lock_creator = None
+        self.configure_private_io(state_writer=state_writer, lock_creator=lock_creator)
+
+    def configure_private_io(self, *, state_writer, lock_creator):
+        """Trusted instance IO only; legacy callers retain their existing policy."""
+        if self.lock is not None or self.state is not None or any(
+            value is not None and not callable(value) for value in (state_writer, lock_creator)
+        ):
+            raise OwnershipError("Runtime IO must be configured before acquiring ownership.")
+        self._state_writer, self._lock_creator = state_writer, lock_creator
+
+    def _publish_json(self, path, value):
+        if self._state_writer is None:
+            atomic_json(path, value)
+        else:
+            self._state_writer(path, value)
 
     def acquire(self) -> bool:
         # Keep this inode permanently. Unlinking a lock allows two independent
         # lock holders; OS locks automatically release on exit, including crashes.
-        fd = os.open(self.lock_path, os.O_RDWR | os.O_CREAT, 0o600)
+        if self._lock_creator is None:
+            fd = os.open(self.lock_path, os.O_RDWR | os.O_CREAT, 0o600)
+        else:
+            expected = self._lock_creator(self.lock_path)
+            fd = os.open(self.lock_path, os.O_RDWR | getattr(os, "O_NOFOLLOW", 0))
+            opened = os.fstat(fd)
+            if (opened.st_dev, opened.st_ino) != expected:
+                os.close(fd)
+                raise OwnershipError("Runtime lock identity changed before acquisition.")
         self.lock = os.fdopen(fd, "r+b")
         try:
             if sys.platform == "win32":
@@ -455,7 +495,7 @@ class Runtime:
         }
         if profile is not None:
             self.state["profile"] = profile
-        atomic_json(self.path, self.state)
+        self._publish_json(self.path, self.state)
 
     def check_stop(self) -> None:
         if self.state and self.stop_path.exists():
@@ -482,7 +522,7 @@ class Runtime:
         if sys.platform == "win32" and name in {"Celery worker", "Celery reports worker", "Celery Beat"}:
             record["shutdown"] = {"instance": self.state["instance"], "component": name}
         self.state["services"][name] = record
-        atomic_json(self.path, self.state)
+        self._publish_json(self.path, self.state)
 
     def _snapshot_members(self, record: dict) -> list[dict]:
         members = windows_children(record["pid"]) if sys.platform == "win32" else group_members(record["pid"])
@@ -527,7 +567,7 @@ class Runtime:
             except OwnershipError as error:
                 self.inspection_errors[record["pid"]] = str(error)
                 raise OwnershipError(self.diagnostic(name, record, error)) from None
-        atomic_json(self.path, self.state)
+        self._publish_json(self.path, self.state)
 
     def service_status(self, record: dict) -> str:
         try:
@@ -685,9 +725,10 @@ class Runtime:
                 if matches(saved, current):
                     if not force:
                         directory = Path(cooperative["SBOM_DEV_STATE_DIR"])
-                        directory.mkdir(parents=True, exist_ok=True)
+                        if self._state_writer is None:
+                            directory.mkdir(parents=True, exist_ok=True)
                         path = windows_shutdown_path(directory, cooperative["SBOM_DEV_INSTANCE"], saved["pid"])
-                        atomic_json(path, {**current, "instance": cooperative["SBOM_DEV_INSTANCE"]})
+                        self._publish_json(path, {**current, "instance": cooperative["SBOM_DEV_INSTANCE"]})
                     elif not kernel.TerminateProcess(handle, 1):
                         code = ctypes.get_last_error()
                         _windows_query_failed(kernel, handle, saved["pid"], "TerminateProcess", code)
@@ -753,13 +794,12 @@ class Runtime:
                 say("WARN", name, self.diagnostic(name, record, error) + "; runtime record retained; inspect and retry stop")
         state["services"] = remaining
         if remaining:
-            atomic_json(self.path, state)
+            self._publish_json(self.path, state)
             return False
         self.path.unlink(missing_ok=True)
         self.stop_path.unlink(missing_ok=True)
         self.state = None
         return True
-
 
 
 ROOT = Path(__file__).resolve().parents[1]
@@ -842,8 +882,26 @@ def heartbeat_path(env: dict[str, str], role: str) -> Path:
 
 def write_service_heartbeat(env, role, **metadata):
     path = heartbeat_path(env, role)
+    payload = {"instance": env["SBOM_DEV_INSTANCE"], "pid": os.getpid(), "time": time.time(), **metadata}
+    if "SBOM_DEV_RESOURCE_ID" in env:
+        resource = env["SBOM_DEV_RESOURCE_ID"]
+        try:
+            valid = (str(uuid.UUID(resource)) == resource and path.is_absolute()
+                     and path.parent.name == ".dev-logs" and path.parent.parent.name == resource
+                     and env.get("APP_ENVIRONMENT") == "development" and env.get("PYTHON_DOTENV_DISABLED") == "1"
+                     and role in {"default", "reports", "beat"})
+        except (ValueError, TypeError, AttributeError):
+            valid = False
+        if not valid:
+            raise OwnershipError("Instance heartbeat context is unverified; no file was written.")
+        if __package__:
+            from .dev_workspace_runtime import private_atomic_json
+        else:
+            from dev_workspace_runtime import private_atomic_json
+        private_atomic_json(path, payload, root=path.parent.parent)
+        return
     path.parent.mkdir(mode=0o700, exist_ok=True)
-    atomic_json(path, {"instance": env["SBOM_DEV_INSTANCE"], "pid": os.getpid(), "time": time.time(), **metadata})
+    atomic_json(path, payload)
 
 
 def configure_local_schedule(app, profile):
@@ -935,7 +993,10 @@ def local_scheduler_class():
             token = env["SBOM_DEV_INSTANCE"]
             client = redis.Redis.from_url(env["REDIS_URL"], socket_connect_timeout=2, socket_timeout=2)
             target = urlsplit(env["DATABASE_URL"])
-            key = f"sbom:dev:beat:{env['SBOM_DEV_PROFILE']}:{target.hostname}:{target.port}:{target.path}"
+            from app.dev_instance import get_instance_namespace
+
+            prefix = get_instance_namespace(env).beat_namespace
+            key = f"{prefix}:{env['SBOM_DEV_PROFILE']}:{target.hostname}:{target.port}:{target.path}"
             owned = client.eval(
                 "if redis.call('get',KEYS[1]) == ARGV[1] then return redis.call('expire',KEYS[1],20) else return 0 end",
                 1,
@@ -1034,12 +1095,15 @@ def reject_foreign_workers(env):
 
 
 def background_commands(env):
+    from app.dev_instance import get_instance_namespace
+
+    namespace = get_instance_namespace(env)
     instance = env["SBOM_DEV_INSTANCE"]
     base = [str(venv_python()), "-B", "-m", "celery", "-A", "scripts.dev:celery_app"]
     commands = {}
     for component, role, queue in (
-        ("Celery worker", "default", "celery"),
-        ("Celery reports worker", "reports", "reports"),
+        ("Celery worker", "default", namespace.queue_default),
+        ("Celery reports worker", "reports", namespace.queue_reports),
     ):
         command = [
             *base,
@@ -1095,12 +1159,15 @@ def service_pid_matches(runtime, record, pid):
 
 
 def background_health(runtime, env, *, require_control=False):
+    from app.dev_instance import get_instance_namespace
+
+    namespace = get_instance_namespace(env)
     state = runtime.state or runtime.load() or {}
     records = state.get("services", {})
     expected = {}
     for component, role, queues in (
-        ("Celery worker", "default", {"celery"}),
-        ("Celery reports worker", "reports", {"reports"}),
+        ("Celery worker", "default", {namespace.queue_default}),
+        ("Celery reports worker", "reports", {namespace.queue_reports}),
         ("Celery Beat", "beat", None),
     ):
         record = records.get(component)
@@ -1524,34 +1591,239 @@ def verify_existing_schema(env):
 
 
 def setup_application(args):
+    """Inspect and obtain scoped authorization before any preparation."""
+    previous = sys.dont_write_bytecode
+    sys.dont_write_bytecode = True
+    try:
+        try:
+            from scripts import dev_setup
+        except ModuleNotFoundError as error:
+            if error.name != "scripts":
+                raise
+            import dev_setup
+        return dev_setup.run_setup(args, sys.modules[__name__], _apply_setup_application)
+    finally:
+        sys.dont_write_bytecode = previous
+
+
+def native_admin_status(args):
+    """Inspect selected Native enrollment without application imports or writes."""
+    from dataclasses import asdict
+
+    previous = sys.dont_write_bytecode
+    sys.dont_write_bytecode = True
+    try:
+        operator = _development_library("dev_operator")
+        try:
+            context = operator.resolve_native_context(args, sys.modules[__name__])
+            result = operator.inspect_native_enrollment(context, confirm_database=args.confirm_database)
+        except operator.OperatorError as error:
+            say("BLOCKED", "Native enrollment", str(error))
+            return 1
+        print(json.dumps(asdict(result), sort_keys=True))
+        return 0
+    finally:
+        sys.dont_write_bytecode = previous
+
+
+def native_admin_enrollment(args, *, action):
+    """Use only the gated default adapter; identity stays in its private prompts."""
+    previous = sys.dont_write_bytecode
+    sys.dont_write_bytecode = True
+    try:
+        adapter = _development_library("dev_native_enrollment")
+        result = adapter.run_enrollment(args, sys.modules[__name__], action=action)
+        blocked = {
+            "ENROLLMENT_ACTION_INVALID",
+            "ENROLLMENT_IDENTITY_REQUIRED",
+            "ENROLLMENT_IDENTITY_INVALID",
+            "ENROLLMENT_RESEND_IDENTITY_INVALID",
+            "ENROLLMENT_READINESS_UNVERIFIED",
+            "ENROLLMENT_STATE_REFUSED",
+            "ENROLLMENT_PLAN_CHANGED",
+            "ENROLLMENT_CONFIGURATION_BLOCKED",
+            "ENROLLMENT_INSPECTION_FAILED",
+            "ENROLLMENT_HELPER_NOT_STARTED",
+            "ENROLLMENT_REFUSED",
+        }
+        messages = {
+            "ACTIVATION_QUEUED": (
+                0,
+                "OK",
+                "Activation queued in the encrypted outbox; complete the approved HTTPS email flow.",
+            ),
+            "ENROLLMENT_READINESS_CONTRACT_REQUIRED": (
+                1,
+                "BLOCKED",
+                "Live enrollment remains gated pending reviewed runtime configuration, Native IAM, activation origin and approved mail attestations.",
+            ),
+            "ENROLLMENT_APPROVAL_REQUIRED": (
+                1,
+                "BLOCKED",
+                "Use an interactive terminal; exact database confirmation and explicit operator approval are required.",
+            ),
+            "ENROLLMENT_APPROVAL_DECLINED": (1, "INFO", "Operator approval was declined; no enrollment was requested."),
+            "ENROLLMENT_CANCELLED": (130, "INFO", "Enrollment was cancelled before a helper outcome was returned."),
+            "OUTCOME_UNCONFIRMED": (1, "WARN", "The enrollment helper outcome could not be confirmed."),
+        }
+        for code in blocked:
+            messages[code] = (
+                1,
+                "BLOCKED",
+                "Review the selected Native configuration, exact database confirmation and approved enrollment state.",
+            )
+        if not isinstance(result.code, str) or result.code not in messages:
+            raise ValueError()
+        exit_code, kind, guidance = messages[result.code]
+        expected_commit = (
+            True if result.code == "ACTIVATION_QUEUED" else None if result.code == "OUTCOME_UNCONFIRMED" else False
+        )
+        if (
+            type(result.exit_code) is not int
+            or result.exit_code != exit_code
+            or result.committed is not expected_commit
+            or type(result.cleanup_confirmed) is not bool
+            or (result.code != "OUTCOME_UNCONFIRMED" and not result.cleanup_confirmed)
+        ):
+            raise ValueError()
+        say(kind, "Native enrollment", f"{result.code}; {guidance}")
+        if result.committed is None:
+            say(
+                "WARN",
+                "Native enrollment",
+                "Commit outcome is uncertain. Do not retry automatically; inspect setup --native-admin-status with the exact --confirm-database first.",
+            )
+        if not result.cleanup_confirmed:
+            pid = result.helper_pid
+            suffix = f" (owned helper PID {pid})" if type(pid) is int and 0 < pid <= 4294967295 else ""
+            say(
+                "WARN",
+                "Native enrollment",
+                f"Helper cleanup is unconfirmed{suffix}. Verify ownership before any manual cleanup.",
+            )
+        return exit_code
+    except Exception:
+        say(
+            "BLOCKED",
+            "Native enrollment",
+            "ENROLLMENT_ADAPTER_FAILED; the result could not be confirmed. Do not retry automatically; inspect read-only Native status before further action.",
+        )
+        return 1
+    finally:
+        sys.dont_write_bytecode = previous
+
+
+def _development_library(name):
+    """Import a private launcher library from a checkout or a direct script."""
+    import importlib
+
+    try:
+        return importlib.import_module("scripts." + name)
+    except ModuleNotFoundError as error:
+        if error.name != "scripts":
+            raise
+        return importlib.import_module(name)
+
+
+def _workspace_library():
+    try:
+        library = _development_library("dev_workspace_cli")
+        if Path(library.__file__).resolve() != Path(__file__).resolve().with_name("dev_workspace_cli.py"):
+            raise ImportError()
+        return library
+    except (ImportError, SyntaxError, AttributeError):
+        raise SetupError("WORKSPACE_FRAMEWORK_UNVERIFIED: use the complete intended checkout and interpreter; no workspace action ran.") from None
+
+
+def _setup_requires(args, category):
+    if category not in getattr(args, "_setup_authorized_categories", ()):
+        raise SetupError(f"SETUP_APPROVAL_REQUIRED: the {category} action was not authorized by this plan.")
+
+
+def _apply_setup_application(args):
     global ACTIVE_PROFILE, ACTIVE_LEGACY_CONFIG
+    if not getattr(args, "_setup_authorized_categories", None):
+        raise SetupError("SETUP_APPROVAL_REQUIRED: review the explicit setup plan before preparation.")
     profile = args.profile
     if profile == "auto":
         profile = "greenfield" if GreenfieldStack.STATE.exists() else "legacy"
     ACTIVE_PROFILE = profile
     ACTIVE_LEGACY_CONFIG = select_legacy_configuration(args.legacy_config)
+    selected_values = {}
+    if profile == "legacy":
+        selected_values, frontend_values = _development_library("dev_environment").load_legacy_snapshots(
+            ACTIVE_LEGACY_CONFIG, sys.modules[__name__]
+        ) if CONFIG.exists() or ACTIVE_LEGACY_CONFIG != "managed" else ({}, {})
+        selected_values = {**frontend_values, **selected_values}
+        _development_library("dev_prepared")._development_only(selected_values, sys.modules[__name__])
+        if ACTIVE_LEGACY_CONFIG == "managed":
+            _development_library("dev_prepared").validate_managed_mode({**os.environ, **selected_values}, sys.modules[__name__])
+    database_action = args.initialize_database or args.migrate or args.provision_greenfield
+    if database_action:
+        if profile == "greenfield":
+            target_name = GreenfieldStack.DB
+        elif ACTIVE_LEGACY_CONFIG == "managed":
+            if selected_values.get("DATABASE_URL"):
+                validate_database_url(selected_values["DATABASE_URL"])
+            target_name = DB_NAME
+        else:
+            target = _development_library("dev_config").resolve_configuration(
+                profile="legacy", family=ACTIVE_LEGACY_CONFIG, inherited=dict(os.environ),
+                saved=selected_values, root=str(ROOT), platform="linux" if sys.platform.startswith("linux") else sys.platform,
+            ).database
+            target_name = target.name
+        if args.confirm_database != target_name:
+            raise SetupError("DATABASE_CONFIRMATION_REQUIRED: repeat the exact selected database name before any preparation.")
+        _setup_requires(args, "database-migrate" if args.migrate else "database-initialize")
     state = Runtime(ROOT).load() or {}
-    if state.get("services") and any((args.provision_greenfield, args.initialize_database, args.migrate)):
+    if state:
         raise SetupError(
-            "Stop the managed runtime before explicit provisioning or schema setup. No database changes were made."
-        )
+            "Use status and verified-ownership stop before preparation; existing runtime records were retained.")
+    _development_library("dev_prepared")._development_only(os.environ, sys.modules[__name__])
     validate_repository_layout()
     validate_prerequisites()
-    ensure_virtualenv()
-    ensure_dependencies()
+    if "project-dependencies" in args._setup_authorized_categories:
+        ensure_virtualenv()
+    else:
+        require_virtualenv()
+    # Take the same lifecycle lock only after any interpreter handoff. A setup
+    # parent must never hold this lock while its child tries to acquire it.
+    runtime = Runtime(ROOT)
+    if not runtime.acquire():
+        raise SetupError("SETUP_RUNTIME_BUSY: another launcher operation owns this checkout; nothing was prepared.")
+    try:
+        if runtime.load():
+            raise SetupError("SETUP_RUNTIME_PRESENT: runtime records appeared; retain them and use verified-ownership stop before preparation.")
+        if "project-dependencies" in args._setup_authorized_categories:
+            if getattr(args, "repair_dependencies", False):
+                ensure_dependencies(force=True)
+            else:
+                ensure_dependencies()
+        else:
+            _development_library("dev_prepared").require_project(sys.modules[__name__])
+        return _prepare_authorized_setup(args, profile)
+    finally:
+        runtime.release()
+
+
+def _prepare_authorized_setup(args, profile):
+    """Apply reviewed actions while the checkout lifecycle lock is held."""
     if profile == "greenfield":
-        if args.provision_greenfield or args.initialize_database:
-            if args.confirm_database != GreenfieldStack.DB:
-                raise SetupError(
-                    "Explicit Greenfield setup requires --confirm-database sbom_greenfield_uuid. Existing databases are never reset."
-                )
         if args.provision_greenfield:
+            for category in ("configuration", "secrets", "certificates", "data-providers"):
+                _setup_requires(args, category)
+            if GreenfieldStack.STATE.exists():
+                raise SetupError("Existing Greenfield state must be restored/reviewed; setup will not provision over it.")
             LocalHttps.ensure_certificate(GreenfieldStack.STATE, prepare=True)
             GreenfieldStack.provision()
         else:
             resolve_profile("greenfield")
-            LocalHttps.ensure_certificate(GreenfieldStack.STATE, prepare=True)
-        ensure_frontend(certificate=False)
+            LocalHttps.ensure_certificate(GreenfieldStack.STATE, prepare=False)
+        if "project-dependencies" in args._setup_authorized_categories:
+            ensure_frontend(certificate=False, force=getattr(args, "repair_dependencies", False))
+        validate_secrets(GreenfieldStack.settings())
+        if "frontend-workspace" in args._setup_authorized_categories:
+            _development_library("dev_frontend").prepare_workspace(sys.modules[__name__], "greenfield")
         if args.initialize_database:
             previous, directory = dict(os.environ), Path.cwd()
             try:
@@ -1565,56 +1837,60 @@ def setup_application(args):
 
             greenfield_migrations.ensure_current()
         if args.frontend_build:
+            _setup_requires(args, "frontend-build")
             env = GreenfieldStack.settings()
             env["NODE_ENV"] = "production"
+            ui = _development_library("dev_frontend").require_workspace(sys.modules[__name__], "greenfield")
+            _development_library("dev_components").verify_compiler(sys.modules[__name__], env, ui, profile="greenfield")
+            env = _development_library("dev_components").process_environment(
+                sys.modules[__name__], "Frontend", env, ui, profile="greenfield")
             result = run(
-                [
-                    str(GreenfieldStack.node_binary()),
-                    str(ROOT / "frontend/node_modules/next/dist/bin/next"),
-                    "build",
-                    "--webpack",
-                ],
-                env=env,
-                cwd=GreenfieldStack.frontend_workspace("frontend-build"),
+                [str(GreenfieldStack.node_binary()), str(ROOT / "frontend/node_modules/next/dist/bin/next"),
+                 "build", "--webpack"], env=env, cwd=ui,
             )
             if result.returncode:
-                raise SetupError(
-                    "Local frontend build failed. Rerun setup --frontend-build --verbose for the redacted diagnostic."
-                )
+                raise SetupError("Local frontend build failed. Review the redacted setup diagnostic.")
     else:
-        if args.frontend_build:
-            raise SetupError("--frontend-build selects the isolated Greenfield workspace; use --profile greenfield.")
-        ensure_frontend()
-        legacy_https_context()
-        if args.provision_greenfield:
-            raise SetupError("--provision-greenfield cannot be used with Legacy.")
-        if args.initialize_database or args.migrate:
-            env = (
-                prepare_managed_legacy()
-                if ACTIVE_LEGACY_CONFIG == "managed"
-                else existing_legacy_environment(ACTIVE_LEGACY_CONFIG)
+        if args.frontend_build or args.provision_greenfield:
+            raise SetupError("Greenfield provisioning/build flags cannot prepare Legacy.")
+        if "project-dependencies" in args._setup_authorized_categories:
+            ensure_frontend(certificate=False, force=getattr(args, "repair_dependencies", False))
+        if ACTIVE_LEGACY_CONFIG == "managed":
+            env = prepare_managed_legacy(setup_args=args)
+        else:
+            plan = _development_library("dev_environment").resolve_existing(
+                argparse.Namespace(profile="legacy", legacy_config=ACTIVE_LEGACY_CONFIG),
+                sys.modules[__name__], None,
             )
-            name = urlsplit(env["DATABASE_URL"]).path.lstrip("/")
-            if args.confirm_database != name:
-                raise SetupError("Database setup requires --confirm-database matching the saved local database name.")
-            if args.initialize_database:
-                from scripts.bootstrap_fresh_database import bootstrap
+            env = dict(plan.environment)
+            _development_library("dev_prepared")._development_only(env, sys.modules[__name__])
+            if plan.authentication_enabled is not True or env.get("DEV_DEFAULT_TENANT", "").lower() not in {"false", "0", "no", "off"}:
+                raise SetupError("AUTHENTICATED_SETUP_REQUIRED: preserve authenticated mode and disable the development bypass explicitly.")
+            if "native" in plan.auth_modes:
+                validate_secrets(env)
+        if "certificates" in args._setup_authorized_categories:
+            certificate, key = ROOT / "frontend/certificates/localhost.pem", ROOT / "frontend/certificates/localhost-key.pem"
+            if certificate.exists() or key.exists():
+                raise SetupError("Existing localhost material appeared; review a new plan instead of replacing either file.")
+            create_local_certificate(certificate, key)
+        legacy_https_context()
+        if "frontend-workspace" in args._setup_authorized_categories:
+            _development_library("dev_frontend").prepare_workspace(sys.modules[__name__], "legacy")
+        if args.initialize_database:
+            from scripts.bootstrap_fresh_database import bootstrap
 
-                previous = dict(os.environ)
-                try:
-                    os.environ.update(env)
-                    bootstrap(env["DATABASE_URL"], name)
-                finally:
-                    os.environ.clear()
-                    os.environ.update(previous)
-            else:
-                validate_existing_schema(env["DATABASE_URL"], validate_target=ACTIVE_LEGACY_CONFIG == "managed")
-                run_migrations(env)
-    say(
-        "OK",
-        "Setup",
-        "project dependencies and local HTTPS prepared; existing configuration retained; no application processes started",
-    )
+            name = urlsplit(env["DATABASE_URL"]).path[1:]
+            previous = dict(os.environ)
+            try:
+                os.environ.update(env)
+                bootstrap(env["DATABASE_URL"], name)
+            finally:
+                os.environ.clear()
+                os.environ.update(previous)
+        elif args.migrate:
+            validate_existing_schema(env["DATABASE_URL"], validate_target=ACTIVE_LEGACY_CONFIG == "managed")
+            run_migrations(env)
+    say("OK", "Setup", "authorized preparation finished; retained private material and data safeguards; no application processes started")
 
 
 def check_profile_ownership(runtime, profile: str) -> None:
@@ -1692,46 +1968,31 @@ def validate_prerequisites() -> None:
     say("OK", "Prerequisites", f"Python {platform.python_version()}, Node {result.stdout.strip()}, npm found")
 
 
-def doctor(args) -> None:
-    """Read-only prerequisite inspection; never creates a venv, credentials or DB."""
-    global ACTIVE_PROFILE
-    validate_repository_layout()
-    validate_prerequisites()
-    profile = resolve_profile(args.profile)
-    ACTIVE_PROFILE = profile
-    say("OK", "Profile", profile)
-    if profile == "greenfield":
-        # Check trust before reading application passwords or resuming containers.
+def diagnose(args) -> int:
+    """Collect bounded read-only checks without preparation or runtime adoption."""
+    previous = sys.dont_write_bytecode
+    sys.dont_write_bytecode = True
+    try:
         try:
-            import cryptography  # noqa: F401
-        except ImportError:
-            raise SetupError(
-                "Project cryptography dependency is missing. Run python scripts/dev.py start to prepare the project virtualenv, then rerun doctor."
-            ) from None
-        LocalHttps.ensure_certificate(GreenfieldStack.STATE, prepare=False)
-        GreenfieldProfile.inventory()
-        say("OK", "Greenfield", "existing container identities and HTTPS trust verified")
-    else:
-        if not docker_available():
-            if not service_available("postgres", 5432) or not service_available("redis", 6379):
-                raise SetupError(
-                    "Docker is unavailable and local PostgreSQL/Redis are not both reachable. "
-                    "Install/start Docker Desktop (Windows/macOS) or Docker Engine with Compose (Linux), "
-                    "or start your explicitly configured local services."
-                )
-        say(
-            "OK",
-            "Configuration",
-            "existing .env.dev.local will be preserved"
-            if CONFIG.is_file()
-            else "first start will prepare private Legacy settings",
-        )
-    if (Runtime(ROOT).load() or {}).get("services"):
-        if not application_status(profile):
-            raise SetupError(
-                "Doctor found an unhealthy managed runtime. Inspect the named component logs and restart after correcting it."
-            )
-    say("OK", "Doctor", "read-only checks finished; native authentication/browser acceptance is separate")
+            from scripts import dev_diagnostics
+        except ModuleNotFoundError as error:
+            if error.name != "scripts":
+                raise
+            import dev_diagnostics
+
+        report = dev_diagnostics.run_checks(args, sys.modules[__name__])
+        for result in report.results:
+            print(f"[{result.status}] {result.component}: {result.code}; {result.guidance}", flush=True)
+        print("[INFO] Diagnose: read-only checks finished; login/browser acceptance is separate", flush=True)
+        return report.exit_code
+    finally:
+        sys.dont_write_bytecode = previous
+
+
+def doctor(args) -> int:
+    """Temporary deprecated compatibility alias for the same read-only checks."""
+    print("[WARN] doctor is deprecated; use python scripts/dev.py diagnose.", file=sys.stderr)
+    return diagnose(args)
 
 
 def profile_log_paths(profile: str) -> dict[str, Path]:
@@ -1808,10 +2069,10 @@ def display_data_logs(args):
             f"{args.service} is externally managed. Read logs through its configured OS/service manager; no container ownership was inferred."
         )
     if not container:
-        raise SetupError(f"No recorded {args.service} container. Run doctor to check the selected installation.")
+        raise SetupError(f"No recorded {args.service} container. Run diagnose to check the selected installation.")
     result = run(command + ["logs", "--tail", str(args.lines), container])
     if result.returncode:
-        raise SetupError(f"Unable to read {args.service} Docker logs. Check Docker availability and run doctor.")
+        raise SetupError(f"Unable to read {args.service} Docker logs. Check Docker availability and run diagnose.")
     env = profile_environment(args.profile)
     print(redact((result.stdout or "") + (result.stderr or ""), env))
 
@@ -1874,41 +2135,13 @@ class LocalHttps:
         Administrators and SYSTEM are permitted. Never infer security from POSIX
         chmod bits on Windows, and never change the user's ACL or trust settings.
         """
-        import json
-
-        env = LocalHttps.clean_environment()
-        env["SBOM_TLS_ACL_PATH"] = str(Path(path).absolute())
-        powershell = shutil.which("powershell.exe", path=env["PATH"])
-        if not powershell:
-            raise LocalHttps.HttpsTrustError(
-                "PowerShell is required to verify Windows private-file ACLs; install/restore Windows PowerShell."
-            )
-        script = "$ErrorActionPreference='Stop';$acl=Get-Acl -LiteralPath $env:SBOM_TLS_ACL_PATH;$rules=@($acl.GetAccessRules($true,$true,[System.Security.Principal.SecurityIdentifier]) | ForEach-Object { @{sid=$_.IdentityReference.Value;type=[int]$_.AccessControlType;rights=[int]$_.FileSystemRights} });@{owner=$acl.GetOwner([System.Security.Principal.SecurityIdentifier]).Value;current=[System.Security.Principal.WindowsIdentity]::GetCurrent().User.Value;protected=$acl.AreAccessRulesProtected;rules=$rules} | ConvertTo-Json -Compress -Depth 4"
+        native_acl = _development_library("dev_windows_acl")
         try:
-            result = subprocess.run(
-                [powershell, "-NoProfile", "-NonInteractive", "-Command", script],
-                env=env,
-                capture_output=True,
-                text=True,
-                timeout=15,
-            )
-            if result.returncode:
-                raise ValueError()
-            acl = json.loads(result.stdout)
-            if not acl.get("current") or acl.get("owner") != acl["current"]:
-                raise ValueError()
-            allowed = {acl["current"], "S-1-5-18", "S-1-5-32-544"}
-            mutable_rights = 2 | 4 | 16 | 64 | 256 | 65536 | 262144 | 524288
-            rules = acl.get("rules")
-            if not isinstance(rules, list) or not rules:
-                raise ValueError()
-            for rule in rules:
-                if rule["type"] == 0 and rule["sid"] not in allowed:
-                    if private or int(rule["rights"]) & mutable_rights:
-                        raise ValueError()
-        except (OSError, ValueError, TypeError, KeyError, subprocess.TimeoutExpired):
+            native_acl.verify_access(Path(path).absolute(), private=private)
+        except native_acl.AclVerificationError as error:
             raise LocalHttps.HttpsTrustError(
-                "Windows file ownership/private ACL verification failed. Restrict this path to your user, SYSTEM and Administrators using Windows Security/Advanced permissions, then rerun doctor; no ACL was changed."
+                f"Windows file ownership/private ACL verification failed ({error}); status=UNVERIFIED. "
+                "Review access and Windows Security/Advanced permissions, then rerun diagnose; no ACL was changed."
             ) from None
 
     @staticmethod
@@ -1957,7 +2190,7 @@ class LocalHttps:
             )
         except (OSError, subprocess.TimeoutExpired):
             raise LocalHttps.HttpsTrustError(
-                "System certificate trust verification could not run; restore the native trust tools and rerun doctor."
+                "System certificate trust verification could not run; restore the native trust tools and rerun diagnose."
             ) from None
 
     @staticmethod
@@ -2006,7 +2239,7 @@ class LocalHttps:
             return False
         except (AttributeError, OSError, ValueError, TypeError, x509.ExtensionNotFound):
             raise LocalHttps.HttpsTrustError(
-                "Windows native ROOT store verification failed; review local CA trust and rerun doctor."
+                "Windows native ROOT store verification failed; review local CA trust and rerun diagnose."
             ) from None
 
     @staticmethod
@@ -2138,7 +2371,7 @@ class LocalHttps:
         )
         if not executable:
             raise LocalHttps.HttpsTrustError(
-                "System curl is required to verify served HTTPS with native trust; install/restore curl and rerun doctor."
+                "System curl is required to verify served HTTPS with native trust; install/restore curl and rerun diagnose."
             )
         result = subprocess.run(
             [
@@ -2695,7 +2928,7 @@ class GreenfieldProfile:
             timeout=20,
         )
         if result.returncode:
-            raise SetupError("Greenfield Docker inventory failed. Start its Docker engine/context and retry doctor.")
+            raise SetupError("Greenfield Docker inventory failed. Start its Docker engine/context and retry diagnose.")
         return json.loads(result.stdout)
 
     @staticmethod
@@ -2729,12 +2962,14 @@ class GreenfieldProfile:
     @staticmethod
     def start_services(runtime):
         GreenfieldStack.check_service_ports()
-        cert, key, _, _ = LocalHttps.ensure_certificate(GreenfieldStack.STATE, prepare=True)
+        cert, key, _, _ = LocalHttps.ensure_certificate(GreenfieldStack.STATE, prepare=False)
         GreenfieldStack.verify_resources()
         env = runtime_environment(GreenfieldStack.settings())
         node = GreenfieldStack.node_binary()
         env["PATH"] = str(node.parent) + os.pathsep + os.environ.get("PATH", "")
-        ui = GreenfieldStack.frontend_workspace("frontend")
+        ui = _development_library("dev_frontend").require_workspace(sys.modules[__name__], "greenfield")
+        _development_library("dev_components").process_environment(sys.modules[__name__], "Frontend", env, ui, profile="greenfield")
+        _development_library("dev_components").verify_compiler(sys.modules[__name__], env, ui, profile="greenfield")
         frontend = GreenfieldProfile.commands(node, cert, key, ui, env)["Frontend"][0]
         return launch_services(
             env,
@@ -2751,7 +2986,9 @@ class GreenfieldProfile:
         from scripts import greenfield_migrations as migrations
 
         validate_greenfield_installation()
-        LocalHttps.ensure_certificate(GreenfieldStack.STATE, prepare=not args.check)
+        LocalHttps.ensure_certificate(GreenfieldStack.STATE, prepare=False)
+        if not args.check:
+            _development_library("dev_prepared")._development_only(GreenfieldStack.settings(), sys.modules[__name__])
         observed = GreenfieldProfile.inventory()
         if args.check:
             say(
@@ -3044,7 +3281,7 @@ def select_service(
     raise SetupError(
         f"{service.title()} is unavailable"
         + (f" on its saved {preferred} provider; no provider fallback occurred" if preferred else "")
-        + ". Start the configured service or Docker engine, then rerun python scripts/dev.py doctor."
+        + ". Start the configured service or Docker engine, then rerun python scripts/dev.py diagnose."
     )
 
 
@@ -3078,7 +3315,18 @@ def venv_python() -> Path:
 
 
 def ensure_virtualenv() -> None:
+    _virtualenv(prepare=True)
+
+
+def require_virtualenv() -> None:
+    """Use an existing project interpreter without creating or repairing it."""
+    _virtualenv(prepare=False)
+
+
+def _virtualenv(*, prepare: bool) -> None:
     if not venv_python().exists():
+        if not prepare:
+            raise SetupError("PROJECT_SETUP_REQUIRED: review python scripts/dev.py setup; startup creates no virtualenv.")
         result = run([sys.executable, "-m", "venv", str(VENV)])
         if result.returncode:
             explain_failed_command(result)
@@ -3099,7 +3347,7 @@ def ensure_virtualenv() -> None:
         os.execv(command[0], command)
 
 
-def ensure_dependencies() -> None:
+def ensure_dependencies(*, force=False) -> None:
     """Install only when the requirements file changes or core imports are missing."""
     import hashlib
 
@@ -3109,10 +3357,12 @@ def ensure_dependencies() -> None:
         import alembic  # noqa: F401
         import celery  # noqa: F401
         import cryptography  # noqa: F401
+        import dotenv  # noqa: F401
         import psycopg  # noqa: F401
+        import redis  # noqa: F401
         import uvicorn  # noqa: F401
 
-        installed = stamp.exists() and stamp.read_text().strip() == digest
+        installed = not force and stamp.exists() and stamp.read_text().strip() == digest
     except ImportError:
         installed = False
     if installed:
@@ -3151,8 +3401,33 @@ def read_config(path: Path = CONFIG) -> dict[str, str]:
     return values
 
 
-def write_config(values: dict[str, str], path: Path = CONFIG) -> None:
+def write_config(values: dict[str, str], path: Path = CONFIG, *, create_only=False) -> None:
     # Replace atomically so interrupted setup cannot leave half a keypair.
+    if create_only:
+        private_files = _development_library("dev_private")
+        try:
+            private_files.validate_parent(path, ROOT)
+        except OSError:
+            raise SetupError("PRIVATE_CONFIG_PARENT_UNVERIFIED: new configuration must remain in nonredirected checkout directories.") from None
+        temporary = path.with_name(path.name + ".tmp-" + uuid.uuid4().hex)
+        payload = "# Local Native IAM development only. Never commit this file.\n" + "".join(
+            f"{key}={json.dumps(value)}\n" for key, value in sorted(values.items())
+        )
+        created = False
+        try:
+            private_files.create_private_file(temporary, payload.encode("utf-8"))
+            created = True
+            private_files.validate_parent(path, ROOT)
+            os.link(temporary, path)  # Publish without ever replacing an existing configuration.
+        except Exception as error:
+            raise SetupError(
+                f"PRIVATE_CONFIG_CREATION_FAILED ({type(error).__name__}): an existing file was not replaced; "
+                "review the new-file permissions and current setup plan."
+            ) from None
+        finally:
+            if created:
+                temporary.unlink(missing_ok=True)
+        return
     temporary = path.with_name(path.name + ".tmp")
     fd = os.open(temporary, os.O_WRONLY | os.O_CREAT | os.O_TRUNC, 0o600)
     try:
@@ -3186,7 +3461,8 @@ def generate_keys(values: dict[str, str]) -> None:
             .decode()
         )
     for key in ("NATIVE_SECURITY_OUTBOX_KEY", "AUTH_SESSION_ENCRYPTION_KEY"):
-        values.setdefault(key, base64.b64encode(secrets.token_bytes(32)).decode())
+        if key not in values:
+            values[key] = base64.b64encode(secrets.token_bytes(32)).decode()
     validate_secrets(values)
 
 
@@ -3388,28 +3664,26 @@ def resolve_local_database_url(
     interactive: bool,
     input_fn=input,
     password_fn=None,
+    allow_missing_database=False,
 ) -> str:
     candidates = []
     if saved_url:
         validate_database_url(saved_url)
         candidates.append(saved_url)
-    else:
-        repository_url = repository_database_candidate(repository_env, port)
-        if repository_url:
-            candidates.append(repository_url)
-        candidates.extend(pgpass_database_candidates(pgpass_path, port))
-        candidates.append(default_database_url("local", port))
 
     for candidate in dict.fromkeys(candidates):
         try:
-            ensure_database(candidate)
+            validate_database_credentials(candidate, allow_missing=allow_missing_database)
             return candidate
         except SetupError:
-            pass
+            raise SetupError(
+                "SAVED_DATABASE_CREDENTIALS_REVIEW_REQUIRED: the saved local target could not be verified. "
+                "Restore its approved credentials; setup will not substitute another login."
+            ) from None
 
     if not interactive:
         raise SetupError(
-            f"PostgreSQL credentials are required for {DB_NAME}. Run python scripts/dev.py in an interactive terminal."
+            f"PostgreSQL credentials are required for {DB_NAME}. Review python scripts/dev.py setup in an interactive terminal."
         )
 
     print(f"[INFO] Local PostgreSQL detected at 127.0.0.1:{port}")
@@ -3418,12 +3692,12 @@ def resolve_local_database_url(
         user, password = read_postgres_credentials(input_fn=input_fn, password_fn=password_fn)
         candidate = local_database_url(user, password, port)
         try:
-            ensure_database(candidate)
+            validate_database_credentials(candidate, allow_missing=allow_missing_database)
             return candidate
         except SetupError:
             if attempt < 2:
                 print(
-                    "[ERROR] PostgreSQL credentials were not accepted or cannot create the development database. Try again."
+                    "[ERROR] PostgreSQL credentials or the selected existing target could not be validated. Try again."
                 )
     raise SetupError("PostgreSQL credentials were not accepted after 3 attempts. Check the local login and rerun.")
 
@@ -3439,6 +3713,8 @@ def configure_local_database(
     interactive: bool,
     input_fn=input,
     password_fn=None,
+    allow_missing_database=False,
+    persist=True,
 ) -> None:
     saved_url = saved.get("DATABASE_URL") if saved.get("DATABASE_URL") == values.get("DATABASE_URL") else None
     values["DATABASE_URL"] = resolve_local_database_url(
@@ -3449,8 +3725,9 @@ def configure_local_database(
         interactive=interactive,
         input_fn=input_fn,
         password_fn=password_fn,
+        allow_missing_database=allow_missing_database,
     )
-    if values != saved:
+    if persist and values != saved:
         write_config(values, config_path)
 
 
@@ -3530,6 +3807,85 @@ def resolve_config(
     values.update(fixed)
     values.setdefault("NATIVE_PLATFORM_BOOTSTRAP_ENABLED", "false")
     return values
+
+
+def _readonly_local_database(url: str, *, database: str | None = None):
+    """Open a pinned local target for inspection, never credential-driven creation."""
+    import psycopg
+
+    validate_database_url(url)
+    target = urlsplit(url)
+    name = database or DB_NAME
+    if name not in {DB_NAME, "postgres"}:
+        raise SetupError("Database inspection is outside the managed development target.")
+    connection = psycopg.connect(
+        host=target.hostname, hostaddr="127.0.0.1", port=target.port,
+        dbname=name, user=unquote(target.username or ""), password=unquote(target.password or ""),
+        connect_timeout=3, autocommit=False,
+        options="-c default_transaction_read_only=on -c statement_timeout=3000 -c lock_timeout=250 -c search_path=pg_catalog,public",
+    )
+    try:
+        if connection.execute("SHOW transaction_read_only").fetchone()[0] != "on":
+            raise SetupError("DATABASE_NOT_READONLY: credential inspection could not establish read-only mode.")
+        if connection.execute("SELECT pg_catalog.current_database()").fetchone()[0] != name:
+            raise SetupError("DATABASE_TARGET_MISMATCH: credential inspection returned a different local target.")
+    except BaseException:
+        try:
+            connection.rollback()
+        finally:
+            connection.close()
+        raise
+    return connection
+
+
+def _close_database_inspection(connection):
+    try:
+        connection.rollback()
+    finally:
+        connection.close()
+
+
+def validate_database_credentials(url: str, *, allow_missing: bool = False) -> bool:
+    """Validate selected credentials with SELECT/SHOW only; return target existence."""
+    import psycopg
+
+    connection = None
+    try:
+        try:
+            connection = _readonly_local_database(url)
+            return True
+        except psycopg.Error as error:
+            if getattr(error, "sqlstate", None) != "3D000" or not allow_missing:
+                raise
+        connection = _readonly_local_database(url, database="postgres")
+        connection.execute("SELECT 1 FROM pg_catalog.pg_database WHERE datname=%s", (DB_NAME,)).fetchone()
+        return False
+    except psycopg.Error:
+        raise SetupError(
+            "DATABASE_CREDENTIALS_UNVERIFIED: verify the selected local credentials/target. "
+            "A missing database requires explicitly confirmed setup; no database was created."
+        ) from None
+    finally:
+        if connection is not None:
+            _close_database_inspection(connection)
+
+
+def _require_empty_database_for_initial_keys(url):
+    connection = _readonly_local_database(url)
+    try:
+        present = connection.execute(
+            "SELECT EXISTS (SELECT 1 FROM pg_catalog.pg_class AS item "
+            "JOIN pg_catalog.pg_namespace AS scope ON scope.oid=item.relnamespace "
+            "WHERE scope.nspname NOT LIKE 'pg_%' AND scope.nspname <> 'information_schema' "
+            "AND item.relkind IN ('r','p','v','m','S','f'))"
+        ).fetchone()
+        if not present or present[0] is not False:
+            raise SetupError(
+                "ORIGINAL_KEYS_REQUIRED: this existing schema cannot receive guessed replacement keys. "
+                "Restore its original private configuration; no keys were generated."
+            )
+    finally:
+        _close_database_inspection(connection)
 
 
 def ensure_database(url: str) -> None:
@@ -3631,7 +3987,7 @@ def run_migrations(env: dict[str, str]) -> str:
     return head
 
 
-def ensure_frontend(*, certificate: bool = True) -> str:
+def ensure_frontend(*, certificate: bool = True, force=False) -> str:
     import hashlib
 
     cert = ROOT / "frontend/certificates/localhost.pem"
@@ -3659,7 +4015,7 @@ def ensure_frontend(*, certificate: bool = True) -> str:
             "Cannot read frontend package.json/package-lock.json. Restore the manifests and rerun."
         ) from None
     try:
-        installed = modules.is_dir() and stamp.read_text().strip() == digest
+        installed = not force and modules.is_dir() and (modules / "next/dist/bin/next").is_file() and stamp.read_text().strip() == digest
     except OSError:
         installed = False
     if not installed:
@@ -3692,6 +4048,12 @@ def ensure_frontend(*, certificate: bool = True) -> str:
 
 def create_local_certificate(cert: Path, key: Path) -> None:
     """Create the same localhost certificate files consumed by dev:https."""
+    private_files = _development_library("dev_private")
+    try:
+        private_files.validate_parent(cert, ROOT, allow_missing=True)
+        private_files.validate_parent(key, ROOT, allow_missing=True)
+    except OSError:
+        raise SetupError("CERTIFICATE_PARENT_UNVERIFIED: restore nonredirected certificate directories inside this checkout before authorizing generation.") from None
     import datetime
     import ipaddress
 
@@ -3723,14 +4085,22 @@ def create_local_certificate(cert: Path, key: Path) -> None:
         .sign(private, hashes.SHA256())
     )
     cert.parent.mkdir(parents=True, exist_ok=True)
-    fd = os.open(key, os.O_WRONLY | os.O_CREAT | os.O_EXCL, 0o600)
-    with os.fdopen(fd, "wb") as stream:
-        stream.write(
-            private.private_bytes(
+    try:
+        private_files.validate_parent(cert, ROOT)
+        private_files.validate_parent(key, ROOT)
+        private_files.create_private_file(
+            key, private.private_bytes(
                 serialization.Encoding.PEM, serialization.PrivateFormat.PKCS8, serialization.NoEncryption()
-            )
+            ),
         )
-    cert.write_bytes(certificate.public_bytes(serialization.Encoding.PEM))
+        fd = os.open(cert, os.O_WRONLY | os.O_CREAT | os.O_EXCL, 0o644)
+        with os.fdopen(fd, "wb") as stream:
+            stream.write(certificate.public_bytes(serialization.Encoding.PEM))
+    except Exception as error:
+        raise SetupError(
+            f"CERTIFICATE_PREPARATION_INCOMPLETE ({type(error).__name__}): existing files were not replaced. "
+            "Review the localhost pair and retained preparation artifacts before retrying."
+        ) from None
 
 
 def acquire_beat_lock() -> None:
@@ -3871,11 +4241,11 @@ def check_application_ports(api_port: int, frontend_port: int) -> None:
 def start_process(name: str, command: list[str], env: dict[str, str], cwd: Path = ROOT) -> subprocess.Popen:
     if ACTIVE_RUNTIME:
         ACTIVE_RUNTIME.check_stop()
+    process_env = _development_library("dev_components").process_environment(sys.modules[__name__], name, env, cwd)
+    process_env["PATH"] = str(GreenfieldStack.node_binary().parent) + os.pathsep + process_env.get("PATH", "")
     path = log_path(name)
     path.parent.mkdir(exist_ok=True)
     fd = os.open(path, os.O_WRONLY | os.O_CREAT | os.O_TRUNC, 0o600)
-    process_env = dict(env)
-    process_env["PATH"] = str(GreenfieldStack.node_binary().parent) + os.pathsep + process_env.get("PATH", "")
     kwargs = {"cwd": cwd, "env": process_env, "stdout": fd, "stderr": subprocess.STDOUT}
     kwargs.update(platform_spawn_options())
     try:
@@ -3945,118 +4315,130 @@ def stop_processes(processes: list[subprocess.Popen]) -> None:
                     pass
 
 
-def prepare_managed_legacy(*, check=False):
-    print("SBOM Analyzer Development Setup\n", flush=True)
-    say("OK", "Python", platform.python_version())
-    saved = read_config()
-    if check and any(
-        key in saved
-        for key in (
-            "NATIVE_JWT_PRIVATE_KEY",
-            "NATIVE_JWT_PUBLIC_KEY",
-            "NATIVE_SECURITY_OUTBOX_KEY",
-            "AUTH_SESSION_ENCRYPTION_KEY",
-        )
-    ):
-        try:
-            validate_secrets(saved)
-        except ImportError:
-            raise SetupError(
-                "Cannot validate saved Native IAM keys without Python dependencies. Run python scripts/dev.py first."
-            ) from None
-    if not check and CONFIG.exists() and os.name != "nt":
-        CONFIG.chmod(0o600)
-    docker_env = os.environ.copy()
-    docker_env.update(
-        {
-            "POSTGRES_PORT": str(POSTGRES_PORT),
-            "REDIS_PORT": str(REDIS_PORT),
-            "MAILPIT_SMTP_PORT": str(MAILPIT_SMTP_PORT),
-            "MAILPIT_UI_PORT": str(MAILPIT_UI_PORT),
-        }
-    )
-    postgres, pg_port = select_service(
-        "postgres",
-        POSTGRES_PORT,
-        5432,
-        check=check,
-        env=docker_env,
-        preferred=saved.get("DEV_POSTGRES_PROVIDER"),
-    )
-    redis, redis_port = select_service(
-        "redis",
-        REDIS_PORT,
-        6379,
-        check=check,
-        env=docker_env,
-        preferred=saved.get("DEV_REDIS_PROVIDER"),
-    )
-    # An older SBOM-specific Mailpit container is accepted, never an arbitrary SMTP server.
-    mailpit = select_mailpit(check=check, env=docker_env)
-    values = resolve_config(
-        saved,
-        pg_port,
-        redis_port,
-        MAILPIT_SMTP_PORT,
-        pg_provider=provider_name(postgres),
-        redis_provider=provider_name(redis),
-    )
-    if not check:
-        generate_keys(values)
-    env = os.environ.copy()
-    env.update(values)
-    env["PYTHONPATH"] = str(ROOT)
-    api_port = int(values["DEV_API_PORT"])
-    frontend_port = int(values["DEV_FRONTEND_PORT"])
-    db_url = urlsplit(values["DATABASE_URL"])
-    say("OK", "PostgreSQL", f"{postgres}, {db_url.hostname}:{db_url.port}")
-    say("OK", "Redis", f"{redis}, 127.0.0.1:{redis_port}")
-    say("OK", "Database", DB_NAME)
-    say("OK", "Mailpit", f"{mailpit}, http://127.0.0.1:{MAILPIT_UI_PORT}")
+def prepare_managed_legacy(*, check=False, setup_args=None):
+    """Prepare only explicitly authorized setup; ordinary start uses saved state."""
     if check:
+        env = _development_library("dev_prepared").prepared_legacy_environment(sys.modules[__name__], "managed")
         say("OK", "Check", "no services or processes started")
-        return
-    check_application_ports(api_port, frontend_port)
-    if postgres == "local":
-        configure_local_database(values, saved, pg_port, interactive=sys.stdin.isatty())
-        env["DATABASE_URL"] = values["DATABASE_URL"]
+        return env
+    if setup_args is None:
+        raise SetupError("SETUP_APPROVAL_REQUIRED: managed preparation is accepted only through the setup plan.")
+    existed = CONFIG.exists() or CONFIG.is_symlink()
+    saved = _development_library("dev_environment").load_legacy_snapshots("managed", sys.modules[__name__])[0] if existed else {}
+    _development_library("dev_prepared").validate_managed_mode({**os.environ, **saved}, sys.modules[__name__])
+    required_keys = {"NATIVE_JWT_PRIVATE_KEY", "NATIVE_JWT_PUBLIC_KEY", "NATIVE_SECURITY_OUTBOX_KEY", "AUTH_SESSION_ENCRYPTION_KEY"}
+    if existed:
+        if not required_keys <= saved.keys():
+            raise SetupError("ORIGINAL_KEYS_REQUIRED: restore the original complete Native keys; setup will not replace them.")
+        validate_secrets(saved)
     else:
+        for category in ("configuration", "secrets", "database-initialize"):
+            _setup_requires(setup_args, category)
+        if not setup_args.initialize_database or setup_args.confirm_database != DB_NAME:
+            raise SetupError("DATABASE_CONFIRMATION_REQUIRED: fresh managed configuration requires confirmed empty initialization.")
+    pg_requested = getattr(setup_args, "postgres_provider", None)
+    redis_requested = getattr(setup_args, "redis_provider", None)
+    mail_requested = getattr(setup_args, "mailpit_provider", None)
+    pg_saved = saved.get("DEV_POSTGRES_PROVIDER")
+    if saved.get("DATABASE_URL"):
+        validate_database_url(saved["DATABASE_URL"])
+        pg_saved = pg_saved or ("docker" if urlsplit(saved["DATABASE_URL"]).port == POSTGRES_PORT else "local")
+    redis_saved = saved.get("DEV_REDIS_PROVIDER")
+    if saved.get("REDIS_URL"):
+        redis_saved = redis_saved or ("docker" if urlsplit(saved["REDIS_URL"]).port == REDIS_PORT else "local")
+    if any(requested and previous and requested != previous for requested, previous in
+           ((pg_requested, pg_saved), (redis_requested, redis_saved),
+            (mail_requested, saved.get("DEV_MAILPIT_PROVIDER")))):
+        raise SetupError("PROVIDER_CHANGE_REVIEW_REQUIRED: preserve saved provider identity; no fallback or conversion was performed.")
+    pg_provider = pg_requested or pg_saved or "local"
+    redis_provider = redis_requested or redis_saved or "local"
+    mail_provider = mail_requested or saved.get("DEV_MAILPIT_PROVIDER") or "local"
+    if not existed and pg_provider == "docker":
+        raise SetupError(
+            "APPROVED_DATABASE_CONFIGURATION_REQUIRED: fresh Legacy setup cannot adopt default Docker credentials. "
+            "Prepare an approved configuration or select explicit Greenfield provisioning."
+        )
+    docker_env = {**os.environ, "POSTGRES_PORT": str(POSTGRES_PORT), "REDIS_PORT": str(REDIS_PORT),
+                  "MAILPIT_SMTP_PORT": str(MAILPIT_SMTP_PORT), "MAILPIT_UI_PORT": str(MAILPIT_UI_PORT)}
+    # Legacy has no durable dependency inventory. Reuse only already running
+    # dependencies; new private container installations use explicit Greenfield
+    # provisioning. Never compose-up an unknown Legacy PostgreSQL volume here.
+    local_pg_port = urlsplit(saved["DATABASE_URL"]).port if pg_provider == "local" and saved.get("DATABASE_URL") else 5432
+    postgres, pg_port = select_service("postgres", POSTGRES_PORT, local_pg_port, check=True,
+                                      env=docker_env, preferred=pg_provider)
+    redis, redis_port = select_service("redis", REDIS_PORT, 6379, check=True,
+                                      env=docker_env, preferred=redis_provider)
+    if any("available to start" in label.lower() for label in (postgres, redis)):
+        raise SetupError(
+            "DEPENDENCY_PREPARATION_REQUIRED: Legacy dependencies must already be running. "
+            "Use the explicit Greenfield setup plan for a new private container installation; no container was started."
+        )
+    if mail_provider == "local":
+        if not mailpit_ready():
+            raise SetupError("MAILPIT_PREPARATION_REQUIRED: start the selected local Mailpit service; no provider was created.")
+    else:
+        mailpit, _ = select_service("mailpit", MAILPIT_SMTP_PORT, MAILPIT_SMTP_PORT, check=True,
+                                    env=docker_env, preferred="docker")
+        if "available to start" in mailpit.lower():
+            raise SetupError("MAILPIT_PREPARATION_REQUIRED: the selected Legacy Mailpit container is not running.")
+        ensure_mailpit_ready()
+    values = resolve_config(saved, pg_port, redis_port, MAILPIT_SMTP_PORT,
+                            pg_provider=provider_name(postgres), redis_provider=provider_name(redis))
+    if postgres == "local":
+        configure_local_database(values, saved, pg_port, interactive=sys.stdin.isatty(),
+                                 allow_missing_database=bool(setup_args.initialize_database), persist=False)
+    else:
+        validate_database_credentials(values["DATABASE_URL"], allow_missing=bool(setup_args.initialize_database))
+    if setup_args.initialize_database:
+        _setup_requires(setup_args, "database-initialize")
+        if setup_args.confirm_database != DB_NAME:
+            raise SetupError("DATABASE_CONFIRMATION_REQUIRED: the managed development database was not confirmed.")
         ensure_database(values["DATABASE_URL"])
-        if values != saved:
-            write_config(values)
+    if not existed:
+        _require_empty_database_for_initial_keys(values["DATABASE_URL"])
+        generate_keys(values)
+        values["DEV_MAILPIT_PROVIDER"] = mail_provider
+        # The preparation plan fingerprint was revalidated. Do not replace a
+        # configuration another actor created while credentials were entered.
+        if CONFIG.exists():
+            raise SetupError("SETUP_PLAN_CHANGED: a managed configuration appeared; no existing file was overwritten.")
+        write_config(values, create_only=True)
+    env = {**os.environ, **values, "PYTHONPATH": str(ROOT)}
     return env
 
 
 def start_application(args) -> None:
+    prepared = _development_library("dev_prepared")
+    npm = prepared.require_project(sys.modules[__name__])
     if getattr(args, "profile", "legacy") == "greenfield":
         if not args.check:
             check_application_ports(DEV_API_PORT, DEV_FRONTEND_PORT)
-            ensure_dependencies()
-            ensure_frontend(certificate=False)
         GreenfieldProfile.start(args, ACTIVE_RUNTIME)
         return
-    if not args.check:
-        ensure_dependencies()
-    if ACTIVE_LEGACY_CONFIG == "managed":
-        env = prepare_managed_legacy(check=args.check)
-    else:
-        env = existing_legacy_environment(ACTIVE_LEGACY_CONFIG)
+    env = prepared.prepared_legacy_environment(sys.modules[__name__], ACTIVE_LEGACY_CONFIG)
     if args.check:
         return
     verify_data_connectivity(env)
+    if ACTIVE_LEGACY_CONFIG == "managed":
+        ensure_mailpit_ready()
     head = verify_existing_schema(env)
     say("OK", "Schema", head)
     api_port, frontend_port = int(env["DEV_API_PORT"]), int(env["DEV_FRONTEND_PORT"])
-    npm = ensure_frontend()
     legacy_https_context()
     check_application_ports(api_port, frontend_port)
+    ui = _development_library("dev_frontend").require_workspace(sys.modules[__name__], "legacy")
+    certificate, key = ROOT / "frontend/certificates/localhost.pem", ROOT / "frontend/certificates/localhost-key.pem"
+    _development_library("dev_components").process_environment(sys.modules[__name__], "Frontend", env, ui, profile="legacy")
+    _development_library("dev_components").verify_compiler(sys.modules[__name__], env, ui, profile="legacy")
     processes, env = launch_services(
         env,
         api_port,
         frontend_port,
-        [npm, "run", "dev:https", "--", "--port", str(frontend_port)],
+        [str(GreenfieldStack.node_binary()), str(ROOT / "frontend/node_modules/next/dist/bin/next"),
+         "dev", "--webpack", "--experimental-https", "--experimental-https-key", str(key),
+         "--experimental-https-cert", str(certificate), "--port", str(frontend_port)],
         cwd=ROOT,
-        frontend_cwd=ROOT / "frontend",
+        frontend_cwd=ui,
         tls_context=legacy_https_context(),
     )
     supervise_runtime(ACTIVE_RUNTIME, env, processes)
@@ -4213,12 +4595,32 @@ def log_service(value):
 def parse_args(argv=None):
     parser = argparse.ArgumentParser(
         description="One local SBOM Analyzer launcher: Windows, macOS and Linux adapters",
-        epilog="Default: start. Ctrl+C stops owned application processes; data services remain running.",
+        epilog="Default: prepared startup or fresh-checkout inventory. Multi-worktree commands: python scripts/dev.py workspace --help. During start, Ctrl+C stops owned application processes; data services remain running. During diagnose, Ctrl+C cancels checks only. Native create/resend remain BLOCKED pending a reviewed runtime readiness attestation contract.",
     )
     parser.add_argument(
-        "command", nargs="?", default="start", choices=("setup", "start", "stop", "restart", "status", "doctor", "logs")
+        "command", nargs="?", default="start",
+        choices=("setup", "start", "stop", "restart", "status", "diagnose", "doctor", "logs"),
+        help="diagnose is read-only; doctor is a deprecated compatibility alias",
     )
-    parser.add_argument("--check", action="store_true", help="alias for read-only doctor")
+    parser.add_argument("--check", action="store_true", help="compatibility alias for read-only diagnose")
+    parser.add_argument("--plan", action="store_true", help="setup only: show a read-only preparation plan without applying it")
+    parser.add_argument("--repair-dependencies", action="store_true",
+                        help="setup only: explicitly plan a pinned dependency repair; category consent is still required")
+    parser.add_argument("--native-admin-status", action="store_true",
+                        help="setup only: read-only aggregate Native enrollment status; requires exact --confirm-database")
+    parser.add_argument(
+        "--native-admin-create",
+        action="store_true",
+        help="setup only: gated future Native enrollment flow; currently BLOCKED pending reviewed readiness attestations; identity is prompted privately",
+    )
+    parser.add_argument(
+        "--native-admin-resend",
+        action="store_true",
+        help="setup only: gated future pending-activation resend; currently BLOCKED pending reviewed readiness attestations; identity is prompted privately",
+    )
+    for service in ("postgres", "redis", "mailpit"):
+        parser.add_argument(f"--{service}-provider", choices=("local", "docker"),
+                            help=f"setup only: explicitly select the {service} provider; saved providers stay pinned")
     parser.add_argument("--verbose", action="store_true", help="redacted setup diagnostics")
     parser.add_argument(
         "--profile",
@@ -4255,27 +4657,151 @@ def parse_args(argv=None):
     return parser.parse_args(argv)
 
 
+def _workspace_source_present():
+    """Presence selects verification only; a marker never proves ownership."""
+    if not os.path.lexists(ROOT / ".git"):
+        if any(
+            os.path.lexists(target / name)
+            for target in (ROOT / ".venv", ROOT / "frontend" / "node_modules")
+            for name in (".sbom-workspace-dependencies.json", ".sbom-workspace-dependency-attempt")
+        ):
+            raise SetupError(
+                "WORKSPACE_SOURCE_UNVERIFIED: preserve dependency and runtime records; "
+                "restore the intended Git worktree or use a surviving controller's explicit instance-ID recovery."
+            )
+        return False
+    return True
+
+
+def workspace_auto_arguments(args):
+    """Select new-instance UX without converting a supported existing profile."""
+    if sys.version_info < MIN_PYTHON:
+        return None
+    if getattr(args, "profile", "auto") != "auto" or getattr(args, "legacy_config", "auto") != "auto":
+        return None
+    if not _workspace_source_present():
+        return None
+    library = _workspace_library()
+    try:
+        descriptor = library.selected_instance(ROOT)
+    except Exception as error:
+        code = getattr(error, "code", None)
+        if type(code) is not str or re.fullmatch(r"[A-Z][A-Z0-9_]{0,79}", code) is None:
+            code = "WORKSPACE_SELECTION_UNVERIFIED"
+        raise SetupError(code + ": preserve unknown records and run workspace diagnose.") from None
+    if descriptor is None and not library.fresh_checkout(ROOT):
+        return None
+    if any(getattr(args, name, False) for name in (
+        "provision_greenfield", "initialize_database", "migrate", "frontend_build", "confirm_database",
+        "postgres_provider", "redis_provider", "mailpit_provider", "repair_dependencies",
+        "native_admin_status", "native_admin_create", "native_admin_resend",
+    )):
+        if descriptor is not None:
+            raise SetupError("WORKSPACE_PROFILE_CONVERSION_REFUSED: use workspace setup; existing instance configuration was preserved.")
+        return None
+    command = args.command
+    if command == "setup":
+        return ["setup", *(["--check"] if args.check or args.plan else [])]
+    if args.check or command in {"diagnose", "doctor"}:
+        return ["doctor" if command == "doctor" else "diagnose"]
+    if descriptor is None:
+        return None
+    if command in {"start", "stop", "restart", "status"}:
+        return [command]
+    if command == "logs":
+        return ["logs", "--lines", str(args.lines), "--service", args.service]
+    return None
+
+
 def main() -> None:
     global VERBOSE, ACTIVE_RUNTIME, ACTIVE_PROFILE, ACTIVE_LEGACY_CONFIG
+    if len(sys.argv) > 1 and sys.argv[1] == "workspace":
+        return _workspace_library().run_cli(sys.argv[2:], ROOT)
+    if len(sys.argv) == 1 and sys.version_info >= MIN_PYTHON and _workspace_source_present():
+        workspace_cli = _workspace_library()
+        if workspace_cli.fresh_checkout(ROOT):
+            workspace_args = workspace_auto_arguments(parse_args([]))
+            if workspace_args is not None:
+                return workspace_cli.run_cli(workspace_args, ROOT)
+            return workspace_cli.initial_inventory(ROOT)
     args = parse_args()
     VERBOSE = args.verbose
-    if args.check or args.command in {"setup", "start", "restart", "doctor"}:
+    if args.check or args.command in {"diagnose", "doctor"}:
+        if any(
+            (
+                args.provision_greenfield,
+                args.initialize_database,
+                args.migrate,
+                args.frontend_build,
+                args.confirm_database,
+                args.plan,
+                args.postgres_provider,
+                args.redis_provider,
+                args.mailpit_provider,
+                args.repair_dependencies,
+                args.native_admin_status,
+                args.native_admin_create,
+                args.native_admin_resend,
+            )
+        ):
+            print("[FAIL] CLI: DIAGNOSTIC_OPTIONS; diagnose cannot be combined with preparation or database flags.",
+                  file=sys.stderr)
+            return 2
+        workspace_args = workspace_auto_arguments(args)
+        if workspace_args is not None:
+            return _workspace_library().run_cli(workspace_args, ROOT)
+        return doctor(args) if args.command == "doctor" else diagnose(args)
+    if args.native_admin_create or args.native_admin_resend:
+        if (
+            args.command != "setup"
+            or args.native_admin_status
+            or (args.native_admin_create and args.native_admin_resend)
+            or any(
+                (
+                    args.plan,
+                    args.provision_greenfield,
+                    args.initialize_database,
+                    args.migrate,
+                    args.frontend_build,
+                    args.postgres_provider,
+                    args.redis_provider,
+                    args.mailpit_provider,
+                    args.repair_dependencies,
+                )
+            )
+        ):
+            print(
+                "[FAIL] CLI: NATIVE_ENROLLMENT_OPTIONS; choose one setup enrollment action without status, preparation or lifecycle actions.",
+                file=sys.stderr,
+            )
+            return 2
+    if args.native_admin_status:
+        if args.command != "setup" or any((args.plan, args.provision_greenfield, args.initialize_database, args.migrate,
+                                          args.frontend_build, args.postgres_provider, args.redis_provider, args.mailpit_provider, args.repair_dependencies)):
+            print("[FAIL] CLI: NATIVE_STATUS_OPTIONS; Native status cannot be combined with preparation or lifecycle actions.", file=sys.stderr)
+            return 2
+    workspace_args = workspace_auto_arguments(args)
+    if workspace_args is not None:
+        return _workspace_library().run_cli(workspace_args, ROOT)
+    if args.native_admin_create or args.native_admin_resend:
+        action = "create" if args.native_admin_create else "resend-activation"
+        return native_admin_enrollment(args, action=action)
+    if args.native_admin_status:
+        return native_admin_status(args)
+    if args.command == "setup":
+        return setup_application(args)
+    if args.command in {"start", "restart"}:
         if not venv_python().exists() or Path(sys.prefix).resolve() == VENV.resolve():
             validate_python_version()
         validate_repository_layout()
         if sys.version_info < MIN_PYTHON:
-            ensure_virtualenv()  # Existing supported environment performs its own checks.
+            require_virtualenv()  # Existing supported environment performs its own checks.
     if args.command != "setup" and any(
-        (args.provision_greenfield, args.initialize_database, args.migrate, args.frontend_build, args.confirm_database)
+        (args.provision_greenfield, args.initialize_database, args.migrate, args.frontend_build, args.confirm_database,
+         args.plan, args.postgres_provider, args.redis_provider, args.mailpit_provider, args.repair_dependencies)
     ):
         raise SetupError("Provisioning and database changes are accepted only by the explicit setup command.")
     ACTIVE_LEGACY_CONFIG = pin_legacy_configuration(args.legacy_config, Runtime(ROOT).load())
-    if args.command == "setup":
-        setup_application(args)
-        return
-    if args.check or args.command == "doctor":
-        doctor(args)
-        return
     args.profile = (
         control_profile(args.profile) if args.command in {"stop", "status"} else resolve_profile(args.profile)
     )
@@ -4293,7 +4819,7 @@ def main() -> None:
             return
     validate_repository_layout()
     validate_prerequisites()
-    ensure_virtualenv()
+    require_virtualenv()
     runtime = Runtime(ROOT)
     if not runtime.acquire():
         state = runtime.load()
@@ -4381,7 +4907,7 @@ def cli() -> int:
     except Exception as error:
         # Never print configuration objects, connection strings or a traceback
         # that can include credential-bearing subprocess arguments.
-        print(f"[ERROR] Setup failed: {type(error).__name__}. Run doctor, then inspect redacted logs.", file=sys.stderr)
+        print(f"[ERROR] Setup failed: {type(error).__name__}. Run diagnose, then inspect redacted logs.", file=sys.stderr)
         return 1
 
 

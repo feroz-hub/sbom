@@ -1,7 +1,6 @@
 """Synthetic certificate tests; no real trust-store changes, network or CA keys."""
 
 import ipaddress
-import json
 import os
 import subprocess
 from datetime import UTC, datetime, timedelta
@@ -370,49 +369,45 @@ def test_windows_native_store_failure_is_actionable(pair, monkeypatch):
         tls._windows_system_trusted(cert, hostname="localhost")
 
 
-def _mock_windows_acl(monkeypatch, *, owner="S-1-5-21-1", rules=None, returncode=0):
+def _mock_windows_acl(monkeypatch, *, category=None):
+    from scripts import dev_windows_acl
+
     monkeypatch.setattr(tls.sys, "platform", "win32")
-    monkeypatch.setattr(tls.shutil, "which", lambda *a, **k: "powershell.exe")
-    if rules is None:
-        rules = [{"sid": "S-1-5-21-1", "type": 0, "rights": 0x1F01FF}]
-    result = {"owner": owner, "current": "S-1-5-21-1", "rules": rules}
-    command = Mock(return_value=subprocess.CompletedProcess([], returncode, json.dumps(result)))
-    monkeypatch.setattr(tls.subprocess, "run", command)
-    return command
+    inspect = Mock(
+        side_effect=dev_windows_acl.AclVerificationError("GetSecurityInfo", 5, category) if category else None
+    )
+    monkeypatch.setattr(dev_windows_acl, "verify_access", inspect)
+    monkeypatch.setattr(
+        tls.subprocess, "run", Mock(side_effect=AssertionError("ACL inspection launched a shell helper"))
+    )
+    return inspect
 
 
 def test_windows_accepts_current_user_private_acl_without_changing_it(monkeypatch, tmp_path):
-    command = _mock_windows_acl(monkeypatch)
+    inspect = _mock_windows_acl(monkeypatch)
     tls._windows_access(tmp_path, private=True)
-    script = command.call_args.args[0][-1]
-    assert "Get-Acl" in script
-    assert "Set-Acl" not in script
-    assert str(tmp_path) not in script
-    assert command.call_args.kwargs["env"]["SBOM_TLS_ACL_PATH"] == str(tmp_path)
+    inspect.assert_called_once_with(tmp_path.absolute(), private=True)
 
 
-@pytest.mark.parametrize("owner,rules", [
-    ("S-1-5-21-2", None),
-    ("S-1-5-21-1", []),
-    ("S-1-5-21-1", [{"sid": "S-1-1-0", "type": 0, "rights": 1}]),
-])
-def test_windows_rejects_unowned_null_or_public_private_acl(monkeypatch, tmp_path, owner, rules):
-    _mock_windows_acl(monkeypatch, owner=owner, rules=rules)
+@pytest.mark.parametrize("category", ["OWNER_MISMATCH", "NULL_SECURITY_METADATA", "UNTRUSTED_GRANT"])
+def test_windows_rejects_unowned_null_or_public_private_acl(monkeypatch, tmp_path, category):
+    _mock_windows_acl(monkeypatch, category=category)
     with pytest.raises(tls.HttpsTrustError, match="no ACL was changed"):
         tls._windows_access(tmp_path, private=True)
 
 
 def test_windows_public_cert_can_be_readable_but_not_writable_by_everyone(monkeypatch, tmp_path):
-    _mock_windows_acl(monkeypatch, rules=[{"sid": "S-1-1-0", "type": 0, "rights": 0x20089}])
+    inspect = _mock_windows_acl(monkeypatch)
     tls._windows_access(tmp_path, private=False)
-    _mock_windows_acl(monkeypatch, rules=[{"sid": "S-1-1-0", "type": 0, "rights": 2}])
+    inspect.assert_called_once_with(tmp_path.absolute(), private=False)
+    _mock_windows_acl(monkeypatch, category="UNTRUSTED_GRANT")
     with pytest.raises(tls.HttpsTrustError, match="private ACL"):
         tls._windows_access(tmp_path, private=False)
 
 
 def test_windows_acl_probe_failure_is_fail_closed(monkeypatch, tmp_path):
-    _mock_windows_acl(monkeypatch, returncode=1)
-    with pytest.raises(tls.HttpsTrustError, match="private ACL"):
+    _mock_windows_acl(monkeypatch, category="API_FAILURE")
+    with pytest.raises(tls.HttpsTrustError, match="winerror=5"):
         tls._windows_access(tmp_path, private=True)
 
 

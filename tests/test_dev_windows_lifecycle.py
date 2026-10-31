@@ -326,7 +326,8 @@ def test_windows_partial_startup_failure_cleans_verified_worker(kernel, monkeypa
     monkeypatch.setattr(dev, "parse_args", lambda: args)
     monkeypatch.setattr(dev, "validate_repository_layout", lambda: None)
     monkeypatch.setattr(dev, "validate_prerequisites", lambda: None)
-    monkeypatch.setattr(dev, "ensure_virtualenv", lambda: None)
+    monkeypatch.setattr(dev, "require_virtualenv", lambda: None)
+    monkeypatch.setattr(dev, "ensure_virtualenv", lambda: pytest.fail("Startup attempted virtualenv preparation"))
     monkeypatch.setattr(dev.Runtime, "acquire", lambda self: True)
     monkeypatch.setattr(dev.signal, "signal", lambda *args: None)
 
@@ -617,7 +618,8 @@ def test_windows_main_cleanup_persistence_error_keeps_startup_diagnosis(kernel, 
     monkeypatch.setattr(dev, "parse_args", lambda: args)
     monkeypatch.setattr(dev, "validate_repository_layout", lambda: None)
     monkeypatch.setattr(dev, "validate_prerequisites", lambda: None)
-    monkeypatch.setattr(dev, "ensure_virtualenv", lambda: None)
+    monkeypatch.setattr(dev, "require_virtualenv", lambda: None)
+    monkeypatch.setattr(dev, "ensure_virtualenv", lambda: pytest.fail("Startup attempted virtualenv preparation"))
     monkeypatch.setattr(dev.Runtime, "acquire", lambda self: True)
     monkeypatch.setattr(dev.signal, "signal", lambda *args: None)
     def stop(runtime, say):

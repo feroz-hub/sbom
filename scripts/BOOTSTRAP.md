@@ -9,15 +9,110 @@ Reopen the terminal and start Docker. Suitable local PostgreSQL/Redis can be use
 with explicitly selected Legacy configuration.
 
 ```sh
-python scripts/dev.py doctor
+python scripts/dev.py diagnose
+python scripts/dev.py setup --plan
 python scripts/dev.py setup
 python scripts/dev.py
 ```
 
-Project pip/npm dependencies and safe missing leaf certificates are prepared;
-existing configuration/keys are preserved. System software and root certificate
-trust are explicit prerequisites. The launcher never approves root trust or
-bypasses TLS verification.
+`setup --plan` only inspects existing preparation and prints actions/blockers.
+Interactive setup asks for an explicit `yes` for every required category, then
+rechecks the plan before applying anything. Noninteractive setup never assumes
+consent. Only approved setup prepares project pip/npm dependencies and missing
+leaf certificates. Ordinary start requires prepared dependencies, existing
+configuration/keys and HTTPS material; it never installs, discovers credentials,
+creates a database or generates keys/certificates. System software and root
+certificate trust remain explicit prerequisites; TLS verification stays enabled.
+
+Run `diagnose` before deciding which preparation is necessary. It does not apply
+the setup plan, install dependencies, generate keys/certificates, change trust,
+create/migrate a database, enroll users or start/stop services. `setup --check`
+also takes the read-only diagnostic path; it cannot be combined with provisioning,
+initialization, migration or build flags. The temporary `doctor` alias emits one
+stderr deprecation notice. See [diagnostic results and exit codes](../docs/reference/configuration.md#read-only-diagnostics-sbo-98-phase-2).
+
+See [controlled setup and recovery](../docs/reference/configuration.md#controlled-setup-and-prepared-startup-sbo-98-phase-3)
+for category consent, source/configuration drift, guarded dependency repair,
+Windows private-file safeguards and retained partial artifacts. Native aggregate
+status can opt into shared configuration; privileged enrollment remains separately
+reviewed work. Setup does not authorize administrator creation or HCL.CS first-user provisioning.
+Existing installations also need a reviewed `frontend-workspace` action before
+the new frontend boundary can start. It creates `.dev-frontend` for Legacy or
+`frontend-isolated` in Greenfield state, without reusing/removing old frontend
+workspaces or copying private `.env`/certificate files. Source/dependency links
+preserve ordinary source saves; stale public config copies need authorized
+refresh, while unknown files/links require review. See [component isolation](../docs/reference/configuration.md#component-environments-and-frontend-workspace-sbo-98-phase-4).
+
+Missing/incompatible native compiler bindings block frontend startup/build;
+the readiness probe loads only an existing native SWC package and never invokes
+Next's downloader. The Node service/build run with CI/no-WASM-fallback guards
+and telemetry disabled by default. Repair is a separate reviewed operation:
+
+```sh
+python scripts/dev.py setup --plan --repair-dependencies --profile legacy --legacy-config managed
+# After review and explicit project-dependencies category consent:
+python scripts/dev.py setup --repair-dependencies --profile legacy --legacy-config managed
+```
+
+This reruns pinned installers, retaining configuration/data/ownership gates. It
+does not rotate keys, migrate a database or authorize arbitrary package upgrades.
+An invalid/incomplete private installation can still block repair; restore its
+original material through review. Ordinary start and `diagnose` never repair
+dependencies or download a compiler implicitly.
+
+## New Managed Legacy Native installation
+
+This procedure is for an independently approved fresh local target, not recovery
+of missing keys next to an existing database. Start the approved local PostgreSQL,
+Redis and Mailpit services first. Review the exact target and obtain database
+operation approval before applying; these examples are not acceptance evidence:
+
+```sh
+python scripts/dev.py setup --plan --profile legacy --legacy-config managed --initialize-database --confirm-database sbom_analyser_dev
+# Only after approval, inspect and consent to the same preparation plan:
+python scripts/dev.py setup --profile legacy --legacy-config managed --initialize-database --confirm-database sbom_analyser_dev
+```
+
+Supply intended database credentials interactively; do not export connection
+strings or put passwords in command arguments. No repository `.env`, pgpass or
+container-default credential adoption occurs. Exact-name and empty-schema checks
+precede initial key generation. Existing managed files are not overwritten.
+Missing/incomplete original security material must be restored, not regenerated.
+Native pending-account creation and email activation remain an explicit approved
+operator procedure after normal authentication/mail readiness is established.
+
+## Inspect Native administrator enrollment
+
+For an existing prepared Native installation, use the exact selected profile,
+configuration family and database name. No database URL export is needed:
+
+```sh
+python scripts/dev.py setup --native-admin-status --profile legacy --legacy-config managed --confirm-database sbom_analyser_dev
+python scripts/dev.py setup --native-admin-status --profile greenfield --confirm-database sbom_greenfield_uuid
+```
+
+The existing Native operator CLI has an equivalent opt-in status route:
+
+```sh
+python scripts/bootstrap_native_platform_user.py --profile legacy --legacy-config managed --confirm-database sbom_analyser_dev status
+```
+
+Windows/env Native installations must explicitly select their saved family and
+confirm its actual local database name. These routes never enable Native mode,
+prepare a database or enroll a user. They resolve the selected configuration
+before driver imports, use a pinned read-only database transaction and report
+only aggregate state/booleans. Unselected `.env` files are not read or applied.
+Successful observation exits 0 even for `ENROLLMENT_REQUIRED`; it proves neither
+live readiness nor permission to create an administrator. Errors exit 1 and
+invalid flag combinations exit 2. The application may remain stopped.
+
+Profile-based create/resend is deliberately refused; the controlled privileged
+runner is not wired. The older no-profile CLI remains compatible but imports
+application settings, commits even for its status branch and returns account
+ID/email fields; it does not meet the strict status contract above. See the
+[status semantics, root cause and remaining approval gates](../docs/reference/configuration.md#native-enrollment-inspection-sbo-98-phase-5-status-increment)
+before choosing an operator action. Do not export credentials as a workaround,
+create grants through SQL or delete an enrollment reservation.
 
 ## Greenfield
 
@@ -35,7 +130,10 @@ python scripts/dev.py setup --profile greenfield --initialize-database --confirm
 python scripts/dev.py --profile greenfield
 ```
 
-Provisioning creates only the fixed new containers/private state; collisions fail.
+Provisioning requires consent for new containers/private state, secrets,
+certificates and PostgreSQL data resources; collisions fail. Provisioning alone
+does not initialize application schema: the separate initialization flag/command
+is still required.
 The preserved image policy uses cached pinned images without silent upgrades.
 If absent, obtain the exact images in infra/greenfield-uuid/compose.yml.
 Initialization requires the confirmed empty database and retains metadata/grant
@@ -45,7 +143,7 @@ checks; populated databases are refused. Account bootstrap is an explicit
 Pending schema changes block ordinary startup. Review migrations/backups:
 
 ```sh
-python scripts/dev.py setup --profile greenfield --migrate
+python scripts/dev.py setup --profile greenfield --migrate --confirm-database sbom_greenfield_uuid
 python scripts/dev.py setup --profile legacy --migrate --confirm-database sbom_analyser_dev
 ```
 
@@ -57,9 +155,16 @@ name; do not run against existing data. Stop the managed application before chan
 ## Existing Legacy
 
 Managed Legacy preserves .env.dev.local and the fixed development database.
+Legacy setup reuses only already-running selected dependencies, whether local or
+Docker; it never creates or resumes Legacy containers. Provider flags preserve
+saved selections rather than authorizing a conversion. A fresh private Docker
+installation uses the reviewed Greenfield path, not guessed Legacy PostgreSQL
+defaults. Existing complete Docker settings can reuse their own pinned credentials.
 Saved Windows/HCL.CS configuration can be selected with:
 
 ```sh
+python scripts/dev.py setup --plan --profile legacy --legacy-config windows
+python scripts/dev.py setup --profile legacy --legacy-config windows
 python scripts/dev.py --profile legacy --legacy-config windows
 ```
 
@@ -74,9 +179,12 @@ credentials and administrator accounts remain operator prerequisites. See
 [HCL configuration](../docs/HCL_IAM_CONFIGURATION.md) and the
 [verification matrix](../docs/engineering/dev-launcher-platform-matrix.md).
 
-Use doctor, status and logs --service <name> for diagnosis. Restore incomplete
+Use diagnose, status and logs --service <name> for diagnosis. Restore incomplete
 certificates/private state rather than rotating credentials. Resolve occupied
 ports deliberately; unrelated listeners are never killed.
+Stop through verified ownership before preparation; UNKNOWN records are retained
+and block it. If setup reports partial preparation, retain any new artifacts and
+review `diagnose` plus a new plan; do not delete private files or reset data.
 
 Before explicit initialization/upgrade, read the [database compatibility gate](../docs/DATABASE_BOOTSTRAP_AND_UPGRADE.md).
 A populated pre-UUID database cannot cross revision 100. Inspection/stop/status

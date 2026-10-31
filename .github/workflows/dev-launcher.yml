@@ -7,6 +7,9 @@ on:
   pull_request:
     paths:
       - "scripts/dev.py"
+      - "scripts/dev_*.py"
+      - "scripts/dev_next_guard.cjs"
+      - "scripts/bootstrap_native_platform_user.py"
       - "scripts/greenfield*migration*.py"
       - "tests/test_dev*.py"
       - "tests/test_greenfield*.py"
@@ -14,6 +17,7 @@ on:
       - "requirements.txt"
       - ".github/workflows/dev-launcher.yml"
       - "app/public_identity.py"
+      - "app/dev_instance.py"
       - "app/workers/celery_app.py"
       - "Dockerfile"
       - "docker-compose.server.yml"
@@ -24,6 +28,9 @@ on:
   push:
     paths:
       - "scripts/dev.py"
+      - "scripts/dev_*.py"
+      - "scripts/dev_next_guard.cjs"
+      - "scripts/bootstrap_native_platform_user.py"
       - "scripts/greenfield*migration*.py"
       - "tests/test_dev*.py"
       - "tests/test_greenfield*.py"
@@ -31,6 +38,7 @@ on:
       - "requirements.txt"
       - ".github/workflows/dev-launcher.yml"
       - "app/public_identity.py"
+      - "app/dev_instance.py"
       - "app/workers/celery_app.py"
       - "Dockerfile"
       - "docker-compose.server.yml"
@@ -67,14 +75,99 @@ jobs:
           cache-dependency-path: requirements.txt
       - name: Install isolated test dependencies
         run: python -m pip install -r requirements.txt ruff
-      - name: Compile and lint the canonical launcher
+      - name: Lint the launcher and controlled development configuration
         run: >-
-          python -m ruff check scripts/dev.py tests/test_dev_main_merge.py
+          python -m ruff check scripts/dev.py scripts/dev_config.py scripts/dev_diagnostics.py
+          scripts/dev_environment.py scripts/dev_prepared.py scripts/dev_private.py scripts/dev_setup.py
+          scripts/dev_windows_acl.py tests/test_dev_windows_acl.py
+          scripts/dev_components.py scripts/dev_frontend.py
+          scripts/dev_operator.py scripts/bootstrap_native_platform_user.py
+          scripts/dev_native_enrollment.py tests/test_dev_native_enrollment.py tests/test_dev_native_enrollment_cli.py
+          scripts/dev_workspace.py scripts/dev_workspace_cli.py scripts/dev_instance_plan.py
+          scripts/dev_instance_registry.py scripts/dev_instance_storage.py
+          scripts/dev_workspace_dependencies.py scripts/dev_workspace_provider.py
+          scripts/dev_workspace_compose.py scripts/dev_workspace_engine.py scripts/dev_workspace_provider_input.py
+          tests/test_dev_workspace_compose.py tests/test_dev_workspace_engine.py tests/test_dev_workspace_provider_input.py
+          tests/test_dev_workspace_dependencies.py tests/test_dev_workspace_provider.py
+          scripts/dev_workspace_lifecycle.py app/dev_instance.py
+          app/settings.py app/workers/celery_app.py app/workers/report_notifications.py
+          app/routers/report_notifications.py app/services/native_operations.py app/services/native_abuse_service.py
+          tests/test_dev_workspace_namespace_wiring.py tests/test_dev_workspace_settings_isolation.py tests/test_dev_workspace_launcher_namespace.py
+          tests/test_dev_workspace_lifecycle.py tests/test_dev_workspace_lifecycle_cli.py tests/test_dev_instance_namespaces.py
+          scripts/dev_workspace_tests.py tests/test_dev_workspace_tests.py tests/test_dev_workspace_tests_cli.py
+          scripts/dev_workspace_onboarding.py tests/test_dev_workspace_onboarding.py tests/test_dev_workspace_onboarding_cli.py
+          scripts/dev_workspace_observe.py tests/test_dev_workspace_observe.py tests/test_dev_workspace_observe_cli.py
+          scripts/dev_workspace_preview.py scripts/dev_workspace_preview_cli.py scripts/dev_workspace_runtime.py
+          scripts/dev_workspace_bundle.py tests/test_dev_workspace_bundle.py tests/test_dev_workspace_tls_contract.py
+          scripts/dev_workspace_database_prepare.py scripts/dev_workspace_operation_journal.py
+          scripts/dev_workspace_database_adapters.py tests/test_dev_workspace_database_adapters.py
+          scripts/dev_workspace_readiness.py scripts/dev_workspace_inspect.py
+          scripts/dev_workspace_certificates.py scripts/dev_workspace_bindings.py
+          scripts/dev_workspace_setup.py scripts/dev_workspace_control.py
+          scripts/dev_workspace_visual.py tests/test_dev_workspace_visual.py
+          tests/test_dev_workspace_setup.py tests/test_dev_workspace_control.py tests/test_dev_workspace_dispatch.py
+          tests/test_dev_workspace_inventory_runtime.py
+          tests/test_dev_workspace_certificates.py tests/test_dev_workspace_bindings.py
+          tests/test_dev_workspace_readiness.py tests/test_dev_workspace_inspect.py tests/test_dev_workspace_diagnostics_bridge.py
+          tests/test_dev_workspace_database_prepare.py tests/test_dev_workspace_operation_journal.py
+          tests/test_dev_workspace_preview.py tests/test_dev_workspace_preview_cli.py tests/test_dev_workspace_runtime.py tests/test_dev_workspace_runtime_native.py
+          tests/test_dev_workspace.py tests/test_dev_workspace_cli.py tests/test_dev_instance_plan.py
+          tests/test_dev_instance_registry.py tests/test_dev_instance_storage.py
+          tests/test_dev_operator.py tests/test_dev_operator_cli.py
+          tests/test_dev_component_environments.py tests/test_dev_frontend_workspace.py
+          tests/test_dev_compiler_probe.py tests/test_dev_frontend_next_integration.py
+          tests/test_dev_next_guard.py tests/test_dev_native_compiler.py
+          tests/test_dev_next_watch.py
+          tests/test_dev_hmr_transport.py
+          tests/test_dev_main_merge.py tests/test_dev_config.py tests/test_dev_diagnose.py
+          tests/test_dev_prepared.py tests/test_dev_private_files.py tests/test_dev_setup.py
       - name: Compile without starting the launcher
-        run: python -c "from pathlib import Path; compile(Path('scripts/dev.py').read_text(encoding='utf-8'), 'scripts/dev.py', 'exec')"
+        run: >-
+          python -c "from pathlib import Path;
+          [compile(Path(name).read_text(encoding='utf-8'), name, 'exec')
+          for name in ('scripts/dev.py', 'scripts/dev_config.py', 'scripts/dev_diagnostics.py',
+          'scripts/dev_environment.py', 'scripts/dev_prepared.py', 'scripts/dev_private.py', 'scripts/dev_setup.py', 'scripts/dev_windows_acl.py', 'scripts/dev_components.py', 'scripts/dev_frontend.py', 'scripts/dev_operator.py', 'scripts/bootstrap_native_platform_user.py', 'scripts/dev_native_enrollment.py',
+          'scripts/dev_workspace.py', 'scripts/dev_workspace_cli.py', 'scripts/dev_instance_plan.py', 'scripts/dev_instance_registry.py', 'scripts/dev_instance_storage.py',
+          'scripts/dev_workspace_dependencies.py', 'scripts/dev_workspace_provider.py', 'scripts/dev_workspace_lifecycle.py', 'app/dev_instance.py', 'scripts/dev_workspace_tests.py', 'scripts/dev_workspace_onboarding.py', 'scripts/dev_workspace_observe.py',
+          'scripts/dev_workspace_compose.py', 'scripts/dev_workspace_engine.py', 'scripts/dev_workspace_provider_input.py',
+          'app/settings.py', 'app/workers/celery_app.py', 'app/workers/report_notifications.py', 'app/routers/report_notifications.py',
+          'app/services/native_operations.py', 'app/services/native_abuse_service.py',
+          'scripts/dev_workspace_preview.py', 'scripts/dev_workspace_preview_cli.py', 'scripts/dev_workspace_runtime.py',
+          'scripts/dev_workspace_bundle.py', 'scripts/dev_workspace_database_prepare.py', 'scripts/dev_workspace_operation_journal.py',
+          'scripts/dev_workspace_database_adapters.py', 'scripts/dev_workspace_readiness.py', 'scripts/dev_workspace_inspect.py',
+          'scripts/dev_workspace_certificates.py', 'scripts/dev_workspace_bindings.py',
+          'scripts/dev_workspace_setup.py', 'scripts/dev_workspace_control.py', 'scripts/dev_workspace_visual.py')]"
       - name: Cross-platform unit and mocked adapter regressions
         run: >-
           python -m pytest -p no:cacheprovider --noconftest -q
+          tests/test_dev_config.py tests/test_dev_diagnose.py
+          tests/test_dev_operator.py tests/test_dev_operator_cli.py
+          tests/test_dev_native_enrollment.py tests/test_dev_native_enrollment_cli.py
+          tests/test_dev_workspace.py tests/test_dev_workspace_cli.py tests/test_dev_instance_plan.py
+          tests/test_dev_instance_registry.py tests/test_dev_instance_storage.py
+          tests/test_dev_workspace_dependencies.py tests/test_dev_workspace_provider.py
+          tests/test_dev_workspace_compose.py tests/test_dev_workspace_engine.py tests/test_dev_workspace_provider_input.py
+          tests/test_dev_workspace_lifecycle.py tests/test_dev_workspace_lifecycle_cli.py tests/test_dev_instance_namespaces.py
+          tests/test_dev_workspace_namespace_wiring.py tests/test_dev_workspace_settings_isolation.py tests/test_dev_workspace_launcher_namespace.py
+          tests/test_dev_workspace_tests.py tests/test_dev_workspace_tests_cli.py
+          tests/test_dev_workspace_onboarding.py tests/test_dev_workspace_onboarding_cli.py
+          tests/test_dev_workspace_observe.py tests/test_dev_workspace_observe_cli.py
+          tests/test_dev_workspace_preview.py tests/test_dev_workspace_preview_cli.py tests/test_dev_workspace_runtime.py
+          tests/test_dev_workspace_bundle.py tests/test_dev_workspace_tls_contract.py
+          tests/test_dev_workspace_database_prepare.py tests/test_dev_workspace_operation_journal.py
+          tests/test_dev_workspace_database_adapters.py
+          tests/test_dev_workspace_readiness.py tests/test_dev_workspace_inspect.py tests/test_dev_workspace_diagnostics_bridge.py
+          tests/test_dev_workspace_certificates.py tests/test_dev_workspace_bindings.py
+          tests/test_dev_workspace_setup.py tests/test_dev_workspace_control.py tests/test_dev_workspace_dispatch.py
+          tests/test_dev_workspace_inventory_runtime.py
+          tests/test_dev_workspace_visual.py
+          tests/test_dev_prepared.py tests/test_dev_private_files.py tests/test_dev_setup.py
+          tests/test_dev_windows_acl.py
+          tests/test_dev_component_environments.py tests/test_dev_frontend_workspace.py
+          tests/test_dev_compiler_probe.py
+          tests/test_dev_next_guard.py tests/test_dev_native_compiler.py
+          tests/test_dev_next_watch.py
+          tests/test_dev_hmr_transport.py
           tests/test_dev_launcher.py tests/test_dev_lifecycle.py
           tests/test_dev_windows_lifecycle.py tests/test_dev_windows_shutdown.py
           tests/test_dev_background.py tests/test_dev_main_merge.py
@@ -92,3 +185,46 @@ jobs:
         run: >-
           python -m pytest -p no:cacheprovider --noconftest -q
           tests/test_dev_native_process.py
+          tests/test_dev_workspace_runtime_native.py
+      - name: Optional real frontend HTTPS and HMR fixture (preinstalled packages only)
+        run: >-
+          python -m pytest -p no:cacheprovider --noconftest -q
+          tests/test_dev_frontend_next_integration.py
+
+  frontend-fixture:
+    # Explicit installations are confined to fresh CI runners. The fixture
+    # blocks Next compiler downloads and never starts the application stack.
+    runs-on: ${{ matrix.os }}
+    timeout-minutes: 20
+    strategy:
+      fail-fast: false
+      matrix:
+        os: [ubuntu-latest, windows-latest, macos-latest]
+        node: ["22", "26.1.0"]
+    env:
+      PYTHONDONTWRITEBYTECODE: "1"
+      PYTHON_DOTENV_DISABLED: "1"
+      PYTEST_DISABLE_PLUGIN_AUTOLOAD: "1"
+      SBOM_DEV_REQUIRE_FRONTEND_FIXTURE: "1"
+      DATABASE_URL: "sqlite:///:memory:"
+      TEST_DATABASE_URL: "sqlite:///:memory:"
+    steps:
+      - uses: actions/checkout@v4
+      - uses: actions/setup-python@v5
+        with:
+          python-version: "3.12"
+      - uses: actions/setup-node@v4
+        with:
+          node-version: ${{ matrix.node }}
+          cache: npm
+          cache-dependency-path: frontend/package-lock.json
+      - name: Install disposable fixture prerequisites
+        run: |
+          node --check scripts/dev_next_guard.cjs
+          python -m pip install pytest pytest-timeout cryptography python-dotenv
+          npm ci --ignore-scripts --prefix frontend
+      - name: Real frontend TLS, HMR, environment and owned-cleanup acceptance
+        run: >-
+          python -m pytest -p pytest_timeout -p no:cacheprovider --noconftest
+          --basetemp "${{ runner.temp }}/sbom-next-fixture" -q
+          tests/test_dev_native_compiler.py tests/test_dev_frontend_next_integration.py

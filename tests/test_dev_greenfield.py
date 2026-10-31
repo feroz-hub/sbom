@@ -14,6 +14,7 @@ def installed(monkeypatch, tmp_path):
     for name in ("environment.json", "runtime-password", "setup-password"):
         (tmp_path / name).write_text("synthetic")
     monkeypatch.setattr(dev.GreenfieldStack, "STATE", tmp_path)
+    monkeypatch.setattr(dev.GreenfieldStack, "settings", lambda: {"APP_ENVIRONMENT": "development"})
     monkeypatch.setattr(dev.LocalHttps, "ensure_certificate", Mock())
     monkeypatch.setattr(migrations, "ensure_current", Mock())
     return tmp_path
@@ -88,6 +89,9 @@ def test_start_requires_ownership_registry(installed, monkeypatch):
 
 
 def test_greenfield_routing_never_initializes_legacy(monkeypatch):
+    from scripts import dev_prepared
+
+    monkeypatch.setattr(dev_prepared, "require_project", lambda launcher: "npm")
     route = Mock()
     monkeypatch.setattr(dev.GreenfieldProfile, "start", route)
     monkeypatch.setattr(dev, "prepare_managed_legacy", Mock(side_effect=AssertionError("Legacy selected")))

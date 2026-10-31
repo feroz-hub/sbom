@@ -38,7 +38,10 @@ from celery.signals import (
 )
 from celery.signals import setup_logging as celery_setup_logging
 
+from app.dev_instance import get_instance_namespace
 from app.logger import CONTEXT_FIELDS, current_log_context, log_context, setup_logging
+
+_INSTANCE_NAMESPACE = get_instance_namespace()
 
 
 @celery_setup_logging.connect
@@ -145,6 +148,14 @@ celery_app.conf.update(
     task_track_started=True,
     task_routes={"report_notifications.*": {"queue": "reports"}},
 )
+
+if _INSTANCE_NAMESPACE.resource_id is not None:
+    celery_app.conf.update(
+        task_default_queue=_INSTANCE_NAMESPACE.queue_default,
+        task_default_exchange=_INSTANCE_NAMESPACE.queue_default,
+        task_default_routing_key=_INSTANCE_NAMESPACE.queue_default,
+        task_routes={"report_notifications.*": {"queue": _INSTANCE_NAMESPACE.queue_reports}},
+    )
 
 celery_app.conf.beat_schedule = {
     "security-mail-outbox": {"task": "security_mail.dispatch", "schedule": 30.0},
