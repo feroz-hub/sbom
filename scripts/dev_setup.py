@@ -575,7 +575,32 @@ def _in_project_venv(launcher):
     return Path(launcher.sys.prefix).resolve() == Path(launcher.VENV).resolve()
 
 
-def _approval(marker, plan):
+def _handoff_lineage(parent_pid, launcher):
+    """Bind approval to the consenting launcher: this process or its parent.
+
+    On Windows, ``.venv\\Scripts\\python.exe`` is a redirector that runs the base
+    interpreter as its own child, so the consenting launcher is the grandparent.
+    Accept that only through this project's redirector, using pinned process
+    identities; any inspection failure keeps the refusal.
+    """
+    if parent_pid in {os.getpid(), os.getppid()}:
+        return True
+    if launcher.sys.platform != "win32" or not _in_project_venv(launcher):
+        return False
+    try:
+        lineage = {info["pid"]: info for info in launcher.windows_children(parent_pid)}
+        redirector = lineage.get(os.getppid())
+        return (
+            os.getpid() in lineage
+            and redirector is not None
+            and os.path.normcase(str(Path(redirector["exe"]).resolve()))
+            == os.path.normcase(str(Path(launcher.venv_python()).resolve()))
+        )
+    except Exception:
+        return False
+
+
+def _approval(marker, plan, launcher):
     try:
         value = json.loads(marker)
         categories = frozenset(value["categories"])
@@ -583,7 +608,7 @@ def _approval(marker, plan):
             not isinstance(value, dict)
             or value["fingerprint"] != plan.fingerprint
             or type(value["parent_pid"]) is not int
-            or value["parent_pid"] not in {os.getpid(), os.getppid()}
+            or not _handoff_lineage(value["parent_pid"], launcher)
             or not categories <= _CATEGORIES
             or not {action.category for action in plan.actions} <= categories
         ):
@@ -633,7 +658,7 @@ def run_setup(args, launcher, apply_callback):
             return launcher.require_virtualenv() or 1
         if getattr(args, "plan", False) or plan.blockers:
             return int(bool(plan.blockers))
-        categories = _approval(inherited, plan) if inherited is not None else None
+        categories = _approval(inherited, plan, launcher) if inherited is not None else None
         if inherited is not None and categories is None:
             print(
                 "[BLOCKED] SETUP_APPROVAL_INVALID: preparation inputs or handoff identity changed; review a new plan."

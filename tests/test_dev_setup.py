@@ -295,6 +295,41 @@ def test_handoff_approval_is_bound_to_current_plan_and_process_lineage_and_consu
     prompt.assert_not_called()
 
 
+@pytest.mark.parametrize("lineage", ["redirector", "other-image", "not-windows", "outside-venv", "not-descendant", "error"])
+def test_windows_venv_redirector_handoff_keeps_grandparent_consent_only_through_project_redirector(
+    checkout, monkeypatch, capsys, lineage
+):
+    # Integration review: .venv\Scripts\python.exe runs the base interpreter as its child.
+    monkeypatch.setattr(os, "getpid", lambda: 111)
+    monkeypatch.setattr(os, "getppid", lambda: 222)
+    monkeypatch.setattr(sys, "platform", "linux" if lineage == "not-windows" else "win32")
+    if lineage != "outside-venv":
+        monkeypatch.setattr(sys, "prefix", str(dev.VENV))
+    redirector = str(dev.venv_python()) if lineage != "other-image" else str(dev.ROOT / "other" / "python.exe")
+    descendants = [
+        {"pid": 333, "birth": "1", "exe": "C:/Python/python.exe"},
+        {"pid": 222, "birth": "2", "exe": redirector},
+        *([] if lineage == "not-descendant" else [{"pid": 111, "birth": "3", "exe": "C:/Python/python.exe"}]),
+    ]
+    children = Mock(side_effect=dev.OwnershipError("fixture") if lineage == "error" else None, return_value=descendants)
+    monkeypatch.setattr(dev, "windows_children", children)
+    os.environ[MARKER] = json.dumps(
+        {"fingerprint": FINGERPRINT, "categories": ["project-dependencies"], "parent_pid": 333}
+    )
+    monkeypatch.setattr(dev_setup, "inspect_setup", lambda args, launcher: planned("project-dependencies"))
+    interactive(monkeypatch, False)
+    monkeypatch.setattr(builtins, "input", Mock(side_effect=AssertionError("handoff prompted again")))
+    callback = Mock(return_value=0)
+    accepted = lineage == "redirector"
+    assert dev_setup.run_setup(setup_args(), dev, callback) == (0 if accepted else 1)
+    assert callback.call_count == int(accepted)
+    assert MARKER not in os.environ
+    if not accepted:
+        assert "SETUP_APPROVAL_INVALID" in capsys.readouterr().out
+    if lineage in {"not-windows", "outside-venv"}:
+        children.assert_not_called()
+
+
 @pytest.mark.parametrize("invalid", ["json", "pid", "fingerprint", "categories-type", "missing-category"])
 def test_invalid_or_stale_handoff_authority_is_refused_without_echoing_payload(checkout, monkeypatch, capsys, invalid):
     monkeypatch.setattr(os, "getpid", lambda: 111)
