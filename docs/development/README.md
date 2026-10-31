@@ -43,8 +43,28 @@ required. Keep partial metadata for explicit recovery.
 The plan separates dependency preparation from configuration, providers,
 database operations, TLS material/trust and administrator enrollment. Missing
 `.env.dev.local` does not block a **dependency-only proposal**. Executing that
-dependency category and the remaining lifecycle operations is delivered in later
-increments; `workspace start/stop/restart/logs/test/compare` currently return a
+dependency category is now separately available on the dependent PR B branch:
+
+```sh
+python scripts/dev.py workspace plan --scope dependencies
+python scripts/dev.py workspace prepare --scope dependencies
+```
+
+Review workstation package-source policy first. Preparation requires exact,
+time-limited interactive consent for the displayed fingerprint. It uses binary
+Python packages from PyPI and locked npm registry packages with install scripts
+disabled. Corporate package-source overrides are not silently inherited; a
+workstation requiring another index needs its reviewed policy adapter first.
+No private `.env` file is read. It creates physical worktree-local dependencies,
+private attempt state and freshness stamps; interrupted or unstamped artifacts
+are preserved and block automatic replacement. A matching stamp still requires
+live package verification before a skip. Compiler readiness remains explicitly
+unverified; ordinary startup still requires its existing native compiler check.
+New dependency-only or interrupted installations continue to receive inventory
+until private configuration is prepared. Existing venv-only dispatch is retained.
+
+The remaining lifecycle operations are delivered in later increments;
+`workspace start/stop/restart/logs/test/compare` currently return a
 specific BLOCKED result. Do not treat a proposal or a registry state as readiness.
 
 For ATLAS/NEXUS work, first confirm each agent's branch and reserved files. Use

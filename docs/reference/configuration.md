@@ -759,6 +759,53 @@ creation/executable identity. The SBO-98 Native mutation guard remains closed.
 Live disposable integration, administrator activation and production/staging
 operations remain separately unexecuted and unapproved.
 
+## Independent dependencies and provider proposals (SBO-101 PR B)
+
+`workspace plan --scope dependencies` performs public manifest/tool inspection
+without reading private configuration or connecting to application services.
+`workspace prepare --scope dependencies` adds exact interactive fingerprint
+consent, expiring after 120 seconds, followed by repeated filesystem, source,
+commit, controller and tool checks. Category consent is a user-level request to
+run trusted installers, not independent authority for databases or enrollment.
+Package names/versions remain pinned. Python installs require binary wheels;
+npm uses owned lockfile copies, pinned registry versions, available integrity
+records and disabled
+install scripts. Source `.npmrc` and inherited private package configuration are
+not applied. Only the documented public package sources are currently supported;
+company mirrors require a separately reviewed policy adapter.
+The existing lock has entries without artifact integrity; this adapter preserves
+that version-pinned contract and does not claim complete artifact attestation.
+
+Each worktree gets physical `.venv` and `frontend/node_modules` directories.
+Unknown, stale, redirected, shared or partial targets are preserved and require
+review. No `npm ci` runs against an existing source dependency directory. Owned
+npm staging uses a same-volume directory and no-replace publication; unsupported
+platform publication is BLOCKED. Private attempt journals and caches live under
+`~/.sbom-dev/dependency-staging/<repository-and-worktree-digest>`. An interrupted
+attempt stays pending and blocks automatic retry. Successful attempts retain a
+completed journal. There is no automatic deletion, permission repair or adoption.
+Matching public stamps require live package checks before skipping installation.
+Package verification explicitly leaves native Next compiler/application readiness
+unverified, preserving the existing startup compiler-download guard.
+
+Source roots must satisfy the current-user ownership and trusted-writer policy.
+For `DEPENDENCY_ROOT_ACCESS_REVIEW_REQUIRED`, use an approved user-owned checkout
+with safe permissions or obtain IT review. Do not recursively rewrite an existing
+checkout's ACLs to make preparation pass. This host's implementation worktree
+reported an untrusted write grant; no installer was run there.
+
+`dev_workspace_provider` is a pure policy/proposal and normalized-inventory
+comparison library. Its policy requires a pinned engine identity, explicit
+company image digests and nonroot users. It proposes independent containers,
+internal networks, named volumes, loopback binds and distinct PostgreSQL bootstrap
+and application roles, with credential references only. There is no engine
+executor or secret generation. `CONSISTENT` means supplied normalized data agrees
+with supplied pinned records; it never establishes ownership or live authority.
+Unknown, mismatched and partial resources remain protected. Image UID/data/port
+contracts and an actual ownership-verifying engine adapter require review and
+approved disposable acceptance. Fresh PostgreSQL container startup can initialize
+data, so provider creation also needs exact database/credential approval.
+
 ## Sources and precedence
 
 | Execution path | Effective sources |
