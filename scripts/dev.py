@@ -941,7 +941,10 @@ def local_scheduler_class():
             token = env["SBOM_DEV_INSTANCE"]
             client = redis.Redis.from_url(env["REDIS_URL"], socket_connect_timeout=2, socket_timeout=2)
             target = urlsplit(env["DATABASE_URL"])
-            key = f"sbom:dev:beat:{env['SBOM_DEV_PROFILE']}:{target.hostname}:{target.port}:{target.path}"
+            from app.dev_instance import get_instance_namespace
+
+            prefix = get_instance_namespace(env).beat_namespace
+            key = f"{prefix}:{env['SBOM_DEV_PROFILE']}:{target.hostname}:{target.port}:{target.path}"
             owned = client.eval(
                 "if redis.call('get',KEYS[1]) == ARGV[1] then return redis.call('expire',KEYS[1],20) else return 0 end",
                 1,
@@ -1040,12 +1043,15 @@ def reject_foreign_workers(env):
 
 
 def background_commands(env):
+    from app.dev_instance import get_instance_namespace
+
+    namespace = get_instance_namespace(env)
     instance = env["SBOM_DEV_INSTANCE"]
     base = [str(venv_python()), "-B", "-m", "celery", "-A", "scripts.dev:celery_app"]
     commands = {}
     for component, role, queue in (
-        ("Celery worker", "default", "celery"),
-        ("Celery reports worker", "reports", "reports"),
+        ("Celery worker", "default", namespace.queue_default),
+        ("Celery reports worker", "reports", namespace.queue_reports),
     ):
         command = [
             *base,
@@ -1101,12 +1107,15 @@ def service_pid_matches(runtime, record, pid):
 
 
 def background_health(runtime, env, *, require_control=False):
+    from app.dev_instance import get_instance_namespace
+
+    namespace = get_instance_namespace(env)
     state = runtime.state or runtime.load() or {}
     records = state.get("services", {})
     expected = {}
     for component, role, queues in (
-        ("Celery worker", "default", {"celery"}),
-        ("Celery reports worker", "reports", {"reports"}),
+        ("Celery worker", "default", {namespace.queue_default}),
+        ("Celery reports worker", "reports", {namespace.queue_reports}),
         ("Celery Beat", "beat", None),
     ):
         record = records.get(component)

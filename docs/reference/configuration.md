@@ -1028,6 +1028,16 @@ provider prerequisites. Redis support does not prove multi-replica acceptance.
 
 ## Build versus runtime
 
+`SBOM_DEV_RESOURCE_ID` is optional launcher-controlled, canonical UUID metadata
+for proposed isolated development stacks. It selects independent queue, Beat,
+session, heartbeat and rate-limit namespaces; it never proves ownership. Keep it
+absent from ordinary production/staging environments and browser-public settings.
+With it present, application settings require explicit development mode,
+`PYTHON_DOTENV_DISABLED=1`, authenticated operation and no default-tenant bypass;
+Pydantic dotenv loading is explicitly disabled. The launcher must resolve the
+protected immutable bundle and project component values before application import.
+Legacy environments without the UUID retain their existing source/defaults.
+
 For proposed SBO-101 isolated provider contracts, `workspace plan --scope
 provider --mode isolated --auth native --provider-policy <proposal.json> --json`
 uses the strict version-1 `container` and `compose` policy objects. This is

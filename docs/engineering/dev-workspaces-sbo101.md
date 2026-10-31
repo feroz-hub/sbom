@@ -508,6 +508,53 @@ interpreter: **78 passed in 1.23s**. Scoped Ruff checks passed. Existing PRs
 heads when rechecked; each remains Draft. These are source/fixture results, not
 real provider or complete application acceptance.
 
+## Increment H — Application resource and settings isolation
+
+The persistent `SBOM_DEV_RESOURCE_ID` now reaches actual Celery default/report
+routes and task decorators, both report publishers, Native mail-worker heartbeat
+writer/reader, Native IP/account limit buckets and the BFF Redis session store.
+The launcher consumes those same queues for worker commands/readiness and the
+same persistent namespace for Beat leases. Its independent `SBOM_DEV_INSTANCE`
+still identifies each process launch. No UUID means the exact legacy names.
+Malformed or ambiguous UUIDs fail closed. The UUID is server metadata, never a
+`NEXT_PUBLIC_*` value or ownership/authorization proof.
+
+Isolated application `get_settings()` now requires explicit development mode,
+python-dotenv disabled, authentication enabled and default-tenant bypass disabled.
+It creates real `Settings(_env_file=None)` and binds the cached instance to the
+resource UUID. This closes the separate Pydantic dotenv source; setting
+`PYTHON_DOTENV_DISABLED` alone does not close it. Ordinary source selection is
+unchanged without the explicit UUID. No temporary settings/module overlay is
+used. Private bundle resolution remains a separate explicit launcher adapter.
+
+Changed source: five queue/Native service consumers, `app/settings.py`,
+`scripts/dev.py`, the pure component projector, and the server session namespace
+helper/store. Three focused regression files and the existing workflow are
+updated. No schema, migration, production manifest or enrollment source changed.
+
+Executed through the existing inspected safe harness on Windows/Python 3.14.6:
+
+```powershell
+& C:\sbom\.venv\Scripts\python.exe -B C:\sbom\.windows\worktrees\SBO-98-component-env\.dev-logs\safe_pytest.py tests/test_dev_workspace_namespace_wiring.py tests/test_dev_workspace_settings_isolation.py tests/test_dev_workspace_launcher_namespace.py tests/test_dev_instance_namespaces.py tests/test_settings_paths.py tests/test_dev_config.py tests/test_dev_component_environments.py tests/test_dev_lifecycle.py --timeout=60
+```
+
+Result: **356 passed, 17 skipped in 31.25s**. Skips are POSIX-only primitives and
+unapproved Windows fixture-symlink privilege. This includes three real Celery
+memory-only routing checks, actual Pydantic dotenv-source behavior and the pure
+TypeScript namespace executed by Node; no worker, application server, broker or
+database connected. Ruff passed. The initial two positive Settings fixtures
+omitted explicit `DEV_DEFAULT_TENANT=false`; they were corrected and this full
+selection passed. A Python 3.12 run failed collection because its existing minimal
+validation venv lacks Celery/Pydantic; no packages were installed. Runtime
+compatibility is therefore delegated to the existing full-dependency CI matrix,
+not reported as a local 3.12 pass.
+
+AST comparison against `73d29949b31fa3564a56043128bde7118e804ede` confirms
+`Runtime`, `process_info`, `windows_children`, `start_process`,
+`start_background` and `wait_for_background` unchanged. Protected Native
+bootstrap/enrollment service sources also have no diff. Actual simultaneous
+queues/sessions/Beat/rate-limit and full-stack acceptance remain **NOT RUN**.
+
 ## Disposable acceptance procedure (not yet authorized or executed)
 
 1. Review the candidate diff and CI on Windows/macOS/Linux, preserving SBO-98.
