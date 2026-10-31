@@ -6,6 +6,7 @@ import io
 import json
 import os
 import sys
+from dataclasses import replace
 from types import SimpleNamespace
 from unittest.mock import Mock
 
@@ -35,9 +36,10 @@ def checkout(tmp_path, monkeypatch):
         "b" * 64, root, identity, "c" * 40, "refs/heads/feature/SBO-101-fixture", False, False, False, False, False
     )
     snapshot = dev_workspace.RepositorySnapshot("a" * 64, root, identity, "c" * 40, (row,), identity)
+    native_discover = dev_workspace.discover_workspaces
     discover = Mock(return_value=snapshot)
     monkeypatch.setattr(dev_workspace, "discover_workspaces", discover)
-    return SimpleNamespace(root=root, snapshot=snapshot, discover=discover)
+    return SimpleNamespace(root=root, snapshot=snapshot, discover=discover, native_discover=native_discover)
 
 
 @pytest.mark.parametrize("command", ["list", "status", "diagnose"])
@@ -215,6 +217,67 @@ def test_existing_private_or_runtime_state_keeps_legacy_dispatch(tmp_path):
     (tmp_path / ".dev-runtime.json").write_text("unknown-owned-record-preserve", encoding="utf-8")
     assert not cli.fresh_checkout(tmp_path)
     assert (tmp_path / ".dev-runtime.json").read_text() == "unknown-owned-record-preserve"
+
+
+@pytest.mark.parametrize(
+    "failure",
+    ["repository", "common-directory", "root-identity", "blocked", "codes", "selected-blocked", "selected-head"],
+)
+def test_selected_instance_requires_verified_source_before_even_missing_registry(checkout, monkeypatch, failure):
+    snapshot = checkout.snapshot
+    expected = "WORKSPACE_REPOSITORY_UNVERIFIED"
+    if failure == "repository":
+        snapshot = replace(snapshot, repository_id=None)
+    elif failure == "common-directory":
+        snapshot = replace(snapshot, common_directory=None)
+    elif failure == "root-identity":
+        snapshot = replace(snapshot, identity=None)
+    elif failure == "blocked":
+        snapshot = replace(snapshot, status="BLOCKED")
+    elif failure == "codes":
+        snapshot = replace(snapshot, codes=("GIT_PROBE_UNVERIFIED",))
+    else:
+        selected = snapshot.worktrees[0]
+        selected = (
+            replace(selected, status="BLOCKED") if failure == "selected-blocked" else replace(selected, head=None)
+        )
+        snapshot = replace(snapshot, worktrees=(selected,))
+        expected = "WORKSPACE_TARGET_UNVERIFIED"
+    checkout.discover.return_value = snapshot
+    forbidden = Mock(side_effect=AssertionError("Unverified source inspected or adopted registry state"))
+    monkeypatch.setattr(cli, "_registry", forbidden)
+    with pytest.raises(cli.WorkspaceCommandError, match="^" + expected + "$"):
+        cli.selected_instance(checkout.root)
+    forbidden.assert_not_called()
+
+
+def test_valid_unregistered_repository_is_distinct_from_unverified_discovery(checkout, monkeypatch):
+    reader = Mock(return_value=cli.dev_instance_registry.RegistrySnapshot(codes=("REGISTRY_MISSING",)))
+    monkeypatch.setattr(cli, "_registry", Mock(return_value=SimpleNamespace(read=reader)))
+    assert cli.selected_instance(checkout.root) is None
+    reader.assert_called_once_with()
+
+
+@pytest.mark.parametrize("command", [[], ["start"], ["diagnose"]])
+def test_present_invalid_git_discovery_never_reaches_legacy_or_private_registry(checkout, monkeypatch, capsys, command):
+    (checkout.root / ".git").write_text("gitdir: invalid-synthetic-target", encoding="utf-8")
+    # Exercise the actual Discovery failure contract at its Git adapter boundary.
+    runner = Mock(return_value=dev_workspace.CommandResult(128, stderr=b"synthetic-private-git-error-never-print"))
+    monkeypatch.setattr(
+        dev_workspace, "discover_workspaces", lambda root: checkout.native_discover(root, runner=runner)
+    )
+    monkeypatch.setattr(dev, "ROOT", checkout.root)
+    monkeypatch.setattr(dev.sys, "argv", ["dev.py", *command])
+    forbidden = Mock(side_effect=AssertionError("Invalid Git source entered Legacy or private registry"))
+    monkeypatch.setattr(cli, "_registry", forbidden)
+    for name in ("Runtime", "diagnose", "doctor", "setup_application", "start_application"):
+        monkeypatch.setattr(dev, name, forbidden)
+    assert dev.cli() == 1
+    captured = capsys.readouterr()
+    assert "WORKSPACE_REPOSITORY_UNVERIFIED" in captured.err
+    assert "synthetic-private-git-error-never-print" not in captured.out + captured.err
+    assert runner.call_count == 1
+    forbidden.assert_not_called()
 
 
 @pytest.mark.parametrize("marker", [".sbom-workspace-dependencies.json", ".sbom-workspace-dependency-attempt"])

@@ -122,6 +122,68 @@ def test_unregistered_existing_profile_keeps_original_dispatch(automatic):
     assert dev.workspace_auto_arguments(dev.parse_args(["start"])) is None
 
 
+@pytest.mark.parametrize("arguments", [["diagnose"], ["doctor"], ["--check"], ["setup", "--native-admin-status"]])
+def test_non_git_source_keeps_legacy_dispatch_before_framework_or_git_probe(tmp_path, monkeypatch, arguments):
+    monkeypatch.setattr(dev, "ROOT", tmp_path)
+    forbidden = Mock(side_effect=AssertionError("Non-Git source loaded workspace framework or probed Git"))
+    monkeypatch.setattr(dev, "_workspace_library", forbidden)
+    monkeypatch.setattr(subprocess, "Popen", forbidden)
+    assert dev.workspace_auto_arguments(dev.parse_args(arguments)) is None
+    forbidden.assert_not_called()
+
+
+@pytest.mark.parametrize("target", [".venv", "frontend/node_modules"])
+@pytest.mark.parametrize("name", [".sbom-workspace-dependencies.json", ".sbom-workspace-dependency-attempt"])
+@pytest.mark.parametrize("entrypoint", ["automatic", "noargs"])
+def test_missing_git_with_workspace_dependency_record_never_falls_back_or_reads_marker(
+    tmp_path, monkeypatch, target, name, entrypoint
+):
+    directory = tmp_path / target
+    directory.mkdir(parents=True)
+    marker = directory / name
+    marker.write_text("synthetic-unknown-record-preserve", encoding="utf-8")
+    monkeypatch.setattr(dev, "ROOT", tmp_path)
+    forbidden = Mock(side_effect=AssertionError("Missing source triggered framework, marker read or Git probe"))
+    monkeypatch.setattr(dev, "_workspace_library", forbidden)
+    monkeypatch.setattr(Path, "read_text", forbidden)
+    monkeypatch.setattr(Path, "read_bytes", forbidden)
+    monkeypatch.setattr(subprocess, "Popen", forbidden)
+    monkeypatch.setattr(dev.sys, "argv", ["dev.py"])
+    with pytest.raises(dev.SetupError, match="^WORKSPACE_SOURCE_UNVERIFIED"):
+        if entrypoint == "noargs":
+            dev.main()
+        else:
+            dev.workspace_auto_arguments(dev.parse_args(["status"]))
+    forbidden.assert_not_called()
+    assert marker.exists()
+
+
+def test_non_git_noargs_does_not_load_framework_before_legacy_parser(tmp_path, monkeypatch):
+    class LegacyParserReached(Exception):
+        pass
+
+    monkeypatch.setattr(dev, "ROOT", tmp_path)
+    monkeypatch.setattr(dev.sys, "argv", ["dev.py"])
+    forbidden = Mock(side_effect=AssertionError("Non-Git default invocation loaded workspace framework"))
+    parsed = Mock(side_effect=LegacyParserReached)
+    monkeypatch.setattr(dev, "_workspace_library", forbidden)
+    monkeypatch.setattr(dev, "parse_args", parsed)
+    with pytest.raises(LegacyParserReached):
+        dev.main()
+    parsed.assert_called_once_with()
+    forbidden.assert_not_called()
+
+
+def test_fresh_valid_git_noargs_keeps_readonly_inventory(automatic, monkeypatch):
+    automatic.selected_instance.return_value = None
+    automatic.initial_inventory = Mock(return_value=1)
+    automatic.run_cli = Mock(side_effect=AssertionError("Fresh checkout attempted startup"))
+    monkeypatch.setattr(dev.sys, "argv", ["dev.py"])
+    assert dev.main() == 1
+    automatic.initial_inventory.assert_called_once_with(dev.ROOT)
+    automatic.run_cli.assert_not_called()
+
+
 def test_prepared_noargs_start_requires_control_verification(automatic, monkeypatch):
     automatic.run_cli = Mock(return_value=1)
     monkeypatch.setattr(dev.sys, "argv", ["dev.py"])
@@ -169,7 +231,8 @@ def test_readonly_top_level_control_creates_no_import_caches(tmp_path, command):
         " return 0\n",
         encoding="utf-8",
     )
-    before = {path.relative_to(tmp_path): path.read_bytes() for path in scripts.iterdir()}
+    (tmp_path / ".git").write_text("gitdir: synthetic-worktree-marker", encoding="utf-8")
+    before = {path.relative_to(tmp_path): path.read_bytes() for path in tmp_path.rglob("*") if path.is_file()}
     environment = {
         key: value
         for key, value in os.environ.items()
