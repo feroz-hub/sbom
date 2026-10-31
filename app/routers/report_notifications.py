@@ -13,6 +13,7 @@ from sqlalchemy.orm import Session
 from ..core.context import CurrentContext
 from ..core.security import require_permission
 from ..db import get_db
+from ..dev_instance import get_instance_namespace
 from ..models import (
     AuditLog,
     IAMUser,
@@ -38,6 +39,7 @@ from ..services.report_rendering import render_email
 from ..services.report_storage import artifact_path, configuration_errors
 from ..settings import get_settings
 
+_INSTANCE_NAMESPACE = get_instance_namespace()
 router = APIRouter(prefix="/api", tags=["report-notifications"])
 reader = require_permission("sbom:read")
 
@@ -263,7 +265,9 @@ def send_now(identifier: int, context: CurrentContext = Depends(reader), db: Ses
 
     try:
         generate.apply_async(
-            args=[row.id, row.tenant_id], queue="reports", time_limit=get_settings().report_generation_timeout_seconds
+            args=[row.id, row.tenant_id],
+            queue=_INSTANCE_NAMESPACE.queue_reports,
+            time_limit=get_settings().report_generation_timeout_seconds,
         )
     except Exception:
         # Retain the outbox; the periodic dispatcher retries enqueue, not SMTP.

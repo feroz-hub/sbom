@@ -20,6 +20,7 @@ from io import StringIO
 from pathlib import PurePath
 from types import MappingProxyType
 from urllib.parse import quote, urlsplit
+from uuid import UUID
 
 _NAME = re.compile(r"[A-Za-z_][A-Za-z_0-9]*\Z")
 _LOOPBACK = {"localhost", "127.0.0.1", "::1"}
@@ -85,6 +86,7 @@ _FRONTEND = (
             "AUTH_SESSION_REDIS_URL",
             "AUTH_SESSION_ENCRYPTION_KEY",
             "AUTH_TRANSACTION_KEY_FILE",
+            "SBOM_DEV_RESOURCE_ID",
         }
     )
 )
@@ -194,6 +196,14 @@ def component_environment(environment: Mapping[str, str], component: str) -> Map
         return MappingProxyType(env)
     if component not in {"frontend", "public"}:
         raise ConfigurationError("INVALID_COMPONENT", "Select a declared development component.")
+    if "SBOM_DEV_RESOURCE_ID" in env:
+        try:
+            if str(UUID(env["SBOM_DEV_RESOURCE_ID"])) != env["SBOM_DEV_RESOURCE_ID"]:
+                raise ValueError()
+        except (TypeError, ValueError, AttributeError):
+            raise ConfigurationError(
+                "DEV_INSTANCE_RESOURCE_ID_INVALID", "Review the canonical instance UUID before projecting configuration."
+            ) from None
     known = _FRONTEND | {"NODE_TLS_REJECT_UNAUTHORIZED"}
     if any(key.upper() in known and key not in known for key in env):
         raise ConfigurationError(

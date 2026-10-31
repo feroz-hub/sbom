@@ -2,6 +2,7 @@ import 'server-only';
 import { createCipheriv, createDecipheriv, createHash, randomBytes } from 'node:crypto';
 import { createClient } from 'redis';
 import type { TokenSession } from './session-store';
+import { sessionNamespace } from './instance-namespace';
 
 export interface SessionStore {
   get(id: string): Promise<TokenSession | null>;
@@ -77,11 +78,12 @@ export async function configuredRedisStore() {
     const url = process.env.AUTH_SESSION_REDIS_URL;
     const key = Buffer.from(process.env.AUTH_SESSION_ENCRYPTION_KEY || '', 'base64');
     if (!url || key.length !== 32) throw new Error('Shared session store is not configured');
+    const namespace = sessionNamespace(process.env);
     const client = createClient({ url, disableOfflineQueue: true, socket: { connectTimeout: 5000, reconnectStrategy: redisReconnectDelay } });
     client.on('end', () => { redisStore = undefined; });
     client.on('error', () => { /* Never log URLs, tokens or Redis diagnostics. */ });
     await client.connect();
-    return new RedisSessionStore(client, key);
+    return new RedisSessionStore(client, key, namespace);
   })().catch(error => { redisStore = undefined; throw error; });
   return redisStore;
 }

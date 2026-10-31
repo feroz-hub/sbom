@@ -11,10 +11,13 @@ from cryptography.hazmat.primitives.asymmetric import rsa
 from redis import Redis
 from sqlalchemy import func, select
 
+from ..dev_instance import get_instance_namespace
 from ..models import SecurityMailOutbox
 from ..settings import get_settings
 from . import native_jwt_service
 from .security_mail_outbox import cipher
+
+_INSTANCE_NAMESPACE = get_instance_namespace()
 
 
 def validate_configuration():
@@ -86,7 +89,7 @@ def redis_client():
 
 def heartbeat():
     with redis_client() as client:
-        client.set("sbom:iam:mail-worker", "ready", ex=120)
+        client.set(_INSTANCE_NAMESPACE.mail_worker_heartbeat, "ready", ex=120)
 
 
 def readiness(db):
@@ -100,7 +103,7 @@ def readiness(db):
         with redis_client() as client:
             checks["rate_limits"] = bool(client.ping())
             checks["delivery_worker"] = get_settings().native_security_outbox_enabled and bool(
-                client.exists("sbom:iam:mail-worker")
+                client.exists(_INSTANCE_NAMESPACE.mail_worker_heartbeat)
             )
     except Exception:
         pass
