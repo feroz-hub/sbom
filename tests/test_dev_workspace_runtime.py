@@ -16,7 +16,7 @@ from unittest.mock import Mock
 from urllib.parse import quote
 
 import pytest
-from scripts import dev_instance_plan, dev_instance_storage, dev_private
+from scripts import dev, dev_instance_plan, dev_instance_storage, dev_private, dev_windows_acl
 from scripts import dev_workspace_preview as preview
 from scripts import dev_workspace_runtime as adapter
 
@@ -645,3 +645,100 @@ def test_deferred_frontend_factory_timeout_is_bounded_without_lingering_test_thr
     finally:
         release.set()
         assert finished.wait(timeout=1)
+
+
+def test_canonical_factory_uses_explicit_private_writers_instead_of_default_token_owner(instance, monkeypatch):
+    """Model an elevated token whose default new-file owner is Administrators.
+
+    No ACL/token is changed. Only files created through the explicit-owner
+    private writer are accepted by the injected ownership classifier.
+    """
+    explicit = set()
+    original_create, original_private = dev_private.create_private_file, adapter.dev_instance_registry._private
+    def create(path, raw):
+        original_create(path, raw)
+        info = Path(path).lstat()
+        explicit.add((info.st_dev, info.st_ino))
+    def private(path, **kwargs):
+        info = original_private(path, **kwargs)
+        if not kwargs.get("directory") and Path(path).is_relative_to(instance.root) and (info.st_dev, info.st_ino) not in explicit:
+            raise dev_windows_acl.AclVerificationError("EqualSid", category="OWNER_MISMATCH")
+        return info
+    monkeypatch.setattr(dev_private, "create_private_file", create)
+    monkeypatch.setattr(adapter.dev_instance_registry, "_private", private)
+    monkeypatch.setattr(dev, "process_info", lambda pid: {"pid": pid, "birth": "fixture-launch", "exe": "fixture-python"})
+    instance.controller.factory = dev.Runtime
+    canonical = instance.controller._new()
+    assert canonical._state_writer is instance.controller.atomic_json
+    assert canonical.acquire()
+    try:
+        canonical.begin("workspace")
+        canonical.state["workspace_context"] = instance.controller._binding()
+        instance.controller._persist(canonical)
+        canonical.refresh()
+        for path in (canonical.lock_path, canonical.path):
+            private(path)
+        assert canonical.load()["workspace_context"] == instance.controller._binding()
+        assert canonical.stop_services(lambda *args: None)
+    finally:
+        canonical.release()
+
+
+def test_existing_unknown_owner_lock_is_preserved_before_factory_or_spawn(instance, monkeypatch):
+    path = instance.root / ".dev-runtime.lock"
+    dev_private.create_private_file(path, b"\0")
+    before = (path.lstat().st_ino, path.read_bytes())
+    original = adapter.dev_instance_registry._private
+    def private(selected, **kwargs):
+        if Path(selected) == path:
+            raise dev_windows_acl.AclVerificationError("EqualSid", category="OWNER_MISMATCH")
+        return original(selected, **kwargs)
+    monkeypatch.setattr(adapter.dev_instance_registry, "_private", private)
+    factory = Mock(side_effect=AssertionError("Unknown lock must not be repaired or adopted"))
+    instance.controller.factory = factory
+    result = start(instance)
+    assert result.code == "INSTANCE_RUNTIME_RECORD_UNVERIFIED" and instance.launches == []
+    assert result.to_dict()["inspection"] == {"stage": "runtime-lock", "category": "OWNER_MISMATCH", "winerror": None}
+    assert before == (path.lstat().st_ino, path.read_bytes())
+    assert SECRET not in json.dumps(result.to_dict())
+    factory.assert_not_called()
+
+
+def test_private_writer_refuses_existing_unknown_state_without_overwrite_or_staging(instance, monkeypatch):
+    path = instance.root / ".dev-runtime.json"
+    dev_private.create_private_file(path, b"existing fixture state")
+    before = (path.lstat().st_ino, path.read_bytes())
+    original = adapter.dev_instance_registry._private
+    def private(selected, **kwargs):
+        if Path(selected) == path:
+            raise dev_windows_acl.AclVerificationError("EqualSid", category="OWNER_MISMATCH")
+        return original(selected, **kwargs)
+    monkeypatch.setattr(adapter.dev_instance_registry, "_private", private)
+    create = Mock(side_effect=AssertionError("Unknown state was overwritten"))
+    monkeypatch.setattr(dev_private, "create_private_file", create)
+    with pytest.raises(adapter.RuntimeAdapterError) as caught:
+        adapter.private_atomic_json(path, {"fixture": True}, root=instance.root)
+    assert caught.value.inspection.category == "OWNER_MISMATCH"
+    assert before == (path.lstat().st_ino, path.read_bytes())
+    create.assert_not_called()
+
+
+@pytest.mark.parametrize("change", [{}, {"APP_ENVIRONMENT": "production"}, {"PYTHON_DOTENV_DISABLED": "0"}, {"SBOM_DEV_RESOURCE_ID": "bad"}])
+def test_instance_heartbeat_uses_private_writer_only_for_exact_development_namespace(instance, monkeypatch, change):
+    directory = instance.root / ".dev-logs"
+    dev_instance_storage.initialize_private_directory(directory, anchor=instance.anchor)
+    env = {"SBOM_DEV_RESOURCE_ID": instance.location.descriptor.instance_id, "SBOM_DEV_INSTANCE": "fixture-instance",
+           "APP_ENVIRONMENT": "development", "PYTHON_DOTENV_DISABLED": "1", "SBOM_DEV_STATE_DIR": str(directory), **change}
+    legacy = Mock(side_effect=AssertionError("Instance heartbeat used default-owner writer"))
+    monkeypatch.setattr(dev, "atomic_json", legacy)
+    writer = Mock(wraps=adapter.private_atomic_json)
+    monkeypatch.setattr(adapter, "private_atomic_json", writer)
+    if change:
+        with pytest.raises(dev.OwnershipError, match="Instance heartbeat context is unverified"):
+            dev.write_service_heartbeat(env, "default")
+        writer.assert_not_called()
+    else:
+        dev.write_service_heartbeat(env, "default")
+        writer.assert_called_once()
+        adapter.dev_instance_registry._private(directory / "default-health.json")
+    legacy.assert_not_called()

@@ -8,6 +8,7 @@ and original Popen handles establish the process lifecycle. No app is imported.
 
 from __future__ import annotations
 
+import errno
 import json
 import os
 import queue
@@ -22,6 +23,7 @@ from collections.abc import Mapping
 from dataclasses import dataclass, field
 from pathlib import Path
 from types import MappingProxyType
+from uuid import uuid4
 
 if __package__:
     from . import (
@@ -134,8 +136,9 @@ _ERRORS = frozenset(
 
 
 class RuntimeAdapterError(ValueError):
-    def __init__(self, code):
+    def __init__(self, code, *, inspection=None):
         self.code = code if type(code) is str and code in _ERRORS else "INSTANCE_RUNTIME_ADAPTER_INVALID"
+        self.inspection = inspection
         super().__init__(self.code)
 
 
@@ -147,6 +150,106 @@ def minimal_transport(environment=None):
     """Allow OS transport only; never inherit ambient application configuration."""
     source = os.environ if environment is None else environment
     return MappingProxyType({key.upper(): value for key, value in source.items() if key.upper() in _TRANSPORT})
+
+
+@dataclass(frozen=True, slots=True)
+class RuntimeInspection:
+    stage: str
+    category: str
+    winerror: int | None = None
+
+    def __post_init__(self):
+        if (type(self.stage) is not str or self.stage not in {"runtime-directory", "runtime-state", "runtime-lock", "runtime-stop"}
+                or type(self.category) is not str or self.category not in {"OWNER_MISMATCH", "UNTRUSTED_GRANT", "OBJECT_UNVERIFIED",
+                                         "OWNER_OR_MODE_MISMATCH", "OVERSIZED", "ACL_UNVERIFIED"}
+                or self.winerror is not None and (type(self.winerror) is not int or not 0 <= self.winerror <= 0xFFFFFFFF)):
+            _fail("INSTANCE_RUNTIME_ADAPTER_INVALID")
+
+    def to_dict(self):
+        return {"stage": self.stage, "category": self.category, "winerror": self.winerror}
+
+
+def _private_failure(stage, error=None, *, category=None):
+    allowed = {"OWNER_MISMATCH", "UNTRUSTED_GRANT", "OBJECT_UNVERIFIED", "OWNER_OR_MODE_MISMATCH", "OVERSIZED"}
+    selected = category or getattr(error, "category", None)
+    if type(selected) is not str or selected not in allowed:
+        selected = "OWNER_OR_MODE_MISMATCH" if getattr(error, "code", None) == "REGISTRY_ACCESS_UNVERIFIED" else "ACL_UNVERIFIED"
+    code = getattr(error, "winerror", None)
+    code = code if type(code) is int and 0 <= code <= 0xFFFFFFFF else None
+    raise RuntimeAdapterError("INSTANCE_RUNTIME_RECORD_UNVERIFIED",
+                              inspection=RuntimeInspection(stage, selected, code)) from None
+
+
+def _private_parent(path, root):
+    if not root.is_absolute() or root.resolve(strict=True) != root:
+        _private_failure("runtime-directory")
+    dev_private.validate_parent(path, root)
+    current = root
+    dev_instance_storage._verify(current, private=True)
+    for part in path.parent.relative_to(root).parts:
+        current /= part
+        dev_instance_storage._verify(current, private=True)
+
+
+def private_runtime_lock(path, *, root):
+    """Create with an explicit user owner; never repair or replace an old lock."""
+    path, root = Path(path), Path(root)
+    try:
+        if path != root / ".dev-runtime.lock":
+            _private_failure("runtime-lock")
+        _private_parent(path, root)
+        if not os.path.lexists(path):
+            try:
+                dev_private.create_private_file(path, b"\0")
+            except OSError as error:
+                if error.errno != errno.EEXIST and getattr(error, "winerror", None) not in {80, 183}:
+                    raise
+        info = dev_instance_registry._private(path)
+        if info.st_size > 1:
+            _private_failure("runtime-lock", category="OVERSIZED")
+        return info.st_dev, info.st_ino
+    except RuntimeAdapterError:
+        raise
+    except Exception as error:
+        _private_failure("runtime-lock", error)
+
+
+def private_atomic_json(path, value, *, root):
+    """Private state from creation, including elevated Windows default-owner tokens.
+
+    Old targets must already satisfy the private policy. No ownership/ACL repair,
+    unknown-state adoption or global token/umask changes are performed. A failed
+    publication retains its uniquely named private staging artifact for review.
+    """
+    path, root = Path(path), Path(root)
+    try:
+        _private_parent(path, root)
+        before = dev_instance_registry._stamp(dev_instance_registry._private(path)) if os.path.lexists(path) else None
+        raw = (json.dumps(value, indent=2) + "\n").encode("utf-8")
+        if len(raw) > 1048576:
+            _private_failure("runtime-state", category="OVERSIZED")
+        stage = path.parent / (".runtime-pending-" + uuid4().hex + ".json")
+        dev_private.create_private_file(stage, raw)
+        created = dev_instance_registry._stamp(dev_instance_registry._private(stage))
+        for attempt in range(11):
+            _private_parent(path, root)
+            current = dev_instance_registry._stamp(dev_instance_registry._private(path)) if os.path.lexists(path) else None
+            if current != before or dev_instance_registry._stamp(dev_instance_registry._private(stage)) != created:
+                _private_failure("runtime-state")
+            try:
+                os.replace(stage, path)
+                break
+            except OSError as error:
+                if sys.platform != "win32" or getattr(error, "winerror", None) not in {5, 32, 33} or attempt == 10:
+                    raise
+                time.sleep(min(0.01 * 2**attempt, 0.1))
+        final = dev_instance_registry._private(path)
+        if (final.st_dev, final.st_ino) != created[:2]:
+            _private_failure("runtime-state")
+    except RuntimeAdapterError:
+        raise
+    except Exception as error:
+        _private_failure("runtime-state", error)
 
 
 @dataclass(frozen=True, slots=True)
@@ -354,9 +457,10 @@ class RuntimeOutcome:
     records_retained: bool = False
     ready: bool = False
     component: str | None = None
+    inspection: RuntimeInspection | None = None
 
     def to_dict(self):
-        return {
+        result = {
             "code": self.code,
             "exit_code": self.exit_code,
             "records_retained": self.records_retained,
@@ -372,6 +476,9 @@ class RuntimeOutcome:
                 for item in self.services
             ],
         }
+        if self.inspection is not None:
+            result["inspection"] = self.inspection.to_dict()
+        return result
 
 
 def _bounded(callback, timeout):
@@ -431,8 +538,9 @@ class WorkspaceRuntime:
             if os.path.lexists(path):
                 try:
                     info = dev_instance_registry._private(path)
-                except Exception:
-                    _fail("INSTANCE_RUNTIME_RECORD_UNVERIFIED")
+                except Exception as error:
+                    _private_failure({".dev-runtime.json": "runtime-state", ".dev-runtime.lock": "runtime-lock",
+                                      ".dev-runtime.stop": "runtime-stop"}[name], error)
                 if info.st_size > 1048576:
                     _fail("INSTANCE_RUNTIME_RECORD_UNVERIFIED")
 
@@ -445,6 +553,12 @@ class WorkspaceRuntime:
             or runtime.stop_path != self.location.root / ".dev-runtime.stop"
         ):
             _fail("INSTANCE_RUNTIME_ADAPTER_INVALID")
+        configure = getattr(runtime, "configure_private_io", None)
+        if callable(configure):
+            def writer(path, value):
+                return private_atomic_json(path, value, root=self.location.root)
+            configure(state_writer=writer, lock_creator=lambda path: private_runtime_lock(path, root=self.location.root))
+            self.atomic_json = writer
         return runtime
 
     def _binding(self):
@@ -759,6 +873,7 @@ class WorkspaceRuntime:
                 diagnostics,
                 (runtime is not None and not complete) or os.path.lexists(self.location.root / ".dev-runtime.json"),
                 component=self.current_component,
+                inspection=getattr(error, "inspection", None) if type(error) is RuntimeAdapterError else None,
             )
 
     def stop(self, *, timeout=45):
