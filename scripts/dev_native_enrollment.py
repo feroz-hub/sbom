@@ -36,7 +36,8 @@ else:
     import dev_operator
     from greenfield_migration_graph import discover
 
-_MARKER = "_SBOM_NATIVE_ENROLLMENT_AUTHORIZATION"
+# Correlates one private pipe exchange; caller-controlled, never authorization.
+_MARKER = "_SBOM_NATIVE_ENROLLMENT_CORRELATION"
 _import_module = importlib.import_module
 _CHILD_ARGUMENT = "--internal-native-enrollment-child"
 _ACTIONS = {"create", "resend-activation"}
@@ -307,7 +308,7 @@ def run_enrollment(args, launcher, *, action, identity=None, readiness_checker=N
         return EnrollmentOutcome("ENROLLMENT_INSPECTION_FAILED", 1)
 
 
-def _payload(plan, identity, authorization):
+def _payload(plan, identity, correlation):
     return {
         "version": 1,
         "action": plan.action,
@@ -317,7 +318,7 @@ def _payload(plan, identity, authorization):
         "fingerprint": plan.fingerprint,
         "head": plan.head,
         "identity": asdict(identity),
-        "authorization": authorization,
+        "correlation": correlation,
         "existing_users_present": plan.existing_users_present,
     }
 
@@ -338,11 +339,11 @@ def _stop_owned(child):
 
 
 def _launch_child(plan, identity, launcher):
-    authorization = secrets.token_urlsafe(32)
+    correlation = secrets.token_urlsafe(32)
     environment = dict(_child_environment(plan.context))
-    environment[_MARKER] = authorization
+    environment[_MARKER] = correlation
     command = [str(launcher.venv_python()), "-B", str(Path(__file__).resolve()), _CHILD_ARGUMENT]
-    payload = json.dumps(_payload(plan, identity, authorization))
+    payload = json.dumps(_payload(plan, identity, correlation))
     child = None
     try:
         child = subprocess.Popen(
@@ -359,7 +360,12 @@ def _launch_child(plan, identity, launcher):
         if len(stdout) > 1024:
             raise ValueError()
         result = json.loads(stdout)
-        allowed = {"ACTIVATION_QUEUED": (True, 0), "ENROLLMENT_REFUSED": (False, 1), "OUTCOME_UNCONFIRMED": (None, 1)}
+        allowed = {
+            "ACTIVATION_QUEUED": (True, 0),
+            "ENROLLMENT_REFUSED": (False, 1),
+            "ENROLLMENT_READINESS_CONTRACT_REQUIRED": (False, 1),
+            "OUTCOME_UNCONFIRMED": (None, 1),
+        }
         if (
             not isinstance(result, dict)
             or set(result) != {"version", "code", "committed"}
@@ -380,9 +386,9 @@ def _launch_child(plan, identity, launcher):
         return EnrollmentOutcome("OUTCOME_UNCONFIRMED", 1, None, cleaned, pid)
 
 
-def _decode_request(raw, authorization):
+def _decode_request(raw, correlation):
     try:
-        if len(raw) > 16384 or not authorization:
+        if len(raw) > 16384 or not correlation:
             raise ValueError()
         request = json.loads(raw)
         required = {
@@ -394,7 +400,7 @@ def _decode_request(raw, authorization):
             "fingerprint",
             "head",
             "identity",
-            "authorization",
+            "correlation",
             "existing_users_present",
         }
         if (
@@ -403,8 +409,8 @@ def _decode_request(raw, authorization):
             or type(request["version"]) is not int
             or request["version"] != 1
             or type(request["existing_users_present"]) is not bool
-            or not isinstance(request["authorization"], str)
-            or not hmac.compare_digest(request["authorization"], authorization)
+            or not isinstance(request["correlation"], str)
+            or not hmac.compare_digest(request["correlation"], correlation)
             or request["action"] not in _ACTIONS
             or not isinstance(request["fingerprint"], str)
             or len(request["fingerprint"]) != 64
@@ -418,8 +424,20 @@ def _decode_request(raw, authorization):
         _refuse("ENROLLMENT_PROTOCOL_REFUSED")
 
 
-def _execute_child(request, identity, launcher):
-    """Application imports only after current source/target/authorization proof."""
+def _require_mutation_authorization(stage):
+    """Sealed until independent runtime AND operator attestation is approved.
+
+    No marker, request field, environment flag or parent checker can open this
+    gate. A future implementation needs fresh trusted evidence at every stage,
+    bound to the instance/configuration, effective child Settings, exact target,
+    identity/action, activation origin and approved mail recipient. Correlation
+    and configuration fingerprints provide none of that authorization.
+    """
+    _refuse("ENROLLMENT_READINESS_CONTRACT_REQUIRED")
+
+
+def _verified_child_plan(request, launcher):
+    """Fresh drift/target validation, explicitly separate from authorization."""
     args = SimpleNamespace(
         profile=request["profile"], legacy_config=request["family"], confirm_database=request["confirm_database"]
     )
@@ -429,16 +447,33 @@ def _execute_child(request, identity, launcher):
         request["fingerprint"], _fingerprint(context, head, launcher)
     ):
         _refuse("ENROLLMENT_PLAN_CHANGED")
+    return args, context, head
+
+
+def _mutation_boundary(request, launcher, environment, stage):
+    _require_mutation_authorization(stage)
+    if dict(os.environ) != environment:
+        _refuse("ENROLLMENT_ENVIRONMENT_CHANGED")
+    _verified_child_plan(request, launcher)
+
+
+def _execute_child(request, identity, launcher):
+    """Default denial precedes even configuration reads or environment changes."""
+    _require_mutation_authorization("entry")
+    request = dict(request)
+    args, context, head = _verified_child_plan(request, launcher)
     if any(name == "app.db" or name == "app.models" or name.startswith("app.services") for name in sys.modules):
         _refuse("ENROLLMENT_CHILD_NOT_FRESH")
     dev_operator._libpq_overrides(os.environ, context.environment)
     connection, session, engine, settings_module = None, None, None, None
     commit_started, committed, cleanup_confirmed, installed_settings = False, False, True, False
-    previous_flag = os.environ.get("NATIVE_PLATFORM_BOOTSTRAP_ENABLED")
-    previous_dotenv = os.environ.get("PYTHON_DOTENV_DISABLED")
+    previous_environment = dict(os.environ)
+    child_environment = dict(_child_environment(context))
+    child_environment["NATIVE_PLATFORM_BOOTSTRAP_ENABLED"] = "true"
     try:
-        os.environ["PYTHON_DOTENV_DISABLED"] = "1"
-        os.environ["NATIVE_PLATFORM_BOOTSTRAP_ENABLED"] = "true"
+        # Settings must consume the selected projection, never ambient overrides.
+        os.environ.clear()
+        os.environ.update(child_environment)
         settings_module = _import_module("app.settings")
         if settings_module._settings_instance is not None:
             _refuse("ENROLLMENT_CHILD_NOT_FRESH")
@@ -489,6 +524,7 @@ def _execute_child(request, identity, launcher):
             ).scalar_one()
             if type(observed_users) is not bool or observed_users is not request["existing_users_present"]:
                 _refuse("ENROLLMENT_PLAN_CHANGED")
+            _mutation_boundary(request, launcher, child_environment, "before-create")
             bootstrap.create(session, **asdict(identity))
         else:
             models = _import_module("app.models")
@@ -501,8 +537,10 @@ def _execute_child(request, identity, launcher):
                 or bootstrap.normalize_email(person.email) != bootstrap.normalize_email(identity.email)
             ):
                 _refuse("ENROLLMENT_RESERVED_IDENTITY_MISMATCH")
+            _mutation_boundary(request, launcher, child_environment, "before-resend")
             bootstrap.resend(session)
         session.flush()
+        _mutation_boundary(request, launcher, child_environment, "before-commit")
         commit_started = True
         session.commit()
         committed = True
@@ -525,14 +563,8 @@ def _execute_child(request, identity, launcher):
                 cleanup_confirmed = False
         if installed_settings:
             settings_module._settings_instance = None
-        if previous_flag is None:
-            os.environ.pop("NATIVE_PLATFORM_BOOTSTRAP_ENABLED", None)
-        else:
-            os.environ["NATIVE_PLATFORM_BOOTSTRAP_ENABLED"] = previous_flag
-        if previous_dotenv is None:
-            os.environ.pop("PYTHON_DOTENV_DISABLED", None)
-        else:
-            os.environ["PYTHON_DOTENV_DISABLED"] = previous_dotenv
+        os.environ.clear()
+        os.environ.update(previous_environment)
     if committed and cleanup_confirmed:
         return {"version": 1, "code": "ACTIVATION_QUEUED", "committed": True}
     if commit_started or not cleanup_confirmed:
@@ -546,22 +578,28 @@ class _Discard(io.TextIOBase):
 
 
 def child_main():
-    """Private pipe protocol only; suppress all imported-module output and traces."""
+    """Private correlation protocol; real mutation authorization remains sealed."""
     sys.dont_write_bytecode = True
-    authorization = os.environ.pop(_MARKER, None)
+    correlation = os.environ.pop(_MARKER, None)
     result = {"version": 1, "code": "ENROLLMENT_REFUSED", "committed": False}
     previous_logging = logging.root.manager.disable
     execution_started = False
     logging.disable(logging.CRITICAL)
     try:
         with redirect_stdout(_Discard()), redirect_stderr(_Discard()):
-            request, identity = _decode_request(sys.stdin.read(16385), authorization)
+            request, identity = _decode_request(sys.stdin.read(16385), correlation)
+            _require_mutation_authorization("dispatch")
             if __package__:
                 from . import dev as launcher
             else:
                 import dev as launcher
             execution_started = True
             result = _execute_child(request, identity, launcher)
+    except EnrollmentError as error:
+        if not execution_started and error.code == "ENROLLMENT_READINESS_CONTRACT_REQUIRED":
+            result = {"version": 1, "code": error.code, "committed": False}
+        elif execution_started:
+            result = {"version": 1, "code": "OUTCOME_UNCONFIRMED", "committed": None}
     except BaseException:
         if execution_started:
             result = {"version": 1, "code": "OUTCOME_UNCONFIRMED", "committed": None}

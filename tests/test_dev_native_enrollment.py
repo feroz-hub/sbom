@@ -470,7 +470,10 @@ class Session:
 
 @pytest.fixture
 def fake_application(candidate, monkeypatch):
+    """Staged transaction simulation only; real mutation authorization stays shut."""
     events = []
+    authorization = Mock(side_effect=lambda stage: events.append("gate:" + stage))
+    monkeypatch.setattr(enrollment, "_require_mutation_authorization", authorization)
     connection = Connection(events)
     session = Session(events, connection)
     settings = SimpleNamespace(_settings_instance=None)
@@ -479,6 +482,7 @@ def fake_application(candidate, monkeypatch):
         assert kwargs == {"_env_file": None}
         assert os.environ["PYTHON_DOTENV_DISABLED"] == "1"
         assert os.environ["NATIVE_PLATFORM_BOOTSTRAP_ENABLED"] == "true"
+        assert os.environ["DATABASE_URL"] == candidate.context.environment["DATABASE_URL"]
         events.append("settings-explicit")
         return object()
 
@@ -536,6 +540,7 @@ def fake_application(candidate, monkeypatch):
         driver=driver,
         engine=engine,
         bootstrap=bootstrap,
+        authorization=authorization,
     )
 
 
@@ -676,7 +681,7 @@ def test_child_revalidates_sources_before_any_application_import(candidate, fake
     (candidate.context.root / source).write_text("changed-fixture", encoding="utf-8")
     with pytest.raises(enrollment.EnrollmentError, match="ENROLLMENT_PLAN_CHANGED"):
         enrollment._execute_child(request, identity(), candidate.launcher)
-    assert not fake_application.events
+    assert fake_application.events == ["gate:entry"]
 
 
 @pytest.mark.parametrize("cached", ["app.db", "app.models", "app.services.native_platform_bootstrap"])
@@ -684,14 +689,14 @@ def test_child_refuses_nonfresh_application_modules_before_import(candidate, fak
     monkeypatch.setitem(sys.modules, cached, object())
     with pytest.raises(enrollment.EnrollmentError, match="ENROLLMENT_CHILD_NOT_FRESH"):
         execute(candidate, fake_application)
-    assert not fake_application.events
+    assert fake_application.events == ["gate:entry"]
 
 
-@pytest.mark.parametrize("failure", ["bad-authorization", "oversized", "identity-password", "boolean-version"])
-def test_private_protocol_rejects_invalid_capability_size_or_extra_identity_fields(candidate, failure):
+@pytest.mark.parametrize("failure", ["bad-correlation", "oversized", "identity-password", "boolean-version"])
+def test_private_protocol_rejects_invalid_correlation_size_or_extra_identity_fields(candidate, failure):
     request = enrollment._payload(inspect(candidate), identity(), "fixture-authorization")
-    if failure == "bad-authorization":
-        request["authorization"] = "wrong-fixture-authorization"
+    if failure == "bad-correlation":
+        request["correlation"] = "wrong-fixture-correlation"
     if failure == "identity-password":
         request["identity"]["password"] = SECRET
     if failure == "boolean-version":
@@ -708,6 +713,8 @@ def test_private_child_protocol_suppresses_private_output_and_marks_unexpected_e
     monkeypatch.setattr(sys, "stdin", io.StringIO(json.dumps(request)))
     monkeypatch.setattr(sys, "dont_write_bytecode", True)
     os.environ[enrollment._MARKER] = "fixture-authorization"
+    # Exercise uncertain execution only with a synthetic gate; production denies.
+    monkeypatch.setattr(enrollment, "_require_mutation_authorization", lambda stage: None)
 
     def fail(*values):
         print(SECRET)
@@ -720,3 +727,258 @@ def test_private_child_protocol_suppresses_private_output_and_marks_unexpected_e
     assert json.loads(captured.out) == {"version": 1, "code": "OUTCOME_UNCONFIRMED", "committed": None}
     assert not captured.err and SECRET not in captured.out and EMAIL not in captured.out
     assert enrollment._MARKER not in os.environ
+
+
+def _action_identity(action):
+    return identity() if action == "create" else enrollment.EnrollmentIdentity(EMAIL)
+
+
+def _direct_request(candidate, action):
+    value = _action_identity(action)
+    planned = replace(inspect(candidate), action=action)
+    return enrollment._payload(planned, value, "caller-selected-correlation"), value
+
+
+@pytest.mark.parametrize("action", ["create", "resend-activation"])
+def test_default_child_gate_refuses_valid_direct_request_before_any_configuration_or_import(
+    candidate, monkeypatch, capsys, action
+):
+    # Deliberately do not request fake_application: production authorization stays intact.
+    request, value = _direct_request(candidate, action)
+    decoded, decoded_identity = enrollment._decode_request(json.dumps(request), request["correlation"])
+    assert decoded == request and decoded_identity == value
+    os.environ.update(
+        {
+            enrollment._MARKER: request["correlation"],
+            "NATIVE_PLATFORM_BOOTSTRAP_ENABLED": "true",
+            "_SBOM_NATIVE_ENROLLMENT_AUTHORIZATION": "caller-selected-correlation",
+            "ENROLLMENT_APPROVED": "true",
+        }
+    )
+    before = dict(os.environ)
+    forbidden = Mock(side_effect=AssertionError("Default denial reached configuration or application code"))
+    monkeypatch.setattr(enrollment, "_verified_child_plan", forbidden)
+    monkeypatch.setattr(enrollment, "_import_module", forbidden)
+    monkeypatch.setattr(dev_operator, "resolve_native_context", forbidden)
+    monkeypatch.setattr(enrollment.dev_environment, "bounded_read_bytes", forbidden)
+    with pytest.raises(enrollment.EnrollmentError, match="^ENROLLMENT_READINESS_CONTRACT_REQUIRED$"):
+        enrollment._execute_child(decoded, decoded_identity, candidate.launcher)
+    forbidden.assert_not_called()
+    assert os.environ == before and request == decoded
+    output = capsys.readouterr()
+    assert not output.out and not output.err
+
+
+@pytest.mark.parametrize("stage", ["dispatch", "entry", "before-create", "before-resend", "before-commit", "unknown"])
+def test_real_mutation_gate_has_no_enabling_stage_or_environment(candidate, stage):
+    os.environ.update({"NATIVE_PLATFORM_BOOTSTRAP_ENABLED": "true", "ENROLLMENT_APPROVED": "true"})
+    with pytest.raises(enrollment.EnrollmentError, match="^ENROLLMENT_READINESS_CONTRACT_REQUIRED$"):
+        enrollment._require_mutation_authorization(stage)
+
+
+@pytest.mark.parametrize("action", ["create", "resend-activation"])
+def test_actual_private_script_entry_refuses_self_chosen_matching_correlation_under_mutation_audit(
+    candidate, tmp_path, action
+):
+    request, _ = _direct_request(candidate, action)
+    script = Path(enrollment.__file__).resolve()
+    # -I/-S/-B excludes ambient Python hooks, site packages and bytecode writes.
+    # The audit is in the actual owned child, before executing the real CLI module.
+    driver = r"""
+import os
+import runpy
+import sys
+
+violations = []
+mutations = {
+    "os.mkdir", "os.remove", "os.rename", "os.rmdir", "os.link", "os.symlink",
+    "os.chmod", "os.chown", "os.truncate", "os.utime", "os.system",
+    "os.posix_spawn", "os.exec", "subprocess.Popen",
+}
+
+def audit(event, arguments):
+    forbidden = event in mutations or event.startswith("socket.")
+    if event == "import":
+        name = arguments[0]
+        forbidden |= name in {"dev", "scripts.dev", "app", "psycopg", "sqlalchemy"}
+        forbidden |= name.startswith(("app.", "psycopg.", "sqlalchemy."))
+    if event == "open":
+        mode = arguments[1]
+        flags = arguments[2]
+        forbidden |= isinstance(mode, str) and any(char in mode for char in "wax+")
+        forbidden |= isinstance(flags, int) and bool(
+            flags & (os.O_WRONLY | os.O_RDWR | os.O_CREAT | os.O_TRUNC | os.O_APPEND)
+        )
+    if forbidden:
+        violations.append("FIXTURE_FORBIDDEN_ACTION")
+        raise RuntimeError("FIXTURE_FORBIDDEN_ACTION")
+
+script = sys.argv[1]
+argument = sys.argv[2]
+sys.path.insert(0, os.path.dirname(script))
+sys.argv = [script, argument]
+sys.addaudithook(audit)
+try:
+    runpy.run_path(script, run_name="__main__")
+finally:
+    if violations:
+        raise SystemExit(97)
+"""
+    completed = subprocess.run(
+        [sys.executable, "-I", "-S", "-B", "-c", driver, str(script), enrollment._CHILD_ARGUMENT],
+        input=json.dumps(request),
+        text=True,
+        encoding="utf-8",
+        capture_output=True,
+        timeout=15,
+        cwd=tmp_path,
+        env={
+            "APP_ENVIRONMENT": "development",
+            enrollment._MARKER: request["correlation"],
+            "NATIVE_PLATFORM_BOOTSTRAP_ENABLED": "true",
+            "DATABASE_URL": f"postgresql+psycopg://fixture:{SECRET}@127.0.0.1:5432/fixture_only",
+        },
+        check=False,
+    )
+    assert completed.returncode == 1
+    assert completed.stderr == ""
+    assert json.loads(completed.stdout) == {
+        "version": 1,
+        "code": "ENROLLMENT_READINESS_CONTRACT_REQUIRED",
+        "committed": False,
+    }
+    assert SECRET not in completed.stdout and EMAIL not in completed.stdout
+
+
+@pytest.mark.parametrize("action", ["create", "resend-activation"])
+@pytest.mark.parametrize("revocation", ["service", "commit"])
+def test_staged_authorization_revocation_rolls_back_before_service_or_commit(
+    candidate, fake_application, action, revocation
+):
+    service_stage = "before-create" if action == "create" else "before-resend"
+    refused_stage = service_stage if revocation == "service" else "before-commit"
+
+    def authorize(stage):
+        fake_application.events.append("gate:" + stage)
+        if stage == refused_stage:
+            raise enrollment.EnrollmentError("ENROLLMENT_READINESS_CONTRACT_REQUIRED")
+
+    fake_application.authorization.side_effect = authorize
+    before = dict(os.environ)
+    result = execute(candidate, fake_application, action=action, value=_action_identity(action))
+    assert result == {"version": 1, "code": "ENROLLMENT_REFUSED", "committed": False}
+    events = fake_application.events
+    assert events.count("rollback") == 1 and "commit" not in events
+    assert events[-2:] == ["close", "dispose"] and os.environ == before
+    service = fake_application.bootstrap.create if action == "create" else fake_application.bootstrap.resend
+    assert service.call_count == (0 if revocation == "service" else 1)
+    assert events.index("gate:entry") < events.index("gate:" + refused_stage) < events.index("rollback")
+    if revocation == "service":
+        assert "flush" not in events and "gate:before-commit" not in events
+    else:
+        assert events.index("flush") < events.index("gate:before-commit")
+
+
+@pytest.mark.parametrize("action", ["create", "resend-activation"])
+@pytest.mark.parametrize("timing", ["lock", "service", "flush"])
+@pytest.mark.parametrize("changed", ["selected-config", "source", "environment"])
+def test_staged_mutation_boundaries_detect_drift_after_lock_service_and_flush(
+    candidate, fake_application, monkeypatch, action, timing, changed
+):
+    def drift():
+        if changed == "environment":
+            os.environ["SMTP_HOST"] = "changed-fixture.invalid"
+        else:
+            name = ".env.dev.local" if changed == "selected-config" else "app/services/native_platform_bootstrap.py"
+            (candidate.context.root / name).write_text("changed-synthetic-fixture", encoding="utf-8")
+
+    service = fake_application.bootstrap.create if action == "create" else fake_application.bootstrap.resend
+    target = fake_application.bootstrap._lock if timing == "lock" else service
+    if timing == "flush":
+        previous = fake_application.session.flush
+
+        def flush():
+            previous()
+            drift()
+
+        monkeypatch.setattr(fake_application.session, "flush", flush)
+    else:
+        previous = target.side_effect
+
+        def invoke(*values, **keywords):
+            previous(*values, **keywords)
+            drift()
+
+        target.side_effect = invoke
+    before = dict(os.environ)
+    result = execute(candidate, fake_application, action=action, value=_action_identity(action))
+    assert result == {"version": 1, "code": "ENROLLMENT_REFUSED", "committed": False}
+    events = fake_application.events
+    assert events.count("rollback") == 1 and "commit" not in events
+    assert service.call_count == (0 if timing == "lock" else 1)
+    assert events[-2:] == ["close", "dispose"] and os.environ == before
+    expected_stage = (
+        ("before-create" if action == "create" else "before-resend") if timing == "lock" else "before-commit"
+    )
+    assert "gate:" + expected_stage in events
+
+
+@pytest.mark.parametrize("action", ["create", "resend-activation"])
+def test_staged_settings_consume_selected_projection_and_restore_ambient_environment(
+    candidate, fake_application, action
+):
+    selected = dev_operator.OperatorEnvironment(
+        {**candidate.context.environment, "SMTP_HOST": "selected-fixture.invalid"}
+    )
+    candidate.context = replace(candidate.context, environment=selected)
+    candidate.resolve.return_value = candidate.context
+    os.environ.update(
+        {
+            "DATABASE_URL": f"postgresql+psycopg://ambient:{SECRET}@127.0.0.1:6543/wrong_fixture",
+            "SMTP_HOST": "ambient-fixture.invalid",
+            "AMBIENT_FIXTURE_SECRET": SECRET,
+            "PYTHONINSPECT": "1",
+        }
+    )
+    before = dict(os.environ)
+    expected = {**enrollment._child_environment(candidate.context), "NATIVE_PLATFORM_BOOTSTRAP_ENABLED": "true"}
+    previous = fake_application.settings.Settings.side_effect
+    observed = []
+
+    def settings(**keywords):
+        observed.append(dict(os.environ))
+        return previous(**keywords)
+
+    fake_application.settings.Settings.side_effect = settings
+    result = execute(candidate, fake_application, action=action, value=_action_identity(action))
+    assert result == {"version": 1, "code": "ACTIVATION_QUEUED", "committed": True}
+    assert observed == [expected] and os.environ == before
+    assert "AMBIENT_FIXTURE_SECRET" not in expected and "PYTHONINSPECT" not in expected
+    assert fake_application.settings._settings_instance is None
+    assert [call.args[0] for call in fake_application.authorization.call_args_list] == [
+        "entry",
+        "before-create" if action == "create" else "before-resend",
+        "before-commit",
+    ]
+
+
+@pytest.mark.parametrize(
+    "committed, exit_code, accepted", [(False, 1, True), (True, 1, False), (None, 1, False), (False, 0, False)]
+)
+def test_parent_accepts_only_exact_known_blocked_child_result(candidate, monkeypatch, committed, exit_code, accepted):
+    output = {"version": 1, "code": "ENROLLMENT_READINESS_CONTRACT_REQUIRED", "committed": committed}
+    helper = Helper(output=json.dumps(output))
+
+    def communicate(payload, timeout):
+        assert timeout == 40
+        helper.payload, helper.returncode = payload, exit_code
+        return helper.output, None
+
+    monkeypatch.setattr(helper, "communicate", communicate)
+    monkeypatch.setattr(subprocess, "Popen", Mock(return_value=helper))
+    result = enrollment._launch_child(inspect(candidate), identity(), candidate.launcher)
+    if accepted:
+        assert result == enrollment.EnrollmentOutcome("ENROLLMENT_READINESS_CONTRACT_REQUIRED", 1, False)
+    else:
+        assert result.code == "OUTCOME_UNCONFIRMED" and result.committed is None
+    assert not helper.terminated and not helper.killed
