@@ -3,9 +3,11 @@
 from __future__ import annotations
 
 import copy
+import errno
 import importlib.util
 import json
 import os
+import runpy
 import subprocess
 import sys
 import threading
@@ -50,6 +52,7 @@ class FakeRuntime:
         self.stop_path, self.state = root / ".dev-runtime.stop", None
         self.store, self.events, self.processes = store, events, {}
         self.fail_register = False
+        self.registration_error = None
         self.status_overrides = {}
         self.lock_available = True
 
@@ -83,6 +86,8 @@ class FakeRuntime:
     def register(self, name, pid, port):
         assert pid in self.processes and self.processes[pid]._handle
         self.events.append(("register", name, pid, port))
+        if self.registration_error is not None:
+            raise self.registration_error
         if self.fail_register:
             raise OSError(SECRET)
         self.state["services"][name] = {"pid": pid, "birth": "birth-" + str(pid), "exe": "verified-exe", "members": []}
@@ -158,6 +163,7 @@ def instance(tmp_path, monkeypatch):
     verified = preview.VerifiedPreviewLaunch(argv, workspace, env, ())
     specs = adapter.preview_launch(location, verified)
     events, store, launches, runtimes = [], {}, [], []
+    signals = {"emit": True, "contents": adapter._INTERPRETER_SIGNAL, "exit": None}
 
     def factory(selected):
         assert selected == root
@@ -180,6 +186,12 @@ def instance(tmp_path, monkeypatch):
             assert "DATABASE_URL" not in options["env"]
         child = Child(100 + len(launches), events)
         launches.append((child, command, options))
+        if adapter._BOOTSTRAP in command:
+            if signals["emit"]:
+                dev_private.create_private_file(
+                    Path(options["env"]["SBOM_DEV_INTERPRETER_SIGNAL"]), signals["contents"]
+                )
+            child.returncode = signals["exit"]
         return child
 
     forbidden = Mock(side_effect=AssertionError("Synthetic runtime attempted OS process control"))
@@ -208,6 +220,7 @@ def instance(tmp_path, monkeypatch):
         factory=factory,
         persist=persist,
         node=node,
+        signals=signals,
         forbidden=forbidden,
     )
     controller.release()
@@ -429,7 +442,8 @@ def isolated_specs(instance, *, include_frontend=True):
     environment = {
         key: value.replace(snapshot.state_root, str(instance.root)).replace(
             quote(snapshot.state_root, safe=""), quote(str(instance.root), safe="")
-        ) for key, value in snapshot.environment.items()
+        )
+        for key, value in snapshot.environment.items()
     }
     snapshot = replace(snapshot, source_root=str(source), state_root=str(instance.root), environment=environment)
     lifecycle = adapter.dev_workspace_lifecycle.plan_lifecycle(descriptor, snapshot)
@@ -655,18 +669,27 @@ def test_canonical_factory_uses_explicit_private_writers_instead_of_default_toke
     """
     explicit = set()
     original_create, original_private = dev_private.create_private_file, adapter.dev_instance_registry._private
+
     def create(path, raw):
         original_create(path, raw)
         info = Path(path).lstat()
         explicit.add((info.st_dev, info.st_ino))
+
     def private(path, **kwargs):
         info = original_private(path, **kwargs)
-        if not kwargs.get("directory") and Path(path).is_relative_to(instance.root) and (info.st_dev, info.st_ino) not in explicit:
+        if (
+            not kwargs.get("directory")
+            and Path(path).is_relative_to(instance.root)
+            and (info.st_dev, info.st_ino) not in explicit
+        ):
             raise dev_windows_acl.AclVerificationError("EqualSid", category="OWNER_MISMATCH")
         return info
+
     monkeypatch.setattr(dev_private, "create_private_file", create)
     monkeypatch.setattr(adapter.dev_instance_registry, "_private", private)
-    monkeypatch.setattr(dev, "process_info", lambda pid: {"pid": pid, "birth": "fixture-launch", "exe": "fixture-python"})
+    monkeypatch.setattr(
+        dev, "process_info", lambda pid: {"pid": pid, "birth": "fixture-launch", "exe": "fixture-python"}
+    )
     instance.controller.factory = dev.Runtime
     canonical = instance.controller._new()
     assert canonical._state_writer is instance.controller.atomic_json
@@ -689,10 +712,12 @@ def test_existing_unknown_owner_lock_is_preserved_before_factory_or_spawn(instan
     dev_private.create_private_file(path, b"\0")
     before = (path.lstat().st_ino, path.read_bytes())
     original = adapter.dev_instance_registry._private
+
     def private(selected, **kwargs):
         if Path(selected) == path:
             raise dev_windows_acl.AclVerificationError("EqualSid", category="OWNER_MISMATCH")
         return original(selected, **kwargs)
+
     monkeypatch.setattr(adapter.dev_instance_registry, "_private", private)
     factory = Mock(side_effect=AssertionError("Unknown lock must not be repaired or adopted"))
     instance.controller.factory = factory
@@ -709,10 +734,12 @@ def test_private_writer_refuses_existing_unknown_state_without_overwrite_or_stag
     dev_private.create_private_file(path, b"existing fixture state")
     before = (path.lstat().st_ino, path.read_bytes())
     original = adapter.dev_instance_registry._private
+
     def private(selected, **kwargs):
         if Path(selected) == path:
             raise dev_windows_acl.AclVerificationError("EqualSid", category="OWNER_MISMATCH")
         return original(selected, **kwargs)
+
     monkeypatch.setattr(adapter.dev_instance_registry, "_private", private)
     create = Mock(side_effect=AssertionError("Unknown state was overwritten"))
     monkeypatch.setattr(dev_private, "create_private_file", create)
@@ -723,12 +750,20 @@ def test_private_writer_refuses_existing_unknown_state_without_overwrite_or_stag
     create.assert_not_called()
 
 
-@pytest.mark.parametrize("change", [{}, {"APP_ENVIRONMENT": "production"}, {"PYTHON_DOTENV_DISABLED": "0"}, {"SBOM_DEV_RESOURCE_ID": "bad"}])
+@pytest.mark.parametrize(
+    "change", [{}, {"APP_ENVIRONMENT": "production"}, {"PYTHON_DOTENV_DISABLED": "0"}, {"SBOM_DEV_RESOURCE_ID": "bad"}]
+)
 def test_instance_heartbeat_uses_private_writer_only_for_exact_development_namespace(instance, monkeypatch, change):
     directory = instance.root / ".dev-logs"
     dev_instance_storage.initialize_private_directory(directory, anchor=instance.anchor)
-    env = {"SBOM_DEV_RESOURCE_ID": instance.location.descriptor.instance_id, "SBOM_DEV_INSTANCE": "fixture-instance",
-           "APP_ENVIRONMENT": "development", "PYTHON_DOTENV_DISABLED": "1", "SBOM_DEV_STATE_DIR": str(directory), **change}
+    env = {
+        "SBOM_DEV_RESOURCE_ID": instance.location.descriptor.instance_id,
+        "SBOM_DEV_INSTANCE": "fixture-instance",
+        "APP_ENVIRONMENT": "development",
+        "PYTHON_DOTENV_DISABLED": "1",
+        "SBOM_DEV_STATE_DIR": str(directory),
+        **change,
+    }
     legacy = Mock(side_effect=AssertionError("Instance heartbeat used default-owner writer"))
     monkeypatch.setattr(dev, "atomic_json", legacy)
     writer = Mock(wraps=adapter.private_atomic_json)
@@ -742,3 +777,338 @@ def test_instance_heartbeat_uses_private_writer_only_for_exact_development_names
         writer.assert_called_once()
         adapter.dev_instance_registry._private(directory / "default-health.json")
     legacy.assert_not_called()
+
+
+def start_isolated(instance, **changes):
+    _, specs = isolated_specs(instance, include_frontend=False)
+    options = dict(
+        preflight=lambda *_: True,
+        probes={name: lambda *_: True for name in adapter._LOGS},
+        frontend_factory=lambda *_: instance.deferred_frontend,
+        # Four roles perform real private-file ACL/identity checks even with
+        # fake Popen. Deadline tests supply their own short explicit budget.
+        timeout=10,
+    )
+    options.update(changes)
+    return instance.controller.start(specs, **options)
+
+
+def test_interpreter_signal_precedes_registration_but_never_replaces_readiness(instance, monkeypatch):
+    original = instance.controller._wait_interpreter
+
+    def wait(child, signal, deadline):
+        runtime = instance.runtimes[-1]
+        assert runtime.processes[child.pid] is child
+        assert child.pid not in [event[2] for event in instance.events if event[0] == "register"]
+        original(child, signal, deadline)
+        instance.events.append(("interpreter-executed", child.pid))
+
+    monkeypatch.setattr(instance.controller, "_wait_interpreter", wait)
+    result = start_isolated(instance)
+    assert result.ready
+    for pid in range(100, 104):
+        registered = next(event for event in instance.events if event[0] == "register" and event[2] == pid)
+        assert instance.events.index(("interpreter-executed", pid)) < instance.events.index(registered)
+    paths = tuple((instance.root / ".dev-logs").glob("interpreter-started-*.signal"))
+    assert len(paths) == 4 and len({path.name for path in paths}) == 4
+    assert instance.controller.stop().exit_code == 0
+    assert all(path.read_bytes() == adapter._INTERPRETER_SIGNAL for path in paths)
+
+
+def test_interpreter_timeout_still_registers_original_child_and_cleans_verified_root(instance, monkeypatch):
+    instance.signals["emit"] = False
+    instance.controller.clock = lambda: 0.0
+    instance.controller.sleep = lambda _: None
+    elapsed = iter(value / 100 for value in range(100))
+    monkeypatch.setattr(adapter.time, "perf_counter", lambda: next(elapsed))
+    result = start_isolated(instance, timeout=0.05)
+    assert result.code == "INSTANCE_INTERPRETER_TIMEOUT" and not result.ready
+    assert result.component == "Celery worker" and not result.records_retained
+    assert len(instance.launches) == 1 and ("verified-stop", 100) in instance.events
+    assert any(event[0] == "register" and event[2] == 100 for event in instance.events)
+    assert result.services[0].log_path == str(instance.root / ".dev-logs/celery-worker.log")
+
+
+def test_exited_interpreter_preserves_unknown_record_without_guessing_a_process(instance):
+    instance.signals.update(emit=False, exit=7)
+    factory = instance.controller.factory
+
+    def absent(root):
+        runtime = factory(root)
+        runtime.fail_register = True
+        return runtime
+
+    instance.controller.factory = absent
+    result = start_isolated(instance)
+    assert result.code == "INSTANCE_INTERPRETER_EXITED" and result.records_retained
+    assert result.component == "Celery worker" and result.services[0].process_status == "UNKNOWN"
+    assert len(instance.launches) == 1 and ("verified-stop", 100) not in instance.events
+    assert not any(event[0] == "original-handle-terminate" for event in instance.events)
+    assert instance.store[instance.root / ".dev-runtime.json"]["services"]["Celery worker"]["pid"] == 100
+
+
+def test_forged_marker_pid_is_never_used_for_registration_or_cleanup(instance):
+    instance.signals["contents"] = b'{"pid":999,"birth":"forged","exe":"foreign"}'
+    result = start_isolated(instance)
+    assert result.code == "INSTANCE_INTERPRETER_HANDSHAKE_UNVERIFIED" and not result.records_retained
+    assert result.component == "Celery worker" and len(instance.launches) == 1
+    assert ("verified-stop", 100) in instance.events
+    assert [event[2] for event in instance.events if event[0] == "register"] == [100]
+    assert (
+        next((instance.root / ".dev-logs").glob("interpreter-started-*.signal")).read_bytes()
+        == instance.signals["contents"]
+    )
+
+
+@pytest.mark.parametrize("status", ["UNOWNED", "UNKNOWN"])
+def test_valid_marker_cannot_authorize_reused_or_unknown_pid(instance, status):
+    factory = instance.controller.factory
+
+    def changed(root):
+        runtime = factory(root)
+        runtime.status_overrides[100] = status
+        return runtime
+
+    instance.controller.factory = changed
+    result = start_isolated(instance)
+    assert result.code == "INSTANCE_PROCESS_IDENTITY_UNVERIFIED" and result.records_retained
+    assert ("verified-stop", 100) not in instance.events
+    assert instance.store[instance.root / ".dev-runtime.json"]["services"]["Celery worker"]["pid"] == 100
+
+
+def test_signal_access_denied_is_actionable_without_weakening_canonical_cleanup(instance, monkeypatch):
+    original = adapter.dev_instance_registry._private
+
+    def denied(path, **kwargs):
+        if Path(path).name.startswith("interpreter-started-"):
+            raise dev_windows_acl.AclVerificationError("CreateFileW", 5)
+        return original(path, **kwargs)
+
+    monkeypatch.setattr(adapter.dev_instance_registry, "_private", denied)
+    result = start_isolated(instance)
+    assert result.code == "INSTANCE_INTERPRETER_HANDSHAKE_UNVERIFIED" and result.winerror == 5
+    assert result.component == "Celery worker" and result.inspection.stage == "interpreter-signal"
+    assert ("verified-stop", 100) in instance.events and not result.records_retained
+    assert result.services[0].log_path.endswith("celery-worker.log")
+
+
+@pytest.mark.parametrize("winerror", [5, "5", True, -1, 0x100000000])
+def test_registration_winerror_is_numeric_redacted_and_unknown_record_is_protected(instance, winerror):
+    factory = instance.controller.factory
+
+    def denied(root):
+        runtime = factory(root)
+        error = dev.OwnershipError(SECRET)
+        error.winerror = winerror
+        runtime.registration_error = error
+        return runtime
+
+    instance.controller.factory = denied
+    result = start_isolated(instance)
+    assert result.code == "INSTANCE_PROCESS_REGISTRATION_FAILED" and result.records_retained
+    assert result.winerror == (5 if type(winerror) is int and winerror == 5 else None)
+    assert result.component == "Celery worker" and result.services[0].process_status == "UNKNOWN"
+    assert result.services[0].log_path.endswith("celery-worker.log")
+    assert ("verified-stop", 100) not in instance.events
+    assert SECRET not in repr(result) + json.dumps(result.to_dict())
+
+
+@pytest.mark.parametrize("transient", ["prefix", "sharing"])
+def test_incomplete_private_signal_and_windows_sharing_close_are_bounded_retries(instance, monkeypatch, transient):
+    instance.signals["contents"] = (
+        adapter._INTERPRETER_SIGNAL[:7] if transient == "prefix" else adapter._INTERPRETER_SIGNAL
+    )
+    original = adapter.dev_instance_registry._private
+    pending = [transient == "sharing"]
+
+    def sharing(path, **kwargs):
+        if Path(path).name.startswith("interpreter-started-") and pending[0]:
+            pending[0] = False
+            error = OSError(SECRET)
+            error.winerror = 32
+            raise error
+        return original(path, **kwargs)
+
+    def finish(_seconds):
+        for path in (instance.root / ".dev-logs").glob("interpreter-started-*.signal"):
+            path.write_bytes(adapter._INTERPRETER_SIGNAL)
+
+    monkeypatch.setattr(adapter.dev_instance_registry, "_private", sharing)
+    instance.controller.sleep = finish
+    result = start_isolated(instance)
+    assert result.ready and instance.controller.stop().exit_code == 0
+
+
+@pytest.mark.parametrize(
+    "field", sorted({variant for name in adapter._SIGNAL_FIELDS for variant in (name, name.lower(), name.title())})
+)
+def test_caller_cannot_supply_interpreter_synchronization_metadata(instance, field):
+    _, specs = isolated_specs(instance, include_frontend=False)
+    first = specs[0]
+    specs = (
+        adapter.ComponentLaunch(first.name, first.argv, first.cwd, {**first.environment, field: SECRET}, first.port),
+        *specs[1:],
+    )
+    result = instance.controller.start(
+        specs,
+        preflight=lambda *_: True,
+        probes={name: lambda *_: True for name in adapter._LOGS},
+        frontend_factory=lambda *_: instance.deferred_frontend,
+    )
+    assert result.code == "INSTANCE_INTERPRETER_HANDSHAKE_UNVERIFIED" and not instance.launches
+
+
+@pytest.mark.parametrize("invalid", [None, "digest", "resource", "environment", "dotenv"])
+def test_bootstrap_emits_only_after_validation_without_caching_controller_scripts(instance, monkeypatch, invalid):
+    assert start_isolated(instance).ready
+    _child, command, options = instance.launches[0]
+    environment = dict(options["env"])
+    marker = Path(environment["SBOM_DEV_INTERPRETER_SIGNAL"]).with_name("interpreter-started-" + "e" * 32 + ".signal")
+    environment["SBOM_DEV_INTERPRETER_SIGNAL"] = str(marker)
+    if invalid == "digest":
+        proof = json.loads(environment["SBOM_DEV_INTERPRETER_HELPER_PROOF"])
+        proof[-1] = "0" * 64
+        environment["SBOM_DEV_INTERPRETER_HELPER_PROOF"] = json.dumps(proof)
+    elif invalid == "resource":
+        environment["SBOM_DEV_RESOURCE_ID"] = "invalid"
+    elif invalid == "environment":
+        environment["APP_ENVIRONMENT"] = "production"
+    elif invalid == "dotenv":
+        environment["PYTHON_DOTENV_DISABLED"] = "0"
+    for name, value in environment.items():
+        monkeypatch.setenv(name, value)
+    arguments = list(command[command.index(adapter._BOOTSTRAP) + 1 :])
+    monkeypatch.setattr(sys, "argv", ["-c", *arguments])
+    monkeypatch.setattr(sys, "path", list(sys.path))
+    packages = {name: value for name, value in sys.modules.items() if name == "scripts" or name.startswith("scripts.")}
+    selected = []
+
+    def module(name, *, run_name):
+        assert marker.read_bytes() == adapter._INTERPRETER_SIGNAL
+        assert name == "celery" and run_name == "__main__"
+        assert sys.path[0] == arguments[0]
+        selected.append(name)
+
+    monkeypatch.setattr(runpy, "run_module", module)
+    if invalid is None:
+        exec(compile(adapter._BOOTSTRAP, "<synthetic-interpreter-bootstrap>", "exec"), {})
+        assert selected == ["celery"]
+    else:
+        with pytest.raises(SystemExit) as caught:
+            exec(compile(adapter._BOOTSTRAP, "<synthetic-interpreter-bootstrap>", "exec"), {})
+        assert str(caught.value).startswith("INSTANCE_") and not marker.exists() and not selected
+    assert {
+        name: value for name, value in sys.modules.items() if name == "scripts" or name.startswith("scripts.")
+    } == packages
+    assert instance.controller.stop().exit_code == 0
+
+
+def test_signal_cancellation_still_registers_original_child_for_verified_cleanup(instance, monkeypatch):
+    def cancelled(*_):
+        raise KeyboardInterrupt
+
+    monkeypatch.setattr(instance.controller, "_wait_interpreter", cancelled)
+    result = start_isolated(instance)
+    assert result.code == "INSTANCE_START_CANCELLED" and result.exit_code == 130
+    assert not result.records_retained and result.component == "Celery worker"
+    assert any(event[0] == "register" and event[2] == 100 for event in instance.events)
+    assert ("verified-stop", 100) in instance.events
+
+
+@pytest.mark.parametrize("cancellation", [KeyboardInterrupt(), SystemExit(130)])
+def test_registration_cancellation_keeps_unknown_record_and_original_handle_cleanup(instance, cancellation):
+    factory = instance.controller.factory
+
+    def cancelled(root):
+        runtime = factory(root)
+        runtime.registration_error = cancellation
+        return runtime
+
+    instance.controller.factory = cancelled
+    result = start_isolated(instance)
+    assert result.code == "INSTANCE_START_CANCELLED" and result.exit_code == 130
+    assert result.records_retained and result.component == "Celery worker"
+    assert result.services[0].process_status == "UNKNOWN"
+    assert ("verified-stop", 100) not in instance.events
+    if sys.platform == "win32":
+        assert ("original-handle-terminate", 100) in instance.events
+
+
+def test_public_helper_proof_drift_after_signal_does_not_skip_canonical_registration(instance, monkeypatch):
+    original = adapter.dev_workspace_dependencies._file
+    proofs = []
+
+    def changed(path, *args, **kwargs):
+        proof = original(path, *args, **kwargs)
+        if Path(path).name == "dev_private.py":
+            proofs.append(proof)
+            if len(proofs) == 2:
+                proof = [*proof[:-1], "0" * 64]
+        return proof
+
+    monkeypatch.setattr(adapter.dev_workspace_dependencies, "_file", changed)
+    result = start_isolated(instance)
+    assert result.code == "INSTANCE_INTERPRETER_HANDSHAKE_UNVERIFIED" and len(proofs) == 2
+    assert not result.records_retained and ("verified-stop", 100) in instance.events
+    assert any(event[0] == "register" and event[2] == 100 for event in instance.events)
+
+
+def test_exited_interpreter_preserves_numeric_os_registration_error_without_raw_message(instance):
+    instance.signals.update(emit=False, exit=7)
+    factory = instance.controller.factory
+
+    def denied(root):
+        runtime = factory(root)
+        error = OSError(SECRET)
+        error.winerror = 5
+        runtime.registration_error = error
+        return runtime
+
+    instance.controller.factory = denied
+    result = start_isolated(instance)
+    assert result.code == "INSTANCE_INTERPRETER_EXITED" and result.winerror == 5
+    assert result.records_retained and result.component == "Celery worker"
+    assert result.services[0].process_status == "UNKNOWN" and result.services[0].log_path.endswith("celery-worker.log")
+    assert SECRET not in repr(result) + json.dumps(result.to_dict())
+    assert ("verified-stop", 100) not in instance.events
+
+
+@pytest.mark.skipif(sys.platform != "win32", reason="Windows CRT publication sharing behavior")
+@pytest.mark.parametrize("persistent", [False, True])
+def test_windows_crt_signal_sharing_error_retries_only_after_private_check_and_stays_bounded(
+    instance, monkeypatch, persistent
+):
+    # CRT errno13 carries no Win32 code. It is not permission to trust the
+    # marker: validate its ACL first, then retry only the open until deadline.
+    original = adapter.dev_environment.bounded_read_bytes
+    original_private = adapter.dev_instance_registry._private
+    checked, attempts = [], []
+
+    def private(path, **kwargs):
+        value = original_private(path, **kwargs)
+        if Path(path).name.startswith("interpreter-started-"):
+            checked.append(Path(path))
+        return value
+
+    def read(path, *args, **kwargs):
+        if Path(path).name.startswith("interpreter-started-"):
+            assert Path(path) in checked
+            attempts.append(Path(path))
+            if persistent or len(attempts) == 1:
+                raise PermissionError(errno.EACCES, SECRET)
+        return original(path, *args, **kwargs)
+
+    monkeypatch.setattr(adapter.dev_instance_registry, "_private", private)
+    monkeypatch.setattr(adapter.dev_environment, "bounded_read_bytes", read)
+    instance.controller.clock = lambda: 0.0
+    instance.controller.sleep = lambda _: None
+    elapsed = iter(value / 100 for value in range(100))
+    monkeypatch.setattr(adapter.time, "perf_counter", lambda: next(elapsed))
+    result = start_isolated(instance, timeout=0.1)
+    if persistent:
+        assert result.code == "INSTANCE_INTERPRETER_HANDSHAKE_UNVERIFIED"
+        assert result.inspection.stage == "interpreter-signal" and not result.records_retained
+        assert ("verified-stop", 100) in instance.events
+    else:
+        assert result.ready and instance.controller.stop().exit_code == 0
+    assert len(attempts) >= 2 and SECRET not in json.dumps(result.to_dict())

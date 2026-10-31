@@ -223,11 +223,26 @@ def test_final_guard_revocation_retains_private_stage_without_publication(state)
 
 
 def test_root_identity_and_permanent_lock_cannot_be_replaced_on_reopen(state):
-    publish(state)
+    published = publish(state)
     original = state.store.root / "000001.json"
     raw = original.read_bytes()
+    identity = state.store.root.stat()
     retired = state.store.root.with_name("retained-bindings")
-    state.store.root.rename(retired)
+    try:
+        state.store.root.rename(retired)
+    except PermissionError as error:
+        if os.name != "nt" or getattr(error, "winerror", None) not in {5, 32}:
+            raise
+        # Windows sharing rules/AV can deny this synthetic replacement before
+        # the application sees it. Verify preservation, without repairing ACLs
+        # or weakening the replacement checks exercised when rename succeeds.
+        after = state.store.root.stat()
+        assert (after.st_dev, after.st_ino) == (identity.st_dev, identity.st_ino)
+        assert not retired.exists() and original.read_bytes() == raw
+        assert state.store.read() == published
+        reopened = bindings.BindingStore(home=state.home, instance_id=state.descriptor.instance_id)
+        assert reopened.read() == published
+        pytest.skip("Windows denied the fixture-owned directory replacement; original bindings verified intact")
     private_directory(state.store.root)
     bindings.dev_private.create_private_file(state.store.root / "000001.json", raw)
     bindings.dev_private.create_private_file(state.store.root / ".registry.lock", b"\0")

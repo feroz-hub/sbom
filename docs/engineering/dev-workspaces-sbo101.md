@@ -20,25 +20,57 @@ remain separate. Remote `main` was
 UI change does not supply the SBO-98 helpers. No old `fcc8731` baseline is used.
 
 The original checkout and ten pre-existing worktrees were clean at preflight.
-Implementation uses `.windows/worktrees/SBO-101-workspace-plan`, branch
-`feature/SBO-101-workspace-plan`. Git cleanliness does not establish agent
+Implementation uses `.windows/worktrees/SBO-101-workspace-plan`, with the
+incremental issue branches listed below, and a dedicated CI-repair worktree.
+Git cleanliness does not establish agent
 availability. No database, provider, certificate, credential or historical
 runtime record was changed. The Linear connector is unavailable; progress text
 must be posted to the real SBO-101 issue by the Engineering Lead.
 
 ## Existing versus required capability
 
-| Capability | Existing integration baseline | This foundation | Remaining work |
+The incremental review stack is listed below. All remain Draft; the first depends
+on unchanged SBO-98 #54, and each subsequent PR targets its predecessor. R adds
+the interpreter synchronization and this consolidated evidence after #71.
+
+| Increment | Draft PR | Published head before R |
+| --- | --- | --- |
+| A registry/planning | [55](https://github.com/feroz-hub/sbom/pull/55) | `6571e0e85e639a8040098c226176d54479c4905a` |
+| B dependencies | [56](https://github.com/feroz-hub/sbom/pull/56) | `7de355e583d21234ea68237674ce8f88dad2a37a` |
+| C launch contracts | [57](https://github.com/feroz-hub/sbom/pull/57) | `3295afa7e519d4f62292b1cc3abfeabc0eb43065` |
+| D restricted tests | [58](https://github.com/feroz-hub/sbom/pull/58) | `e5f103988b31e08fa87e64463a67889de31e2aad` |
+| E onboarding guidance | [59](https://github.com/feroz-hub/sbom/pull/59) | `35aacd4084874648ce68e8890d950554182f6662` |
+| F observations | [60](https://github.com/feroz-hub/sbom/pull/60) | `32d2f23b31cde61fcedd6c41a36a0e79dad18a1d` |
+| G Compose adapter | [61](https://github.com/feroz-hub/sbom/pull/61) | `4446e2f5f9f2bc38ddace8bf4023fa62a33f8aa8` |
+| H resource namespaces | [62](https://github.com/feroz-hub/sbom/pull/62) | `a913cb3343e94aaa29d0940639562ee78ee1236d` |
+| I preview/Runtime | [63](https://github.com/feroz-hub/sbom/pull/63) | `84519cbb2730777162a779a2fdbf07feadd92657` |
+| J private preparation | [64](https://github.com/feroz-hub/sbom/pull/64) | `402bf0ae1bac33eb5f6f44f14148038d70c3a3f5` |
+| K data operation journal | [65](https://github.com/feroz-hub/sbom/pull/65) | `bf51a921a61aa7dc46f3361ccc9133bf260c2220` |
+| L data adapters | [66](https://github.com/feroz-hub/sbom/pull/66) | `f99ca24f3670dae05e7df90b60af83d604a1052d` |
+| M readiness inspection | [67](https://github.com/feroz-hub/sbom/pull/67) | `6ea5345040f3dd4afe0525ffc4cc783271b40f27` |
+| N prepared bindings | [68](https://github.com/feroz-hub/sbom/pull/68) | `542c9b966564b9889f2e21f6daf8adce07b400bb` |
+| O guided control | [69](https://github.com/feroz-hub/sbom/pull/69) | `2598f70abead52074860a0740af05755eddf6134` |
+| P visual artifacts | [70](https://github.com/feroz-hub/sbom/pull/70) | `6ec5664834f5ffc16b6c44ba3725fcbee6277b0b` |
+| Q HCL consumer parity | [71](https://github.com/feroz-hub/sbom/pull/71) | `b967b4ed3e14869086505b213b442f608b2331ab` |
+
+Fresh GitHub audit confirmed A–Q each had 20 successful check-runs (ten unique
+matrix job names; push and PR runs), zero failures/pending. O–Q results are for
+the repaired heads listed above. R's publication-time CI remains separate;
+consult its exact-head checks and validation description for subsequent outcomes.
+Green checks are fixture regression evidence,
+not full-stack or independent security acceptance.
+
+| Capability | Existing integration baseline | Implemented candidate | Remaining acceptance / gates |
 | --- | --- | --- | --- |
-| Configuration | Immutable SBO-98 resolver; profile and component projections | Public manifests only; no private configuration adoption | Approved per-instance private configuration |
-| Diagnostics | Read-only `diagnose`; deprecated `doctor` alias | Read-only Git/registry inventory and public plans | Provider/schema/worker/HTTPS evidence bound to each instance |
-| Process safety | Birth/executable/tree verification; cooperative Windows worker shutdown | Existing lifecycle code unchanged | Connect verified instance resources to existing lifecycle |
-| Worktrees | Git worktrees do not imply application isolation | Authoritative Git discovery and canonical filesystem identities | Runtime branch-drift recovery |
-| Ownership | Per-launcher runtime records | Protected, locked, atomic public instance registry | Provider/process attestations; a descriptor is not authority |
-| Dependencies | Existing controlled setup also needs private configuration | Missing configuration permits dependency-only proposals | Independently consented installation and freshness checks |
-| Data services | Greenfield fixed resources; Legacy fixed saved providers | Unique proposed names/ports, no existing service adoption | Approved independent providers and restricted database roles |
-| Auth/browser | Native/HCL prerequisites and fail-closed enrollment | Unique proposed HTTPS hostname per instance | Valid TLS, trust and registered callbacks; isolated browser contexts |
-| Privileged onboarding | Native create/resend adapter closed | Gate preserved | Guided status; independently approved authority before live enrollment |
+| Configuration | Immutable SBO-98 resolver; profile and component projections | Protected per-instance bundles, provenance/continuity bindings and component projections | Approved private generation and real application parity |
+| Diagnostics | Read-only `diagnose`; deprecated `doctor` alias | Fresh process inspection, bounded service adapters, passive background checks and redacted guidance | Real provider forwarding/transport attestations and complete application matrix |
+| Process safety | Birth/executable/tree verification; cooperative Windows worker shutdown | Canonical Runtime bridge, private IO, verified partial-start cleanup and interpreter synchronization | Real workers/Beat/jobs on each platform |
+| Worktrees | Git worktrees do not imply application isolation | Authoritative discovery, source comparison, known-instance recovery and explicit drift refusal | Active rebase/deletion and parallel application acceptance |
+| Ownership | Per-launcher runtime records | Protected registry, engine identity/receipt checks and fresh canonical process inspection | Approved provider/host forwarding; a descriptor is never authority |
+| Dependencies | Existing controlled setup also needs private configuration | Independent consented installation adapters, stamps, compiler guards and limited test closure | Real approved installation/recovery on fresh machines |
+| Data services | Greenfield fixed resources; Legacy fixed saved providers | Compose-compatible plans, Docker adapter, restricted DB/schema preparation journal | Engine/image/nonroot policy, actual-session TLS attestation and exact-target approval |
+| Auth/browser | Native/HCL prerequisites and fail-closed enrollment | Unique origins/namespaces, TLS adapter, inert mock and private CDP visual adapter | Real PKI/browser trust, registered HCL callbacks and two-stack acceptance |
+| Privileged onboarding | Native create/resend adapter closed | Guided existing/pending/completed state and prerequisites; live gate preserved | Independent authority/security/DBA approval before live enrollment |
 
 ## PR A: architecture, registry and safe planning
 
@@ -1020,7 +1052,8 @@ logout URI still require the identity-provider owner's independent approval.
    provider resources, database roles/targets/schema operations, private material
    creation, and any OS certificate trust changes. Existing protected services
    are never substitutes. Docker/Podman are currently absent from this host's PATH.
-4. Once those adapters and approvals exist, prepare independent dependencies,
+4. Once the missing transport/authority integrations are reviewed and those
+   approvals exist, use the implemented adapters to prepare independent dependencies,
    providers and configurations; verify labels, loopback bindings, restricted
    roles and negative cross-instance access before schema actions.
 5. Verify each candidate's actual API/IAM readiness, TLS hostname/chain, workers,
@@ -1038,5 +1071,209 @@ T01–T36 and A01–A15 in the master specification remain the acceptance checkl
 The unit/synthetic evidence above covers selected contracts only; none of those
 scenarios is claimed as full end-to-end acceptance. Actual provider/database,
 two-stack, browser/tenant and privileged-enrollment scenarios are **NOT RUN /
-BLOCKED** pending implementation and their specific approvals. No merge or
+BLOCKED** pending the missing integrations and their specific approvals. No merge or
 deployment is authorized by a draft PR or green CI.
+
+## CI follow-up — Native option validation and source routing
+
+O–Q initially failed their cross-platform unit steps. The confirmed regression
+was workspace discovery running before invalid Native CLI combinations were
+rejected; the existing security tests correctly caught the premature boundary
+crossing. Pure usage validation now precedes discovery. Valid Native actions
+still select known instance registrations before any Legacy operation.
+
+Non-Git, unprepared source retains existing diagnostic compatibility without
+loading the new framework or probing Git. A surviving workspace dependency stamp
+or attempt marker with missing Git metadata instead gives
+`WORKSPACE_SOURCE_UNVERIFIED`; records are not read, changed or adopted. Present
+but invalid Git metadata and blocked discovery give
+`WORKSPACE_REPOSITORY_UNVERIFIED`, including before a missing registry can be
+interpreted as an unregistered checkout. No-argument dispatch uses the same gate;
+fresh valid Git checkouts retain read-only inventory. Marker presence only
+selects verification and never grants ownership or operation permission.
+
+Repair commit `7247a7de81e819117bb4eb43d1d6bc2f306a31c3` updates only
+`scripts/dev.py`, `scripts/dev_workspace_cli.py` and their two dispatch test
+modules. The existing Native/operator mutation tripwires were not weakened.
+Final affected selections on Windows/Python3.14.6:
+
+```powershell
+python -B <safe_pytest.py> tests/test_dev_workspace_dispatch.py tests/test_dev_workspace_cli.py tests/test_dev_operator_cli.py tests/test_dev_native_enrollment_cli.py --timeout=60
+python -B <safe_pytest.py> tests/test_dev_main_merge.py tests/test_dev_diagnose.py tests/test_dev_launcher.py tests/test_dev_lifecycle.py --timeout=60
+```
+
+The interpreter and harness paths are those in the exact commands above.
+Results: **194 passed in 39.82s**, then **307 passed, 16 platform skips,
+6 existing Alembic warnings in 21.95s**. Scoped Ruff, diff checks and Python3.11/
+3.12 grammar passed. The fix was pushed to draft #69, merged forward only into
+our draft #70 (`c54fea17a51003543cf0bd898052c016bf061c0c`) and #71
+(`53b97edc25d7782675e0e0062ea2d09080f097c4`), and included in R without
+rewriting history or changing SBO-98. Exact-head CI is recorded in the final
+validation section. No live resources or privileged action ran.
+
+A subsequent exact-head native smoke failed because its deliberate empty PATH
+now makes automatic selection refuse unverifiable Git before inspecting an
+incomplete Greenfield profile. The source guard was retained. The old smoke now
+explicitly selects Greenfield, and a separate real-CLI automatic-mode negative
+requires the safe refusal plus unchanged synthetic private records. Only
+`tests/test_dev_native_process.py` changed in follow-up commit
+`2598f70abead52074860a0740af05755eddf6134`; **7 passed in 3.91s** on Windows,
+with Ruff/diff checks passing. Current O/P/Q heads are respectively that commit,
+`6ec5664834f5ffc16b6c44ba3725fcbee6277b0b` and
+`b967b4ed3e14869086505b213b442f608b2331ab`.
+
+## Increment R — actual interpreter-start synchronization
+
+Cross-platform CI exposed a real adapter risk: macOS framework Python can exec
+from its initial launcher into a different interpreter executable after Popen.
+Immediate canonical registration can pin the transient executable. Waiting only
+inside a test fixture concealed that production race. The candidate now waits
+for bounded, private interpreter-start synchronization in its actual `-I -B`
+bootstrap, then registers the original Popen with the existing canonical Runtime.
+The native fixture's extra workload timing wait has been removed.
+
+The signal contains one constant line, with no PID or credentials. Before
+executing the private writer, the child verifies bounded controller helper bytes,
+filesystem identity, metadata and SHA-256; it does not cache a controller scripts
+package into the selected application. Reserved helper environment names are
+rejected case-insensitively, including on Windows. The marker cannot establish
+process ownership, service readiness or privileged operator authority. Missing,
+forged or denied signals still lead to canonical registration/verified cleanup
+where possible; uncertain records remain protected. Registration cancellation
+retains its cancellation result after the same cleanup.
+
+Native Windows testing confirmed two additional platform details: path and open
+handle creation timestamps can differ, and the CRT can return errno13 without a
+Win32 error while the explicit-owner writer still holds its exclusive handle.
+The loader binds the open handle's device/inode/size/mtime and contents while
+retaining full before/after path metadata checks. Only a signal read following a
+successful private ACL check can retry that narrow sharing symptom, within the
+original deadline and an independent elapsed-time bound. Persistent denial
+fails closed with `INSTANCE_INTERPRETER_HANDSHAKE_UNVERIFIED`; explicit Win32
+access-denied code 5 is not converted into absence or ownership permission.
+
+Executed safe Windows regression commands:
+
+```powershell
+& C:\sbom\.venv\Scripts\python.exe -B C:\sbom\.windows\worktrees\SBO-98-component-env\.dev-logs\safe_pytest.py tests/test_dev_workspace_runtime.py tests/test_dev_workspace_runtime_native.py tests/test_dev_native_process.py --timeout=60
+& C:\sbom\.windows\worktrees\SBO-98-dev-config-onboarding\.venv\py312-validation\Scripts\python.exe -B C:\sbom\.windows\worktrees\SBO-98-component-env\.dev-logs\safe_pytest.py tests/test_dev_workspace_runtime.py tests/test_dev_workspace_runtime_native.py tests/test_dev_native_process.py --timeout=60
+```
+
+Before the final two review hardenings, both interpreters passed **70 tests**
+(Python3.14.6: 23.12s; Python3.12.10: 38.15s). The case-insensitive negative
+extension passed **76 tests in 33.25s** on Python3.14.6. The two additional
+registration-cancellation cases plus all reserved-name cases passed **11 tests,
+60 deselected in 3.08s**. Final closure results below supersede intermediate
+counts. These runs include four real disposable stdlib Python helpers, actual
+canonical ownership and verified cleanup. They do not start Celery, the API,
+Next.js, containers or a database. macOS/Linux framework behavior requires the
+exact candidate CI run, and real application readiness remains unexecuted.
+
+## Final local closure and handoff
+
+The Windows-applicable workflow selection was executed from the candidate with
+the sanitized harness described above. The exact selection command was:
+
+```powershell
+$validationWorkflow = Get-Content .github/workflows/dev-launcher.yml -Raw
+$validationBlock = [regex]::Match($validationWorkflow, '(?ms)^      - name: Cross-platform unit and mocked adapter regressions\r?\n.*?(?=^      - name:)').Value
+$validationFiles = @([regex]::Matches($validationBlock, 'tests/test_[A-Za-z0-9_]+\.py') | ForEach-Object { $_.Value } | Select-Object -Unique)
+if ($validationFiles.Count -ne 64) { throw 'Review changed selection' }
+& C:\sbom\.venv\Scripts\python.exe -B C:\sbom\.windows\worktrees\SBO-98-component-env\.dev-logs\safe_pytest.py @validationFiles --timeout=90
+```
+
+Actual result: **3,331 passed, 45 skipped, one failed, six existing Alembic
+warnings in 1,216.28s**. The sole failure was the synthetic bindings-directory
+rename returning Windows error 5 before replacement. Its underlying cause is
+unconfirmed: sharing/AV interference and an open handle are possibilities, not
+established facts. No production code was changed to make this operation succeed.
+The test now records a Windows-only skip only after verifying unchanged directory
+identity, record bytes, original snapshot and independent reopen, with no retired
+directory. If rename succeeds, all original replacement-refusal assertions run.
+
+Final affected closure:
+
+```powershell
+& C:\sbom\.venv\Scripts\python.exe -B C:\sbom\.windows\worktrees\SBO-98-component-env\.dev-logs\safe_pytest.py tests/test_dev_workspace_bindings.py tests/test_dev_workspace_runtime.py tests/test_dev_native_process.py tests/test_dev_workspace_runtime_native.py --timeout=60
+```
+
+Result: **134 passed, one POSIX-mode skip in 70.94s**. Directory replacement
+actually succeeded in this rerun, exercising the original refusal assertions;
+the Windows preservation-only skip was not taken. The first affected rerun had
+133 passed, one skipped and one synthetic startup timeout: its four-role success
+fixture allowed two seconds for real private-file checks. The success-fixture
+budget is now ten seconds; explicit short-deadline regressions and production
+startup/cleanup budgets are unchanged. Verified cleanup occurred on that timeout.
+This is test setup headroom, not a relaxed product readiness requirement.
+
+The existing Python3.12.10 environment also ran:
+
+```powershell
+& C:\sbom\.windows\worktrees\SBO-98-dev-config-onboarding\.venv\py312-validation\Scripts\python.exe -B C:\sbom\.windows\worktrees\SBO-98-component-env\.dev-logs\safe_pytest.py tests/test_dev_workspace_runtime.py tests/test_dev_workspace_runtime_native.py tests/test_dev_native_process.py tests/test_dev_workspace_dispatch.py tests/test_dev_workspace_cli.py --timeout=60
+```
+
+Result: **167 passed in 85.97s**, against final production code (before only the
+success-fixture budget edit). All **81 changed Python files** and the embedded
+bootstrap passed in-memory Python3.11/3.12 grammar/current compile checks. The
+workflow's scoped Ruff selection and final affected lint/diff checks passed.
+Python3.11 execution is provided by CI, not by this Windows host. Earlier broader
+Python3.12 application-consumer selection lacked Celery/Pydantic; nothing was installed.
+
+The optional preinstalled frontend fixture was attempted alongside native tests.
+It exceeded its bounded public Next package-copy deadline before server startup
+or temporary TLS generation. That combined attempt returned two failures/six
+passes: the obsolete automatic-profile smoke assertion (subsequently corrected)
+and the copy timeout. The separate Python3.12 attempt similarly had one obsolete
+smoke failure/165 passes before the correction; the final 167-pass run supersedes
+it. Local frontend acceptance remains **NOT COMPLETED**. A retry that generates
+temporary TLS material needs its separately approved scope. Existing hosted
+disposable frontend CI is separate evidence, not protected-app acceptance. No
+Python3.14 or Node26 compatibility defect was established by the copy deadline.
+
+The actual candidate's read-only `workspace setup --mode mock --auth native
+--check --json` was repeated with no module overlay and sanitized SQLite sentinel
+URLs. It returned exit1, one JSON object, empty stderr and
+`CONTROL_HOME_ACCESS_UNVERIFIED / OWNER_MISMATCH / EqualSid / winerror=null`.
+Observed protected original/candidate configuration, runtime and state metadata
+stayed unchanged. This execution context cannot approve its own home ownership;
+use the intended approved account or obtain IT review without automatic ACL repair.
+
+Final remote fetch confirmed `origin/main` remained
+`fc59432a4eec46f009b3809bd751e510d3b2887c`. Every pre-existing worktree was still
+clean at the audit; only the two dedicated SBO-101 worktrees had authorized edits.
+SBO-98 branch SHAs were unchanged. The diff from #54 was empty for the private
+enrollment guard, bootstrap entry points, bootstrap/platform services, migrations,
+Dockerfile, production Compose and infrastructure. The intentional H development
+namespace consumers listed above remain the application changes; no DTO/schema
+or authentication policy change is implied. Original service health/database
+contents were not inspected or mutated. No merge or deployment occurred.
+
+Current limitations remain explicit: missing company engine/image/platform/
+nonroot policy; no local runtime; unimplemented approved Windows provider-port
+forwarding and actual-session SQL peer attestation integration; unproven absolute
+libpq wall-clock bounds; browser/OS trust integration and real CDP renderer churn;
+non-atomic enumeration/connect and bind/spawn intervals; and missing independent
+privileged authority. Public isolated/shared start remains blocked. Mock is an
+inert theme/layout fixture. Logs expose bounded redacted metadata rather than
+arbitrary private messages. Full application tests, two-stack acceptance, live
+tenant/auth workflows, schema operations and Native creation/resend were **NOT
+RUN**. The application conftest can mutate databases and was never collected.
+
+### SBO-101 update text for the Engineering Lead to post
+
+Implemented the safe source scope in stacked Draft PRs #55–#71 plus the final
+interpreter-synchronization draft. The authorized remote/main and unchanged
+SBO-98 dependency/worktrees were rechecked. Includes worktree/instance planning,
+independent preparation, Compose/provider/data adapters, protected configuration/
+TLS bindings, resource namespaces, Runtime/readiness, guided setup, read-only
+diagnostics, bounded logs, mock/visual/test adapters and closed Native onboarding
+guidance. Published A–Q heads each have 20 successful checks; final R exact-head
+CI is tracked in its PR. Windows broad selection: 3,331 passed/45 skipped/one
+synthetic rename refusal; corrected affected closure: 134 passed/one POSIX skip;
+Python3.12 runtime/dispatch: 167 passed. Report and T01–T36/A01–A15 ledger retain
+all failed attempts and unexecuted acceptance. No protected resource or security
+setting changed. BLOCKED for real use pending IT state ownership, provider/image/
+nonroot policy, exact disposable resource/DB/private-material approvals and missing
+live transport/trust integrations. Native create/resend remains closed pending
+independent authority/security/DBA approval; HCL onboarding also requires IdP owner
+approval. No merge/deploy. Do not mark SBO-101 complete from fixture CI.
