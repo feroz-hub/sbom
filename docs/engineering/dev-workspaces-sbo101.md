@@ -977,6 +977,39 @@ delivered HCL-origin contract fix. Scoped Ruff passed. Full inspected launcher
 and cross-platform CI evidence is recorded separately after the final source
 freeze; this test is not real provider/application/enrollment acceptance.
 
+## Increment Q — HCL origin consumer parity
+
+Source audit of the real frontend `server-config.ts` and logout route found that
+an omitted post-logout URI defaults to `https://localhost:3000/logged-out`. The
+new HCL bundle omitted that setting. Backend email-verification services similarly
+default to `https://localhost:3000/verify-email`, while the bundle set an
+instance-specific value only for Native mode. These are confirmed consumer/
+configuration mismatches; no live HCL login or email delivery was attempted.
+
+`HclRegistration` now accepts an explicit operator-provided
+`post_logout_redirect_uri`, after the existing positional CA field. HCL bundle
+planning refuses missing/foreign logout origins, requires the exact instance
+`/logged-out` URL and binds it into material/operation/private context. It never
+invents an approved IdP registration. Frontend projection supplies the actual
+consumer variable. The app-owned verification URL is common to both modes and
+enforced by lifecycle validation. Native material identity remains unchanged.
+Existing incomplete HCL bundles are preserved/refused, not rewritten or rotated.
+
+Windows/Python3.14.6 safe bundle/lifecycle/TLS-contract selection:
+
+```powershell
+& C:\sbom\.venv\Scripts\python.exe -B C:\sbom\.windows\worktrees\SBO-98-component-env\.dev-logs\safe_pytest.py tests/test_dev_workspace_bundle.py tests/test_dev_workspace_lifecycle.py tests/test_dev_workspace_tls_contract.py --timeout=60
+```
+
+Result: **191 passed in 19.73s**. Downstream synthetic readiness/runtime/bindings
+selection passed **227 tests, 1 POSIX-mode skip in 68.58s**. Tests exercise real
+consumer names/default resolution, approved-target projection, missing/foreign/
+unsafe logout, consent drift, both-mode mail URL refusal and positional CA
+compatibility. Ruff and Python3.11/3.12 grammar passed; unrelated existing
+formatting was preserved. No real crypto, network, IdP, email, application,
+provider, database or trust operation ran. Live HCL registration and its allowed
+logout URI still require the identity-provider owner's independent approval.
+
 ## Disposable acceptance procedure (not yet authorized or executed)
 
 1. Review the candidate diff and CI on Windows/macOS/Linux, preserving SBO-98.

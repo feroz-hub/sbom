@@ -13,6 +13,7 @@ import base64
 import builtins
 import json
 import os
+import re
 import socket
 import subprocess
 import sys
@@ -364,6 +365,7 @@ def test_frontend_redis_credential_is_independent_and_scoped_to_its_session_name
             "operator-client-id",
             proposal.descriptor.origin + "/api/auth/callback",
             "openid profile email",
+            post_logout_redirect_uri=proposal.descriptor.origin + "/logged-out",
         )
         if auth_mode == "hcl"
         else None
@@ -653,6 +655,7 @@ def test_hcl_uses_only_exact_operator_registration_and_never_creates_native_keys
         "operator-client-id",
         original.descriptor.origin + "/api/auth/callback",
         "openid profile email",
+        post_logout_redirect_uri=original.descriptor.origin + "/logged-out",
     )
     plan = bundle.plan_bundle(
         original,
@@ -669,6 +672,8 @@ def test_hcl_uses_only_exact_operator_registration_and_never_creates_native_keys
     assert env["HCL_IAM_ISSUER"] == registration.issuer and env["HCL_IAM_AUDIENCE"] == registration.audience
     assert env["NEXT_PUBLIC_HCL_IAM_CLIENT_ID"] == registration.client_id
     assert env["NEXT_PUBLIC_HCL_IAM_REDIRECT_URI"] == registration.redirect_uri
+    assert env["NEXT_PUBLIC_HCL_IAM_POST_LOGOUT_REDIRECT_URI"] == registration.post_logout_redirect_uri
+    assert env["EMAIL_VERIFICATION_FRONTEND_URL"] == original.descriptor.origin + "/verify-email"
     assert env["NATIVE_AUTH_ENABLED"] == "false" and env["HCL_AUTH_ENABLED"] == "true"
     assert env["NATIVE_PLATFORM_BOOTSTRAP_ENABLED"] == "false"
     assert "NATIVE_JWT_PRIVATE_KEY" not in env and not (plan.directory / "keys/native-jwt-private.pem").exists()
@@ -702,6 +707,146 @@ def test_hcl_registration_absence_mismatch_and_credentials_are_never_invented(fi
             "openid",
             client_secret=SECRET,
         )
+
+
+@pytest.mark.parametrize(
+    "logout",
+    [None, "https://localhost:3000/logged-out", "https://foreign.invalid/logged-out"],
+)
+def test_hcl_logout_must_be_independently_supplied_for_this_exact_instance(fixture, logout):
+    source = provider_plan(auth_mode="hcl")
+    registration = bundle.HclRegistration(
+        "7" * 64,
+        "https://identity.invalid",
+        "operator-audience",
+        "operator-client",
+        source.descriptor.origin + "/api/auth/callback",
+        "openid",
+        post_logout_redirect_uri=logout,
+    )
+    with pytest.raises(bundle.BundleError, match="^BUNDLE_HCL_LOGOUT_REGISTRATION_REQUIRED$"):
+        bundle.plan_bundle(
+            source,
+            fixture.source,
+            anchor=fixture.plan.anchor,
+            generation=GENERATION,
+            profiles=compose._PROFILES,
+            registration=registration,
+        )
+    assert not (fixture.anchor / ".sbom-dev").exists()
+
+
+@pytest.mark.parametrize(
+    "logout",
+    [
+        "",
+        "http://identity.invalid/logout",
+        "https://user:secret@identity.invalid/logout",
+        "https://identity.invalid/logout?token",
+        "https://identity.invalid/#token",
+        True,
+    ],
+)
+def test_hcl_logout_rejects_unsafe_registration_values_without_disclosing_them(logout):
+    with pytest.raises(bundle.BundleError, match="^BUNDLE_HCL_REGISTRATION_INVALID$") as caught:
+        bundle.HclRegistration(
+            "7" * 64,
+            "https://identity.invalid",
+            "operator-audience",
+            "operator-client",
+            "https://instance.invalid/api/auth/callback",
+            "openid",
+            post_logout_redirect_uri=logout,
+        )
+    assert "secret" not in str(caught.value) and "token" not in str(caught.value)
+
+
+def test_hcl_logout_projection_matches_real_server_config_and_preserves_positional_ca(fixture, synthetic_crypto):
+    source = provider_plan(auth_mode="hcl")
+    registration = bundle.HclRegistration(
+        "7" * 64,
+        "https://identity.invalid",
+        "operator-audience",
+        "operator-client",
+        source.descriptor.origin + "/api/auth/callback",
+        "openid",
+        b"synthetic-operator-ca",
+        post_logout_redirect_uri=source.descriptor.origin + "/logged-out",
+    )
+    assert registration.ca_pem == b"synthetic-operator-ca"
+    planned = bundle.plan_bundle(
+        source,
+        fixture.source,
+        anchor=fixture.plan.anchor,
+        generation=GENERATION,
+        profiles=compose._PROFILES,
+        registration=registration,
+    )
+    environment = bundle._validate_material(planned, fake_material(planned))
+    projected = bundle.dev_config.component_environment(environment, "frontend")
+    public = bundle.dev_config.component_environment(environment, "public")
+    frontend = Path(__file__).resolve().parents[1] / "frontend/src"
+    consumer = (frontend / "lib/auth/server-config.ts").read_text(encoding="utf-8")
+    # Read the actual consumer's ordered keys and fallback, not duplicated names.
+    match = re.search(
+        r"postLogoutRedirectUri:\s*process\.env\.([A-Z_]+)\s*\|\|\s*"
+        r"process\.env\.([A-Z_]+)\s*\|\|\s*'([^']+)'",
+        consumer,
+    )
+    assert match is not None
+    primary, alias, fallback = match.groups()
+    assert primary in projected and public[primary] == projected[primary]
+    assert (projected.get(primary) or projected.get(alias) or fallback) == registration.post_logout_redirect_uri
+    logout_consumer = (frontend / "app/api/auth/logout/route.ts").read_text(encoding="utf-8")
+    assert "endSession.searchParams.set('post_logout_redirect_uri', config.postLogoutRedirectUri)" in logout_consumer
+    assert environment["EMAIL_VERIFICATION_FRONTEND_URL"] == source.descriptor.origin + "/verify-email"
+    changed = replace(registration, post_logout_redirect_uri=None)
+    changed_bindings = bundle._bindings(
+        source, fixture.source, fixture.plan.anchor, GENERATION, compose._PROFILES, changed, 30
+    )
+    assert all(
+        actual != previous
+        for actual, previous in zip(
+            changed_bindings,
+            (planned.fingerprint, planned.material_fingerprint, planned.private_binding),
+            strict=True,
+        )
+    )
+
+
+@pytest.mark.parametrize("category", ["credentials", "certificates"])
+def test_hcl_logout_drift_after_consent_never_reaches_generation_or_publication(fixture, category):
+    source = provider_plan(auth_mode="hcl")
+    registration = bundle.HclRegistration(
+        "7" * 64,
+        "https://identity.invalid",
+        "operator-audience",
+        "operator-client",
+        source.descriptor.origin + "/api/auth/callback",
+        "openid",
+        post_logout_redirect_uri=source.descriptor.origin + "/logged-out",
+    )
+    planned = bundle.plan_bundle(
+        source,
+        fixture.source,
+        anchor=fixture.plan.anchor,
+        generation=GENERATION,
+        profiles=compose._PROFILES,
+        registration=registration,
+    )
+
+    def authorize(candidate, requested):
+        if requested == category:
+            # Model a hostile caller defeating the immutable value object's API.
+            object.__setattr__(candidate.registration, "post_logout_redirect_uri", "https://foreign.invalid/logout")
+        return True
+
+    forbidden = Mock(side_effect=AssertionError("Changed registration reached key generation"))
+    result = bundle.prepare_bundle(planned, authorize=authorize, generator=forbidden)
+    assert result.code == "BUNDLE_HCL_LOGOUT_REGISTRATION_REQUIRED" and result.exit_code == 1
+    assert not (fixture.anchor / ".sbom-dev").exists()
+    assert "foreign.invalid" not in json.dumps(result.to_dict())
+    forbidden.assert_not_called()
 
 
 def test_known_artifacts_survive_normal_source_head_advance_without_key_rotation(fixture, synthetic_crypto):
@@ -867,6 +1012,7 @@ def test_known_receipt_cannot_be_reused_for_a_changed_private_hcl_registration(f
         "client",
         original.descriptor.origin + "/api/auth/callback",
         "openid",
+        post_logout_redirect_uri=original.descriptor.origin + "/logged-out",
     )
     plan = bundle.plan_bundle(
         original,
