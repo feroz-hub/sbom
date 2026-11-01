@@ -140,6 +140,13 @@ def generate_run_fixes(
                 status="failed",
                 last_error="Background job authorization denied" if isinstance(exc, HTTPException) else "AI batch execution failed",
             )
+            if (
+                isinstance(exc, ProgressStoreUnavailableError) and exc.progress is not None
+                and exc.progress.run_id == run_id and exc.progress.batch_id == batch_id
+            ):
+                # Preserve completed/billed outcomes if publication fails after
+                # a finding finishes; failing Redis must not reset cost to zero.
+                prog = exc.progress.model_copy(update={"status": "failed", "last_error": "AI progress publication failed"})
             # Rejected/foreign jobs must not overwrite another run's progress key.
             if ownership_confirmed:
                 if batch_id is not None:

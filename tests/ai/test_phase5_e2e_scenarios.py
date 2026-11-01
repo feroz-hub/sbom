@@ -525,8 +525,9 @@ def test_progress_failure_prevents_dispatch_and_marks_durable_batch_failed(
         assert row.status == "failed" and row.generated_count == 0
 
 
+@pytest.mark.parametrize("completed_work", [False, True])
 def test_worker_progress_outage_persists_failed_batch(
-    client, _seeded_run, _enable_ai, _fake_registry, _memory_store, monkeypatch
+    client, _seeded_run, _enable_ai, _fake_registry, _memory_store, monkeypatch, completed_work
 ):
     from app.ai.progress import ProgressStoreUnavailableError
     from app.core.context import minimal_background_context
@@ -539,14 +540,19 @@ def test_worker_progress_outage_persists_failed_batch(
     monkeypatch.setattr(ai_fix_tasks, "authorize_job_actor", lambda *a, **kw: minimal_background_context(1))
 
     def unavailable(progress):
-        raise ProgressStoreUnavailableError("AI progress is unavailable")
+        snapshot = BatchProgress(run_id=run_id, batch_id=bid, status="in_progress", total=6,
+                                 generated=1, failed=1, remaining=4, cost_so_far_usd=0.003) if completed_work else None
+        raise ProgressStoreUnavailableError("AI progress is unavailable", progress=snapshot)
 
     monkeypatch.setattr(_memory_store, "write", unavailable)
     result = ai_fix_tasks.generate_run_fixes.run(run_id, tenant_id=1, actor_user_id=1, batch_id=bid)
     assert result["status"] == "failed"
     with SessionLocal() as db:
         batch = db.get(AiFixBatch, bid)
-        assert batch.status == "failed" and batch.generated_count == 0
+        assert batch.status == "failed"
+        assert batch.generated_count == (1 if completed_work else 0)
+        assert batch.failed_count == (1 if completed_work else 0)
+        assert batch.cost_usd == pytest.approx(0.003 if completed_work else 0)
 
 
 def test_trigger_without_scope_processes_all_findings(client, _seeded_run, _enable_ai, _fake_registry, _memory_store):

@@ -106,6 +106,10 @@ class ProgressStore(Protocol):
 class ProgressStoreUnavailableError(RuntimeError):
     """Progress could not be published; callers must not dispatch paid work."""
 
+    def __init__(self, message: str, *, progress: BatchProgress | None = None) -> None:
+        super().__init__(message)
+        self.progress = progress.model_copy(deep=True) if progress is not None else None
+
 
 # ---------------------------------------------------------------------------
 # In-memory backend (test + fallback)
@@ -339,7 +343,7 @@ class RedisProgressStore:
                 progress.batch_id,
                 exc,
             )
-            raise ProgressStoreUnavailableError("AI progress could not be recorded. Try again.") from exc
+            raise ProgressStoreUnavailableError("AI progress could not be recorded. Try again.", progress=progress) from exc
 
     # Reads ------------------------------------------------------------
 
