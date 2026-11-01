@@ -348,7 +348,8 @@ def _run_owned_stub(command, *, root, environment):
 
 
 @pytest.mark.parametrize("entrypoint", ["dev.py", "bootstrap_native_platform_user.py"])
-def test_copied_status_cli_suppresses_bytecode_before_optional_imports_and_preserves_checkout(tmp_path, entrypoint):
+@pytest.mark.parametrize("interpreter", [sys.executable, sys._base_executable], ids=["project-venv", "system-python"])
+def test_copied_status_cli_suppresses_bytecode_before_optional_imports_and_preserves_checkout(tmp_path, entrypoint, interpreter):
     root = tmp_path / "copied-checkout"
     scripts = root / "scripts"
     scripts.mkdir(parents=True)
@@ -386,7 +387,7 @@ def test_copied_status_cli_suppresses_bytecode_before_optional_imports_and_prese
     environment = {name: value for name, value in os.environ.items() if name.upper() in transport}
     environment.update(HOME=str(tmp_path), USERPROFILE=str(tmp_path))
     result = _run_owned_stub(
-        [sys.executable, "-S", str(scripts / entrypoint), *arguments], root=root, environment=environment
+        [interpreter, "-S", str(scripts / entrypoint), *arguments], root=root, environment=environment
     )
     assert result.returncode == 0, result.stdout + result.stderr
     assert _snapshot(root) == before

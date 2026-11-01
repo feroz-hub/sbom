@@ -86,6 +86,21 @@ First-account enrollment is a separate approved operator action. Setup never
 creates a privileged Native administrator; the existing launcher enrollment
 attestation gate remains in effect.
 
+Inspect first-administrator enrollment with the existing project interpreter:
+
+```powershell
+.\.venv\Scripts\python.exe -B scripts/dev.py setup --profile legacy --legacy-config managed --native-admin-status --confirm-database sbom_analyser_dev
+```
+
+`ENROLLMENT_REQUIRED` describes the database state; it does not authorize account
+creation. System Python without `cryptography` reports
+`OPERATOR_NATIVE_DEPENDENCIES_REQUIRED`; use the project interpreter without
+regenerating keys. Status failures identify a fixed inspection operation without
+printing driver exceptions or credentials. A migration-source failure can occur
+before any database connection and is not evidence of database damage. The
+[SBO-102 readiness design](sbo-102-enrollment-readiness-design.md) remains subject
+to separate security approval.
+
 ## Existing configuration and recovery
 
 Ordinary setup never overwrites `.env.dev.local`, keys or certificates. Repeating

@@ -58,6 +58,35 @@ def test_actual_graph_head_is_discovered_without_historical_imports(monkeypatch)
     assert observed.head == "103_tenant_admin_governance"
 
 
+@pytest.mark.parametrize("crlf", [False, True])
+def test_frozen_history_accepts_checkout_line_endings_but_keeps_raw_source_locks(repository, crlf):
+    import hashlib
+
+    for path in (repository / "alembic/versions").glob("*.py"):
+        raw = path.read_bytes().replace(b"\r\n", b"\n")
+        path.write_bytes(raw.replace(b"\n", b"\r\n") if crlf else raw)
+    observed = graph.discover(repository)
+    assert observed.head == "102_public_membership_grant_analysis_uuid"
+    for revision in observed.revisions:
+        assert revision.sha256 == hashlib.sha256(revision.path.read_bytes()).hexdigest()
+    lock = graph.SourceLock.capture(repository)
+    path = observed.revisions[-1].path
+    raw = path.read_bytes()
+    path.write_bytes(raw.replace(b"\r\n", b"\n") if crlf else raw.replace(b"\n", b"\r\n"))
+    with pytest.raises(graph.DiscoveryError, match="changed after review"):
+        lock.verify()
+
+
+@pytest.mark.parametrize("crlf", [False, True])
+@pytest.mark.parametrize("revision", graph.IMMUTABLE)
+def test_checkout_line_ending_support_still_rejects_frozen_content_edits(repository, crlf, revision):
+    path = repository / "alembic/versions" / f"{revision}.py"
+    raw = path.read_bytes().replace(b"\r\n", b"\n") + b"\n# unreviewed change\n"
+    path.write_bytes(raw.replace(b"\n", b"\r\n") if crlf else raw)
+    with pytest.raises(graph.DiscoveryError, match="Frozen Greenfield migration changed"):
+        graph.discover(repository)
+
+
 def test_actual_governance_revision_binds_inert_startup_hooks(repository, monkeypatch):
     import sqlalchemy as sa
     from alembic import op

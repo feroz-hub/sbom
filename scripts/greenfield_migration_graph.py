@@ -90,7 +90,11 @@ def discover(root):
         if fields.get("branch_labels") is not None or fields.get("depends_on") is not None or revision in found:
             raise DiscoveryError("Duplicate/branched/dependent migration graph is not supported.")
         digest = hashlib.sha256(raw).hexdigest()
-        if revision in IMMUTABLE and digest != IMMUTABLE[revision]:
+        # Git may materialize Python text with CRLF on Windows. Compare frozen
+        # history in its committed LF representation, but retain the raw digest
+        # for execution/source locks so any post-review byte change still fails.
+        frozen_digest = hashlib.sha256(raw.replace(b"\r\n", b"\n")).hexdigest()
+        if revision in IMMUTABLE and frozen_digest != IMMUTABLE[revision]:
             raise DiscoveryError("Frozen Greenfield migration changed: " + revision)
         found[revision] = Revision(revision, parent, path, digest, fields.get("startup"))
     if BASELINE not in found or any(r.parent is not None and r.parent not in found for r in found.values()):
