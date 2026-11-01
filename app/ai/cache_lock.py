@@ -161,6 +161,10 @@ class RedisCacheLock:
             self._KEY_PREFIX + cache_key,
             timeout=ttl_seconds,
             blocking_timeout=ttl_seconds,
+            # Acquire/release run in executor threads that need not be the
+            # same thread. Each context owns its own Lock instance/token;
+            # Redis still compares that token before deleting the lease.
+            thread_local=False,
         )
         acquired = False
         try:
