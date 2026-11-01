@@ -201,6 +201,46 @@ def test_ai_credentials_are_scope_isolated_and_never_serialized(configured_actor
             assert key not in str(audit.new_value)
 
 
+def test_platform_saved_unsaved_and_registry_paid_tests_fail_closed(configured_actors, monkeypatch):
+    from app.ai.probe_policy import PLATFORM_PROBE_BLOCKED
+
+    calls = []
+
+    def provider(config):
+        async def unexpected(*args, **kwargs):
+            calls.append(True)
+            raise AssertionError("Paid platform probe reached provider")
+
+        return SimpleNamespace(name=config.name, default_model=config.default_model, is_local=False,
+                               test_connection=unexpected, generate=unexpected)
+
+    monkeypatch.setattr("app.routers.ai_credentials.build_provider", provider)
+    monkeypatch.setattr("app.ai.model_registry.build_provider", provider)
+    call = configured_actors
+    base = "/api/platform/configuration/ai"
+    cred_id = add_provider(call, model="gpt-4o", provider_name="openai", is_local=False,
+                           api_key="synthetic-local-only", base_url="https://example.test/v1")
+    models = call("platform", "GET", f"{base}/credentials/{cred_id}/models").json()
+    model_id = models[0]["id"]
+    for _ in range(2):
+        saved = call("platform", "POST", f"{base}/credentials/{cred_id}/test")
+        unsaved = call("platform", "POST", f"{base}/credentials/test", json={
+            "provider_name": "openai", "credential_id": cred_id, "default_model": "gpt-4o",
+        })
+        for response in (saved, unsaved):
+            assert response.status_code == 200
+            assert response.json()["error_kind"] == "configuration"
+            assert response.json()["error_message"] == PLATFORM_PROBE_BLOCKED
+            assert response.json()["accessible"] is None
+        result = call("platform", "POST", f"{base}/credentials/{cred_id}/models/{model_id}/test")
+        assert result.status_code == 200
+        assert PLATFORM_PROBE_BLOCKED in result.text
+    assert not calls
+    saved = call("platform", "GET", f"{base}/credentials/{cred_id}").json()
+    assert saved["enabled"] is True and saved["default_model"] == "gpt-4o"
+    assert saved["last_test_error"] == PLATFORM_PROBE_BLOCKED
+
+
 def test_ai_unusable_override_never_falls_back_to_platform(configured_actors):
     call = configured_actors
     add_provider(call)

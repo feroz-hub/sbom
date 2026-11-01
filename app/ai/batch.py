@@ -230,6 +230,7 @@ class AiFixBatchPipeline:
             else:
                 errors.append(outcome)
                 progress.failed += 1
+                progress.cost_so_far_usd = round(progress.cost_so_far_usd + outcome.billable_cost_usd, 6)
                 progress.last_error = outcome.message[:240]
                 if outcome.error_code == "budget_exceeded":
                     budget_halted = True

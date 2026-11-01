@@ -18,6 +18,7 @@ from ..security.secrets import get_cipher
 from .config_loader import get_loader
 from .config_types import ProviderConfig
 from .cost import estimate_cost_usd, estimate_tokens, write_usage_log_row
+from .probe_policy import PLATFORM_PROBE_BLOCKED, PlatformProbeBlockedError, check_probe_spending
 from .provider_factory import build_provider
 from .providers._probe import structured_probe_request
 from .providers.base import AiProviderError, BudgetExceededError, DiscoveredModel, LlmProvider
@@ -38,6 +39,22 @@ class RefreshResult:
 
 def _now() -> str:
     return datetime.now(UTC).isoformat()
+
+
+def invalidate_model_verification(session: Session, credential: AiProviderCredential) -> None:
+    """Credential-specific evidence expires when its key or endpoint changes.
+
+    Retain discovery history, availability and the administrator's selection.
+    The caller commits this together with the credential mutation.
+    """
+    for model in session.scalars(
+        select(AiProviderModel).where(AiProviderModel.provider_credential_id == credential.id)
+    ):
+        model.raw_metadata = {key: value for key, value in (model.raw_metadata or {}).items() if key != "verification"}
+        model.last_verified_at = None
+        model.last_test_success = None
+        model.last_test_error = None
+        model.updated_at = _now()
 
 
 def _sanitize_metadata(value: dict[str, Any] | None) -> dict[str, Any] | None:
@@ -269,8 +286,10 @@ async def test_model(
     started = time.perf_counter()
     state = {"accessible": None, "generation_verified": None, "workload_compatible": None, "error_kind": None}
     usage = None
-    guard = build_budget_guard()
+    guard = None
     try:
+        check_probe_spending(provider, tier=credential.tier)
+        guard = build_budget_guard()
         guard.check_request(
             estimated_usd=estimate_cost_usd(
                 provider=credential.provider_name,
@@ -290,6 +309,10 @@ async def test_model(
         state["workload_compatible"] = ok
         state["error_kind"] = None if ok else "invalid_json"
         error = None if ok else MESSAGES["invalid_json"]
+    except PlatformProbeBlockedError:
+        ok = False
+        state["error_kind"] = "configuration"
+        error = PLATFORM_PROBE_BLOCKED
     except OpenAiError as exc:
         ok = False
         usage = exc.usage
@@ -336,7 +359,7 @@ async def test_model(
             error=None if ok else state["error_kind"] or "model_test_failed",
         )
     model.raw_metadata = {**(model.raw_metadata or {}), "verification": state}
-    model.last_verified_at = now
+    model.last_verified_at = None if error == PLATFORM_PROBE_BLOCKED else now
     model.last_test_success = ok
     model.last_test_error = error
     model.updated_at = now

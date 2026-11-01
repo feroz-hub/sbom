@@ -21,7 +21,8 @@ from fastapi import HTTPException
 from sqlalchemy import select
 
 from ..ai.batch import AiFixBatchPipeline
-from ..ai.progress import BatchProgress, get_progress_store
+from ..ai.batches import update_batch_from_progress
+from ..ai.progress import BatchProgress, ProgressStoreUnavailableError, get_progress_store
 from ..ai.rollout import evaluate_access
 from ..ai.runtime_config import build_budget_guard
 from ..core.context import minimal_background_context, tenant_scope
@@ -141,7 +142,12 @@ def generate_run_fixes(
             )
             # Rejected/foreign jobs must not overwrite another run's progress key.
             if ownership_confirmed:
-                get_progress_store().write(prog)
+                if batch_id is not None:
+                    update_batch_from_progress(db, batch_id=batch_id, progress=prog)
+                try:
+                    get_progress_store().write(prog)
+                except ProgressStoreUnavailableError:
+                    log.warning("ai.task.failure_progress_unavailable: run=%s batch=%s", run_id, batch_id)
             return prog.model_dump(mode="json")
         finally:
             db.close()

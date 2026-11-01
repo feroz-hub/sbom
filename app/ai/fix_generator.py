@@ -462,9 +462,11 @@ class AiFixGenerator:
                 provider_name=provider.name,
                 model_name=provider.default_model,
                 failure=exc.failure,
+                billable_cost_usd=usage.cost_usd if usage is not None else 0.0,
             )
 
         latency_ms = int((time.perf_counter() - t0) * 1000)
+        final_request_id = request_id
 
         # Lenient parse — strips fences, trims preamble/trailing text,
         # tries brace-extracted JSON. The strict schema is unchanged;
@@ -532,6 +534,7 @@ class AiFixGenerator:
                     retry_access.message,
                     provider_name=provider.name,
                     model_name=provider.default_model,
+                    billable_cost_usd=prior_generation_cost_usd,
                 )
             retry_estimated = estimate_cost_usd(
                 provider=provider.name,
@@ -550,11 +553,15 @@ class AiFixGenerator:
                     str(exc),
                     provider_name=provider.name,
                     model_name=provider.default_model,
+                    billable_cost_usd=prior_generation_cost_usd,
                 )
             retry_t0 = time.perf_counter()
             try:
                 resp = await provider.generate(retry_req)
             except (AiProviderError, CircuitBreakerOpenError) as exc:
+                retry_usage = getattr(exc, "usage", None)
+                if retry_usage is not None:
+                    self._budget.record(actual_usd=retry_usage.cost_usd, scan_id=scan_id)
                 self._log_failed_call(
                     request_id=retry_req.request_id,
                     provider=provider.name,
@@ -562,6 +569,7 @@ class AiFixGenerator:
                     cache_key=cache_key,
                     error=f"retry_failed:{exc}",
                     raw_response=bad_preview,
+                    usage=retry_usage,
                 )
                 return self._error(
                     finding,
@@ -571,19 +579,23 @@ class AiFixGenerator:
                     provider_name=provider.name,
                     model_name=provider.default_model,
                     failure=getattr(exc, "failure", None),
-            )
+                    billable_cost_usd=prior_generation_cost_usd + (retry_usage.cost_usd if retry_usage else 0.0),
+                )
             latency_ms += int((time.perf_counter() - retry_t0) * 1000)
+            final_request_id = retry_req.request_id
             bundle, parse_error = self._parse_response(resp.text, resp.parsed)
 
         if bundle is None:
             raw_preview = (resp.text or "")[:500]
+            self._budget.record(actual_usd=resp.usage.cost_usd, scan_id=scan_id)
             self._log_failed_call(
-                request_id=request_id,
+                request_id=final_request_id,
                 provider=provider.name,
                 model=provider.default_model,
                 cache_key=cache_key,
                 error="schema_parse_failed",
                 raw_response=raw_preview,
+                usage=resp.usage,
             )
             return self._error(
                 finding,
@@ -592,6 +604,7 @@ class AiFixGenerator:
                 "The AI provider returned a response that did not match the required schema.",
                 provider_name=provider.name,
                 model_name=provider.default_model,
+                billable_cost_usd=prior_generation_cost_usd + resp.usage.cost_usd,
             )
 
         validated = self._post_validate(bundle, ctx)
@@ -750,6 +763,7 @@ class AiFixGenerator:
         provider_name: str | None = None,
         model_name: str | None = None,
         failure: UpstreamFailure | None = None,
+        billable_cost_usd: float = 0.0,
     ) -> AiFixError:
         retry_after = failure.retry_after_seconds if failure else None
         upstream_status = failure.upstream_status if failure else None
@@ -760,7 +774,7 @@ class AiFixGenerator:
         # it reflects the wrapping provider's identity (e.g. "gemini") set
         # by ``_inner.name`` overrides on the wrapper classes.
         resolved_provider = (failure.provider_name if failure else None) or provider_name
-        return AiFixError(
+        error = AiFixError(
             finding_id=finding.id,
             vuln_id=ctx.cve_id,
             component_name=ctx.component.name,
@@ -774,6 +788,8 @@ class AiFixGenerator:
             retry_after_seconds=retry_after,
             retry_after_human=humanize_retry_after(retry_after),
         )
+        error._billable_cost_usd = billable_cost_usd
+        return error
 
     def _log_failed_call(
         self,

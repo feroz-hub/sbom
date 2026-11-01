@@ -183,6 +183,10 @@ def sanitized_result(result: ConnectionTestResult) -> ConnectionTestResult:
     if result.success:
         return result.model_copy(update={"error_message": None, "error_kind": None})
     kind = result.error_kind or "unknown"
+    from ..probe_policy import PLATFORM_PROBE_BLOCKED
+
+    if kind == "configuration" and result.error_message == PLATFORM_PROBE_BLOCKED:
+        return result
     from .openai_compat import MESSAGES
     if result.provider == "openai" and kind in MESSAGES:
         return result.model_copy(update={"error_message": f"{kind} {MESSAGES[kind]}"})

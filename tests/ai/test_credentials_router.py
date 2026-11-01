@@ -93,6 +93,46 @@ def test_list_empty(client):
     assert resp.json() == []
 
 
+@pytest.mark.parametrize("change, invalidated", [
+    ({"api_key": "synthetic-replacement-key"}, True),
+    ({"base_url": "https://changed.example.test/v1"}, True),
+    ({"base_url": "https://original.example.test/v1"}, False),
+    ({"label": "renamed"}, False),
+])
+def test_effective_credential_change_invalidates_only_its_model_evidence(client, change, invalidated):
+    from app.models import AiProviderModel
+    from app.routers.ai_credentials import _model_response
+
+    ids = []
+    for label in ("first", "other"):
+        response = client.post("/api/v1/ai/credentials", json={
+            "provider_name": "openai", "label": label, "api_key": "synthetic-original-key",
+            "default_model": "gpt-4o", "base_url": "https://original.example.test/v1",
+        })
+        assert response.status_code == 201
+        ids.append(response.json()["id"])
+    with SessionLocal() as db:
+        for cred_id in ids:
+            model = db.query(AiProviderModel).filter_by(provider_credential_id=cred_id).one()
+            model.raw_metadata = {"verification": {"accessible": True, "generation_verified": True, "workload_compatible": True}, "source": "synthetic"}
+            model.last_discovered_at = "2026-11-01T00:00:00Z"
+            model.is_available = True
+            model.last_verified_at = "2026-11-01T00:00:01Z"
+            model.last_test_success = True
+        db.commit()
+    response = client.put(f"/api/v1/ai/credentials/{ids[0]}", json=change)
+    assert response.status_code == 200
+    with SessionLocal() as db:
+        first, other = [db.query(AiProviderModel).filter_by(provider_credential_id=cid).one() for cid in ids]
+        assert ("verification" not in first.raw_metadata) is invalidated
+        assert first.is_available and first.is_selected and first.is_enabled
+        assert first.last_discovered_at is not None
+        if invalidated:
+            assert first.last_verified_at is None and first.last_test_success is None
+            assert _model_response(first).discovered and _model_response(first).accessible is None
+        assert other.raw_metadata["verification"]["accessible"] is True
+
+
 def test_create_response_omits_raw_key(client):
     raw_key = "sk-ant-api03-VERY-SECRET-KEY-PAYLOAD-AhB7"
     resp = client.post(

@@ -486,9 +486,9 @@ def test_legacy_get_progress_endpoint_returns_latest_batch(
 
 
 def test_legacy_post_cancel_sets_run_level_flag(client, _seeded_run, _enable_ai, _memory_store):
-    """The legacy run-scoped cancel endpoint sets the legacy flag,
-    which halts every batch on the run."""
+    """Legacy cancel stops existing/unregistered work, but permits new retries."""
     run_id = _seeded_run["run_id"]
+    _memory_store.write(initial_progress(run_id, total=2, batch_id="active", status="in_progress"))
     resp = client.post(f"/api/v1/runs/{run_uuid(run_id)}/ai-fixes/cancel")
     assert resp.status_code == 202
     body = resp.json()
@@ -496,6 +496,57 @@ def test_legacy_post_cancel_sets_run_level_flag(client, _seeded_run, _enable_ai,
     # Both legacy and any batch-id callers see the flag as set.
     assert _memory_store.is_cancel_requested(run_id) is True
     assert _memory_store.is_cancel_requested(run_id, "batch-a") is True
+    assert _memory_store.is_cancel_requested(run_id, "active") is True
+    _memory_store.write(initial_progress(run_id, total=2, batch_id="retry", status="queued"))
+    assert not _memory_store.is_cancel_requested(run_id, "retry")
+    assert _memory_store.read(run_id).batch_id == "retry"
+
+
+def test_progress_failure_prevents_dispatch_and_marks_durable_batch_failed(
+    client, _seeded_run, _enable_ai, _fake_registry, _memory_store, monkeypatch
+):
+    from app.ai.progress import ProgressStoreUnavailableError
+
+    dispatched = []
+    monkeypatch.setattr(
+        "app.workers.ai_fix_tasks.generate_run_fixes.apply_async", lambda **kw: dispatched.append(kw)
+    )
+
+    def unavailable(progress):
+        raise ProgressStoreUnavailableError("AI progress is unavailable; generation was not dispatched.")
+
+    monkeypatch.setattr(_memory_store, "write", unavailable)
+    run_id = _seeded_run["run_id"]
+    response = client.post(f"/api/v1/runs/{run_uuid(run_id)}/ai-fixes", json={})
+    assert response.status_code == 503
+    assert not dispatched
+    with SessionLocal() as db:
+        row = db.query(AiFixBatch).filter_by(run_id=run_id).one()
+        assert row.status == "failed" and row.generated_count == 0
+
+
+def test_worker_progress_outage_persists_failed_batch(
+    client, _seeded_run, _enable_ai, _fake_registry, _memory_store, monkeypatch
+):
+    from app.ai.progress import ProgressStoreUnavailableError
+    from app.core.context import minimal_background_context
+    from app.workers import ai_fix_tasks
+
+    run_id = _seeded_run["run_id"]
+    with SessionLocal() as db:
+        batch = create_batch(db, run_id=run_id, finding_ids=_seeded_run["finding_ids"], provider_name="fake", scope=None)
+        bid = batch.id
+    monkeypatch.setattr(ai_fix_tasks, "authorize_job_actor", lambda *a, **kw: minimal_background_context(1))
+
+    def unavailable(progress):
+        raise ProgressStoreUnavailableError("AI progress is unavailable")
+
+    monkeypatch.setattr(_memory_store, "write", unavailable)
+    result = ai_fix_tasks.generate_run_fixes.run(run_id, tenant_id=1, actor_user_id=1, batch_id=bid)
+    assert result["status"] == "failed"
+    with SessionLocal() as db:
+        batch = db.get(AiFixBatch, bid)
+        assert batch.status == "failed" and batch.generated_count == 0
 
 
 def test_trigger_without_scope_processes_all_findings(client, _seeded_run, _enable_ai, _fake_registry, _memory_store):

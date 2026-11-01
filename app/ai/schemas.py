@@ -37,7 +37,7 @@ from __future__ import annotations
 
 from typing import Literal
 
-from pydantic import BaseModel, ConfigDict, Field, field_validator
+from pydantic import BaseModel, ConfigDict, Field, PrivateAttr, field_validator
 
 
 def _normalize_enum_value(v: object) -> object:
@@ -328,6 +328,13 @@ class AiFixError(BaseModel):
     """
 
     model_config = ConfigDict(extra="forbid")
+
+    # Internal batch accounting only; never extends the public error JSON.
+    _billable_cost_usd: float = PrivateAttr(default=0.0)
+
+    @property
+    def billable_cost_usd(self) -> float:
+        return self._billable_cost_usd
 
     finding_id: int | None = None
     vuln_id: str

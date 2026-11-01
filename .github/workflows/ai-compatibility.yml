@@ -7,10 +7,12 @@ on:
       - 'app/ai/**'
       - 'app/routers/ai_*.py'
       - 'app/services/validation_repair_service.py'
+      - 'app/workers/ai_fix_tasks.py'
       - 'frontend/**'
       - 'tests/ai/**'
       - 'tests/test_tenant_isolation.py'
       - 'tests/test_security_remediation_patches.py'
+      - 'tests/test_scoped_configuration.py'
       - '.github/workflows/ai-compatibility.yml'
 
 permissions:
@@ -40,19 +42,30 @@ jobs:
       DATABASE_URL: postgresql+psycopg://sbom:synthetic-ci-only@127.0.0.1:5432/sbom_ai_test
       TEST_DATABASE_URL: postgresql+psycopg://sbom:synthetic-ci-only@127.0.0.1:5432/sbom_ai_test
       REDIS_URL: redis://127.0.0.1:6379/15
+      AI_TEST_REDIS_URL: redis://127.0.0.1:6379/14
     steps:
       - uses: actions/checkout@v4
       - uses: actions/setup-python@v5
         with:
           python-version: '3.12'
           cache: pip
+      - uses: actions/setup-node@v4
+        with:
+          node-version: '26.1.0'
       - run: python -m pip install -r requirements.txt ruff
       - name: AI, tenant and authorization regressions (mocked providers)
-        run: python -m pytest tests/ai tests/test_tenant_isolation.py tests/test_security_remediation_patches.py -q
+        run: python -m pytest tests/ai tests/test_tenant_isolation.py tests/test_security_remediation_patches.py tests/test_scoped_configuration.py -q
       - name: AI lint and whitespace
         run: |
-          python -m ruff check app/ai app/routers/ai_credentials.py app/routers/ai_fixes.py app/services/validation_repair_service.py tests/ai scripts/run_ai_remediation_e2e.py
+          python -m ruff check app/ai app/routers/ai_credentials.py app/routers/ai_fixes.py app/services/validation_repair_service.py app/workers/ai_fix_tasks.py tests/ai tests/test_scoped_configuration.py scripts/run_ai_remediation_e2e.py
           git diff --check HEAD^ HEAD
+      - name: Isolated launcher/configuration regressions
+        run: >-
+          python -m pytest --noconftest -p no:cacheprovider -q
+          tests/test_dev_config.py tests/test_dev_component_environments.py
+          tests/test_dev_instance_namespaces.py tests/test_dev_workspace_settings_isolation.py
+          tests/test_dev_workspace_namespace_wiring.py tests/test_dev_workspace_launcher_namespace.py
+          tests/test_dev_prepared.py tests/test_dev_main_merge.py
 
   frontend:
     runs-on: ubuntu-latest

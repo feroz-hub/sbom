@@ -39,11 +39,13 @@ from ..ai.config_loader import get_loader
 from ..ai.config_types import ProviderConfig
 from ..ai.model_registry import (
     ensure_legacy_model,
+    invalidate_model_verification,
     refresh_models,
     select_model,
     sync_legacy_configured_model,
     test_model,
 )
+from ..ai.probe_policy import PLATFORM_PROBE_BLOCKED, PlatformProbeBlockedError, check_probe_spending
 from ..ai.provider_factory import build_provider, validate_provider_config
 from ..ai.providers._probe import network_failure, sanitized_result
 from ..ai.providers.base import ConnectionTestResult, ModelDiscoveryError, ProviderUnavailableError
@@ -465,6 +467,8 @@ def _build_transient_provider(payload: TestConnectionRequest):
 def _safe_stored_test_error(row: AiProviderCredential) -> str | None:
     # Legacy rows may contain raw provider JSON. Do not return it to clients.
     value = row.last_test_error or ""
+    if value == PLATFORM_PROBE_BLOCKED:
+        return value
     from ..ai.providers.openai_compat import MESSAGES
     if value in {f"{kind} {message}" for kind, message in MESSAGES.items()}:
         return value
@@ -489,9 +493,10 @@ def _stamp_test_result(row: AiProviderCredential, result: ConnectionTestResult) 
         row.enabled = False
 
 
-async def _run_probe(provider, model: str | None) -> ConnectionTestResult:
+async def _run_probe(provider, model: str | None, *, tier: str | None = None) -> ConnectionTestResult:
     guard = None
     try:
+        check_probe_spending(provider, tier=tier)
         if getattr(provider, "name", None) == "openai":
             from ..ai.cost import estimate_cost_usd, write_usage_log_row
             from ..ai.providers.base import BudgetExceededError
@@ -532,6 +537,11 @@ async def _run_probe(provider, model: str | None) -> ConnectionTestResult:
                 )
         return result
     except Exception as exc:  # noqa: BLE001
+        if isinstance(exc, PlatformProbeBlockedError):
+            return ConnectionTestResult(
+                success=False, provider=provider.name, model_tested=model,
+                error_kind="configuration", error_message=PLATFORM_PROBE_BLOCKED,
+            )
         if guard is not None and isinstance(exc, BudgetExceededError):
             return ConnectionTestResult(
                 success=False,
@@ -783,8 +793,10 @@ def update_credential(
         row.api_key_encrypted = _cipher().encrypt(body.api_key)
         changes.append("api_key")
     if body.base_url is not None:
-        row.base_url = body.base_url.strip() or None
-        changes.append("base_url")
+        endpoint = body.base_url.strip() or None
+        if endpoint != row.base_url:
+            row.base_url = endpoint
+            changes.append("base_url")
     if body.default_model is not None and body.default_model != row.default_model:
         row.default_model = body.default_model
         sync_legacy_configured_model(db, row)
@@ -810,6 +822,9 @@ def update_credential(
     if body.rate_per_minute is not None:
         row.rate_per_minute = float(body.rate_per_minute)
         changes.append("rate")
+
+    if any(field in changes for field in ("api_key", "base_url")):
+        invalidate_model_verification(db, row)
 
     if _verification_status(row) != "INVALID_CREDENTIALS" and any(
         field in changes for field in ("api_key", "base_url", "default_model")
@@ -1001,7 +1016,7 @@ async def test_unsaved_credential(
             provider=test_body.provider_name,
             model_tested=test_body.default_model,
         )
-    result = await _run_probe(provider, test_body.default_model)
+    result = await _run_probe(provider, test_body.default_model, tier=test_body.tier)
     credential_audit.record(
         db,
         user_id=_user_id(request),
@@ -1049,7 +1064,7 @@ async def test_saved_credential(
         rate_per_minute=row.rate_per_minute,
     )
     provider = _build_transient_provider(payload)
-    result = await _run_probe(provider, row.default_model)
+    result = await _run_probe(provider, row.default_model, tier=row.tier)
     _stamp_test_result(row, result)
     db.commit()
     get_loader().invalidate()
