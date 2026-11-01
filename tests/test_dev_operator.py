@@ -442,8 +442,14 @@ def test_unsafe_database_observation_blocks_enrollment_reads_and_closes(checkout
         connection.revisions = []
     else:
         connection.revisions.append(("fixture-unreviewed-head",))
-    with pytest.raises(dev_operator.OperatorError):
+    with pytest.raises(dev_operator.OperatorError) as caught:
         dev_operator.inspect_native_enrollment(context(checkout), confirm_database="sbom_analyser_dev")
+    assert caught.value.code == {
+        "readonly": "OPERATOR_DATABASE_NOT_READONLY",
+        "target": "OPERATOR_DATABASE_TARGET_MISMATCH",
+        "schema": "OPERATOR_SCHEMA_REQUIRED",
+        "multiple-heads": "OPERATOR_SCHEMA_REQUIRED",
+    }[failure]
     assert not any("iam_users" in sql or "bootstrap" in sql for sql in connection.statements)
     assert connection.rollbacks == 1 and connection.closed
 
@@ -483,3 +489,115 @@ def test_cleanup_failure_is_an_explicit_error_not_success(checkout, database, mo
         dev_operator.inspect_native_enrollment(context(checkout), confirm_database="sbom_analyser_dev")
     assert caught.value.code == "OPERATOR_DATABASE_CLEANUP_UNCONFIRMED"
     assert SECRET not in str(caught.value) and connection.closed
+
+
+@pytest.mark.parametrize("crlf", [False, True])
+def test_fresh_status_with_real_migration_discovery(checkout, database, monkeypatch, crlf):
+    from scripts.greenfield_migration_graph import discover
+
+    root, _ = checkout
+    versions = root / "alembic/versions"
+    versions.mkdir(parents=True)
+    for source in (SOURCE / "alembic/versions").glob("*.py"):
+        raw = source.read_bytes().replace(b"\r\n", b"\n")
+        (versions / source.name).write_bytes(raw.replace(b"\n", b"\r\n") if crlf else raw)
+    monkeypatch.setattr(dev_operator, "discover", discover)
+    status = dev_operator.inspect_native_enrollment(context(checkout), confirm_database="sbom_analyser_dev")
+    assert status.code == "ENROLLMENT_REQUIRED"
+    assert status.live_readiness_verified is False
+    connection, _ = database
+    assert connection.closed and connection.rollbacks == 1
+
+
+def test_discovery_failure_is_redacted_and_never_connects(checkout, database, monkeypatch):
+    _, connect = database
+    monkeypatch.setattr(dev_operator, "discover", Mock(side_effect=RuntimeError(SECRET)))
+    with pytest.raises(dev_operator.OperatorError) as caught:
+        dev_operator.inspect_native_enrollment(context(checkout), confirm_database="sbom_analyser_dev")
+    assert caught.value.code == "OPERATOR_MIGRATION_SOURCE_INVALID"
+    assert "migration source discovery" in str(caught.value)
+    assert SECRET not in str(caught.value)
+    connect.assert_not_called()
+
+
+@pytest.mark.parametrize("failure,code", [
+    (ImportError(SECRET), "OPERATOR_NATIVE_DEPENDENCIES_REQUIRED"),
+    (ValueError(SECRET), "OPERATOR_NATIVE_KEYS_REQUIRED"),
+])
+def test_missing_crypto_dependency_is_not_reported_as_invalid_keys(checkout, monkeypatch, failure, code):
+    monkeypatch.setattr(dev, "validate_secrets", Mock(side_effect=failure))
+    with pytest.raises(dev_operator.OperatorError) as caught:
+        context(checkout)
+    assert caught.value.code == code
+    assert SECRET not in str(caught.value)
+
+
+@pytest.mark.parametrize("url", [
+    "postgresql+psycopg://fixture@127.0.0.1:5432/sbom_analyser_dev",
+    "postgresql+psycopg://fixture:@127.0.0.1:5432/sbom_analyser_dev",
+])
+def test_missing_database_password_never_connects(checkout, database, url):
+    _, values = checkout
+    values["DATABASE_URL"] = url
+    save(values)
+    _, connect = database
+    with pytest.raises(dev_operator.OperatorError) as caught:
+        context(checkout)
+    assert caught.value.code == "OPERATOR_DATABASE_CREDENTIALS_REQUIRED"
+    connect.assert_not_called()
+
+
+@pytest.mark.parametrize("statement,operation", [
+    ("SHOW transaction_read_only", "read-only transaction verification"),
+    ("SELECT pg_catalog.current_database()", "database identity verification"),
+    ("SELECT version_num", "schema marker inspection"),
+    ("SELECT count(*) FROM public.iam_users", "user count inspection"),
+    ("SELECT count(*) FROM public.platform_user_roles", "administrator eligibility inspection"),
+    ("SELECT state FROM public.native_platform_bootstrap", "bootstrap reservation inspection"),
+])
+def test_query_failures_identify_only_the_fixed_operation(checkout, database, monkeypatch, statement, operation):
+    connection, _ = database
+    execute = connection.execute
+
+    def fail_selected(sql):
+        if sql.startswith(statement):
+            raise RuntimeError(SECRET)
+        return execute(sql)
+
+    monkeypatch.setattr(connection, "execute", fail_selected)
+    with pytest.raises(dev_operator.OperatorError) as caught:
+        dev_operator.inspect_native_enrollment(context(checkout), confirm_database="sbom_analyser_dev")
+    assert caught.value.code == "OPERATOR_DATABASE_INSPECTION_FAILED"
+    assert operation in str(caught.value)
+    assert SECRET not in str(caught.value)
+    assert connection.closed and connection.rollbacks == 1
+
+
+def test_invalid_postgres_credentials_report_connection_stage_without_private_details(checkout, database):
+    _, connect = database
+    connect.side_effect = RuntimeError(SECRET)
+    with pytest.raises(dev_operator.OperatorError) as caught:
+        dev_operator.inspect_native_enrollment(context(checkout), confirm_database="sbom_analyser_dev")
+    assert caught.value.code == "OPERATOR_DATABASE_INSPECTION_FAILED"
+    assert "PostgreSQL connection" in str(caught.value)
+    assert SECRET not in str(caught.value)
+
+
+def test_missing_postgres_driver_is_not_reported_as_database_failure(checkout, database, monkeypatch):
+    _, connect = database
+    monkeypatch.setitem(sys.modules, "psycopg", None)
+    with pytest.raises(dev_operator.OperatorError) as caught:
+        dev_operator.inspect_native_enrollment(context(checkout), confirm_database="sbom_analyser_dev")
+    assert caught.value.code == "OPERATOR_DATABASE_DRIVER_REQUIRED"
+    connect.assert_not_called()
+
+
+def test_status_reporting_deadline_remains_bounded(checkout, database, monkeypatch):
+    _, connect = database
+    bounded = Mock(side_effect=dev_operator.dev_diagnostics.DiagnosticError("PROBE_TIMEOUT"))
+    monkeypatch.setattr(dev_operator.dev_diagnostics, "_bounded", bounded)
+    with pytest.raises(dev_operator.OperatorError) as caught:
+        dev_operator.inspect_native_enrollment(context(checkout), confirm_database="sbom_analyser_dev")
+    assert caught.value.code == "OPERATOR_STATUS_TIMEOUT"
+    assert bounded.call_args.kwargs == {"timeout": 8}
+    connect.assert_not_called()

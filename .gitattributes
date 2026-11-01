@@ -8,3 +8,6 @@ docs/uat/** -text
 docs/uuid-migration/** -text
 infra/uuid-migration/** -text
 data/sbom-workspaces/** -text
+
+# Frozen Python migration hashes use the repository LF representation.
+alembic/versions/*.py text eol=lf

@@ -171,6 +171,11 @@ def _native_configuration(environment, launcher):
             environment["AUTH_SESSION_ENCRYPTION_KEY"], validate=True
         ):
             raise ValueError()
+    except ImportError:
+        _refuse(
+            "OPERATOR_NATIVE_DEPENDENCIES_REQUIRED",
+            "Run this read-only command with the existing project .venv interpreter and its cryptography dependency; no keys were changed.",
+        )
     except Exception:
         _refuse(
             "OPERATOR_NATIVE_KEYS_REQUIRED",
@@ -431,10 +436,13 @@ def native_child_environment(context):
 
 def _inspect_native_enrollment(context):
     connection, outcome, failure = None, None, None
+    operation = "migration source discovery"
     try:
         head = discover(context.root).head
+        operation = "PostgreSQL driver import"
         import psycopg
 
+        operation = "PostgreSQL connection"
         credentials = urlsplit(context.environment["DATABASE_URL"])
         connection = psycopg.connect(
             host=context.database.host,
@@ -448,16 +456,19 @@ def _inspect_native_enrollment(context):
             application_name="sbom-dev-native-status",
             options="-c default_transaction_read_only=on -c statement_timeout=3000 -c lock_timeout=250 -c idle_in_transaction_session_timeout=5000 -c search_path=pg_catalog,public",
         )
+        operation = "read-only transaction verification"
         if connection.execute("SHOW transaction_read_only").fetchone()[0] != "on":
             _refuse(
                 "OPERATOR_DATABASE_NOT_READONLY",
                 "The server did not confirm a read-only transaction; enrollment state was not queried.",
             )
+        operation = "database identity verification"
         if connection.execute("SELECT pg_catalog.current_database()").fetchone()[0] != context.confirmed_database:
             _refuse(
                 "OPERATOR_DATABASE_TARGET_MISMATCH",
                 "The connected database differs from confirmation; enrollment state was not queried.",
             )
+        operation = "schema marker inspection"
         revisions = connection.execute(
             "SELECT version_num FROM public.alembic_version ORDER BY version_num LIMIT 2"
         ).fetchall()
@@ -466,7 +477,9 @@ def _inspect_native_enrollment(context):
                 "OPERATOR_SCHEMA_REQUIRED",
                 "Review the current schema through explicitly authorized setup; no migration was run.",
             )
+        operation = "user count inspection"
         users = connection.execute("SELECT count(*) FROM public.iam_users").fetchone()[0]
+        operation = "administrator eligibility inspection"
         admins = connection.execute(
             "SELECT count(*) FROM public.platform_user_roles AS grant_row JOIN public.iam_users AS person "
             "ON person.id=grant_row.user_id WHERE grant_row.role='PLATFORM_ADMIN' AND grant_row.status='ACTIVE' "
@@ -474,6 +487,7 @@ def _inspect_native_enrollment(context):
             "EXISTS (SELECT 1 FROM public.user_identities AS identity_row WHERE identity_row.user_id=person.id "
             "AND identity_row.provider_type='MICROSOFT_ENTRA'))"
         ).fetchone()[0]
+        operation = "bootstrap reservation inspection"
         reservation = connection.execute("SELECT state FROM public.native_platform_bootstrap WHERE id=1").fetchone()
         state = (
             reservation[0]
@@ -502,9 +516,13 @@ def _inspect_native_enrollment(context):
     except OperatorError as error:
         failure = error
     except Exception:
+        code = {
+            "migration source discovery": "OPERATOR_MIGRATION_SOURCE_INVALID",
+            "PostgreSQL driver import": "OPERATOR_DATABASE_DRIVER_REQUIRED",
+        }.get(operation, "OPERATOR_DATABASE_INSPECTION_FAILED")
         failure = OperatorError(
-            "OPERATOR_DATABASE_INSPECTION_FAILED",
-            "Verify the selected target, credentials, schema and driver; no private exception details were printed.",
+            code,
+            f"Read-only status failed during {operation}; verify project dependencies/source or the selected database as applicable. Private exception details were withheld.",
         )
     finally:
         if connection is not None:
