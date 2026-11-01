@@ -133,6 +133,36 @@ def test_effective_credential_change_invalidates_only_its_model_evidence(client,
         assert other.raw_metadata["verification"]["accessible"] is True
 
 
+def test_late_old_key_auth_failure_cannot_disable_rotated_credential(client, monkeypatch):
+    from types import SimpleNamespace
+
+    from app.ai.model_registry import CONFIGURATION_CHANGED
+    from app.security.secrets import get_cipher
+
+    response = client.post("/api/v1/ai/credentials", json={
+        "provider_name": "openai", "default_model": "gpt-4o", "api_key": "synthetic-old-key",
+    })
+    cred_id = response.json()["id"]
+
+    async def old_result(**kwargs):
+        with SessionLocal() as other:
+            row = other.get(AiProviderCredential, cred_id)
+            row.api_key_encrypted = get_cipher().encrypt("synthetic-rotated-key")
+            row.last_test_success = None
+            row.last_test_error = None
+            other.commit()
+        return ConnectionTestResult(success=False, provider="openai", error_kind="auth")
+
+    monkeypatch.setattr("app.routers.ai_credentials.build_provider", lambda cfg: SimpleNamespace(
+        name="openai", default_model="gpt-4o", is_local=False, test_connection=old_result,
+    ))
+    result = client.post(f"/api/v1/ai/credentials/{cred_id}/test")
+    assert result.status_code == 200 and result.json()["error_message"] == CONFIGURATION_CHANGED
+    with SessionLocal() as db:
+        row = db.get(AiProviderCredential, cred_id)
+        assert row.enabled and row.last_test_success is None and row.last_test_error is None
+
+
 def test_create_response_omits_raw_key(client):
     raw_key = "sk-ant-api03-VERY-SECRET-KEY-PAYLOAD-AhB7"
     resp = client.post(

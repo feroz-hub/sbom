@@ -121,6 +121,32 @@ async def test_mismatched_credential_cannot_invoke_model():
             await verify_model(db, credential, model)
 
 
+@pytest.mark.asyncio
+@pytest.mark.usefixtures("temporary_cipher")
+async def test_late_old_key_model_result_cannot_restore_rotated_verification():
+    from app.ai.model_registry import CONFIGURATION_CHANGED, invalidate_model_verification
+    from app.security.secrets import get_cipher
+
+    with SessionLocal() as db:
+        credential, model = add_rows(db)
+
+        def rotate_during_call(request):
+            with SessionLocal() as other:
+                changed = other.get(AiProviderCredential, credential.id)
+                changed.api_key_encrypted = get_cipher().encrypt("synthetic-rotated-key")
+                invalidate_model_verification(other, changed)
+                other.commit()
+            return httpx.Response(200, json=response("gpt-6-luna"))
+
+        async with httpx.AsyncClient(transport=httpx.MockTransport(rotate_during_call)) as client:
+            provider = OpenAiProvider(api_key="synthetic-old-key", client_factory=lambda: client)
+            ok, error = await verify_model(db, credential, model, provider=provider)
+        assert not ok and error == CONFIGURATION_CHANGED
+        assert "verification" not in (model.raw_metadata or {})
+        assert model.last_test_success is None and model.last_verified_at is None
+        assert credential.enabled
+
+
 @pytest.fixture
 def temporary_cipher(monkeypatch):
     from app.security.secrets import generate_master_key, reset_cipher

@@ -38,12 +38,15 @@ from ..ai import credential_audit
 from ..ai.config_loader import get_loader
 from ..ai.config_types import ProviderConfig
 from ..ai.model_registry import (
+    CONFIGURATION_CHANGED,
     ensure_legacy_model,
     invalidate_model_verification,
+    lock_verification_configuration,
     refresh_models,
     select_model,
     sync_legacy_configured_model,
     test_model,
+    verification_configuration,
 )
 from ..ai.probe_policy import PLATFORM_PROBE_BLOCKED, PlatformProbeBlockedError, check_probe_spending
 from ..ai.provider_factory import build_provider, validate_provider_config
@@ -1064,8 +1067,15 @@ async def test_saved_credential(
         rate_per_minute=row.rate_per_minute,
     )
     provider = _build_transient_provider(payload)
+    configuration = verification_configuration(row)
     result = await _run_probe(provider, row.default_model, tier=row.tier)
-    _stamp_test_result(row, result)
+    if lock_verification_configuration(db, row, configuration):
+        _stamp_test_result(row, result)
+    else:
+        result = ConnectionTestResult(
+            success=False, provider=row.provider_name, model_tested=payload.default_model,
+            error_kind="configuration", error_message=CONFIGURATION_CHANGED,
+        )
     db.commit()
     get_loader().invalidate()
 

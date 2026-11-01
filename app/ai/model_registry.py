@@ -41,6 +41,22 @@ def _now() -> str:
     return datetime.now(UTC).isoformat()
 
 
+CONFIGURATION_CHANGED = "Provider configuration changed during this test. Test the current configuration again."
+
+
+def verification_configuration(credential: AiProviderCredential) -> tuple:
+    # In-memory comparison only: never persist/log a key-derived fingerprint.
+    return credential.api_key_encrypted, credential.base_url, credential.default_model
+
+
+def lock_verification_configuration(session: Session, credential: AiProviderCredential, expected: tuple) -> bool:
+    current = session.scalar(
+        select(AiProviderCredential).where(AiProviderCredential.id == credential.id)
+        .with_for_update().execution_options(populate_existing=True)
+    )
+    return current is not None and verification_configuration(current) == expected
+
+
 def invalidate_model_verification(session: Session, credential: AiProviderCredential) -> None:
     """Credential-specific evidence expires when its key or endpoint changes.
 
@@ -275,6 +291,7 @@ async def test_model(
     if model.provider_credential_id != credential.id:
         raise ValueError("model does not belong to this provider credential")
     provider = provider or build_provider_for_credential(credential)
+    configuration = verification_configuration(credential)
     now = _now()
     request = structured_probe_request(
         model.runtime_model_id,
@@ -358,6 +375,13 @@ async def test_model(
             latency_ms=int((time.perf_counter() - started) * 1000),
             error=None if ok else state["error_kind"] or "model_test_failed",
         )
+    # Serialize with credential edits. A late old-key result must not restore
+    # evidence invalidated by rotation; edits after this lock invalidate it
+    # after this transaction commits. Billed usage above remains accounted.
+    if not lock_verification_configuration(session, credential, configuration):
+        session.refresh(model)
+        session.commit()
+        return False, CONFIGURATION_CHANGED
     model.raw_metadata = {**(model.raw_metadata or {}), "verification": state}
     model.last_verified_at = None if error == PLATFORM_PROBE_BLOCKED else now
     model.last_test_success = ok
