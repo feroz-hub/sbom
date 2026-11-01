@@ -332,7 +332,7 @@ def _database(url: str, profile: str, family: str) -> DatabaseTarget:
             allowed = allowed and (
                 parsed.scheme == "postgresql+psycopg"
                 and host in {"localhost", "127.0.0.1"}
-                and parsed.path == "/sbom_analyser_dev"
+                and re.fullmatch(r"sbom_analyser_dev(?:_[a-z0-9_]{1,24})?", name) is not None
                 and bool(port)
             )
         else:
@@ -547,7 +547,15 @@ def resolve_configuration(
                     "DATABASE_PORT_CONFLICT", "Selected PostgreSQL port differs from saved configuration."
                 )
             layer({"DEV_POSTGRES_PROVIDER": pg, "DEV_REDIS_PROVIDER": redis}, "selection.providers")
-            layer(_managed_fixed(ports), "policy.managed")
+            fixed = _managed_fixed(ports)
+            if saved.get("DEV_REDIS_DATABASE_MODE") == "shared-db0":
+                if not saved.get("SBOM_DEV_RESOURCE_ID"):
+                    raise ConfigurationError("REDIS_NAMESPACE_REQUIRED", "Restore the recorded resource UUID for this shared database-zero installation.")
+                fixed["AUTH_SESSION_REDIS_URL"] = fixed["REDIS_URL"]
+                fixed["NATIVE_AUTH_RATE_LIMIT_STORAGE_URI"] = fixed["REDIS_URL"]
+                fixed["APP_ENVIRONMENT"] = "development"
+                fixed["PYTHON_DOTENV_DISABLED"] = "1"
+            layer(fixed, "policy.managed")
             layer({"NATIVE_PLATFORM_BOOTSTRAP_ENABLED": "false"}, "default.managed", defaults=True)
         elif family != "managed":
             native = env.get("NATIVE_AUTH_ENABLED", "false").lower() == "true"

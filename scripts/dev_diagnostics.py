@@ -17,6 +17,7 @@ import smtplib
 import socket
 import ssl
 import subprocess
+import sys
 import threading
 import time
 from dataclasses import dataclass
@@ -462,6 +463,18 @@ def _smtp_check(env):
     host, port = env.get("SMTP_HOST", ""), int(env.get("SMTP_PORT", "587"))
     if not host or not 1 <= port <= 65535:
         raise DiagnosticError("SMTP_CONFIGURATION_INVALID")
+    if env.get("DEV_MAILPIT_UI_PORT") or env.get("DEV_MAILPIT_PROVIDER") == "local":
+        if host not in {"127.0.0.1", "localhost", "::1"}:
+            raise DiagnosticError("MAILPIT_EXPOSED")
+        if sys.platform == "win32":
+            if __package__:
+                from .dev_local_services import LocalServiceError, mailpit_bindings
+            else:
+                from dev_local_services import LocalServiceError, mailpit_bindings
+            try:
+                mailpit_bindings({port, int(env.get("DEV_MAILPIT_UI_PORT", "8025"))})
+            except LocalServiceError as error:
+                raise DiagnosticError("MAILPIT_EXPOSED" if str(error).startswith("MAILPIT_EXPOSED:") else "MAILPIT_BINDING_UNVERIFIED") from None
     tls, starttls = _true(env.get("SMTP_USE_TLS", "false")), _true(env.get("SMTP_USE_STARTTLS", "true"))
     if tls and starttls:
         raise DiagnosticError("SMTP_TLS_CONFLICT")
@@ -1377,7 +1390,7 @@ def run_checks(args, launcher):
                         component,
                         "PASS",
                         "REDIS_PING_VALID",
-                        "Selected Redis endpoint answered PING; no keys were written.",
+                        "Selected Redis endpoint answered PING; no keys were written. To verify Lua, Celery and session semantics, review setup --profile legacy --legacy-config managed --check-local-services --plan, then separately approve its disposable probes.",
                     )
                 )
             except Exception as error:
@@ -1409,8 +1422,9 @@ def run_checks(args, launcher):
                         "FAIL",
                         "PROBE_TIMEOUT"
                         if isinstance(error, DiagnosticError) and error.code == "PROBE_TIMEOUT"
+                        else error.code if isinstance(error, DiagnosticError) and error.code in {"MAILPIT_EXPOSED", "MAILPIT_BINDING_UNVERIFIED"}
                         else "SMTP_PROTOCOL_FAILED",
-                        "Review approved SMTP/Mailpit service, port and TLS; no message or activation token was created.",
+                        "For local Mailpit, verify both SMTP/UI bind only to loopback (mailpit --smtp 127.0.0.1:<smtp-port> --listen 127.0.0.1:<ui-port>); review saved ports and TLS. No service was changed and no message or activation token was created.",
                     )
                 )
     else:
