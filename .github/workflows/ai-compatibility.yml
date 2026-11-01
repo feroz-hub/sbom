@@ -29,7 +29,7 @@ jobs:
           POSTGRES_DB: sbom_ai_test
         ports: ['5432:5432']
         options: >-
-          --health-cmd 'pg_isready -U sbom -d sbom_ai_test'
+          --health-cmd "pg_isready -U sbom -d sbom_ai_test"
           --health-interval 5s --health-timeout 5s --health-retries 12
       redis:
         image: redis:7
