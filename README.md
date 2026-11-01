@@ -39,6 +39,10 @@ readiness where applicable, and verified HTTPS.
 
 ## Development commands
 
+For a fresh Windows installation with local PostgreSQL, Garnet/Redis and Mailpit,
+follow the [Docker-free Windows onboarding guide](docs/engineering/windows-local-onboarding.md).
+It covers separate setup/runtime credentials, private-file ACL recovery and disposable compatibility checks.
+
 ```sh
 python3 scripts/dev.py setup --plan
 python3 scripts/dev.py setup
