@@ -40,6 +40,9 @@ _CATEGORIES = frozenset(
         "database-migrate",
         "frontend-build",
         "frontend-workspace",
+        "local-postgres-provision",
+        "database-credentials",
+        "local-service-checks",
     }
 )
 SETUP_CATEGORIES = _CATEGORIES
@@ -245,7 +248,7 @@ def _legacy_values(args, launcher, family, snapshot, actions, blockers):
                 )
             if not getattr(args, "initialize_database", False):
                 blockers.append(
-                    "CONFIGURATION_MISSING: restore the original managed file, or explicitly authorize fresh empty-database initialization."
+                    "CONFIGURATION_MISSING: for a fresh Docker-free installation run setup --profile legacy --legacy-config managed --provision-local-postgres --initialize-database --confirm-database sbom_analyser_dev. For an existing installation restore the original managed file."
                 )
             else:
                 actions["configuration"] = (
@@ -362,7 +365,7 @@ def _certificates(launcher, snapshot, actions, blockers):
             )
         except Exception:
             blockers.append(
-                "CERTIFICATE_VALIDATION_REQUIRED: restore a valid existing localhost pair or use its project interpreter; no certificate will be replaced."
+                "CERTIFICATE_VALIDATION_REQUIRED: restore a valid existing localhost pair or use its project interpreter. On Windows inspect setup --repair-private-file frontend/certificates/localhost-key.pem --plan for explicit ACL narrowing; certificate trust still requires separate approval. No certificate will be replaced."
             )
 
 
@@ -391,9 +394,16 @@ def inspect_setup(args, launcher):
             "redis_provider",
             "mailpit_provider",
             "repair_dependencies",
+            "provision_local_postgres",
+            "local_database",
+            "local_postgres_port",
+            "transition_database_credentials",
+            "check_local_services",
+            "local_mailpit_smtp_port",
+            "local_mailpit_ui_port",
         )
     }
-    values, fresh = {}, False
+    values, fresh, phase = {}, False, "configuration selection"
     try:
         if profile not in {"legacy", "greenfield"}:
             raise _ObservationError("Unsupported development profile.")
@@ -403,16 +413,21 @@ def inspect_setup(args, launcher):
             else "greenfield"
         )
         _scope_check([os.environ], blockers)
+        phase = "dependency manifests and project interpreter"
         _dependencies(snapshot, launcher, actions, blockers)
         if getattr(args, "repair_dependencies", False):
             actions["project-dependencies"] = (
                 "Repair project Python/npm dependencies from the pinned manifests after explicit consent; preserve private configuration and data."
             )
+        phase = "runtime ownership records"
         _runtime(snapshot, launcher, blockers)
         if not any(item.startswith("RUNTIME_") for item in blockers):
             if profile == "legacy":
+                phase = "saved configuration and authentication mode"
                 values, fresh = _legacy_values(args, launcher, family, snapshot, actions, blockers)
+                phase = "persistent Native keys"
                 _keys(values, fresh, launcher, actions, blockers, native_default=family == "managed")
+                phase = "localhost certificates and private-key ACL"
                 _certificates(launcher, snapshot, actions, blockers)
                 if getattr(args, "provision_greenfield", False) or getattr(args, "frontend_build", False):
                     blockers.append(
@@ -480,6 +495,7 @@ def inspect_setup(args, launcher):
                     )
 
         if not any(item.startswith("RUNTIME_") for item in blockers):
+            phase = "frontend workspace ownership and configuration"
             try:
                 current_workspace = dev_frontend.inspect_workspace(launcher, profile)
             except launcher.SetupError as error:
@@ -498,10 +514,51 @@ def inspect_setup(args, launcher):
                 actions["frontend-workspace"] = (
                     "Prepare an environment-free Next workspace with verified live source/dependency links and owned public configuration copies."
                 )
-        target_name = launcher.GreenfieldStack.DB if profile == "greenfield" else launcher.DB_NAME
+        target_name = launcher.GreenfieldStack.DB if profile == "greenfield" else (getattr(args, "local_database", None) or launcher.DB_NAME)
         if profile == "legacy" and values.get("DATABASE_URL"):
             target_name = urlsplit(values["DATABASE_URL"]).path[1:]
-        database_action = any(
+        phase = "local PostgreSQL provisioning target and recovery record"
+        local_provision = getattr(args, "provision_local_postgres", False)
+        transition = getattr(args, "transition_database_credentials", False)
+        local_selection = local_provision or transition or getattr(args, "local_database", None) or getattr(args, "local_postgres_port", None)
+        for option in ("local_mailpit_smtp_port", "local_mailpit_ui_port"):
+            port = getattr(args, option, None)
+            if port is not None and (type(port) is not int or not 1 <= port <= 65535):
+                blockers.append("MAILPIT_PORT_INVALID: select SMTP/UI ports from 1 to 65535.")
+            saved_port = values.get("SMTP_PORT" if option == "local_mailpit_smtp_port" else "DEV_MAILPIT_UI_PORT")
+            if port is not None and (not local_provision or (values and str(port) != saved_port)):
+                blockers.append("MAILPIT_TARGET_PINNED: Mailpit port overrides require fresh local provisioning; existing saved service settings were retained.")
+        if local_selection and (profile != "legacy" or family != "managed"):
+            blockers.append("LOCAL_POSTGRES_PROFILE_REQUIRED: select --profile legacy --legacy-config managed for local PostgreSQL actions.")
+        if local_provision:
+            if not getattr(args, "initialize_database", False) or transition or getattr(args, "migrate", False):
+                blockers.append("LOCAL_POSTGRES_ACTION_REQUIRED: provisioning requires --initialize-database and cannot be combined with migration or credential transition.")
+            if getattr(args, "postgres_provider", None) == "docker":
+                blockers.append("LOCAL_POSTGRES_PROVIDER_CONFLICT: select --postgres-provider local for Docker-free provisioning.")
+            from_module = launcher._development_library("dev_local_postgres")
+            from_module.validate_target(target_name, getattr(args, "local_postgres_port", None) or 5432)
+            recovery = from_module.record_path(launcher)
+            snapshot.read(recovery)
+            if values and not recovery.is_file():
+                blockers.append("LOCAL_POSTGRES_EXISTING_CONFIG: existing installations require --transition-database-credentials; provisioning cannot adopt them.")
+            if recovery.is_file():
+                record = from_module.read_record(launcher)
+                if (record["database"], record["port"]) != (target_name, getattr(args, "local_postgres_port", None) or 5432):
+                    blockers.append("LOCAL_POSTGRES_RECORD_TARGET_CHANGED: repeat the recorded database name and port; retain the recovery file.")
+            actions["local-postgres-provision"] = f"Provision only absent PostgreSQL resources at 127.0.0.1:{getattr(args, 'local_postgres_port', None) or 5432}/{target_name} with separate {target_name}_setup and {target_name}_app roles; retain recovery credentials; administrator password stays in memory."
+        elif getattr(args, "local_database", None) or getattr(args, "local_postgres_port", None):
+            blockers.append("LOCAL_POSTGRES_PROVISION_REQUIRED: target overrides apply only to --provision-local-postgres; saved installations retain their target.")
+        if transition:
+            if not values.get("DATABASE_URL") or getattr(args, "initialize_database", False) or getattr(args, "migrate", False):
+                blockers.append("CREDENTIAL_TRANSITION_REQUIRES_SAVED_TARGET: select an existing managed installation without initialization or migration.")
+            actions["database-credentials"] = "Validate a separately provisioned runtime login for the exact saved target; back up original bytes and change only DATABASE_URL; keep all keys and certificates."
+        if local_provision or getattr(args, "check_local_services", False):
+            if profile != "legacy" or family != "managed":
+                blockers.append("LOCAL_SERVICE_PROFILE_REQUIRED: select --profile legacy --legacy-config managed for disposable local service checks.")
+            actions["local-service-checks"] = "Check local Redis/Garnet Lua, Celery and session commands using only disposable expiring keys; validate loopback Mailpit without sending email."
+            if local_provision and fresh:
+                actions["local-service-checks"] += " Fresh configuration uses database zero and unique queue/session/rate-limit namespaces; existing installations keep their saved layout."
+        database_action = transition or any(
             getattr(args, name, False) for name in ("initialize_database", "migrate", "provision_greenfield")
         )
         if getattr(args, "initialize_database", False) and getattr(args, "migrate", False):
@@ -548,9 +605,11 @@ def inspect_setup(args, launcher):
         blockers.append(
             "INSPECTION_DEPENDENCY_REQUIRED: existing configuration inspection requires project dependencies; no preparation occurred."
         )
-    except Exception:
+    except Exception as error:
+        code = getattr(error, "code", None)
+        safe_code = code if isinstance(code, str) and code.isascii() and code.replace("_", "").isalnum() and len(code) <= 80 else "INPUT_UNVERIFIED"
         blockers.append(
-            "SETUP_INSPECTION_BLOCKED: inspect existing file permissions, configuration, keys and certificate trust; no preparation occurred."
+            f"SETUP_INSPECTION_BLOCKED: {phase} ({safe_code}). Review that exact setup input and rerun setup --plan; no preparation occurred."
         )
     scope = {key: os.environ[key] for key in ("APP_ENVIRONMENT", "APP_ENV") if key in os.environ}
     identity = {
@@ -629,6 +688,15 @@ def run_setup(args, launcher, apply_callback):
     """Display, authorize and revalidate a plan before delegating preparation."""
     inherited = os.environ.pop(APPROVAL_ENV, None)
     try:
+        if getattr(args, "repair_private_file", None):
+            if any(getattr(args, name, False) for name in (
+                "provision_local_postgres", "local_database", "local_postgres_port", "transition_database_credentials",
+                "check_local_services", "initialize_database", "migrate", "provision_greenfield", "frontend_build", "repair_dependencies",
+                "confirm_database", "postgres_provider", "redis_provider", "mailpit_provider",
+                "local_mailpit_smtp_port", "local_mailpit_ui_port",
+            )):
+                raise launcher.SetupError("ACL_REPAIR_SEPARATE_ACTION: review exact private-file ACL repair separately from other preparation actions.")
+            return launcher._development_library("dev_acl_repair").run(args, launcher)
         plan = inspect_setup(args, launcher)
         print(f"[PLAN] Setup: {plan.profile}/{plan.family}; no changes have been applied.", flush=True)
         if plan.profile == "legacy":
@@ -636,6 +704,8 @@ def run_setup(args, launcher, apply_callback):
                 "[INFO] Legacy dependencies: reuse only already-running explicitly selected local/Docker services; setup never creates or resumes Legacy containers.",
                 flush=True,
             )
+            if launcher.sys.platform == "win32":
+                print("[INFO] Windows without Docker: install PostgreSQL, a Redis-compatible service with Lua enabled, and Mailpit. Start services on loopback only. Mailpit: mailpit --smtp 127.0.0.1:1025 --listen 127.0.0.1:8025. TLS certificate trust is a separate explicit OS action.", flush=True)
         for action in plan.actions:
             print(f"[PLAN] {action.category}: {action.description}", flush=True)
         for blocker in plan.blockers:

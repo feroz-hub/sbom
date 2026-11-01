@@ -125,6 +125,9 @@ def _managed_ports(saved, inspection, launcher):
         expected = launcher.REDIS_PORT if provider == "docker" else 6379
         if redis_port is not None and not 1 <= redis_port <= 65535:
             raise ValueError()
+        shared_zero = saved.get("DEV_REDIS_DATABASE_MODE") == "shared-db0"
+        if saved.get("DEV_REDIS_DATABASE_MODE") not in {None, "shared-db0"} or (shared_zero and not saved.get("SBOM_DEV_RESOURCE_ID")):
+            raise ValueError()
         for key, database in (
             ("REDIS_URL", "0"),
             ("CELERY_BROKER_URL", "0"),
@@ -133,6 +136,7 @@ def _managed_ports(saved, inspection, launcher):
             ("NATIVE_AUTH_RATE_LIMIT_STORAGE_URI", "2"),
         ):
             if key in saved:
+                database = "0" if shared_zero else database
                 selected = urlsplit(saved[key])
                 if (
                     selected.scheme != "redis"
@@ -146,7 +150,10 @@ def _managed_ports(saved, inspection, launcher):
                 ):
                     raise ValueError()
         smtp = int(saved.get("SMTP_PORT", str(launcher.MAILPIT_SMTP_PORT)))
-        if smtp != launcher.MAILPIT_SMTP_PORT:
+        if (not 1 <= smtp <= 65535 or
+                (smtp != launcher.MAILPIT_SMTP_PORT and not saved.get("DEV_MAILPIT_UI_PORT"))):
+            raise ValueError()
+        if saved.get("DEV_MAILPIT_UI_PORT") and not 1 <= int(saved["DEV_MAILPIT_UI_PORT"]) <= 65535:
             raise ValueError()
     except (ValueError, TypeError):
         _required(

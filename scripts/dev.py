@@ -892,6 +892,25 @@ def write_service_heartbeat(env, role, **metadata):
                      and role in {"default", "reports", "beat"})
         except (ValueError, TypeError, AttributeError):
             valid = False
+        if not valid and env.get("SBOM_DEV_PROFILE") == "legacy" and path.parent == ROOT / ".dev-logs":
+            # Locally provisioned Legacy instances use the existing checkout
+            # runtime directory. Validate against runtime-only configuration;
+            # workers must never read the separate setup credential record.
+            try:
+                saved = _development_library("dev_config").parse_managed(
+                    _development_library("dev_environment").bounded_read_text(CONFIG))
+                local = (str(uuid.UUID(resource)) == resource
+                         and saved.get("SBOM_DEV_RESOURCE_ID") == resource
+                         and saved.get("DATABASE_URL") == env.get("DATABASE_URL")
+                         and saved.get("DEV_REDIS_DATABASE_MODE") == "shared-db0"
+                         and env.get("APP_ENVIRONMENT") == "development"
+                         and env.get("PYTHON_DOTENV_DISABLED") == "1"
+                         and role in {"default", "reports", "beat"})
+            except (OSError, ValueError, TypeError):
+                local = False
+            if local:
+                atomic_json(path, payload)
+                return
         if not valid:
             raise OwnershipError("Instance heartbeat context is unverified; no file was written.")
         if __package__:
@@ -1765,7 +1784,7 @@ def _apply_setup_application(args):
         elif ACTIVE_LEGACY_CONFIG == "managed":
             if selected_values.get("DATABASE_URL"):
                 validate_database_url(selected_values["DATABASE_URL"])
-            target_name = DB_NAME
+            target_name = urlsplit(selected_values["DATABASE_URL"]).path[1:] if selected_values.get("DATABASE_URL") else (getattr(args, "local_database", None) or DB_NAME)
         else:
             target = _development_library("dev_config").resolve_configuration(
                 profile="legacy", family=ACTIVE_LEGACY_CONFIG, inherited=dict(os.environ),
@@ -1808,6 +1827,8 @@ def _apply_setup_application(args):
 
 def _prepare_authorized_setup(args, profile):
     """Apply reviewed actions while the checkout lifecycle lock is held."""
+    if getattr(args, "transition_database_credentials", False):
+        _development_library("dev_local_postgres").transition_credentials(args, sys.modules[__name__])
     if profile == "greenfield":
         if args.provision_greenfield:
             for category in ("configuration", "secrets", "certificates", "data-providers"):
@@ -1876,7 +1897,13 @@ def _prepare_authorized_setup(args, profile):
         legacy_https_context()
         if "frontend-workspace" in args._setup_authorized_categories:
             _development_library("dev_frontend").prepare_workspace(sys.modules[__name__], "legacy")
-        if args.initialize_database:
+        if args.initialize_database and _development_library("dev_local_postgres").record_path(sys.modules[__name__]).is_file() and ACTIVE_LEGACY_CONFIG == "managed":
+            local_postgres = _development_library("dev_local_postgres")
+            record = local_postgres.read_record(sys.modules[__name__])
+            if not local_postgres.matches_runtime_target(env["DATABASE_URL"], record):
+                raise SetupError("LOCAL_POSTGRES_RECORD_MISMATCH: saved runtime target does not match the protected setup record; no schema operation ran.")
+            local_postgres.bootstrap_record(record, sys.modules[__name__])
+        elif args.initialize_database:
             from scripts.bootstrap_fresh_database import bootstrap
 
             name = urlsplit(env["DATABASE_URL"]).path[1:]
@@ -1888,8 +1915,20 @@ def _prepare_authorized_setup(args, profile):
                 os.environ.clear()
                 os.environ.update(previous)
         elif args.migrate:
-            validate_existing_schema(env["DATABASE_URL"], validate_target=ACTIVE_LEGACY_CONFIG == "managed")
-            run_migrations(env)
+            migration_env = dict(env)
+            local_postgres = _development_library("dev_local_postgres")
+            if ACTIVE_LEGACY_CONFIG == "managed" and local_postgres.record_path(sys.modules[__name__]).is_file():
+                record = local_postgres.read_record(sys.modules[__name__])
+                if not local_postgres.matches_runtime_target(env["DATABASE_URL"], record):
+                    raise SetupError("LOCAL_POSTGRES_RECORD_MISMATCH: saved target differs from the protected setup record; no migration ran.")
+                migration_env["DATABASE_URL"] = local_postgres.setup_url(record)
+            validate_existing_schema(migration_env["DATABASE_URL"], validate_target=ACTIVE_LEGACY_CONFIG == "managed")
+            run_migrations(migration_env)
+            if migration_env["DATABASE_URL"] != env["DATABASE_URL"]:
+                try:
+                    local_postgres.grant_runtime(record)
+                except local_postgres.LocalPostgresError as error:
+                    raise SetupError(str(error)) from None
     say("OK", "Setup", "authorized preparation finished; retained private material and data safeguards; no application processes started")
 
 
@@ -3137,10 +3176,13 @@ def service_available(service: str, port: int) -> bool:
     return False
 
 
-def mailpit_ready() -> bool:
+def mailpit_ready(ui_port=None) -> bool:
     try:
-        with urlopen(f"http://127.0.0.1:{MAILPIT_UI_PORT}/api/v1/info", timeout=2) as response:
-            return response.status == 200 and "Version" in json.load(response)
+        port = MAILPIT_UI_PORT if ui_port is None else int(ui_port)
+        if not 1 <= port <= 65535:
+            return False
+        payload = _development_library("dev_diagnostics")._json_get(f"http://127.0.0.1:{port}/api/v1/info")
+        return isinstance(payload.get("Version"), str) and bool(payload["Version"])
     except (OSError, ValueError):
         return False
 
@@ -3161,8 +3203,14 @@ def wait_for_mailpit_ready(
         time.sleep(min(poll_interval, remaining))
 
 
-def ensure_mailpit_ready(timeout: float = MAILPIT_READY_TIMEOUT) -> None:
+def ensure_mailpit_ready(timeout: float = MAILPIT_READY_TIMEOUT, *, env=None) -> None:
     """Wait for a selected Mailpit service or raise a concise setup error."""
+    if env is not None and (env.get("DEV_MAILPIT_UI_PORT") or env.get("DEV_MAILPIT_PROVIDER") == "local"):
+        try:
+            _development_library("dev_local_services").validate_mailpit(env, sys.modules[__name__])
+        except ValueError as error:
+            raise SetupError(str(error)) from None
+        return
     if reachable("127.0.0.1", MAILPIT_SMTP_PORT) and mailpit_ready():
         return
 
@@ -3242,7 +3290,7 @@ def select_service(
     """Pin saved infrastructure; never switch an existing installation's database."""
     if preferred not in (None, "docker", "local"):
         raise SetupError(f"Saved {service} provider must be docker or local.")
-    docker = docker_available()
+    docker = docker_available() if preferred != "local" else False
     order = (preferred,) if preferred else ("docker", "local")
     for provider in order:
         if provider == "local":
@@ -3281,7 +3329,8 @@ def select_service(
     raise SetupError(
         f"{service.title()} is unavailable"
         + (f" on its saved {preferred} provider; no provider fallback occurred" if preferred else "")
-        + ". Start the configured service or Docker engine, then rerun python scripts/dev.py diagnose."
+        + (f". Start the local {service} listener on 127.0.0.1:{local_port}; Redis-compatible services must enable Lua. Then rerun setup."
+           if preferred == "local" else ". Start the configured service or Docker engine, then rerun python scripts/dev.py diagnose.")
     )
 
 
@@ -3504,7 +3553,7 @@ def validate_database_url(url: str) -> None:
     if (
         parsed.scheme != "postgresql+psycopg"
         or parsed.hostname not in {"localhost", "127.0.0.1"}
-        or parsed.path != "/" + DB_NAME
+        or re.fullmatch(r"sbom_analyser_dev(?:_[a-z0-9_]{1,24})?", parsed.path[1:]) is None
         or not port
         or parsed.query
         or parsed.fragment
@@ -3815,8 +3864,9 @@ def _readonly_local_database(url: str, *, database: str | None = None):
 
     validate_database_url(url)
     target = urlsplit(url)
-    name = database or DB_NAME
-    if name not in {DB_NAME, "postgres"}:
+    selected = target.path[1:]
+    name = database or selected
+    if name not in {selected, "postgres"}:
         raise SetupError("Database inspection is outside the managed development target.")
     connection = psycopg.connect(
         host=target.hostname, hostaddr="127.0.0.1", port=target.port,
@@ -3858,7 +3908,7 @@ def validate_database_credentials(url: str, *, allow_missing: bool = False) -> b
             if getattr(error, "sqlstate", None) != "3D000" or not allow_missing:
                 raise
         connection = _readonly_local_database(url, database="postgres")
-        connection.execute("SELECT 1 FROM pg_catalog.pg_database WHERE datname=%s", (DB_NAME,)).fetchone()
+        connection.execute("SELECT 1 FROM pg_catalog.pg_database WHERE datname=%s", (urlsplit(url).path[1:],)).fetchone()
         return False
     except psycopg.Error:
         raise SetupError(
@@ -3905,9 +3955,11 @@ def ensure_database(url: str) -> None:
             connect_timeout=3,
             autocommit=True,
         ) as connection:
-            row = connection.execute("SELECT 1 FROM pg_database WHERE datname = %s", (DB_NAME,)).fetchone()
+            name = parsed.path[1:]
+            row = connection.execute("SELECT 1 FROM pg_database WHERE datname = %s", (name,)).fetchone()
             if not row:
-                connection.execute(f'CREATE DATABASE "{DB_NAME}"')
+                from psycopg import sql
+                connection.execute(sql.SQL("CREATE DATABASE {}").format(sql.Identifier(name)))
     except psycopg.Error as exc:
         raise SetupError(
             "Cannot access/create the local development database. Check PostgreSQL credentials in .env.dev.local."
@@ -4334,7 +4386,7 @@ def prepare_managed_legacy(*, check=False, setup_args=None):
     else:
         for category in ("configuration", "secrets", "database-initialize"):
             _setup_requires(setup_args, category)
-        if not setup_args.initialize_database or setup_args.confirm_database != DB_NAME:
+        if not setup_args.initialize_database or setup_args.confirm_database != (getattr(setup_args, "local_database", None) or DB_NAME):
             raise SetupError("DATABASE_CONFIRMATION_REQUIRED: fresh managed configuration requires confirmed empty initialization.")
     pg_requested = getattr(setup_args, "postgres_provider", None)
     redis_requested = getattr(setup_args, "redis_provider", None)
@@ -4353,6 +4405,8 @@ def prepare_managed_legacy(*, check=False, setup_args=None):
     pg_provider = pg_requested or pg_saved or "local"
     redis_provider = redis_requested or redis_saved or "local"
     mail_provider = mail_requested or saved.get("DEV_MAILPIT_PROVIDER") or "local"
+    smtp_port = int(saved.get("SMTP_PORT") or getattr(setup_args, "local_mailpit_smtp_port", None) or MAILPIT_SMTP_PORT)
+    ui_port = int(saved.get("DEV_MAILPIT_UI_PORT") or getattr(setup_args, "local_mailpit_ui_port", None) or MAILPIT_UI_PORT)
     if not existed and pg_provider == "docker":
         raise SetupError(
             "APPROVED_DATABASE_CONFIGURATION_REQUIRED: fresh Legacy setup cannot adopt default Docker credentials. "
@@ -4363,7 +4417,7 @@ def prepare_managed_legacy(*, check=False, setup_args=None):
     # Legacy has no durable dependency inventory. Reuse only already running
     # dependencies; new private container installations use explicit Greenfield
     # provisioning. Never compose-up an unknown Legacy PostgreSQL volume here.
-    local_pg_port = urlsplit(saved["DATABASE_URL"]).port if pg_provider == "local" and saved.get("DATABASE_URL") else 5432
+    local_pg_port = urlsplit(saved["DATABASE_URL"]).port if pg_provider == "local" and saved.get("DATABASE_URL") else (getattr(setup_args, "local_postgres_port", None) or 5432)
     postgres, pg_port = select_service("postgres", POSTGRES_PORT, local_pg_port, check=True,
                                       env=docker_env, preferred=pg_provider)
     redis, redis_port = select_service("redis", REDIS_PORT, 6379, check=True,
@@ -4374,28 +4428,61 @@ def prepare_managed_legacy(*, check=False, setup_args=None):
             "Use the explicit Greenfield setup plan for a new private container installation; no container was started."
         )
     if mail_provider == "local":
-        if not mailpit_ready():
-            raise SetupError("MAILPIT_PREPARATION_REQUIRED: start the selected local Mailpit service; no provider was created.")
+        if not (mailpit_ready() if ui_port == MAILPIT_UI_PORT else mailpit_ready(ui_port)):
+            raise SetupError(f"MAILPIT_PREPARATION_REQUIRED: start mailpit --smtp 127.0.0.1:{smtp_port} --listen 127.0.0.1:{ui_port}, then repeat setup; no provider was created.")
     else:
         mailpit, _ = select_service("mailpit", MAILPIT_SMTP_PORT, MAILPIT_SMTP_PORT, check=True,
                                     env=docker_env, preferred="docker")
         if "available to start" in mailpit.lower():
             raise SetupError("MAILPIT_PREPARATION_REQUIRED: the selected Legacy Mailpit container is not running.")
         ensure_mailpit_ready()
-    values = resolve_config(saved, pg_port, redis_port, MAILPIT_SMTP_PORT,
+    values = resolve_config(saved, pg_port, redis_port, smtp_port,
                             pg_provider=provider_name(postgres), redis_provider=provider_name(redis))
-    if postgres == "local":
+    if not existed:
+        values["DEV_MAILPIT_UI_PORT"] = str(ui_port)
+        if getattr(setup_args, "provision_local_postgres", False):
+            # Garnet can accept SELECT while Lua still uses database zero.
+            # Existing instance namespaces isolate queues/sessions/rate keys.
+            values["DEV_REDIS_DATABASE_MODE"] = "shared-db0"
+            values["AUTH_SESSION_REDIS_URL"] = values["REDIS_URL"]
+            values["NATIVE_AUTH_RATE_LIMIT_STORAGE_URI"] = values["REDIS_URL"]
+    local_postgres = _development_library("dev_local_postgres")
+    record = None
+    if getattr(setup_args, "provision_local_postgres", False) or getattr(setup_args, "check_local_services", False):
+        _setup_requires(setup_args, "local-service-checks")
+        try:
+            _development_library("dev_local_services").check_local_services(saved or values, sys.modules[__name__])
+        except ValueError as error:
+            raise SetupError(str(error)) from None
+    if getattr(setup_args, "provision_local_postgres", False):
+        if pg_provider != "local":
+            raise SetupError("LOCAL_POSTGRES_PROVIDER_REQUIRED: explicit provisioning requires the local PostgreSQL provider.")
+        record = local_postgres.provision(setup_args, sys.modules[__name__])
+        values.update(local_postgres.runtime_values(record))
+    elif local_postgres.record_path(sys.modules[__name__]).is_file():
+        record = local_postgres.read_record(sys.modules[__name__])
+        if not local_postgres.matches_runtime_target(saved.get("DATABASE_URL", ""), record):
+            raise SetupError("LOCAL_POSTGRES_RECORD_MISMATCH: retain the configuration and protected setup record; no database operation ran.")
+        values["DATABASE_URL"] = saved["DATABASE_URL"]
+        validate_database_credentials(values["DATABASE_URL"])
+    elif postgres == "local":
         configure_local_database(values, saved, pg_port, interactive=sys.stdin.isatty(),
                                  allow_missing_database=bool(setup_args.initialize_database), persist=False)
     else:
         validate_database_credentials(values["DATABASE_URL"], allow_missing=bool(setup_args.initialize_database))
+    if not existed and record is None:
+        try:
+            local_postgres.validate_runtime_credentials(values["DATABASE_URL"], sys.modules[__name__])
+        except Exception:
+            raise SetupError("RUNTIME_CREDENTIALS_REQUIRED: fresh setup cannot save an administrator/database-owner login. Use --provision-local-postgres --initialize-database --confirm-database <selected-name> for separate setup/runtime credentials.") from None
     if setup_args.initialize_database:
         _setup_requires(setup_args, "database-initialize")
-        if setup_args.confirm_database != DB_NAME:
+        if setup_args.confirm_database != urlsplit(values["DATABASE_URL"]).path[1:]:
             raise SetupError("DATABASE_CONFIRMATION_REQUIRED: the managed development database was not confirmed.")
-        ensure_database(values["DATABASE_URL"])
+        if record is None:
+            ensure_database(values["DATABASE_URL"])
     if not existed:
-        _require_empty_database_for_initial_keys(values["DATABASE_URL"])
+        _require_empty_database_for_initial_keys(local_postgres.setup_url(record) if record else values["DATABASE_URL"])
         generate_keys(values)
         values["DEV_MAILPIT_PROVIDER"] = mail_provider
         # The preparation plan fingerprint was revalidated. Do not replace a
@@ -4403,7 +4490,7 @@ def prepare_managed_legacy(*, check=False, setup_args=None):
         if CONFIG.exists():
             raise SetupError("SETUP_PLAN_CHANGED: a managed configuration appeared; no existing file was overwritten.")
         write_config(values, create_only=True)
-    env = {**os.environ, **values, "PYTHONPATH": str(ROOT)}
+    env = {**os.environ, **(saved if existed else values), "PYTHONPATH": str(ROOT)}
     return env
 
 
@@ -4420,7 +4507,10 @@ def start_application(args) -> None:
         return
     verify_data_connectivity(env)
     if ACTIVE_LEGACY_CONFIG == "managed":
-        ensure_mailpit_ready()
+        if env.get("DEV_MAILPIT_UI_PORT"):
+            ensure_mailpit_ready(env=env)
+        else:
+            ensure_mailpit_ready()
     head = verify_existing_schema(env)
     say("OK", "Schema", head)
     api_port, frontend_port = int(env["DEV_API_PORT"]), int(env["DEV_FRONTEND_PORT"])
@@ -4592,6 +4682,22 @@ def log_service(value):
         ) from None
 
 
+def local_service_port(value):
+    try:
+        number = int(value)
+        if not 1 <= number <= 65535:
+            raise ValueError()
+        return number
+    except (ValueError, TypeError):
+        raise argparse.ArgumentTypeError("Choose a local service TCP port from 1 to 65535.") from None
+
+
+def local_database_name(value):
+    if re.fullmatch(r"sbom_analyser_dev(?:_[a-z0-9_]{1,24})?", value) is None:
+        raise argparse.ArgumentTypeError("Choose sbom_analyser_dev or sbom_analyser_dev_<1-24 lowercase letters, digits or underscores>.")
+    return value
+
+
 def parse_args(argv=None):
     parser = argparse.ArgumentParser(
         description="One local SBOM Analyzer launcher: Windows, macOS and Linux adapters",
@@ -4606,6 +4712,18 @@ def parse_args(argv=None):
     parser.add_argument("--plan", action="store_true", help="setup only: show a read-only preparation plan without applying it")
     parser.add_argument("--repair-dependencies", action="store_true",
                         help="setup only: explicitly plan a pinned dependency repair; category consent is still required")
+    parser.add_argument("--provision-local-postgres", action="store_true",
+                        help="setup only: provision an explicitly confirmed fresh local database with separate setup/runtime logins")
+    parser.add_argument("--local-database", type=local_database_name, help="setup provisioning only: sbom_analyser_dev or sbom_analyser_dev_<suffix>")
+    parser.add_argument("--local-postgres-port", type=local_service_port, help="setup provisioning only: local PostgreSQL TCP port (default 5432)")
+    parser.add_argument("--local-mailpit-smtp-port", type=local_service_port, help="fresh local provisioning only: loopback Mailpit SMTP port (default 1025)")
+    parser.add_argument("--local-mailpit-ui-port", type=local_service_port, help="fresh local provisioning only: loopback Mailpit UI port (default 8025)")
+    parser.add_argument("--transition-database-credentials", action="store_true",
+                        help="setup only: validate and adopt a new runtime login for the same saved database, retaining a private backup")
+    parser.add_argument("--check-local-services", action="store_true",
+                        help="setup only: consent to disposable Redis compatibility probes and local Mailpit validation")
+    parser.add_argument("--repair-private-file", action="append", metavar="EXACT_PATH",
+                        help="setup only: separately consent to narrowing one allowlisted Windows private-file DACL, with descriptor backup")
     parser.add_argument("--native-admin-status", action="store_true",
                         help="setup only: read-only aggregate Native enrollment status; requires exact --confirm-database")
     parser.add_argument(
@@ -4695,6 +4813,8 @@ def workspace_auto_arguments(args):
         "provision_greenfield", "initialize_database", "migrate", "frontend_build", "confirm_database",
         "postgres_provider", "redis_provider", "mailpit_provider", "repair_dependencies",
         "native_admin_status", "native_admin_create", "native_admin_resend",
+        "provision_local_postgres", "local_database", "local_postgres_port", "transition_database_credentials",
+        "check_local_services", "repair_private_file", "local_mailpit_smtp_port", "local_mailpit_ui_port",
     )):
         if descriptor is not None:
             raise SetupError("WORKSPACE_PROFILE_CONVERSION_REFUSED: use workspace setup; existing instance configuration was preserved.")
@@ -4726,6 +4846,17 @@ def main() -> None:
             return workspace_cli.initial_inventory(ROOT)
     args = parse_args()
     VERBOSE = args.verbose
+    local_actions = any(getattr(args, name, None) for name in (
+        "provision_local_postgres", "local_database", "local_postgres_port", "transition_database_credentials",
+        "check_local_services", "repair_private_file", "local_mailpit_smtp_port", "local_mailpit_ui_port",
+    ))
+    if local_actions and (args.command != "setup" or args.check or args.native_admin_status or args.native_admin_create or args.native_admin_resend):
+        raise SetupError("LOCAL_SETUP_OPTIONS: local provisioning, credential transitions, compatibility probes and ACL repair are accepted only by setup without Native enrollment or diagnostic actions.")
+    if args.command not in {"setup", "diagnose", "doctor"} and not args.check and any((
+        args.provision_greenfield, args.initialize_database, args.migrate, args.frontend_build, args.confirm_database,
+        args.plan, args.postgres_provider, args.redis_provider, args.mailpit_provider, args.repair_dependencies,
+    )):
+        raise SetupError("Provisioning and database changes are accepted only by the explicit setup command.")
     if args.check or args.command in {"diagnose", "doctor"}:
         if any(
             (

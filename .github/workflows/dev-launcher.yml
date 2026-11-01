@@ -14,6 +14,7 @@ on:
       - "tests/test_dev*.py"
       - "tests/test_greenfield*.py"
       - "docs/engineering/dev-launcher*.md"
+      - "docs/engineering/windows-local-onboarding.md"
       - "requirements.txt"
       - ".github/workflows/dev-launcher.yml"
       - "app/public_identity.py"
@@ -35,6 +36,7 @@ on:
       - "tests/test_dev*.py"
       - "tests/test_greenfield*.py"
       - "docs/engineering/dev-launcher*.md"
+      - "docs/engineering/windows-local-onboarding.md"
       - "requirements.txt"
       - ".github/workflows/dev-launcher.yml"
       - "app/public_identity.py"
@@ -80,6 +82,7 @@ jobs:
           python -m ruff check scripts/dev.py scripts/dev_config.py scripts/dev_diagnostics.py
           scripts/dev_environment.py scripts/dev_prepared.py scripts/dev_private.py scripts/dev_setup.py
           scripts/dev_windows_acl.py tests/test_dev_windows_acl.py
+          scripts/dev_acl_repair.py scripts/dev_local_postgres.py scripts/dev_local_services.py tests/test_dev_local_setup.py
           scripts/dev_components.py scripts/dev_frontend.py
           scripts/dev_operator.py scripts/bootstrap_native_platform_user.py
           scripts/dev_native_enrollment.py tests/test_dev_native_enrollment.py tests/test_dev_native_enrollment_cli.py
@@ -163,6 +166,7 @@ jobs:
           tests/test_dev_workspace_visual.py
           tests/test_dev_prepared.py tests/test_dev_private_files.py tests/test_dev_setup.py
           tests/test_dev_windows_acl.py
+          tests/test_dev_local_setup.py
           tests/test_dev_component_environments.py tests/test_dev_frontend_workspace.py
           tests/test_dev_compiler_probe.py
           tests/test_dev_next_guard.py tests/test_dev_native_compiler.py

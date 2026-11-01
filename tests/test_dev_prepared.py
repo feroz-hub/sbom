@@ -12,7 +12,7 @@ from types import SimpleNamespace
 from unittest.mock import Mock
 
 import pytest
-from scripts import dev, dev_components, dev_config, dev_environment, dev_frontend, dev_prepared
+from scripts import dev, dev_components, dev_config, dev_environment, dev_frontend, dev_local_postgres, dev_prepared
 
 SECRET = "fixture-prepared-secret-never-log"
 DATABASE_URL = f"postgresql+psycopg://postgres:{SECRET}@127.0.0.1:5432/sbom_analyser_dev"
@@ -536,6 +536,7 @@ def test_fresh_managed_preparation_proves_empty_target_before_keys_and_create_on
         events.append("publication")
 
     monkeypatch.setattr(dev, "configure_local_database", configure)
+    monkeypatch.setattr(dev_local_postgres, "validate_runtime_credentials", Mock())
     monkeypatch.setattr(dev, "ensure_database", lambda url: events.append("database"))
     monkeypatch.setattr(dev, "_require_empty_database_for_initial_keys", empty)
     generate_spy = Mock(side_effect=generate)
