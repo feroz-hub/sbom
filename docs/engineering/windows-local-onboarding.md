@@ -33,13 +33,27 @@ PostgreSQL administrator login at the private prompt. The administrator password
 stays in memory. The launcher creates `sbom_analyser_dev_setup` and
 `sbom_analyser_dev_app`, both without superuser, role-creation, database-creation,
 replication or RLS-bypass privileges. Setup owns this one database; the app has
-DML access and read-only access to the schema revision marker.
+DML access and read-only access to the schema revision marker. Outside approved
+initialization/migration windows the setup role has `NOLOGIN` and a NULL server
+password. Recovery credentials alone cannot re-enable it.
 
 The protected `.env.dev.postgres.json` retains generated setup/runtime passwords
 and an ownership token for recovery. Only the app URL is put in `.env.dev.local`.
+Each initialization/migration requires exact database confirmation, category
+consent and an administrator login entered privately. Only that approved window
+temporarily restores the setup password and LOGIN, with a ten-minute password
+expiry. Cleanup disables LOGIN, clears the server password and closes only the
+recorded setup role's sessions, including after migration failure or cancellation.
+If the administrator connection drops, cleanup reconnects using the in-memory
+administrator credentials. A cleanup failure is an explicit blocker requiring
+administrator action; application startup refuses an unlocked setup role.
+If the entire launcher is forcibly killed, the password expiry bounds new
+password-authenticated connections; have the administrator close residual setup
+sessions and repeat the approved command before resuming development.
 Neither file belongs in Git. Retain both files and the original keys/certificates.
-The launcher never changes passwords on an existing role or adopts an unrecorded
-database, even if its name matches.
+The launcher never rotates retained credentials or adopts an unrecorded
+database, even if its name matches. Only the approved setup window restores and
+clears the recorded setup role's server password; the runtime password is retained.
 
 For a separate disposable target, add
 `--local-database sbom_analyser_dev_<suffix>` and repeat that exact name in
@@ -76,7 +90,8 @@ attestation gate remains in effect.
 
 Ordinary setup never overwrites `.env.dev.local`, keys or certificates. Repeating
 setup reuses valid preparation. Repeating the exact local provisioning command
-can resume owned resources using the recovery record, without password rotation.
+can resume owned resources using the recovery record and a new explicit
+administrator-approved window, without changing the retained recovery password.
 A completed schema is verified instead of bootstrapped again. An incomplete or
 unknown schema is retained for review; setup never resets it or deletes resources.
 

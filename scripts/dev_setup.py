@@ -589,7 +589,7 @@ def inspect_setup(args, launcher):
             )
         if getattr(args, "initialize_database", False):
             actions["database-initialize"] = (
-                "Initialize only the explicitly confirmed fresh empty development database; never reset existing content."
+                "Initialize only the explicitly confirmed fresh empty development database; never reset existing content. Recorded local setup requires an administrator-approved, expiring login window; disable its login/password and close only its setup-role sessions on exit."
             )
         elif profile == "greenfield" and getattr(args, "provision_greenfield", False):
             actions["database-initialize"] = (
@@ -597,7 +597,7 @@ def inspect_setup(args, launcher):
             )
         if getattr(args, "migrate", False):
             actions["database-migrate"] = (
-                "Run only the explicitly confirmed reviewed migration path, retaining all existing safeguards."
+                "Run only the explicitly confirmed reviewed migration path, retaining all existing safeguards. Recorded local setup requires an administrator-approved, expiring login window; disable its login/password and close only its setup-role sessions on exit."
             )
         if getattr(args, "frontend_build", False):
             actions["frontend-build"] = "Build the selected isolated Greenfield frontend workspace."

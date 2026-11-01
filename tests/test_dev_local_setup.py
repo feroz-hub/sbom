@@ -37,7 +37,7 @@ def args(**overrides):
     values = dict(
         local_database="sbom_analyser_dev_fixture", local_postgres_port=5432,
         confirm_database="sbom_analyser_dev_fixture", initialize_database=True,
-        _setup_authorized_categories={"local-postgres-provision", "database-credentials"},
+        _setup_authorized_categories={"local-postgres-provision", "database-credentials", "database-initialize"},
     )
     values.update(overrides)
     return SimpleNamespace(**values)
@@ -47,6 +47,7 @@ class Catalog:
     def __init__(self):
         self.roles, self.database, self.statements, self.failure = {}, None, [], None
         self.connects = []
+        self.setup_sessions = False
 
     def connect(self, record, user, password, *, control=False):
         self.connects.append((user, control))
@@ -62,6 +63,9 @@ class Catalog:
     def transaction(self):
         return nullcontext()
 
+    def close(self):
+        pass
+
     def execute(self, query, parameters=()):
         query = query if isinstance(query, str) else query.as_string(None)
         self.statements.append(query)
@@ -76,18 +80,24 @@ class Catalog:
             row = self.database
         elif "pg_auth_members" in query:
             row = (False,)
+        elif "SELECT EXISTS" in query and "pg_stat_activity" in query:
+            row = (self.setup_sessions,)
         elif query.startswith("CREATE ROLE"):
             for kind in ("setup", "runtime"):
                 name = self.record[kind + "_user"]
                 if '"' + name + '"' in query:
-                    self.roles[name] = (*pg.ROLE_POLICY, self.record["token"], 10 if kind == "setup" else 11)
+                    self.roles[name] = (kind == "runtime", *pg.ROLE_POLICY[1:], self.record["token"], 10 if kind == "setup" else 11)
+        elif query.startswith("ALTER ROLE"):
+            name = self.record["setup_user"]
+            previous = self.roles[name]
+            self.roles[name] = (" NOLOGIN " not in query, *previous[1:])
         elif query.startswith("CREATE DATABASE"):
             self.database = (10,)
         elif "has_schema_privilege" in query:
             row = (False,)
         elif "WHERE rolname=current_user" in query:
             row = (False,) * 5
-        return SimpleNamespace(fetchone=lambda: row)
+        return SimpleNamespace(fetchone=lambda: row, fetchall=lambda: [])
 
 
 @pytest.fixture
@@ -103,11 +113,13 @@ def test_provision_uses_separate_restricted_roles_and_never_saves_admin(launcher
     persisted = pg.record_path(launcher).read_text()
     assert "synthetic-admin" not in persisted
     assert record["setup_password"] != record["runtime_password"]
-    assert record["runtime_password"] not in pg.setup_url(record)
+    assert record["runtime_password"] not in pg._url(record, "setup")
     assert record["setup_password"] not in pg.runtime_values(record)["DATABASE_URL"]
     assert all("NOSUPERUSER NOCREATEDB NOCREATEROLE NOREPLICATION NOBYPASSRLS" in query
                for query in catalog.statements if query.startswith("CREATE ROLE"))
-    assert all("DROP " not in query and "ALTER ROLE" not in query for query in catalog.statements)
+    assert all("DROP " not in query for query in catalog.statements)
+    assert catalog.roles[record["setup_user"]][0] is False
+    assert all(" NOLOGIN PASSWORD NULL " in query for query in catalog.statements if query.startswith("ALTER ROLE"))
     assert not launcher.CONFIG.exists()
     assert record["setup_password"] not in capsys.readouterr().out
 
@@ -144,7 +156,8 @@ def test_repeat_provision_has_no_create_or_alter_role_operations(launcher, catal
     catalog.statements.clear()
     repeated = pg.provision(args(), launcher)
     assert repeated == record
-    assert not any(q.startswith(("CREATE", "ALTER ROLE")) for q in catalog.statements)
+    assert not any(q.startswith("CREATE") for q in catalog.statements)
+    assert all(" NOLOGIN PASSWORD NULL " in q for q in catalog.statements if q.startswith("ALTER ROLE"))
 
 
 @pytest.mark.parametrize("change", ["owner", "role-policy", "token", "target"])
@@ -404,9 +417,9 @@ def test_completed_record_initialization_checks_schema_without_rebootstrapping(l
         return execute(query, parameters)
 
     monkeypatch.setattr(catalog, "execute", populated)
-    pg.bootstrap_record(record, launcher)
+    pg.bootstrap_record(record, launcher, args=args())
     bootstrap.assert_not_called()
-    launcher.verify_existing_schema.assert_called_once_with({"DATABASE_URL": pg.setup_url(record)})
+    launcher.verify_existing_schema.assert_called_once_with({"DATABASE_URL": pg._url(record, "setup")})
 
 
 def test_external_runtime_password_transition_retains_setup_recovery_and_target(launcher, catalog):
@@ -419,7 +432,7 @@ def test_external_runtime_password_transition_retains_setup_recovery_and_target(
     assert pg.matches_runtime_target(updated, record)
     assert "externally-renewed-fixture-password" in updated
     assert pg.record_path(launcher).read_bytes() == original_record
-    assert pg.setup_url(record) != updated
+    assert pg._url(record, "setup") != updated
 
 
 def test_legacy_namespaced_heartbeat_requires_matching_runtime_config(tmp_path, monkeypatch):
@@ -443,3 +456,174 @@ def test_legacy_namespaced_heartbeat_requires_matching_runtime_config(tmp_path, 
     with pytest.raises(dev.OwnershipError, match="unverified"):
         dev.write_service_heartbeat({**environment, "DATABASE_URL": database.replace("fixture:fixture", "other:other")}, "beat")
     writer.assert_not_called()
+
+
+def test_recovery_password_cannot_open_setup_outside_approved_window(launcher, catalog):
+    record = pg.provision(args(), launcher)
+    with pytest.raises(pg.LocalPostgresError, match="WINDOW_REQUIRED"):
+        pg.setup_url(record)
+    with pytest.raises(dev.SetupError, match="APPROVAL_REQUIRED"):
+        with pg.setup_window(record, args(_setup_authorized_categories=set()), launcher):
+            pytest.fail("unapproved window opened")
+    assert catalog.roles[record["setup_user"]][0] is False
+
+
+def test_approved_window_is_bounded_and_revokes_login_password_and_sessions(launcher, catalog):
+    record = pg.provision(args(), launcher)
+    before = pg.record_path(launcher).read_bytes()
+    catalog.statements.clear()
+    with pg.setup_window(record, args(), launcher):
+        assert catalog.roles[record["setup_user"]][0] is True
+        assert pg.setup_url(record) == pg._url(record, "setup")
+        enable = next(q for q in catalog.statements if " LOGIN PASSWORD " in q)
+        assert " VALID UNTIL " in enable and "::timestamptz" not in enable and "infinity" not in enable
+    assert catalog.roles[record["setup_user"]][0] is False
+    assert catalog.roles[record["runtime_user"]][0] is True
+    assert pg.record_path(launcher).read_bytes() == before
+    assert "NOLOGIN PASSWORD NULL" in catalog.statements[-2]
+    assert "pg_terminate_backend(pid,2000)" in catalog.statements[-1]
+    with pytest.raises(pg.LocalPostgresError, match="WINDOW_REQUIRED"):
+        pg.setup_url(record)
+
+
+@pytest.mark.parametrize("failure", [RuntimeError, KeyboardInterrupt, SystemExit])
+def test_failed_or_cancelled_window_disables_setup_and_preserves_recovery(launcher, catalog, failure):
+    record = pg.provision(args(), launcher)
+    before = pg.record_path(launcher).read_bytes()
+    expected = dev.SetupError if failure is RuntimeError else failure
+    with pytest.raises(expected):
+        with pg.setup_window(record, args(), launcher):
+            raise failure("fixture-private-exception")
+    assert catalog.roles[record["setup_user"]][0] is False
+    assert pg.record_path(launcher).read_bytes() == before
+    assert pg._ACTIVE_SETUP.get() is None
+
+
+def test_cleanup_reconnects_after_losing_administrator_connection(launcher, catalog, monkeypatch):
+    record = pg.provision(args(), launcher)
+    execute = catalog.execute
+    closing = False
+    dropped = False
+
+    def disconnect(query, parameters=()):
+        nonlocal dropped
+        text = query if isinstance(query, str) else query.as_string(None)
+        if closing and "NOLOGIN PASSWORD NULL" in text and not dropped:
+            dropped = True
+            raise OSError("fixture dropped connection")
+        return execute(query, parameters)
+
+    monkeypatch.setattr(catalog, "execute", disconnect)
+    with pg.setup_window(record, args(), launcher):
+        closing = True
+    assert dropped and catalog.roles[record["setup_user"]][0] is False
+    assert sum(control for _, control in catalog.connects) >= 3
+
+
+def test_uncertain_login_enable_still_runs_disable_cleanup(launcher, catalog, monkeypatch):
+    record = pg.provision(args(), launcher)
+    execute = catalog.execute
+
+    def lost_ack(query, parameters=()):
+        text = query if isinstance(query, str) else query.as_string(None)
+        result = execute(query, parameters)
+        if " LOGIN PASSWORD " in text:
+            raise OSError("fixture enable committed but reply lost")
+        return result
+
+    monkeypatch.setattr(catalog, "execute", lost_ack)
+    with pytest.raises(dev.SetupError, match="WINDOW_FAILED"):
+        with pg.setup_window(record, args(), launcher):
+            pytest.fail("uncertain enable yielded")
+    assert catalog.roles[record["setup_user"]][0] is False
+
+
+def test_migration_window_uses_setup_only_for_migration_and_cleans_failure(launcher, catalog):
+    record = pg.provision(args(), launcher)
+    original = {"DATABASE_URL": pg.runtime_values(record)["DATABASE_URL"], "CUSTOM": "preserve"}
+    launcher.validate_existing_schema = Mock()
+    launcher.run_migrations = Mock(side_effect=RuntimeError("fixture migration failed"))
+    options = args(initialize_database=False, migrate=True, _setup_authorized_categories={"database-migrate"})
+    with pytest.raises(dev.SetupError, match="WINDOW_FAILED"):
+        pg.migrate_record(record, options, original, launcher)
+    assert original["DATABASE_URL"] == pg.runtime_values(record)["DATABASE_URL"]
+    assert launcher.run_migrations.call_args.args[0]["DATABASE_URL"] == pg._url(record, "setup")
+    assert launcher.run_migrations.call_args.args[0]["APP_ENVIRONMENT"] == "development"
+    assert launcher.run_migrations.call_args.args[0]["PYTHON_DOTENV_DISABLED"] == "1"
+    assert catalog.roles[record["setup_user"]][0] is False
+
+
+def test_legacy_login_is_closed_only_through_approved_recovery(launcher, catalog):
+    record = pg.provision(args(), launcher)
+    row = catalog.roles[record["setup_user"]]
+    catalog.roles[record["setup_user"]] = (True, *row[1:])
+    catalog.statements.clear()
+    environment = pg.runtime_values(record)
+    with pytest.raises(dev.SetupError, match="SETUP_UNLOCKED"):
+        pg.verify_setup_locked(environment, launcher)
+    assert not any(q.startswith("ALTER") for q in catalog.statements)
+    with pg.setup_window(record, args(), launcher):
+        pass
+    pg.verify_setup_locked(environment, launcher)
+    assert catalog.roles[record["setup_user"]][0] is False
+
+
+def test_window_refuses_wrong_confirmation_and_ownership_before_unlock(launcher, catalog):
+    record = pg.provision(args(), launcher)
+    launcher.read_postgres_credentials.reset_mock()
+    with pytest.raises(dev.SetupError, match="CONFIRMATION_REQUIRED"):
+        with pg.setup_window(record, args(confirm_database="another"), launcher):
+            pytest.fail("wrong confirmation opened window")
+    launcher.read_postgres_credentials.assert_not_called()
+    catalog.database = (999,)
+    catalog.statements.clear()
+    with pytest.raises(dev.SetupError, match="IDENTITY_CHANGED"):
+        with pg.setup_window(record, args(), launcher):
+            pytest.fail("foreign owner opened window")
+    assert not any(q.startswith("ALTER") for q in catalog.statements)
+
+
+def test_failed_cleanup_is_a_blocker_and_cannot_be_reported_as_success(launcher, catalog, monkeypatch):
+    record = pg.provision(args(), launcher)
+    execute = catalog.execute
+    closing = False
+
+    def fail_close(query, parameters=()):
+        text = query if isinstance(query, str) else query.as_string(None)
+        if closing and "NOLOGIN PASSWORD NULL" in text:
+            raise OSError("fixture administrator unavailable")
+        return execute(query, parameters)
+
+    monkeypatch.setattr(catalog, "execute", fail_close)
+    with pytest.raises(dev.SetupError, match="CLEANUP_UNCONFIRMED"):
+        with pg.setup_window(record, args(), launcher):
+            closing = True
+    assert pg._ACTIVE_SETUP.get() is None
+    with pytest.raises(dev.SetupError, match="SETUP_UNLOCKED"):
+        pg.verify_setup_locked(pg.runtime_values(record), launcher)
+
+
+def test_runtime_refuses_residual_setup_sessions_even_with_nologin(launcher, catalog):
+    record = pg.provision(args(), launcher)
+    catalog.setup_sessions = True
+    catalog.statements.clear()
+    with pytest.raises(dev.SetupError, match="SETUP_UNLOCKED"):
+        pg.verify_setup_locked(pg.runtime_values(record), launcher)
+    assert not any(q.startswith("ALTER") for q in catalog.statements)
+
+
+def test_start_refuses_open_setup_access_before_launching_any_process(launcher, monkeypatch):
+    from scripts import dev_prepared
+
+    dev_private.create_private_file(pg.record_path(launcher), b"fixture existence marker only")
+    monkeypatch.setattr(dev, "ROOT", launcher.ROOT)
+    monkeypatch.setattr(dev, "ACTIVE_LEGACY_CONFIG", "managed")
+    monkeypatch.setattr(dev_prepared, "require_project", Mock(return_value="npm"))
+    monkeypatch.setattr(dev_prepared, "prepared_legacy_environment", Mock(return_value={"DATABASE_URL": "fixture"}))
+    monkeypatch.setattr(dev, "verify_data_connectivity", Mock())
+    monkeypatch.setattr(pg, "verify_setup_locked", Mock(side_effect=dev.SetupError("LOCAL_POSTGRES_SETUP_UNLOCKED")))
+    launch = Mock(side_effect=AssertionError("process launched with open setup access"))
+    monkeypatch.setattr(dev, "launch_services", launch)
+    with pytest.raises(dev.SetupError, match="SETUP_UNLOCKED"):
+        dev.start_application(SimpleNamespace(profile="legacy", check=False))
+    launch.assert_not_called()

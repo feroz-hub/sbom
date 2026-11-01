@@ -1902,7 +1902,7 @@ def _prepare_authorized_setup(args, profile):
             record = local_postgres.read_record(sys.modules[__name__])
             if not local_postgres.matches_runtime_target(env["DATABASE_URL"], record):
                 raise SetupError("LOCAL_POSTGRES_RECORD_MISMATCH: saved runtime target does not match the protected setup record; no schema operation ran.")
-            local_postgres.bootstrap_record(record, sys.modules[__name__])
+            local_postgres.bootstrap_record(record, sys.modules[__name__], args=args)
         elif args.initialize_database:
             from scripts.bootstrap_fresh_database import bootstrap
 
@@ -1921,14 +1921,10 @@ def _prepare_authorized_setup(args, profile):
                 record = local_postgres.read_record(sys.modules[__name__])
                 if not local_postgres.matches_runtime_target(env["DATABASE_URL"], record):
                     raise SetupError("LOCAL_POSTGRES_RECORD_MISMATCH: saved target differs from the protected setup record; no migration ran.")
-                migration_env["DATABASE_URL"] = local_postgres.setup_url(record)
-            validate_existing_schema(migration_env["DATABASE_URL"], validate_target=ACTIVE_LEGACY_CONFIG == "managed")
-            run_migrations(migration_env)
-            if migration_env["DATABASE_URL"] != env["DATABASE_URL"]:
-                try:
-                    local_postgres.grant_runtime(record)
-                except local_postgres.LocalPostgresError as error:
-                    raise SetupError(str(error)) from None
+                local_postgres.migrate_record(record, args, migration_env, sys.modules[__name__])
+            else:
+                validate_existing_schema(migration_env["DATABASE_URL"], validate_target=ACTIVE_LEGACY_CONFIG == "managed")
+                run_migrations(migration_env)
     say("OK", "Setup", "authorized preparation finished; retained private material and data safeguards; no application processes started")
 
 
@@ -4482,7 +4478,7 @@ def prepare_managed_legacy(*, check=False, setup_args=None):
         if record is None:
             ensure_database(values["DATABASE_URL"])
     if not existed:
-        _require_empty_database_for_initial_keys(local_postgres.setup_url(record) if record else values["DATABASE_URL"])
+        _require_empty_database_for_initial_keys(values["DATABASE_URL"])
         generate_keys(values)
         values["DEV_MAILPIT_PROVIDER"] = mail_provider
         # The preparation plan fingerprint was revalidated. Do not replace a
@@ -4507,6 +4503,9 @@ def start_application(args) -> None:
         return
     verify_data_connectivity(env)
     if ACTIVE_LEGACY_CONFIG == "managed":
+        local_postgres = _development_library("dev_local_postgres")
+        if local_postgres.record_path(sys.modules[__name__]).is_file():
+            local_postgres.verify_setup_locked(env, sys.modules[__name__])
         if env.get("DEV_MAILPIT_UI_PORT"):
             ensure_mailpit_ready(env=env)
         else:

@@ -12,6 +12,9 @@ import json
 import os
 import re
 import secrets
+from contextlib import contextmanager
+from contextvars import ContextVar
+from datetime import UTC, datetime, timedelta
 from pathlib import Path
 from urllib.parse import quote, unquote, urlsplit
 from uuid import UUID
@@ -25,6 +28,8 @@ else:
 
 RECORD = ".env.dev.postgres.json"
 ROLE_POLICY = (True, False, False, False, False, False, False)
+_ACTIVE_SETUP = ContextVar("local_postgres_setup_window", default=None)
+SETUP_WINDOW_SECONDS = 600
 
 
 class LocalPostgresError(ValueError):
@@ -71,6 +76,9 @@ def read_record(launcher):
 def _connect(record, user, password, *, control=False):
     import psycopg
 
+    if user == record.get("setup_user"):
+        _require_setup_window(record)
+
     # libpq service/password/host/TLS environment must not redirect this target.
     if any(k.upper().startswith("PG") and v for k, v in os.environ.items()):
         raise ValueError("LOCAL_POSTGRES_AMBIENT_SETTINGS: remove PG* overrides in this terminal before local setup.")
@@ -89,8 +97,8 @@ def _role(connection, name):
     ).fetchone()
 
 
-def _verify_role(row, token):
-    return row is not None and tuple(row[:7]) == ROLE_POLICY and row[7] == token
+def _verify_role(row, token, *, login=True):
+    return row is not None and tuple(row[:7]) == (login, *ROLE_POLICY[1:]) and row[7] == token
 
 
 def matches_runtime_target(url, record):
@@ -106,6 +114,7 @@ def matches_runtime_target(url, record):
 
 
 def _verify_setup_connection(connection, record):
+    _require_setup_window(record)
     setup = _role(connection, record["setup_user"])
     runtime = _role(connection, record["runtime_user"])
     owner = connection.execute("SELECT datdba FROM pg_database WHERE datname=current_database()").fetchone()
@@ -116,6 +125,92 @@ def _verify_setup_connection(connection, record):
     if (not _verify_role(setup, record["token"]) or not _verify_role(runtime, record["token"])
             or owner is None or owner[0] != setup[-1] or memberships is None or memberships[0]):
         raise LocalPostgresError("LOCAL_POSTGRES_IDENTITY_CHANGED: review recorded role privileges, memberships and database ownership before any schema/grant operation.")
+
+
+def _require_setup_window(record):
+    active = _ACTIVE_SETUP.get()
+    identity = (os.getpid(), record["token"], record["database"], record["port"])
+    if active is None or active[:4] != identity or datetime.now(UTC) >= active[4]:
+        raise LocalPostgresError("LOCAL_POSTGRES_WINDOW_REQUIRED: setup credentials are usable only inside an explicitly approved initialization/migration window.")
+
+
+def _lock_setup(control, record):
+    """Close authentication first, then terminate only this owned setup role."""
+    from psycopg import sql
+
+    control.execute(sql.SQL("ALTER ROLE {} NOLOGIN PASSWORD NULL VALID UNTIL 'epoch'").format(sql.Identifier(record["setup_user"])))
+    results = control.execute(
+        "SELECT pg_terminate_backend(pid,2000) FROM pg_stat_activity WHERE usesysid="
+        "(SELECT oid FROM pg_roles WHERE rolname=%s) AND pid<>pg_backend_pid()",
+        (record["setup_user"],),
+    ).fetchall()
+    if any(row[0] is not True for row in results):
+        raise LocalPostgresError("LOCAL_POSTGRES_WINDOW_CLEANUP_UNCONFIRMED: setup authentication is disabled; ask the local administrator to close remaining sessions for the recorded setup role before retrying.")
+
+
+@contextmanager
+def setup_window(record, args, launcher):
+    """Administrator approval unlocks a bounded window; recovery alone cannot."""
+    migrate = bool(getattr(args, "migrate", False))
+    initialize = bool(getattr(args, "initialize_database", False))
+    if initialize == migrate or getattr(args, "confirm_database", None) != record["database"]:
+        raise launcher.SetupError("LOCAL_POSTGRES_WINDOW_CONFIRMATION_REQUIRED: choose initialization or migration and confirm the exact recorded database.")
+    launcher._setup_requires(args, "database-migrate" if migrate else "database-initialize")
+    print(f"[PLAN] Temporarily unlock only {record['setup_user']} for at most {SETUP_WINDOW_SECONDS} seconds; disable its login/password and close its sessions on exit.")
+    user, password = launcher.read_postgres_credentials()
+    if user in {record["setup_user"], record["runtime_user"]}:
+        raise launcher.SetupError("LOCAL_POSTGRES_ADMIN_REQUIRED: the recovery/runtime login cannot unlock setup; enter the local administrator login.")
+    control, armed, marker = None, False, None
+    try:
+        control = _connect(record, user, password, control=True)
+        lock = int.from_bytes(hashlib.sha256(record["database"].encode()).digest()[:8], "big", signed=True)
+        if not control.execute("SELECT pg_try_advisory_lock(%s)", (lock,)).fetchone()[0]:
+            raise launcher.SetupError("LOCAL_POSTGRES_BUSY: another approved setup window owns this database; retry after it finishes.")
+        setup, runtime = _role(control, record["setup_user"]), _role(control, record["runtime_user"])
+        owner = control.execute("SELECT datdba FROM pg_database WHERE datname=%s", (record["database"],)).fetchone()
+        memberships = control.execute(
+            "SELECT EXISTS (SELECT 1 FROM pg_auth_members WHERE member IN "
+            "(SELECT oid FROM pg_roles WHERE rolname IN (%s,%s)))", (record["setup_user"], record["runtime_user"]),
+        ).fetchone()
+        # Accept the previous PR's LOGIN state only in this approved recovery
+        # path. Runtime startup never unlocks or repairs it.
+        if (setup is None or not (_verify_role(setup, record["token"], login=False) or _verify_role(setup, record["token"]))
+                or not _verify_role(runtime, record["token"]) or owner is None or owner[0] != setup[-1]
+                or memberships is None or memberships[0]):
+            raise LocalPostgresError("LOCAL_POSTGRES_IDENTITY_CHANGED: retain recovery credentials and review setup ownership/privileges; no login was enabled.")
+        armed = True
+        _lock_setup(control, record)
+        deadline = datetime.now(UTC) + timedelta(seconds=SETUP_WINDOW_SECONDS)
+        from psycopg import sql
+
+        control.execute(sql.SQL("ALTER ROLE {} LOGIN PASSWORD {} VALID UNTIL {}").format(
+            sql.Identifier(record["setup_user"]), sql.Literal(record["setup_password"]), sql.Literal(deadline.isoformat())))
+        marker = _ACTIVE_SETUP.set((os.getpid(), record["token"], record["database"], record["port"], deadline))
+        yield
+    except (launcher.SetupError, KeyboardInterrupt, EOFError):
+        raise
+    except Exception as error:
+        if isinstance(error, LocalPostgresError):
+            raise launcher.SetupError(str(error)) from None
+        raise launcher.SetupError("LOCAL_POSTGRES_WINDOW_FAILED: verify the administrator's role-management/session-termination authority, then repeat the exact approved initialization/migration command; recovery files were retained.") from None
+    finally:
+        if marker is not None:
+            _ACTIVE_SETUP.reset(marker)
+        try:
+            if armed:
+                try:
+                    _lock_setup(control, record)
+                except Exception:
+                    # A dropped administrator connection must not leave the
+                    # setup login enabled. Retry using in-memory credentials.
+                    with _connect(record, user, password, control=True) as recovery:
+                        _lock_setup(recovery, record)
+        except BaseException:
+            raise launcher.SetupError("LOCAL_POSTGRES_WINDOW_CLEANUP_UNCONFIRMED: ask the local administrator to disable the recorded setup login/password and close its sessions immediately; do not start the application. Retain the recovery record and repeat the approved command.") from None
+        finally:
+            if control is not None:
+                control.close()
+            password = None
 
 
 def provision(args, launcher):
@@ -157,7 +252,9 @@ def provision(args, launcher):
             db = control.execute("SELECT datdba FROM pg_database WHERE datname=%s", (database,)).fetchone()
             if not existing and (any(row is not None for row in rows) or db is not None):
                 raise launcher.SetupError("LOCAL_POSTGRES_TARGET_EXISTS: choose a new --local-database name; existing roles and databases were retained.")
-            if any(row is not None and not _verify_role(row, record["token"]) for row in rows):
+            if any(row is not None and not (_verify_role(row, record["token"], login=(kind == "runtime"))
+                       or (kind == "setup" and _verify_role(row, record["token"])))
+                   for kind, row in zip(("setup", "runtime"), rows, strict=True)):
                 raise launcher.SetupError("LOCAL_POSTGRES_ROLE_UNOWNED: restore the matching recovery record or choose a fresh target; no role was altered.")
             if control.execute(
                 "SELECT EXISTS (SELECT 1 FROM pg_auth_members WHERE member IN "
@@ -176,15 +273,18 @@ def provision(args, launcher):
                     if row is None:
                         role = sql.Identifier(record[kind + "_user"])
                         control.execute(sql.SQL(
-                            "CREATE ROLE {} LOGIN NOINHERIT NOSUPERUSER NOCREATEDB NOCREATEROLE NOREPLICATION NOBYPASSRLS PASSWORD {}"
-                        ).format(role, sql.Literal(record[kind + "_password"])))
+                            "CREATE ROLE {} {} NOINHERIT NOSUPERUSER NOCREATEDB NOCREATEROLE NOREPLICATION NOBYPASSRLS PASSWORD {}"
+                        ).format(role, sql.SQL("LOGIN" if kind == "runtime" else "NOLOGIN"),
+                                 sql.Literal(record["runtime_password"]) if kind == "runtime" else sql.SQL("NULL")))
                         control.execute(sql.SQL("COMMENT ON ROLE {} IS {}").format(role, sql.Literal(record["token"])))
             # A setup login may own this database but cannot create roles or databases.
             if db is None:
                 control.execute(sql.SQL("CREATE DATABASE {} OWNER {} TEMPLATE template0").format(
                     sql.Identifier(database), sql.Identifier(record["setup_user"])))
-        with _connect(record, record["setup_user"], record["setup_password"]) as connection:
+            _lock_setup(control, record)
+        with _connect(record, user, password) as connection:
             with connection.transaction():
+                connection.execute(sql.SQL("SET LOCAL ROLE {}").format(sql.Identifier(record["setup_user"])))
                 connection.execute(sql.SQL("REVOKE ALL ON DATABASE {} FROM PUBLIC").format(sql.Identifier(database)))
                 connection.execute(sql.SQL("GRANT CONNECT ON DATABASE {} TO {}").format(
                     sql.Identifier(database), sql.Identifier(record["runtime_user"])))
@@ -201,7 +301,12 @@ def provision(args, launcher):
         password = None
 
 
-def bootstrap_record(record, launcher):
+def bootstrap_record(record, launcher, args=None):
+    with setup_window(record, args, launcher):
+        _bootstrap_record(record, launcher)
+
+
+def _bootstrap_record(record, launcher):
     """Initialize empty recorded databases; validate completed ones read-only."""
     bootstrap = launcher._development_library("bootstrap_fresh_database").bootstrap
 
@@ -233,12 +338,15 @@ def runtime_values(record):
 
 
 def setup_url(record):
+    _require_setup_window(record)
     return _url(record, "setup")
 
 
 def grant_runtime(record):
     """Grant DML only, keeping schema and migration ownership with setup."""
     from psycopg import sql
+
+    _require_setup_window(record)
 
     with _connect(record, record["setup_user"], record["setup_password"]) as connection:
         _verify_setup_connection(connection, record)
@@ -254,6 +362,34 @@ def grant_runtime(record):
                 "GRANT SELECT ON public.alembic_version TO {}",
             ):
                 connection.execute(sql.SQL(query).format(role))
+
+
+def migrate_record(record, args, environment, launcher):
+    with setup_window(record, args, launcher):
+        if environment.get("APP_ENVIRONMENT", "development") not in {"development", "dev", "local"}:
+            raise launcher.SetupError("LOCAL_POSTGRES_DEVELOPMENT_REQUIRED: migrations require the approved local development environment.")
+        values = {**environment, "DATABASE_URL": setup_url(record),
+                  "APP_ENVIRONMENT": "development", "PYTHON_DOTENV_DISABLED": "1"}
+        launcher.validate_existing_schema(values["DATABASE_URL"])
+        launcher.run_migrations(values)
+        grant_runtime(record)
+
+
+def verify_setup_locked(environment, launcher):
+    """Runtime-only read: refuse an old/unclosed setup login; never repair it."""
+    target = urlsplit(environment["DATABASE_URL"])
+    record = {"database": target.path[1:], "port": target.port}
+    try:
+        with _connect(record, unquote(target.username or ""), unquote(target.password or "")) as connection:
+            row = _role(connection, record["database"] + "_setup")
+            sessions = connection.execute(
+                "SELECT EXISTS (SELECT 1 FROM pg_stat_activity WHERE usesysid="
+                "(SELECT oid FROM pg_roles WHERE rolname=%s))", (record["database"] + "_setup",),
+            ).fetchone()
+            if row is None or row[0] is not False or sessions is None or sessions[0]:
+                raise LocalPostgresError("LOCAL_POSTGRES_SETUP_UNLOCKED: do not start application processes while setup login/sessions remain open. Review setup --initialize-database --confirm-database <saved-name> to close setup access through an administrator-approved window.")
+    except LocalPostgresError as error:
+        raise launcher.SetupError(str(error)) from None
 
 
 def transition_credentials(args, launcher):
