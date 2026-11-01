@@ -1,0 +1,7 @@
+simulation: openai-compat
+routing: path
+mocks:
+  - name: openai-compat
+    routeKey: openai
+    origin: api.openai.com
+    path: postman/mocks/openai-compat/config.yaml

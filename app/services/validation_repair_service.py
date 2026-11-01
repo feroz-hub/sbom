@@ -1097,7 +1097,7 @@ class ValidationRepairService:
         estimated_cost = estimate_cost_usd(
             provider=provider.name,
             model=provider.default_model,
-            input_tokens=estimate_tokens(system) + estimate_tokens(user),
+            input_tokens=estimate_tokens(system) + estimate_tokens(user) + (estimate_tokens(json.dumps(response_schema)) if provider.name == "openai" else 0),
             output_tokens=max_output_tokens,
             is_local=getattr(provider, "is_local", False),
         )
@@ -1111,7 +1111,7 @@ class ValidationRepairService:
                 estimate_cost_usd(
                     provider=fallback.name,
                     model=fallback.default_model,
-                    input_tokens=estimate_tokens(system) + estimate_tokens(user),
+                    input_tokens=estimate_tokens(system) + estimate_tokens(user) + (estimate_tokens(json.dumps(response_schema)) if fallback.name == "openai" else 0),
                     output_tokens=max_output_tokens,
                     is_local=getattr(fallback, "is_local", False),
                 ),
@@ -1155,16 +1155,19 @@ class ValidationRepairService:
                     error=f"fallback_selected:{failure_kind}",
                 )
         except AiProviderError as exc:
+            usage = getattr(exc, "usage", None)
+            if usage is not None:
+                guard.record(actual_usd=usage.cost_usd)
             write_usage_log_row(
                 self.db,
                 request_id=request_id,
-                provider=provider.name,
-                model=provider.default_model,
+                provider=exc.failure.provider_name if usage is not None and exc.failure else provider.name,
+                model=getattr(exc, "model", provider.default_model),
                 purpose="sbom_validation_repair",
                 finding_cache_key=session.id,
-                input_tokens=0,
-                output_tokens=0,
-                cost_usd=0.0,
+                input_tokens=usage.input_tokens if usage is not None else 0,
+                output_tokens=usage.output_tokens if usage is not None else 0,
+                cost_usd=usage.cost_usd if usage is not None else 0.0,
                 latency_ms=int((time.perf_counter() - started) * 1000),
                 error=str(exc),
             )

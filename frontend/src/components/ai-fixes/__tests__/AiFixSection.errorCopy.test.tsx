@@ -105,6 +105,11 @@ describe('aiFixErrorCopy', () => {
     expect(aiFixErrorCopy(err)).toBe('Invalid API key for gemini. Update in Settings.');
   });
 
+  it('distinguishes model permission denial from an invalid key', () => {
+    const err = makeError({ error_code: 'auth_failed', upstream_status_code: 403 }).error!;
+    expect(aiFixErrorCopy(err)).toBe('The configured credential cannot access gemini-2.5-flash on gemini. Check model permissions in Settings.');
+  });
+
   it('model_not_found names the model', () => {
     const err = makeError({ error_code: 'model_not_found' }).error!;
     expect(aiFixErrorCopy(err)).toBe('Model gemini-2.5-flash not available. Update in Settings.');

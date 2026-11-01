@@ -71,6 +71,7 @@ class GrokProvider(LlmProvider):
         self.max_concurrent = max_concurrent
 
         self._inner = OpenAiProvider(
+            native_openai=False,
             api_key=api_key,
             default_model=default_model,
             base_url=_BASE_URL,

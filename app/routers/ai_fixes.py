@@ -76,12 +76,14 @@ from ..ai.batches import (
     get_batch,
     list_batches_for_run,
     new_batch_id,
+    update_batch_from_progress,
 )
 from ..ai.estimator import estimate_batch_duration
 from ..ai.fix_generator import AiFixGenerator
 from ..ai.grounding import build_grounding_context
 from ..ai.progress import (
     BatchProgress,
+    ProgressStoreUnavailableError,
     get_progress_store,
     initial_progress,
     progress_events,
@@ -384,7 +386,13 @@ async def trigger_run_fixes(
         status="queued",
     )
     store = get_progress_store()
-    store.write(progress)
+    try:
+        store.write(progress)
+    except ProgressStoreUnavailableError as exc:
+        progress.status = "failed"
+        progress.last_error = str(exc)
+        update_batch_from_progress(db, batch_id=bid, progress=progress)
+        raise HTTPException(status_code=503, detail=str(exc)) from exc
 
     current_context = get_bound_context()
     if current_context is None or current_context.tenant_id is None:
@@ -741,7 +749,10 @@ def cancel_run_batch(
     row = get_batch(db, run_id=run_id, batch_id=batch_id)
     if row is None:
         raise HTTPException(status_code=404, detail=f"Batch {batch_id} not found for run {run_id}.")
-    get_progress_store().request_cancel(run_id, batch_id)
+    try:
+        get_progress_store().request_cancel(run_id, batch_id)
+    except ProgressStoreUnavailableError as exc:
+        raise HTTPException(status_code=503, detail=str(exc)) from exc
     return {"run_id": run_id, "batch_id": batch_id, "cancel_requested": True}
 
 
@@ -804,9 +815,8 @@ def get_progress(run_id: int, db: Session = Depends(get_db)) -> BatchProgress | 
 def cancel_run_fixes_legacy(run_id: int, db: Session = Depends(get_db)) -> dict:
     """Cancel every active batch on the run (legacy compat).
 
-    The legacy cancel flag is honoured by every batch's pipeline loop;
-    in practice this halts the in-flight semaphore work for all
-    concurrent batches.
+    Cancellation snapshots the currently tracked queued/running batch IDs.
+    This halts their in-flight work without cancelling future retry batches.
 
     Idempotent. When no live progress entry exists (e.g. a phantom
     subscriber on a run that has no batch), writes a synthetic terminal
@@ -817,9 +827,12 @@ def cancel_run_fixes_legacy(run_id: int, db: Session = Depends(get_db)) -> dict:
     """
     _ensure_run_exists(db, run_id)
     store = get_progress_store()
-    store.request_cancel(run_id)
-    if store.read(run_id) is None:
-        store.write(initial_progress(run_id, total=0, status="cancelled"))
+    try:
+        store.request_cancel(run_id)
+        if store.read(run_id) is None:
+            store.write(initial_progress(run_id, total=0, status="cancelled"))
+    except ProgressStoreUnavailableError as exc:
+        raise HTTPException(status_code=503, detail=str(exc)) from exc
     return {"run_id": run_id, "cancel_requested": True}
 
 

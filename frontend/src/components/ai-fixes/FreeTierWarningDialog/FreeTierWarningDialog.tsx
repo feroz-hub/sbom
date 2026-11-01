@@ -92,10 +92,10 @@ export function FreeTierWarningDialog({
           >
             Switch provider
           </a>
-          <PermissionButton size="sm" variant="ghost" permission={"tenant:settings:update"}
+          <PermissionButton size="sm" variant="primary" permission="analysis:run"
             type="button"
             onClick={onContinue}
-            className="rounded-md bg-primary px-3 py-1.5 text-sm font-medium text-white shadow-elev-1 hover:bg-hcl-dark"
+            className="h-auto min-h-8 whitespace-normal"
           >
             Continue with {estimate.provider}
           </PermissionButton>

@@ -38,7 +38,7 @@ from .. import metrics
 from ..db import SessionLocal
 from ..metrics.cache import invalidation_key
 from .cost import estimate_cost_usd, estimate_tokens, write_usage_log_row
-from .providers.base import LlmRequest
+from .providers.base import AiProviderError, LlmRequest
 from .registry import get_registry
 from .rollout import AiAccessDeniedError, evaluate_access
 from .runtime_config import build_budget_guard
@@ -231,16 +231,36 @@ async def _call_llm(*, system: str, user: str, purpose: str, max_output_tokens: 
 
     request_id = uuid.uuid4().hex
     started = time.monotonic()
-    routed = await registry.generate_with_fallback(
-        LlmRequest(
-            system=system,
-            user=user,
-            max_output_tokens=max_output_tokens,
-            temperature=0.2,
-            request_id=request_id,
-            purpose=purpose,
+    try:
+        routed = await registry.generate_with_fallback(
+            LlmRequest(
+                system=system,
+                user=user,
+                max_output_tokens=max_output_tokens,
+                temperature=0.2,
+                request_id=request_id,
+                purpose=purpose,
+            )
         )
-    )
+    except AiProviderError as error:
+        usage = getattr(error, "usage", None)
+        if usage is not None:
+            guard.record(actual_usd=usage.cost_usd)
+            with SessionLocal() as db:
+                write_usage_log_row(
+                    db,
+                    request_id=request_id,
+                    provider=error.failure.provider_name if error.failure else provider.name,
+                    model=getattr(error, "model", model),
+                    purpose=purpose,
+                    finding_cache_key=None,
+                    input_tokens=usage.input_tokens,
+                    output_tokens=usage.output_tokens,
+                    cost_usd=usage.cost_usd,
+                    latency_ms=int((time.monotonic() - started) * 1000),
+                    error=getattr(error, "kind", "provider_error"),
+                )
+        raise
     response = routed.response
     latency_ms = int((time.monotonic() - started) * 1000)
 

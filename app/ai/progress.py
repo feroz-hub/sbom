@@ -25,7 +25,10 @@ same run don't clobber each other's progress.
 Backward compatibility: when ``batch_id is None`` (legacy single-batch
 callers — including the old test suite), writes go to the run-id-only
 key. ``read(run_id)`` returns the legacy entry if present, otherwise
-the most-recently-written batch entry. New code paths use
+the latest registered batch entry. A new batch supersedes any legacy
+snapshot. Cancellation generations are captured at registration so existing
+and unregistered legacy work stops, while a fresh retry can proceed.
+New code paths use
 :meth:`read_batch` and :meth:`latest_for_run` explicitly.
 """
 
@@ -34,6 +37,7 @@ from __future__ import annotations
 import logging
 import threading
 import time
+import uuid
 from collections.abc import Iterator
 from typing import Any, Literal, Protocol
 
@@ -99,6 +103,14 @@ class ProgressStore(Protocol):
     def clear(self, run_id: int, batch_id: str | None = None) -> None: ...
 
 
+class ProgressStoreUnavailableError(RuntimeError):
+    """Progress could not be published; callers must not dispatch paid work."""
+
+    def __init__(self, message: str, *, progress: BatchProgress | None = None) -> None:
+        super().__init__(message)
+        self.progress = progress.model_copy(deep=True) if progress is not None else None
+
+
 # ---------------------------------------------------------------------------
 # In-memory backend (test + fallback)
 # ---------------------------------------------------------------------------
@@ -118,6 +130,8 @@ class InMemoryProgressStore:
         # Per-run ordered list of (created_perf_seconds, batch_id),
         # most-recent last. Lets ``latest_for_run`` resolve in O(1).
         self._run_batches: dict[int, list[tuple[float, str]]] = {}
+        self._run_epoch: dict[int, str] = {}
+        self._batch_epoch: dict[tuple[int, str], str] = {}
 
     def write(self, progress: BatchProgress) -> None:
         with self._lock:
@@ -127,6 +141,8 @@ class InMemoryProgressStore:
             key = (progress.run_id, progress.batch_id)
             if key not in self._batch_progress:
                 self._run_batches.setdefault(progress.run_id, []).append((time.monotonic(), progress.batch_id))
+                self._batch_epoch[key] = self._run_epoch.get(progress.run_id, "")
+                self._legacy_progress.pop(progress.run_id, None)
             self._batch_progress[key] = progress.model_dump_json()
 
     def read(self, run_id: int) -> BatchProgress | None:
@@ -167,6 +183,7 @@ class InMemoryProgressStore:
         with self._lock:
             if batch_id is None:
                 self._legacy_cancel.add(run_id)
+                self._run_epoch[run_id] = uuid.uuid4().hex
             else:
                 self._batch_cancel.add((run_id, batch_id))
 
@@ -177,9 +194,13 @@ class InMemoryProgressStore:
                 if run_id in self._legacy_cancel:
                     return True
                 return any(rid == run_id for rid, _ in self._batch_cancel)
-            # Batch-level callers: explicit batch flag OR legacy flag
-            # (the latter covers "cancel everything for this run").
-            return (run_id, batch_id) in self._batch_cancel or run_id in self._legacy_cancel
+            key = (run_id, batch_id)
+            if key in self._batch_cancel:
+                return True
+            if key not in self._batch_epoch:
+                # Unregistered/in-flight legacy callers still see run cancel.
+                return run_id in self._legacy_cancel
+            return self._batch_epoch[key] != self._run_epoch.get(run_id, "")
 
     def clear(self, run_id: int, batch_id: str | None = None) -> None:
         with self._lock:
@@ -187,6 +208,8 @@ class InMemoryProgressStore:
                 # Clear EVERYTHING for the run — legacy + all batches.
                 self._legacy_progress.pop(run_id, None)
                 self._legacy_cancel.discard(run_id)
+                self._run_epoch.pop(run_id, None)
+                self._batch_epoch = {key: epoch for key, epoch in self._batch_epoch.items() if key[0] != run_id}
                 for rid, bid in list(self._batch_progress.keys()):
                     if rid == run_id:
                         self._batch_progress.pop((rid, bid), None)
@@ -195,6 +218,7 @@ class InMemoryProgressStore:
                 return
             self._batch_progress.pop((run_id, batch_id), None)
             self._batch_cancel.discard((run_id, batch_id))
+            self._batch_epoch.pop((run_id, batch_id), None)
             entries = self._run_batches.get(run_id, [])
             self._run_batches[run_id] = [e for e in entries if e[1] != batch_id]
 
@@ -221,8 +245,9 @@ class RedisProgressStore:
       * ``ai:fix:progress:{run_id}:{batch_id}``       per-batch progress
       * ``ai:fix:cancel:{run_id}``                    legacy cancel flag
       * ``ai:fix:cancel:{run_id}:{batch_id}``         per-batch cancel
+      * ``ai:fix:epoch:{run_id}:{batch_id}``          registration generation
       * ``ai:fix:run_batches:{run_id}``               sorted-set index
-            (member=batch_id, score=created-time epoch ms) for fast
+            (member=batch_id, score=registration time) for fast
             "list all batches for this run" lookups
 
     TTL: 24h on every key (rolled forward on write). Stale entries clean
@@ -230,6 +255,32 @@ class RedisProgressStore:
     """
 
     _PROGRESS_TTL_SECONDS = 24 * 3600
+
+    # One server-side publication: an acknowledged snapshot always has its
+    # index and immutable cancellation generation. Validate key types before
+    # mutations (Redis scripts are atomic, but do not roll back runtime errors).
+    _PUBLISH = """
+    local kind = redis.call('TYPE', KEYS[2]).ok
+    if kind ~= 'none' and kind ~= 'zset' then
+        return redis.error_reply('Invalid AI progress index type')
+    end
+    local previous = redis.call('GET', KEYS[1])
+    local epoch = redis.call('GET', KEYS[5])
+    local current = redis.call('GET', KEYS[4]) or ''
+    redis.call('ZADD', KEYS[2], 'NX', ARGV[3], ARGV[4])
+    if not epoch then
+        -- Pre-upgrade/partial publications have no generation. Preserve a
+        -- prior run cancel rather than reclassifying old work as a new retry.
+        epoch = previous and '' or current
+        redis.call('SET', KEYS[5], epoch, 'EX', ARGV[2])
+        redis.call('DEL', KEYS[3])
+    else
+        redis.call('EXPIRE', KEYS[5], ARGV[2])
+    end
+    redis.call('SET', KEYS[1], ARGV[1], 'EX', ARGV[2])
+    redis.call('EXPIRE', KEYS[2], ARGV[2])
+    return 1
+    """
 
     def __init__(self, client: Any) -> None:
         self._client = client
@@ -256,6 +307,10 @@ class RedisProgressStore:
     def _run_batches_index(run_id: int) -> str:
         return f"ai:fix:run_batches:{run_id}"
 
+    @staticmethod
+    def _batch_epoch_key(run_id: int, batch_id: str) -> str:
+        return f"ai:fix:epoch:{run_id}:{batch_id}"
+
     # Writes -----------------------------------------------------------
 
     def write(self, progress: BatchProgress) -> None:
@@ -268,20 +323,18 @@ class RedisProgressStore:
                     ex=self._PROGRESS_TTL_SECONDS,
                 )
                 return
-            self._client.set(
+            self._client.eval(
+                self._PUBLISH,
+                5,
                 self._batch_progress_key(progress.run_id, progress.batch_id),
+                self._run_batches_index(progress.run_id),
+                self._legacy_progress_key(progress.run_id),
+                self._legacy_cancel_key(progress.run_id),
+                self._batch_epoch_key(progress.run_id, progress.batch_id),
                 payload,
-                ex=self._PROGRESS_TTL_SECONDS,
-            )
-            # Index this batch under its run for fast "latest" lookups.
-            score = time.time()
-            self._client.zadd(
-                self._run_batches_index(progress.run_id),
-                {progress.batch_id: score},
-            )
-            self._client.expire(
-                self._run_batches_index(progress.run_id),
                 self._PROGRESS_TTL_SECONDS,
+                time.time(),
+                progress.batch_id,
             )
         except Exception as exc:  # noqa: BLE001
             log.warning(
@@ -290,6 +343,7 @@ class RedisProgressStore:
                 progress.batch_id,
                 exc,
             )
+            raise ProgressStoreUnavailableError("AI progress could not be recorded. Try again.", progress=progress) from exc
 
     # Reads ------------------------------------------------------------
 
@@ -336,7 +390,7 @@ class RedisProgressStore:
     def request_cancel(self, run_id: int, batch_id: str | None = None) -> None:
         key = self._legacy_cancel_key(run_id) if batch_id is None else self._batch_cancel_key(run_id, batch_id)
         try:
-            self._client.set(key, "1", ex=self._PROGRESS_TTL_SECONDS)
+            self._client.set(key, uuid.uuid4().hex, ex=self._PROGRESS_TTL_SECONDS)
         except Exception as exc:  # noqa: BLE001
             log.warning(
                 "ai.progress.redis_cancel_failed: run=%s batch=%s err=%s",
@@ -344,18 +398,28 @@ class RedisProgressStore:
                 batch_id,
                 exc,
             )
+            raise ProgressStoreUnavailableError("AI cancellation could not be recorded. Try again.") from exc
 
     def is_cancel_requested(self, run_id: int, batch_id: str | None = None) -> bool:
-        # Legacy flag is a "cancel everything for this run" lever; honour
-        # it for both legacy and per-batch callers.
         try:
-            if self._client.get(self._legacy_cancel_key(run_id)):
+            if batch_id is None:
+                return bool(self._client.get(self._legacy_cancel_key(run_id)))
+            current, registered, direct = self._client.mget(
+                self._legacy_cancel_key(run_id),
+                self._batch_epoch_key(run_id, batch_id),
+                self._batch_cancel_key(run_id, batch_id),
+            )
+            if direct:
                 return True
-            if batch_id is not None and self._client.get(self._batch_cancel_key(run_id, batch_id)):
-                return True
-            return False
+            if registered is None:
+                return bool(current)
+            # Normalise decode_responses clients and byte-returning clients.
+            def normal(value):
+                return value.decode() if isinstance(value, bytes) else value or ""
+            return normal(registered) != normal(current)
         except Exception:  # noqa: BLE001
-            return False
+            # Never start another billable call when cancellation cannot be read.
+            return True
 
     # Clear ------------------------------------------------------------
 
@@ -372,6 +436,7 @@ class RedisProgressStore:
                 for bid in members:
                     pattern_keys.append(self._batch_progress_key(run_id, bid))
                     pattern_keys.append(self._batch_cancel_key(run_id, bid))
+                    pattern_keys.append(self._batch_epoch_key(run_id, bid))
                 pattern_keys.append(self._run_batches_index(run_id))
                 self._client.delete(*pattern_keys)
                 return
@@ -379,6 +444,7 @@ class RedisProgressStore:
             self._client.delete(
                 self._batch_progress_key(run_id, batch_id),
                 self._batch_cancel_key(run_id, batch_id),
+                self._batch_epoch_key(run_id, batch_id),
             )
             try:
                 self._client.zrem(self._run_batches_index(run_id), batch_id)

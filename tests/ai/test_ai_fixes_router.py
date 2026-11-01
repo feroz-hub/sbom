@@ -240,14 +240,29 @@ def test_trigger_runs_inline_when_celery_unavailable(client, _seeded_run, _enabl
         assert body["progress"]["generated"] == 3  # solo finding is in same run
 
 
-def test_progress_endpoint_round_trips(client, _seeded_run, _enable_ai, _fake_registry, _memory_store):
-    client.post(f"/api/v1/runs/{run_uuid(_seeded_run['run_id'])}/ai-fixes")
+@pytest.mark.parametrize("broker_accepts", [False, True])
+def test_progress_endpoint_round_trips(client, _seeded_run, _enable_ai, _fake_registry, _memory_store, monkeypatch, broker_accepts):
+    dispatched = []
+
+    def dispatch(**kwargs):
+        dispatched.append(kwargs)
+        if not broker_accepts:
+            raise ConnectionError("synthetic broker unavailable")
+
+    monkeypatch.setattr("app.workers.ai_fix_tasks.generate_run_fixes.apply_async", dispatch)
+    triggered = client.post(f"/api/v1/runs/{run_uuid(_seeded_run['run_id'])}/ai-fixes")
+    assert triggered.status_code == 200
+    assert triggered.json()["enqueued"] is broker_accepts
     resp = client.get(f"/api/v1/runs/{run_uuid(_seeded_run['run_id'])}/ai-fixes/progress")
     assert resp.status_code == 200
     body = resp.json()
     assert body["run_id"] == run_uuid(_seeded_run["run_id"])
-    # If inline ran, status is complete; otherwise pending. Either is fine.
-    assert body["status"] in {"pending", "in_progress", "complete"}
+    assert body["status"] == ("queued" if broker_accepts else "complete")
+    assert body["generated"] == (0 if broker_accepts else 3)
+    assert body["remaining"] == (3 if broker_accepts else 0)
+    assert dispatched[0]["kwargs"]["tenant_id"] == 1
+    assert dispatched[0]["kwargs"]["run_id"] == _seeded_run["run_id"]
+    assert dispatched[0]["kwargs"]["batch_id"] == triggered.json()["batch_id"]
 
 
 def test_progress_endpoint_returns_204_when_no_batch(client, _seeded_run, _memory_store):

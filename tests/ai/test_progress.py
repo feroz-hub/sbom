@@ -97,3 +97,138 @@ def test_redis_round_trip_when_available():  # pragma: no cover — gated
     got = store.read(1234)
     assert got is not None and got.run_id == 1234
     store.clear(1234)
+
+
+@pytest.fixture(params=["memory", "redis"])
+def cancel_store(request):
+    if request.param == "memory":
+        return InMemoryProgressStore()
+    if not os.getenv("AI_TEST_REDIS_URL"):
+        pytest.skip("Set AI_TEST_REDIS_URL for the real Redis cancellation regression")
+    import redis
+    from app.ai.progress import RedisProgressStore
+
+    return RedisProgressStore(redis.Redis.from_url(os.environ["AI_TEST_REDIS_URL"]))
+
+
+def test_run_cancel_stops_existing_batches_but_allows_retry(cancel_store):
+    import uuid
+
+    run_id = uuid.uuid4().int % 1_000_000_000
+    try:
+        for batch_id in ("queued-before-cancel", "running-before-cancel"):
+            cancel_store.write(initial_progress(run_id, total=3, batch_id=batch_id))
+        cancel_store.request_cancel(run_id)
+        assert cancel_store.is_cancel_requested(run_id, "queued-before-cancel")
+        assert cancel_store.is_cancel_requested(run_id, "running-before-cancel")
+        cancel_store.write(initial_progress(run_id, total=3, batch_id="retry-after-cancel"))
+        assert not cancel_store.is_cancel_requested(run_id, "retry-after-cancel")
+    finally:
+        cancel_store.clear(run_id)
+
+
+def test_idle_legacy_cancel_does_not_poison_a_future_batch(cancel_store):
+    import uuid
+
+    run_id = uuid.uuid4().int % 1_000_000_000
+    try:
+        cancel_store.request_cancel(run_id)
+        assert cancel_store.is_cancel_requested(run_id)
+        assert cancel_store.is_cancel_requested(run_id, "unregistered-in-flight")
+        cancel_store.write(initial_progress(run_id, total=0, status="cancelled"))
+        cancel_store.write(initial_progress(run_id, total=75, batch_id="new-batch"))
+        assert not cancel_store.is_cancel_requested(run_id, "new-batch")
+        assert cancel_store.read(run_id).batch_id == "new-batch"
+    finally:
+        cancel_store.clear(run_id)
+
+
+def test_cancel_generation_survives_writes_and_repeated_cancel(cancel_store):
+    import uuid
+
+    run_id = uuid.uuid4().int % 1_000_000_000
+    try:
+        old = initial_progress(run_id, total=2, batch_id="old", status="in_progress")
+        cancel_store.write(old)
+        cancel_store.request_cancel(run_id)
+        cancel_store.write(old)  # An in-flight completion cannot reset cancellation.
+        assert cancel_store.is_cancel_requested(run_id, "old")
+        retry = initial_progress(run_id, total=2, batch_id="retry")
+        cancel_store.write(retry)
+        assert not cancel_store.is_cancel_requested(run_id, "retry")
+        cancel_store.request_cancel(run_id)
+        assert cancel_store.is_cancel_requested(run_id, "old")
+        assert cancel_store.is_cancel_requested(run_id, "retry")
+    finally:
+        cancel_store.clear(run_id)
+
+
+@pytest.fixture
+def redis_fault_store():
+    if not os.getenv("AI_TEST_REDIS_URL"):
+        pytest.skip("Set AI_TEST_REDIS_URL for Redis fault injection")
+    import uuid
+
+    import redis
+    from app.ai.progress import RedisProgressStore
+
+    client = redis.Redis.from_url(os.environ["AI_TEST_REDIS_URL"])
+    store = RedisProgressStore(client)
+    run_id = uuid.uuid4().int % 1_000_000_000
+    yield store, client, run_id
+    store.clear(run_id)
+    client.delete(store._batch_progress_key(run_id, "partial"), store._batch_epoch_key(run_id, "partial"))
+
+
+def test_redis_rejects_invalid_index_before_publishing(redis_fault_store):
+    from app.ai.progress import ProgressStoreUnavailableError
+
+    store, client, run_id = redis_fault_store
+    client.set(store._run_batches_index(run_id), "injected-wrong-type")
+    try:
+        with pytest.raises(ProgressStoreUnavailableError):
+            store.write(initial_progress(run_id, total=2, batch_id="partial"))
+        assert store.read_batch(run_id, "partial") is None
+        assert client.get(store._batch_epoch_key(run_id, "partial")) is None
+    finally:
+        client.delete(store._run_batches_index(run_id))
+
+
+@pytest.mark.parametrize("fault", ["partial-legacy-write", "lost-publication-reply"])
+def test_redis_publication_fault_stays_cancellable_after_recovery(redis_fault_store, fault):
+    from app.ai.progress import ProgressStoreUnavailableError, RedisProgressStore
+
+    store, client, run_id = redis_fault_store
+    snapshot = initial_progress(run_id, total=2, batch_id="partial", status="queued")
+
+    class Fault:
+        def eval(self, *args):
+            if fault == "partial-legacy-write":
+                # Reproduce a SET-success/index-failure publication from the
+                # pre-upgrade implementation. No epoch or index was written.
+                client.set(store._batch_progress_key(run_id, "partial"), snapshot.model_dump_json())
+            else:
+                client.eval(*args)  # Server committed; client lost the reply.
+            raise ConnectionError("synthetic publication failure")
+
+    with pytest.raises(ProgressStoreUnavailableError):
+        RedisProgressStore(Fault()).write(snapshot)
+    store.request_cancel(run_id)
+    assert store.is_cancel_requested(run_id, "partial")  # Does not need the index.
+    store.write(snapshot)  # Recovery repairs registration without losing cancel.
+    assert store.list_for_run(run_id)[0].batch_id == "partial"
+    assert store.read(run_id).batch_id == "partial"
+    assert store.is_cancel_requested(run_id, "partial")
+    store.write(initial_progress(run_id, total=2, batch_id="retry"))
+    assert not store.is_cancel_requested(run_id, "retry")
+    assert store.read(run_id).batch_id == "retry"
+
+
+def test_redis_cancel_read_failure_does_not_start_more_paid_work():
+    from app.ai.progress import RedisProgressStore
+
+    class Unavailable:
+        def mget(self, *args):
+            raise ConnectionError("synthetic read failure")
+
+    assert RedisProgressStore(Unavailable()).is_cancel_requested(1, "active")

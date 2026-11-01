@@ -38,12 +38,17 @@ from ..ai import credential_audit
 from ..ai.config_loader import get_loader
 from ..ai.config_types import ProviderConfig
 from ..ai.model_registry import (
+    CONFIGURATION_CHANGED,
     ensure_legacy_model,
+    invalidate_model_verification,
+    lock_verification_configuration,
     refresh_models,
     select_model,
     sync_legacy_configured_model,
     test_model,
+    verification_configuration,
 )
+from ..ai.probe_policy import PLATFORM_PROBE_BLOCKED, PlatformProbeBlockedError, check_probe_spending
 from ..ai.provider_factory import build_provider, validate_provider_config
 from ..ai.providers._probe import network_failure, sanitized_result
 from ..ai.providers.base import ConnectionTestResult, ModelDiscoveryError, ProviderUnavailableError
@@ -251,6 +256,11 @@ class ProviderModelResponse(BaseModel):
     last_verified_at: str | None
     last_test_success: bool | None
     last_test_error: str | None
+    discovered: bool | None = None
+    accessible: bool | None = None
+    generation_verified: bool | None = None
+    workload_compatible: bool | None = None
+    error_kind: str | None = None
 
 
 class ModelRefreshResponse(BaseModel):
@@ -370,7 +380,9 @@ def _row_to_response(row: AiProviderCredential, *, decrypted_key: str | None = N
 
 
 def _model_response(row: AiProviderModel) -> ProviderModelResponse:
-    return ProviderModelResponse.model_validate(row, from_attributes=True)
+    result = ProviderModelResponse.model_validate(row, from_attributes=True)
+    verification = (row.raw_metadata or {}).get("verification", {})
+    return result.model_copy(update={"discovered": bool(row.last_discovered_at), **{key: verification.get(key) for key in ("accessible", "generation_verified", "workload_compatible", "error_kind")}})
 
 
 def _credential_or_404(db: Session, cred_id: int) -> AiProviderCredential:
@@ -458,6 +470,11 @@ def _build_transient_provider(payload: TestConnectionRequest):
 def _safe_stored_test_error(row: AiProviderCredential) -> str | None:
     # Legacy rows may contain raw provider JSON. Do not return it to clients.
     value = row.last_test_error or ""
+    if value == PLATFORM_PROBE_BLOCKED:
+        return value
+    from ..ai.providers.openai_compat import MESSAGES
+    if value in {f"{kind} {message}" for kind, message in MESSAGES.items()}:
+        return value
     if not value:
         return None
     safe_pattern = (
@@ -479,11 +496,64 @@ def _stamp_test_result(row: AiProviderCredential, result: ConnectionTestResult) 
         row.enabled = False
 
 
-async def _run_probe(provider, model: str | None) -> ConnectionTestResult:
+async def _run_probe(provider, model: str | None, *, tier: str | None = None) -> ConnectionTestResult:
+    guard = None
     try:
-        return sanitized_result(await provider.test_connection(model=model))
+        check_probe_spending(provider, tier=tier)
+        if getattr(provider, "name", None) == "openai":
+            from ..ai.cost import estimate_cost_usd, write_usage_log_row
+            from ..ai.providers.base import BudgetExceededError
+            from ..ai.providers.openai_models import profile_for
+            from ..ai.runtime_config import build_budget_guard
+
+            target = model or provider.default_model
+            guard = build_budget_guard()
+            guard.check_request(
+                estimated_usd=estimate_cost_usd(
+                    provider="openai",
+                    model=target,
+                    input_tokens=128,
+                    output_tokens=2048 if profile_for(target).reasoning_efforts else 256,
+                )
+            )
+        result = sanitized_result(await provider.test_connection(model=model))
+        if guard is not None and result.usage is not None:
+            from uuid import uuid4
+
+            from ..db import SessionLocal
+
+            usage = result.usage
+            guard.record(actual_usd=usage.cost_usd)
+            with SessionLocal() as session:
+                write_usage_log_row(
+                    session,
+                    request_id=f"connection-test-{uuid4()}",
+                    provider=provider.name,
+                    model=target,
+                    purpose="connection_test",
+                    finding_cache_key=None,
+                    input_tokens=usage.input_tokens,
+                    output_tokens=usage.output_tokens,
+                    cost_usd=usage.cost_usd,
+                    latency_ms=result.latency_ms or 0,
+                    error=None if result.success else result.error_kind,
+                )
+        return result
     except Exception as exc:  # noqa: BLE001
-        return sanitized_result(network_failure(provider=provider.name, model=model, exc=exc))
+        if isinstance(exc, PlatformProbeBlockedError):
+            return ConnectionTestResult(
+                success=False, provider=provider.name, model_tested=model,
+                error_kind="configuration", error_message=PLATFORM_PROBE_BLOCKED,
+            )
+        if guard is not None and isinstance(exc, BudgetExceededError):
+            return ConnectionTestResult(
+                success=False,
+                provider=provider.name,
+                model_tested=model,
+                error_kind="budget_exceeded",
+                error_message="Model test exceeds the configured AI budget. Review spending limits.",
+            )
+        return sanitized_result(network_failure(provider=getattr(provider, "name", ""), model=model, exc=exc))
 
 
 # ---------------------------------------------------------------------------
@@ -726,8 +796,10 @@ def update_credential(
         row.api_key_encrypted = _cipher().encrypt(body.api_key)
         changes.append("api_key")
     if body.base_url is not None:
-        row.base_url = body.base_url.strip() or None
-        changes.append("base_url")
+        endpoint = body.base_url.strip() or None
+        if endpoint != row.base_url:
+            row.base_url = endpoint
+            changes.append("base_url")
     if body.default_model is not None and body.default_model != row.default_model:
         row.default_model = body.default_model
         sync_legacy_configured_model(db, row)
@@ -753,6 +825,9 @@ def update_credential(
     if body.rate_per_minute is not None:
         row.rate_per_minute = float(body.rate_per_minute)
         changes.append("rate")
+
+    if any(field in changes for field in ("api_key", "base_url")):
+        invalidate_model_verification(db, row)
 
     if _verification_status(row) != "INVALID_CREDENTIALS" and any(
         field in changes for field in ("api_key", "base_url", "default_model")
@@ -944,7 +1019,7 @@ async def test_unsaved_credential(
             provider=test_body.provider_name,
             model_tested=test_body.default_model,
         )
-    result = await _run_probe(provider, test_body.default_model)
+    result = await _run_probe(provider, test_body.default_model, tier=test_body.tier)
     credential_audit.record(
         db,
         user_id=_user_id(request),
@@ -992,8 +1067,15 @@ async def test_saved_credential(
         rate_per_minute=row.rate_per_minute,
     )
     provider = _build_transient_provider(payload)
-    result = await _run_probe(provider, row.default_model)
-    _stamp_test_result(row, result)
+    configuration = verification_configuration(row)
+    result = await _run_probe(provider, row.default_model, tier=row.tier)
+    if lock_verification_configuration(db, row, configuration):
+        _stamp_test_result(row, result)
+    else:
+        result = ConnectionTestResult(
+            success=False, provider=row.provider_name, model_tested=payload.default_model,
+            error_kind="configuration", error_message=CONFIGURATION_CHANGED,
+        )
     db.commit()
     get_loader().invalidate()
 

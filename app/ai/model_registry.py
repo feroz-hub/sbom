@@ -4,6 +4,7 @@ from __future__ import annotations
 
 import json
 import logging
+import time
 from dataclasses import dataclass
 from datetime import UTC, datetime
 from typing import Any
@@ -16,8 +17,14 @@ from ..models import AiProviderCredential, AiProviderModel
 from ..security.secrets import get_cipher
 from .config_loader import get_loader
 from .config_types import ProviderConfig
+from .cost import estimate_cost_usd, estimate_tokens, write_usage_log_row
+from .probe_policy import PLATFORM_PROBE_BLOCKED, PlatformProbeBlockedError, check_probe_spending
 from .provider_factory import build_provider
-from .providers.base import DiscoveredModel, LlmProvider, LlmRequest
+from .providers._probe import structured_probe_request
+from .providers.base import AiProviderError, BudgetExceededError, DiscoveredModel, LlmProvider
+from .providers.openai_compat import MESSAGES, OpenAiError
+from .providers.openai_models import profile_for
+from .runtime_config import build_budget_guard
 
 log = logging.getLogger("sbom.ai.model_registry")
 
@@ -32,6 +39,38 @@ class RefreshResult:
 
 def _now() -> str:
     return datetime.now(UTC).isoformat()
+
+
+CONFIGURATION_CHANGED = "Provider configuration changed during this test. Test the current configuration again."
+
+
+def verification_configuration(credential: AiProviderCredential) -> tuple:
+    # In-memory comparison only: never persist/log a key-derived fingerprint.
+    return credential.api_key_encrypted, credential.base_url, credential.default_model
+
+
+def lock_verification_configuration(session: Session, credential: AiProviderCredential, expected: tuple) -> bool:
+    current = session.scalar(
+        select(AiProviderCredential).where(AiProviderCredential.id == credential.id)
+        .with_for_update().execution_options(populate_existing=True)
+    )
+    return current is not None and verification_configuration(current) == expected
+
+
+def invalidate_model_verification(session: Session, credential: AiProviderCredential) -> None:
+    """Credential-specific evidence expires when its key or endpoint changes.
+
+    Retain discovery history, availability and the administrator's selection.
+    The caller commits this together with the credential mutation.
+    """
+    for model in session.scalars(
+        select(AiProviderModel).where(AiProviderModel.provider_credential_id == credential.id)
+    ):
+        model.raw_metadata = {key: value for key, value in (model.raw_metadata or {}).items() if key != "verification"}
+        model.last_verified_at = None
+        model.last_test_success = None
+        model.last_test_error = None
+        model.updated_at = _now()
 
 
 def _sanitize_metadata(value: dict[str, Any] | None) -> dict[str, Any] | None:
@@ -207,7 +246,7 @@ async def refresh_models(
         row.max_output_tokens = item.max_output_tokens
         row.discovery_source = "live"
         row.last_discovered_at = now
-        row.raw_metadata = _sanitize_metadata(item.raw_metadata)
+        row.raw_metadata = _sanitize_metadata({**{key: value for key, value in (item.raw_metadata or {}).items() if key != "verification"}, **({"verification": row.raw_metadata["verification"]} if row.raw_metadata and "verification" in row.raw_metadata else {})})
         row.updated_at = now
 
     returned_ids = set(by_provider_id)
@@ -252,30 +291,99 @@ async def test_model(
     if model.provider_credential_id != credential.id:
         raise ValueError("model does not belong to this provider credential")
     provider = provider or build_provider_for_credential(credential)
+    configuration = verification_configuration(credential)
     now = _now()
+    request = structured_probe_request(
+        model.runtime_model_id,
+        max_output_tokens=2048
+        if credential.provider_name == "openai" and profile_for(model.runtime_model_id).reasoning_efforts
+        else 256,
+        request_id=f"model-test-{uuid4()}",
+    )
+    started = time.perf_counter()
+    state = {"accessible": None, "generation_verified": None, "workload_compatible": None, "error_kind": None}
+    usage = None
+    guard = None
     try:
-        response = await provider.generate(LlmRequest(
-            system="Return only JSON matching the requested schema.",
-            user='Return {"ok": true}.',
-            response_schema={
-                "type": "object",
-                "properties": {"ok": {"type": "boolean", "const": True}},
-                "required": ["ok"],
-                "additionalProperties": False,
-            },
-            max_output_tokens=32,
-            temperature=0.0,
-            request_id=f"model-test-{uuid4()}",
-            purpose="model_test",
-            model=model.runtime_model_id,
-        ))
-        ok = isinstance(response.parsed, dict) and response.parsed.get("ok") is True
-        error = None if ok else "Model generated a response but did not return the required structured JSON."
-    except Exception as exc:  # noqa: BLE001
-        log.info("ai.model_test.failed provider=%s model_id=%s error_type=%s", credential.provider_name, model.id, type(exc).__name__)
+        check_probe_spending(provider, tier=credential.tier)
+        guard = build_budget_guard()
+        guard.check_request(
+            estimated_usd=estimate_cost_usd(
+                provider=credential.provider_name,
+                model=model.runtime_model_id,
+                input_tokens=estimate_tokens(request.system + request.user + json.dumps(request.response_schema)),
+                output_tokens=request.max_output_tokens,
+                is_local=getattr(provider, "is_local", False),
+            )
+        )
+        response = await provider.generate(request)
+        usage = response.usage
+        state.update(accessible=True, generation_verified=bool(response.text))
+        from jsonschema import Draft202012Validator
+
+        payload = json.loads(response.text)
+        ok = not list(Draft202012Validator(request.response_schema).iter_errors(payload))
+        state["workload_compatible"] = ok
+        state["error_kind"] = None if ok else "invalid_json"
+        error = None if ok else MESSAGES["invalid_json"]
+    except PlatformProbeBlockedError:
+        ok = False
+        state["error_kind"] = "configuration"
+        error = PLATFORM_PROBE_BLOCKED
+    except OpenAiError as exc:
+        ok = False
+        usage = exc.usage
+        state.update(
+            accessible=exc.accessible,
+            generation_verified=exc.generated,
+            workload_compatible=False if exc.accessible else None,
+            error_kind=exc.kind,
+        )
+        error = MESSAGES[exc.kind]
+    except (ValueError, TypeError):
+        ok = False
+        state.update(workload_compatible=False, error_kind="invalid_json")
+        error = MESSAGES["invalid_json"]
+    except BudgetExceededError:
+        ok = False
+        state["error_kind"] = "budget_exceeded"
+        error = "Model test exceeds the configured AI budget. Review the spending limits."
+    except AiProviderError:
         ok = False
         error = "Model generation test failed. Check model access and provider configuration."
-    model.last_verified_at = now
+    except Exception as exc:  # noqa: BLE001
+        log.info(
+            "ai.model_test.failed provider=%s model_id=%s error_type=%s",
+            credential.provider_name,
+            model.id,
+            type(exc).__name__,
+        )
+        ok = False
+        error = "Model generation test failed. Check model access and provider configuration."
+    if usage is not None:
+        guard.record(actual_usd=usage.cost_usd)
+        write_usage_log_row(
+            session,
+            request_id=request.request_id,
+            provider=credential.provider_name,
+            model=model.runtime_model_id,
+            purpose="model_test",
+            finding_cache_key=None,
+            input_tokens=usage.input_tokens,
+            output_tokens=usage.output_tokens,
+            cost_usd=usage.cost_usd,
+            latency_ms=int((time.perf_counter() - started) * 1000),
+            error=None if ok else state["error_kind"] or "model_test_failed",
+        )
+    # Serialize with credential edits. A late old-key result must not restore
+    # evidence invalidated by rotation; edits after this lock invalidate it
+    # after this transaction commits. Billed usage above remains accounted.
+    if not lock_verification_configuration(session, credential, configuration):
+        session.refresh(model)
+        session.commit()
+        return False, CONFIGURATION_CHANGED
+    model.raw_metadata = {**(model.raw_metadata or {}), "verification": state}
+    model.last_verified_at = None if error == PLATFORM_PROBE_BLOCKED else now
     model.last_test_success = ok
     model.last_test_error = error
     model.updated_at = now
@@ -284,6 +392,12 @@ async def test_model(
 
 
 __all__ = [
-    "RefreshResult", "build_provider_for_credential", "ensure_legacy_model",
-    "provider_config_from_credential", "refresh_models", "select_model", "sync_legacy_configured_model", "test_model",
+    "RefreshResult",
+    "build_provider_for_credential",
+    "ensure_legacy_model",
+    "provider_config_from_credential",
+    "refresh_models",
+    "select_model",
+    "sync_legacy_configured_model",
+    "test_model",
 ]

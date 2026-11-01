@@ -1,0 +1,30 @@
+purpose:
+  stands_in_for: OpenAI generation over local HTTP using synthetic Log4j remediation and controlled failures.
+  unblocks: SBO-100 individual and batch acceptance without paid model calls or user data.
+assumptions:
+  - id: strict-remediation-generation
+    status: supported
+    claim: The native GPT-4o caller sends normalized strict schemas and persists complete remediation bundles through the real application and worker.
+    reason: Local HTTP fixtures reject missing object additionalProperties or required keys. Native IAM, PostgreSQL, Celery and Redis run without mocking their boundaries.
+    verification: On 2026-10-30 the browser individual flow, three-finding batch and 75-finding batch passed. All 79 generation requests used Chat Completions with strict schemas; 79 bundles and matching token/cost ledger rows were persisted. This establishes caller behavior under synthetic responses, not model access or real inference quality.
+    source: scripts/run_ai_remediation_e2e.py; frontend/e2e/ai-remediation.browser.ts; postman/mocks/ai-remediation/default.js; app/ai/providers/openai_compat.py
+    updated_at: '2026-10-30'
+  - id: cancellation-retry-and-controls
+    status: supported
+    claim: Run cancellation stops current work while a later batch can reuse cached results; denial and a zero per-scan budget make no generation call.
+    reason: The real Redis-backed worker completed cancellation and retry after the store stopped applying a historical run flag to new batch IDs.
+    verification: Final Chrome acceptance on 2026-10-30 passed all four cases. Cancellation generated 2 of 15 and left 13 remaining; retry reused 2 and generated 13. Viewer POST returned 403 and foreign-tenant access 404. The zero-budget batch generated nothing, with no additional provider request. Permission and quota fixtures were classified safely. Memory and real Redis cancellation regressions passed.
+    source: app/ai/progress.py; tests/ai/test_progress.py; frontend/e2e/ai-remediation.browser.ts
+    updated_at: '2026-10-30'
+  - id: live-provider-availability
+    status: unknown
+    claim: A real account can invoke the selected model and produce accurate remediation within its quota.
+    reason: All model generation is local and synthetic. No live provider credentials or paid requests are used.
+    verification: Not tested. Real inference requires separate approval with a spending limit.
+    source: docs/engineering/openai-model-compatibility.md
+    updated_at: '2026-10-30'
+fingerprints:
+  - id: sbo100-base
+    date: '2026-10-30'
+    commit: ccf7486c
+    cli: '1.75.0'

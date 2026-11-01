@@ -43,12 +43,12 @@ export function AiFixGenerateButton({
   const isDisabled = Boolean(loading) || disabledByError;
   return (
     <div className="flex flex-col items-start gap-2 rounded-lg border border-dashed border-border bg-surface-muted p-4">
-      <PermissionButton size="sm" variant="ghost" permission={"tenant:settings:update"}
+      <PermissionButton size="sm" variant="primary" permission="analysis:run"
         type="button"
         onClick={onGenerate}
         disabled={isDisabled}
-        aria-disabled={isDisabled}
-        className="inline-flex items-center gap-2 rounded-md bg-primary px-3 py-2 text-sm font-medium text-white shadow-elev-1 hover:bg-hcl-dark disabled:cursor-not-allowed disabled:opacity-50"
+        disabledReason={loading ? `Asking ${providerLabel ?? 'provider'}…` : disabledByError ? 'Generation is unavailable. See the error below for the required action.' : undefined}
+        className="max-w-full whitespace-normal text-left"
       >
         <Sparkles className="h-4 w-4" aria-hidden />
         {loading

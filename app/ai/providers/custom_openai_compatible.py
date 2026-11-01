@@ -99,6 +99,7 @@ class CustomOpenAiCompatibleProvider(LlmProvider):
         effective_rpm = float(rate_per_minute or 5000.0)
 
         self._inner = OpenAiProvider(
+            native_openai=False,
             api_key=api_key or "EMPTY",
             default_model=default_model,
             base_url=validated,

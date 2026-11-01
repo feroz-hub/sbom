@@ -1,0 +1,16 @@
+purpose:
+  stands_in_for: OpenAI Chat Completions, Responses and model listing using synthetic responses.
+  unblocks: Offline validation of native provider HTTP payloads and quota failure classification for SBO-99.
+assumptions:
+  - id: responses-structured-generation
+    status: supported
+    claim: The caller sends bounded native Responses requests and extracts validated JSON with reasoning-inclusive output usage.
+    reason: The real OpenAiProvider completed structured probes over HTTP through the local Postman simulation. This supports caller behavior under these fixtures only.
+    verification: On 2026-10-30, structured probes passed for gpt-4o-mini and gpt-6-luna; a synthetic gpt-6.1-sol quota failure returned quota. Six request events confirmed models, Chat Completions and Responses traffic. No live account access or inference was tested.
+    source: app/ai/providers/openai.py; tests/ai/test_openai_modern.py; https://developers.openai.com/api/docs/guides/structured-outputs
+    updated_at: '2026-10-30'
+fingerprints:
+  - id: sbo99
+    date: '2026-10-30'
+    commit: fc59432a
+    cli: '1.75.0'

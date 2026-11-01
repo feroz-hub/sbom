@@ -71,4 +71,19 @@ describe('ProviderModels', () => {
     await waitFor(() => expect(refreshAiProviderModels).toHaveBeenCalledWith(3, undefined, 'tenant'));
     expect(selectAiProviderModel).not.toHaveBeenCalled();
   });
+  it('separates discovery, access, generation, workload compatibility and activation', async () => {
+    listAiProviderModels.mockResolvedValue([{ ...model, discovered: true, accessible: true,
+      generation_verified: true, workload_compatible: false, is_selected: false,
+      last_test_error: 'The model output did not match the required JSON schema.' }]);
+    renderWithProviders(<ProviderModels credentialId={3} providerName="OpenAI" enabled />);
+    await screen.findByText('gemini-new');
+    await userEvent.click(screen.getByText('Capabilities and details'));
+    expect(screen.getByText('Discovered:').parentElement).toHaveTextContent('Yes');
+    expect(screen.getByText('Accessible:').parentElement).toHaveTextContent('Yes');
+    expect(screen.getByText('Generation verified:').parentElement).toHaveTextContent('Yes');
+    expect(screen.getByText('Workload compatible:').parentElement).toHaveTextContent('No');
+    expect(screen.getByText('Active:').parentElement).toHaveTextContent('No');
+    expect(screen.getByText('The model output did not match the required JSON schema.')).toBeInTheDocument();
+  });
+
 });

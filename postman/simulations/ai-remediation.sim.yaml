@@ -1,0 +1,7 @@
+simulation: ai-remediation
+routing: path
+mocks:
+  - name: ai-remediation
+    routeKey: openai
+    origin: api.openai.com
+    path: postman/mocks/ai-remediation/config.yaml

@@ -204,8 +204,9 @@ export function RunBatchProgress({
     liveProgress.status === 'complete' ||
     liveProgress.status === 'failed' ||
     liveProgress.status === 'cancelled' ||
+    liveProgress.status === 'paused_budget' ||
     (liveProgress.status === 'pending' && liveProgress.total === 0);
-  const { data: estimate } = useScopedRunBatchEstimate(runId, scope, {
+  const { data: estimate, isError: estimateFailed } = useScopedRunBatchEstimate(runId, scope, {
     enabled: enabled && isIdle,
   });
 
@@ -225,10 +226,24 @@ export function RunBatchProgress({
   const runFixesAvailable = runFixList?.total ?? 0;
 
   const [showWarning, setShowWarning] = useState(false);
+  const generationDisabledReason = atMaxConcurrent
+    ? 'Wait for one to complete before starting another.'
+    : estimateFailed
+      ? 'Unable to estimate this batch. Reload the page to retry.'
+      : !estimate
+        ? 'Checking the generation scope and provider…'
+        : estimate.blocked
+          ? estimate.blocked_reason || 'AI generation is unavailable. Check AI settings.'
+          : estimate.total_findings_in_scope === 0
+            ? 'No findings match the current scope.'
+            : estimate.llm_call_count === 0
+              ? 'All findings in scope are already cached.'
+              : undefined;
 
   if (!enabled) return null;
 
   const handleTrigger = () => {
+    if (generationDisabledReason) return;
     if (estimate?.warning_recommended) {
       setShowWarning(true);
       return;
@@ -237,6 +252,7 @@ export function RunBatchProgress({
   };
   const confirmTrigger = () => {
     setShowWarning(false);
+    if (generationDisabledReason) return;
     trigger.mutate({ scope });
   };
 
@@ -277,7 +293,7 @@ export function RunBatchProgress({
           role="region"
           aria-label="AI remediation"
         >
-          <div className="flex items-start justify-between gap-3">
+          <div className="flex flex-col items-start justify-between gap-3 sm:flex-row">
             <div className="min-w-0 flex-1 space-y-1">
               <div className="flex items-center gap-2 text-sm font-medium text-hcl-navy">
                 <Sparkles className="h-4 w-4 text-primary" aria-hidden />
@@ -328,17 +344,12 @@ export function RunBatchProgress({
               onCancel={() => cancel.mutate()}
               triggering={trigger.isPending}
               cancelling={cancel.isPending}
-              disabledReason={
-                atMaxConcurrent
-                  ? 'Wait for one to complete before starting another.'
-                  : emptyScope
-                    ? 'No findings match the current scope.'
-                    : allCached
-                      ? 'All findings in scope are already cached.'
-                      : undefined
-              }
+              disabledReason={generationDisabledReason}
             />
           </div>
+          {trigger.isError || cancel.isError ? (
+            <p role="alert" className="text-xs text-red-700">{trigger.error?.message || cancel.error?.message}</p>
+          ) : null}
         </div>
         <FreeTierWarningDialog
           open={showWarning}
@@ -365,7 +376,7 @@ export function RunBatchProgress({
         role="region"
         aria-label="AI remediation progress"
       >
-        <div className="flex items-center justify-between gap-3">
+        <div className="flex flex-col items-start justify-between gap-3 sm:flex-row sm:items-center">
           <div className="flex items-center gap-2 text-sm font-medium text-hcl-navy">
             <Sparkles className="h-4 w-4 text-primary" aria-hidden />
             <span>{statusCopy(progress.status)}</span>
@@ -384,6 +395,7 @@ export function RunBatchProgress({
             onCancel={() => cancel.mutate()}
             triggering={trigger.isPending}
             cancelling={cancel.isPending}
+            disabledReason={isIdle ? generationDisabledReason : undefined}
           />
         </div>
 
@@ -429,6 +441,9 @@ export function RunBatchProgress({
           </p>
         ) : null}
 
+        {trigger.isError || cancel.isError ? (
+          <p role="alert" className="text-xs text-red-700">{trigger.error?.message || cancel.error?.message}</p>
+        ) : null}
         {progress.last_error ? (
           <p className="text-xs text-red-700">{progress.last_error}</p>
         ) : null}

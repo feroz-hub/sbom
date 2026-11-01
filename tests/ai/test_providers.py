@@ -191,7 +191,7 @@ async def test_openai_response_format_with_schema():
         body = json.loads(request.content.decode())
         rf = body["response_format"]
         assert rf["type"] == "json_schema"
-        assert rf["json_schema"]["schema"] == schema
+        assert rf["json_schema"]["schema"] == {**schema, "required": ["x"], "additionalProperties": False}
         return httpx.Response(
             200,
             json={
@@ -293,7 +293,7 @@ async def test_openai_no_schema_means_no_response_format_in_any_mode():
 
 
 @pytest.mark.asyncio
-async def test_openai_unknown_model_warns_and_costs_zero(caplog):
+async def test_openai_unknown_model_is_rejected_before_spending(caplog):
     def handler(request: httpx.Request) -> httpx.Response:
         return httpx.Response(
             200,
@@ -308,10 +308,8 @@ async def test_openai_unknown_model_warns_and_costs_zero(caplog):
         default_model="future-model-not-in-table",
         client_factory=lambda: _make_client(handler),
     )
-    with caplog.at_level("WARNING"):
-        resp = await provider.generate(_llm_req())
-    assert resp.usage.cost_usd == 0.0
-    assert any("unknown_model" in m for m in caplog.messages)
+    with pytest.raises(AiProviderError, match="reviewed text-generation profile and pricing"):
+        await provider.generate(_llm_req())
 
 
 def test_openai_requires_api_key():
@@ -355,7 +353,7 @@ async def test_openai_429_resource_exhausted_classified_as_quota_exceeded_and_sh
     assert failure.kind == "quota_exceeded"
     assert failure.upstream_status == 429
     assert failure.retry_after_seconds == 35
-    assert failure.upstream_message and "exceeded your current quota" in failure.upstream_message
+    assert failure.upstream_message is None  # Raw provider prose is never exposed by native OpenAI.
     # The error string must NOT be tagged "openai" when the wrapping
     # provider has overridden ``self.name`` (we simulate a Gemini wrap
     # by mutating the inner provider's name attribute below).
@@ -441,7 +439,7 @@ async def test_openai_200_with_quota_prose_classified_as_quota_exceeded():
     assert failure.upstream_status == 200
     assert failure.retry_after_seconds == 35
     # The matched substring + ±50 chars context lands in upstream_message.
-    assert failure.upstream_message and "rate-limits" in failure.upstream_message
+    assert failure.upstream_message is None
 
 
 def test_detect_quota_in_2xx_body_signals():
@@ -514,7 +512,7 @@ async def test_openai_401_classified_as_auth_failed():
     assert ei.value.failure is not None
     assert ei.value.failure.kind == "auth_failed"
     assert ei.value.failure.upstream_status == 401
-    assert ei.value.failure.upstream_message == "Invalid API key."
+    assert ei.value.failure.upstream_message is None
 
 
 @pytest.mark.asyncio

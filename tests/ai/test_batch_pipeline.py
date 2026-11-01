@@ -182,6 +182,45 @@ async def test_empty_run_completes_immediately(_empty_run):
 
 
 @pytest.mark.asyncio
+@pytest.mark.parametrize("scenario, expected_cost", [("billed_error", 0.0013), ("invalid_twice", 0.003), ("retry_error", 0.0024)])
+async def test_billed_failures_count_toward_batch_cost_not_success(client, scenario, expected_cost):
+    from app.ai.batches import create_batch
+    from app.ai.providers.openai_compat import OpenAiError
+    from app.models import AiFixBatch
+
+    run_id = _seed_run_with_findings(2)
+    usage = LlmUsage(input_tokens=10, output_tokens=20, cost_usd=0.0003 if scenario == "billed_error" else 0.0004)
+    failure = OpenAiError("incomplete", usage=usage, accessible=True, generated=False)
+    payloads = {
+        "billed_error": [failure, EX1_CRITICAL_KEV_WITH_FIX_BUNDLE],
+        "invalid_twice": [{"invalid": True}, {"invalid": True}, EX1_CRITICAL_KEV_WITH_FIX_BUNDLE],
+        "retry_error": [{"invalid": True}, failure, EX1_CRITICAL_KEV_WITH_FIX_BUNDLE],
+    }[scenario]
+    fake = FakeProvider(payloads)
+    fake.max_concurrent = 1
+    guard = BudgetGuard(BudgetCaps(per_request_usd=1, per_scan_usd=1, per_day_org_usd=1))
+    with SessionLocal() as db:
+        findings = db.query(AnalysisFinding).filter_by(analysis_run_id=run_id).all()
+        batch = create_batch(db, run_id=run_id, finding_ids=[f.id for f in findings], provider_name="fake", scope=None)
+        summary = await AiFixBatchPipeline(
+            db, registry=_registry_with(fake), store=InMemoryProgressStore(), budget=guard
+        ).run(run_id, batch_id=batch.id)
+        assert summary.progress.generated == 1
+        assert summary.progress.failed == 1
+        assert summary.progress.remaining == 0
+        assert summary.progress.cost_so_far_usd == pytest.approx(expected_cost)
+        assert guard.spent_today() == pytest.approx(expected_cost)
+        assert sum(row.cost_usd for row in db.query(AiUsageLog)) == pytest.approx(expected_cost)
+        assert db.query(AiFixCache).count() == 1
+        db.refresh(batch)
+        assert db.get(AiFixBatch, batch.id).cost_usd == pytest.approx(expected_cost)
+        assert batch.generated_count == 1 and batch.failed_count == 1
+        # Internal error cost does not alter the public API error contract.
+        assert summary.errors[0].billable_cost_usd == pytest.approx(expected_cost - 0.001)
+        assert "billable_cost_usd" not in summary.errors[0].model_dump()
+
+
+@pytest.mark.asyncio
 async def test_full_cache_miss_generates_each_finding(client):
     run_id = _seed_run_with_findings(3)
     payloads = [EX1_CRITICAL_KEV_WITH_FIX_BUNDLE, EX2_MEDIUM_WITH_FIX_BUNDLE, EX3_HIGH_NO_FIX_BUNDLE]
@@ -434,6 +473,8 @@ async def test_cancel_mid_flight_skips_remaining(client):
     assert summary.progress.cancel_requested is True
     # Some calls landed before cancel propagated; some were skipped.
     assert len(fake.calls) < 8
+    assert summary.progress.remaining == 8 - summary.progress.generated - summary.progress.failed
+    assert summary.progress.remaining > 0
 
 
 @pytest.mark.asyncio
